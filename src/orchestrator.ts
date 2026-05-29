@@ -4,6 +4,8 @@ import { analyze } from "./agents/tutor";
 import type { TutorAnalysis } from "./agents/schema";
 import { getWeakList, recordAnalysis } from "./db/mastery";
 import { formatRecentHistory, persistTurn } from "./db/turns";
+import { readProfile, profileSliceForConversation } from "./profile/profile";
+import { maybeRunMaintainer } from "./profile/maintainer-runner";
 
 export interface TurnCallbacks {
   onReplyDelta: (delta: string) => void;
@@ -41,7 +43,7 @@ export async function runTurn(
   // 共享上下文(两个 agent 都读),先查好再喂。
   const history = await formatRecentHistory();
   const weakList = await getWeakList();
-  const profileSlice = ""; // Task 7 接 learner-profile.md;此前用占位
+  const profileSlice = profileSliceForConversation(await readProfile(config));
 
   // 并行发出:对话流式,导师结构化。互不阻塞。
   const replyPromise = converse(
@@ -64,6 +66,9 @@ export async function runTurn(
   // 记账(代码侧)+ 持久化本轮。
   if (analysis) await recordAnalysis(analysis);
   await persistTurn(userInput, reply, analysis);
+
+  // 每 N 轮在后台刷新 MD 档案,不阻塞本轮返回。
+  void maybeRunMaintainer();
 
   return { reply, analysis };
 }

@@ -1,5 +1,6 @@
 mod keychain;
 mod llm;
+mod profile;
 
 use tauri_plugin_sql::{Migration, MigrationKind};
 
@@ -58,6 +59,8 @@ pub fn run() {
             keychain::delete_secret,
             llm::llm_request,
             llm::llm_stream,
+            profile::read_profile,
+            profile::write_profile,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

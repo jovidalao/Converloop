@@ -80,3 +80,46 @@ export async function getWeakList(limit = 15): Promise<WeakItem[]> {
 export async function getAllMastery(): Promise<MasteryItem[]> {
   return db.select().from(masteryItem).orderBy(desc(masteryItem.lastSeenAt));
 }
+
+// 维护 agent 的聚合输入(代码查好再喂,别让 LLM 自己算)。见 profile-maintainer-agent.md#输入。
+export interface MaintainerData {
+  weak: {
+    label: string;
+    key: string;
+    type: string;
+    errorCount: number;
+    seenCount: number;
+    status: string;
+    lastSeenAt: number;
+  }[];
+  recentlyKnown: { label: string; key: string }[];
+}
+
+export async function getMaintainerData(): Promise<MaintainerData> {
+  const weak = await db
+    .select({
+      label: masteryItem.label,
+      key: masteryItem.key,
+      type: masteryItem.type,
+      errorCount: masteryItem.errorCount,
+      seenCount: masteryItem.seenCount,
+      status: masteryItem.status,
+      lastSeenAt: masteryItem.lastSeenAt,
+    })
+    .from(masteryItem)
+    .where(ne(masteryItem.status, "known"))
+    .orderBy(
+      sql`(${masteryItem.errorCount} * 1.0 / MAX(${masteryItem.seenCount}, 1)) DESC`,
+      desc(masteryItem.lastSeenAt),
+    )
+    .limit(15);
+
+  const recentlyKnown = await db
+    .select({ label: masteryItem.label, key: masteryItem.key })
+    .from(masteryItem)
+    .where(eq(masteryItem.status, "known"))
+    .orderBy(desc(masteryItem.lastSeenAt))
+    .limit(10);
+
+  return { weak, recentlyKnown };
+}

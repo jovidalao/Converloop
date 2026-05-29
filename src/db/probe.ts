@@ -1,11 +1,20 @@
 import { recordAnalysis, getAllMastery, getWeakList } from "./mastery";
 import { persistTurn, getRecentTurns } from "./turns";
+import { readProfile, writeProfile, defaultProfile } from "../profile/profile";
+import { loadConfig } from "../config";
 import type { TutorAnalysis } from "../agents/schema";
 import type { MasteryItem, Turn } from "./schema";
 import type { WeakItem } from "../agents/tutor";
 
 export type ProbeResult =
-  | { ok: true; rows: MasteryItem[]; weak: WeakItem[]; turns: Turn[]; note: string }
+  | {
+      ok: true;
+      rows: MasteryItem[];
+      weak: WeakItem[];
+      turns: Turn[];
+      profileLen: number;
+      note: string;
+    }
   | { ok: false; error: string };
 
 // 一个模拟的导师分析(真实错句),用来验证记账链路。
@@ -50,7 +59,18 @@ export async function runBookkeepingProbe(): Promise<ProbeResult> {
     // Task 6 持久化层:存一轮、读回。
     await persistTurn("I have a apple.", "Nice! What kind of apple?", SAMPLE);
     const turns = await getRecentTurns();
-    return { ok: true, rows, weak, turns, note: "记账两轮 + 持久化一轮完成" };
+    // Task 7 档案原子读写:写默认模板、读回。
+    const config = loadConfig();
+    await writeProfile(defaultProfile(config));
+    const profile = await readProfile(config);
+    return {
+      ok: true,
+      rows,
+      weak,
+      turns,
+      profileLen: profile.length,
+      note: "记账两轮 + 持久化一轮 + 档案读写完成",
+    };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
