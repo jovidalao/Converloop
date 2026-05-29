@@ -1,47 +1,40 @@
-import { useEffect, useState } from "react";
-import { runBookkeepingProbe, type ProbeResult } from "./db/probe";
+import { useState } from "react";
+import { ChatView } from "./components/ChatView";
+import { ProfileView } from "./components/ProfileView";
+import { SettingsView } from "./components/SettingsView";
 import "./App.css";
 
+type Tab = "chat" | "profile" | "settings";
+
+const TABS: { id: Tab; label: string }[] = [
+  { id: "chat", label: "聊天" },
+  { id: "profile", label: "档案" },
+  { id: "settings", label: "设置" },
+];
+
 function App() {
-  const [result, setResult] = useState<ProbeResult | null>(null);
-  const [running, setRunning] = useState(false);
-
-  async function probe() {
-    setRunning(true);
-    setResult(await runBookkeepingProbe());
-    setRunning(false);
-  }
-
-  // 启动即跑一次,验证 migration 在 Database.load 时已执行。
-  useEffect(() => {
-    void probe();
-  }, []);
+  const [tab, setTab] = useState<Tab>("chat");
 
   return (
-    <main className="container">
-      <h1>lang-agent · SQLite 探针</h1>
-      <p>Task 1:Drizzle (sqlite-proxy) + tauri-plugin-sql 读写 mastery_item</p>
-
-      <button onClick={probe} disabled={running}>
-        {running ? "运行中…" : "重新运行探针"}
-      </button>
-
-      {result && (
-        <pre
-          style={{
-            textAlign: "left",
-            background: result.ok ? "#0a2a0a" : "#2a0a0a",
-            color: "#ddd",
-            padding: "1rem",
-            borderRadius: 8,
-            overflowX: "auto",
-          }}
-        >
-          {result.ok ? "✅ " : "❌ "}
-          {JSON.stringify(result, null, 2)}
-        </pre>
-      )}
-    </main>
+    <div className="app">
+      <nav className="tabs">
+        <span className="brand">lang-agent</span>
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            className={t.id === tab ? "tab active" : "tab"}
+            onClick={() => setTab(t.id)}
+          >
+            {t.label}
+          </button>
+        ))}
+      </nav>
+      <main className="view">
+        {tab === "chat" && <ChatView />}
+        {tab === "profile" && <ProfileView />}
+        {tab === "settings" && <SettingsView />}
+      </main>
+    </div>
   );
 }
 
