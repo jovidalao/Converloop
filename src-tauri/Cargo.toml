@@ -23,4 +23,10 @@ tauri-plugin-opener = "2"
 tauri-plugin-sql = { version = "2", features = ["sqlite"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# BYOK key 存 OS keychain(macOS Keychain),绝不明文。
+# 跨平台时再加 windows-native / sync-secret-service feature。
+keyring = { version = "3", features = ["apple-native"] }
+# LLM HTTP:走 Rust 发请求,绕过 webview CORS;reqwest 的 bytes_stream 做真流式。
+reqwest = { version = "0.12", features = ["json", "stream"] }
+futures-util = "0.3"
 

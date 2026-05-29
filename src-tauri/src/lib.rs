@@ -1,3 +1,6 @@
+mod keychain;
+mod llm;
+
 use tauri_plugin_sql::{Migration, MigrationKind};
 
 // Schema 见 docs/architecture.md#sqlitemastery_item。计数/状态归代码管,LLM 不碰。
@@ -31,6 +34,13 @@ pub fn run() {
                 .add_migrations("sqlite:lang-agent.db", migrations)
                 .build(),
         )
+        .invoke_handler(tauri::generate_handler![
+            keychain::set_secret,
+            keychain::get_secret,
+            keychain::delete_secret,
+            llm::llm_request,
+            llm::llm_stream,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
