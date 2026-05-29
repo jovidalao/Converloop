@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { runMasteryProbe, type ProbeResult } from "./db/probe";
+import { runBookkeepingProbe, type ProbeResult } from "./db/probe";
 import "./App.css";
 
 function App() {
@@ -8,7 +8,7 @@ function App() {
 
   async function probe() {
     setRunning(true);
-    setResult(await runMasteryProbe());
+    setResult(await runBookkeepingProbe());
     setRunning(false);
   }
 
