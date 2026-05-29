@@ -3,8 +3,10 @@ import {
   loadConfig,
   saveConfig,
   getProvider,
-  API_KEY_ACCOUNT,
+  apiKeyAccount,
+  PROVIDER_PRESETS,
   type AppConfig,
+  type ProviderType,
 } from "../config";
 import { getSecret, setSecret, deleteSecret } from "../keychain";
 
@@ -15,9 +17,12 @@ export function SettingsView() {
   const [status, setStatus] = useState<string | null>(null);
   const [testing, setTesting] = useState(false);
 
+  const keyAccount = apiKeyAccount(cfg.providerType);
+  const preset = PROVIDER_PRESETS[cfg.providerType];
+
   useEffect(() => {
-    getSecret(API_KEY_ACCOUNT).then((k) => setHasKey(!!k));
-  }, []);
+    getSecret(apiKeyAccount(cfg.providerType)).then((k) => setHasKey(!!k));
+  }, [cfg.providerType]);
 
   function update<K extends keyof AppConfig>(k: K, v: AppConfig[K]) {
     const next = { ...cfg, [k]: v };
@@ -25,16 +30,28 @@ export function SettingsView() {
     saveConfig(next);
   }
 
+  function setProviderType(type: ProviderType) {
+    const p = PROVIDER_PRESETS[type];
+    const next: AppConfig = {
+      ...cfg,
+      providerType: type,
+      baseUrl: p.baseUrl,
+      model: p.model,
+    };
+    setCfg(next);
+    saveConfig(next);
+  }
+
   async function saveKey() {
     if (!keyInput.trim()) return;
-    await setSecret(API_KEY_ACCOUNT, keyInput.trim());
+    await setSecret(keyAccount, keyInput.trim());
     setKeyInput("");
     setHasKey(true);
     setStatus("API key 已保存到 OS keychain。");
   }
 
   async function clearKey() {
-    await deleteSecret(API_KEY_ACCOUNT);
+    await deleteSecret(keyAccount);
     setHasKey(false);
     setStatus("API key 已从 keychain 清除。");
   }
@@ -72,11 +89,25 @@ export function SettingsView() {
       <h2>设置</h2>
 
       <div className="field">
-        <label>Base URL(OpenAI 兼容)</label>
+        <label>Provider</label>
+        <select
+          value={cfg.providerType}
+          onChange={(e) => setProviderType(e.target.value as ProviderType)}
+        >
+          {(Object.keys(PROVIDER_PRESETS) as ProviderType[]).map((t) => (
+            <option key={t} value={t}>
+              {PROVIDER_PRESETS[t].label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="field">
+        <label>{cfg.providerType === "gemini" ? "Base URL(Gemini)" : "Base URL(OpenAI 兼容)"}</label>
         <input
           value={cfg.baseUrl}
           onChange={(e) => update("baseUrl", e.target.value)}
-          placeholder="https://api.openai.com/v1"
+          placeholder={preset.baseUrl}
         />
       </div>
       <div className="field">
@@ -112,7 +143,7 @@ export function SettingsView() {
             type="password"
             value={keyInput}
             onChange={(e) => setKeyInput(e.target.value)}
-            placeholder={hasKey ? "••••••••" : "sk-…"}
+            placeholder={hasKey ? "••••••••" : cfg.providerType === "gemini" ? "AIza…" : "sk-…"}
           />
           <button onClick={saveKey} disabled={!keyInput.trim()}>
             保存 key
