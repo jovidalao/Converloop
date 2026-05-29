@@ -18,14 +18,32 @@ CREATE TABLE IF NOT EXISTS mastery_item (
     notes        TEXT
 );";
 
+// 每轮持久化(输入 / 回复 / 导师分析 JSON)。
+const CREATE_TURN: &str = "\
+CREATE TABLE IF NOT EXISTS turn (
+    id            TEXT PRIMARY KEY NOT NULL,
+    created_at    INTEGER NOT NULL,
+    user_input    TEXT NOT NULL,
+    reply         TEXT NOT NULL,
+    analysis_json TEXT
+);";
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let migrations = vec![Migration {
-        version: 1,
-        description: "create_mastery_item",
-        sql: CREATE_MASTERY_ITEM,
-        kind: MigrationKind::Up,
-    }];
+    let migrations = vec![
+        Migration {
+            version: 1,
+            description: "create_mastery_item",
+            sql: CREATE_MASTERY_ITEM,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 2,
+            description: "create_turn",
+            sql: CREATE_TURN,
+            kind: MigrationKind::Up,
+        },
+    ];
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())

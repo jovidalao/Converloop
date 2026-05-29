@@ -21,3 +21,14 @@ export const masteryItem = sqliteTable("mastery_item", {
 
 export type MasteryItem = typeof masteryItem.$inferSelect;
 export type NewMasteryItem = typeof masteryItem.$inferInsert;
+
+// 每轮持久化:输入 / 回复 / 导师分析(JSON,导师失败时为 null)。
+export const turn = sqliteTable("turn", {
+  id: text("id").primaryKey(),
+  createdAt: integer("created_at").notNull(),
+  userInput: text("user_input").notNull(),
+  reply: text("reply").notNull(),
+  analysisJson: text("analysis_json"),
+});
+
+export type Turn = typeof turn.$inferSelect;
