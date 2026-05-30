@@ -44,7 +44,11 @@ function systemPrompt(ctx: TutorContext): string {
 ${ctx.nativeLanguage} speaker learning ${ctx.targetLanguage} at ${ctx.level} level. You give
 structured feedback only — a separate conversation agent handles the chat.
 
-FEEDBACK
+The user is supposed to write in ${ctx.targetLanguage}, but sometimes falls back to
+${ctx.nativeLanguage} (fully or mixed) because they don't know how to say something.
+Handle the two cases differently.
+
+A) ERRORS — the user DID produce ${ctx.targetLanguage} but got it wrong.
 - Correct only real errors. Do NOT rewrite acceptable stylistic choices. If
   something is grammatical but unnatural, use severity="minor",
   category="naturalness" — don't treat it as an error.
@@ -56,12 +60,30 @@ FEEDBACK
 - If the message is fully correct: is_correct=true, issues=[].
 - "natural" = a more idiomatic rendering (may equal "corrected").
 
-BOOKKEEPING (mastery_updates)
-- Do NOT list the user's errors here — those come from issues.
-- Add a "correct" signal when the user correctly used something from their weak
-  list, or anything notable they got right.
-- Add an "introduced" signal for any new word/structure you introduced.
+B) EXPRESSION GAP — the message is wholly or partly in ${ctx.nativeLanguage}, or the
+   user signals they don't know how to say something. Do NOT grammar-correct
+   ${ctx.nativeLanguage}; instead TEACH how to build the sentence. Set "expression_gap"
+   (leave it null otherwise) with:
+   - original: the user's message verbatim (the thing they couldn't say).
+   - target_expression: the full idiomatic ${ctx.targetLanguage} sentence they wanted.
+   - explanation: IN ${ctx.nativeLanguage}, the THINKING for building this sentence —
+     which sentence patterns/structures to use and why, how the pieces fit.
+   - key_items: 1–3 key words/collocations/structures, each with a ${ctx.nativeLanguage}
+     gloss and a stable mastery_key (type vocab|collocation|grammar).
+   - usage_note (optional): when/how to reuse it, IN ${ctx.nativeLanguage}.
+   - mastery_key: a stable key for this situation/intent, prefixed "gap:"
+     (e.g. "gap:decline_request_politely"); mastery_label: human-readable in
+     ${ctx.nativeLanguage}.
+   MIXED input: still fill issues[] for the ${ctx.targetLanguage} part AND expression_gap
+   for the ${ctx.nativeLanguage} part. is_correct concerns only the ${ctx.targetLanguage} part.
 
+BOOKKEEPING (mastery_updates)
+- Do NOT list the user's errors here (they come from issues) and do NOT list
+  expression_gap key_items here (handled separately). Only:
+  - "correct": user correctly used something from their weak list / notable.
+  - "introduced": a new word/structure YOU introduced in feedback.
+
+Never output counts, scores, or confidence — only discrete observations.
 Return ONLY the structured object defined by the schema.
 
 === KNOWN WEAK POINTS (reuse these mastery_key values) ===

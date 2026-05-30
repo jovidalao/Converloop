@@ -27,6 +27,10 @@ describe("applySignal", () => {
     expect(applySignal({ seenCount: 5, errorCount: 2 }, "correct").errorCount).toBe(2);
     expect(applySignal({ seenCount: 5, errorCount: 2 }, "introduced").errorCount).toBe(2);
   });
+
+  it("gap 与 error 一样增 error_count", () => {
+    expect(applySignal({ seenCount: 5, errorCount: 2 }, "gap").errorCount).toBe(3);
+  });
 });
 
 describe("deriveSignals", () => {
@@ -56,5 +60,44 @@ describe("deriveSignals", () => {
     expect(sigs).toHaveLength(2);
     expect(sigs[0]).toMatchObject({ key: "grammar:article_usage", kind: "error", example: "a apple" });
     expect(sigs[1]).toMatchObject({ key: "vocab:apple", kind: "introduced" });
+  });
+
+  it("expression_gap → 情景记 gap 信号(存原句),key_items 走 introduced", () => {
+    const withGap: TutorAnalysis = {
+      is_correct: true,
+      corrected: "",
+      natural: "",
+      issues: [],
+      mastery_updates: [],
+      expression_gap: {
+        mastery_key: "gap:decline_request_politely",
+        mastery_label: "委婉拒绝请求",
+        original: "我想委婉地拒绝这个请求",
+        target_expression: "I'd rather not take this on right now, but I could help later.",
+        explanation: "用 'I'd rather not ___, but ___' 句式先婉拒再给替代。",
+        key_items: [
+          {
+            text: "I'd rather not",
+            gloss: "我不太想",
+            mastery_key: "collocation:would_rather_not",
+            mastery_label: "would rather not",
+            mastery_type: "collocation",
+          },
+        ],
+      },
+    };
+    const sigs = deriveSignals(withGap);
+    expect(sigs).toHaveLength(2);
+    expect(sigs[0]).toMatchObject({
+      key: "gap:decline_request_politely",
+      type: "expression_gap",
+      kind: "gap",
+      example: "我想委婉地拒绝这个请求",
+      note: "I'd rather not take this on right now, but I could help later.",
+    });
+    expect(sigs[1]).toMatchObject({
+      key: "collocation:would_rather_not",
+      kind: "introduced",
+    });
   });
 });

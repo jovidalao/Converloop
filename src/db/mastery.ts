@@ -32,6 +32,7 @@ async function upsertSignal(sig: Signal, now: number): Promise<void> {
         status: next.status,
         lastSeenAt: now,
         example: sig.example ?? existing.example,
+        notes: sig.note ?? existing.notes,
       })
       .where(eq(masteryItem.key, sig.key));
   } else {
@@ -46,6 +47,7 @@ async function upsertSignal(sig: Signal, now: number): Promise<void> {
       errorCount: fresh.errorCount,
       lastSeenAt: now,
       example: sig.example ?? null,
+      notes: sig.note ?? null,
     });
   }
 }

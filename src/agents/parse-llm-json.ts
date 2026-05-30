@@ -73,7 +73,13 @@ const ISSUE_CATEGORIES = new Set([
 ]);
 
 const SEVERITIES = new Set(["minor", "moderate", "major"]);
-const MASTERY_TYPES = new Set(["vocab", "grammar", "collocation", "error_pattern"]);
+const MASTERY_TYPES = new Set([
+  "vocab",
+  "grammar",
+  "collocation",
+  "error_pattern",
+  "expression_gap",
+]);
 const SIGNALS = new Set(["correct", "introduced"]);
 
 function pickEnum(value: unknown, allowed: Set<string>): unknown {
@@ -116,6 +122,20 @@ export function normalizeTutorPayload(json: unknown): unknown {
       })
     : [];
 
+  // expression_gap 可选:存在时把 key_items 的 mastery_type 规整到合法值。
+  let expression_gap = o.expression_gap;
+  if (expression_gap && typeof expression_gap === "object" && !Array.isArray(expression_gap)) {
+    const g = expression_gap as Record<string, unknown>;
+    const key_items = Array.isArray(g.key_items)
+      ? g.key_items.map((item) => {
+          if (!item || typeof item !== "object" || Array.isArray(item)) return item;
+          const k = item as Record<string, unknown>;
+          return { ...k, mastery_type: pickEnum(k.mastery_type, MASTERY_TYPES) };
+        })
+      : [];
+    expression_gap = { ...g, key_items };
+  }
+
   return {
     ...o,
     is_correct: typeof o.is_correct === "string" ? o.is_correct === "true" : o.is_correct,
@@ -123,6 +143,7 @@ export function normalizeTutorPayload(json: unknown): unknown {
     natural: typeof o.natural === "string" ? o.natural : o.natural ?? "",
     issues,
     mastery_updates,
+    expression_gap,
   };
 }
 

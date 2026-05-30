@@ -5,7 +5,7 @@ import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
 export const masteryItem = sqliteTable("mastery_item", {
   id: text("id").primaryKey(),
   type: text("type", {
-    enum: ["vocab", "grammar", "collocation", "error_pattern"],
+    enum: ["vocab", "grammar", "collocation", "error_pattern", "expression_gap"],
   }).notNull(),
   key: text("key").notNull().unique(), // 稳定 upsert 键 = Issue.mastery_key
   label: text("label").notNull(),

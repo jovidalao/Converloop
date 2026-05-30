@@ -1,9 +1,15 @@
 import type { TutorAnalysis } from "../agents/schema";
 
 // 纯逻辑:不碰 DB、不碰 Tauri,可单测。LLM 给离散信号,这里算计数/状态。
-export type SignalKind = "error" | "correct" | "introduced";
+// "gap" = 用户没能用目标语产出(母语/混说),区别于 "error"(产出了但错了)。
+export type SignalKind = "error" | "correct" | "introduced" | "gap";
 export type MasteryStatus = "struggling" | "learning" | "known";
-export type MasteryType = "vocab" | "grammar" | "collocation" | "error_pattern";
+export type MasteryType =
+  | "vocab"
+  | "grammar"
+  | "collocation"
+  | "error_pattern"
+  | "expression_gap";
 
 export interface Signal {
   key: string;
@@ -11,6 +17,7 @@ export interface Signal {
   type: MasteryType;
   kind: SignalKind;
   example?: string;
+  note?: string; // 额外存到 mastery_item.notes(如表达缺口的地道说法)
 }
 
 export interface MasteryCounters {
@@ -27,7 +34,8 @@ export function applySignal(
   now: number = Date.now(),
 ): MasteryCounters {
   const seenCount = prev.seenCount + 1;
-  const errorCount = prev.errorCount + (kind === "error" ? 1 : 0);
+  // gap 与 error 一样算负面证据:用户没能产出 → 推向 struggling。
+  const errorCount = prev.errorCount + (kind === "error" || kind === "gap" ? 1 : 0);
   const errRate = errorCount / seenCount;
   const status: MasteryStatus =
     seenCount < 3
@@ -62,6 +70,27 @@ export function deriveSignals(analysis: TutorAnalysis): Signal[] {
       kind: update.signal,
       example: update.evidence,
     });
+  }
+  // 表达缺口:情景本身记一个 gap 信号(存原句 + 地道说法),关键词走 introduced。
+  const gap = analysis.expression_gap;
+  if (gap) {
+    signals.push({
+      key: gap.mastery_key,
+      label: gap.mastery_label,
+      type: "expression_gap",
+      kind: "gap",
+      example: gap.original, // 最重要:用户说不出的原句
+      note: gap.target_expression,
+    });
+    for (const item of gap.key_items) {
+      signals.push({
+        key: item.mastery_key,
+        label: item.mastery_label,
+        type: item.mastery_type,
+        kind: "introduced",
+        example: item.text,
+      });
+    }
   }
   return signals;
 }

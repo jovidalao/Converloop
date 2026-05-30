@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { runTurn, MissingApiKeyError } from "../orchestrator";
 import { loadChatHistory, type ChatTurn } from "../db/turns";
 import { maybeAutoTitle, touchConversation } from "../db/conversations";
-import { InlineCorrection } from "./InlineCorrection";
+import { InlineCorrection, UserSentence } from "./InlineCorrection";
 import { SpeakButton } from "./SpeakButton";
 import { ReplyExplanation } from "./ReplyExplanation";
 import { IconCopy, IconCheck, IconSend } from "./icons";
@@ -156,7 +156,9 @@ export function ChatView({ conversationId, onActivity }: ChatViewProps) {
         {turns.map((turn) => (
           <div key={turn.id} className="turn-block">
             <div className="turn-user">
-              <div className="msg user">{turn.userText}</div>
+              <div className="msg user">
+                <UserSentence text={turn.userText} analysis={turn.analysis} />
+              </div>
               {(turn.analysisPending ||
                 turn.analysis ||
                 turn.analysisProse ||

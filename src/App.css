@@ -398,10 +398,23 @@ body,
   font-size: 0.95rem;
 }
 .msg.user {
-  background: var(--accent);
-  color: var(--accent-text);
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
   border-bottom-right-radius: 5px;
   box-shadow: var(--shadow-sm);
+}
+/* Inline diff inside the user bubble: wrong span struck red, rewrite in green. */
+.sentence-diff .diff-del {
+  color: var(--danger-fg);
+  text-decoration: line-through;
+  text-decoration-color: var(--danger);
+  text-decoration-thickness: 1.5px;
+}
+.sentence-diff .diff-ins {
+  color: var(--success-fg);
+  text-decoration: none;
+  font-weight: 600;
 }
 /* Partner reply is borderless plain text (ChatGPT-style), actions sit below. */
 .msg.partner {
@@ -479,18 +492,7 @@ body,
   font-size: 0.85rem;
 }
 
-/* Inline correction (under user bubble) — flat surface + colored accent bar */
-.inline-correction {
-  width: 100%;
-  padding: 0.7rem 0.85rem;
-  border-radius: var(--radius);
-  font-size: 0.82rem;
-  line-height: 1.45;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow-sm);
-  animation: correction-in 0.28s ease-out;
-}
+/* Correction under user bubble — flat icon toolbar + separate expandable cards */
 @keyframes correction-in {
   from {
     opacity: 0;
@@ -501,116 +503,177 @@ body,
     transform: translateY(0);
   }
 }
-.inline-correction.pending {
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.correction {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.4rem;
+}
+.correction-actions {
   display: flex;
   align-items: center;
-  gap: 0.55rem;
-  color: var(--text-muted);
+  gap: 0.15rem;
+  margin-right: -0.3rem;
+}
+.correction-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.3rem 0.45rem;
+  font-size: 0.76rem;
+  color: var(--success-fg);
+}
+.correction-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.3rem 0.5rem;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  font-size: 0.76rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.correction-toggle:hover {
   background: var(--surface-2);
-  border: 1px dashed var(--border-strong);
-  box-shadow: none;
+  color: var(--text);
+}
+.correction-toggle.active {
+  color: var(--accent-fg);
+  background: var(--accent-weak);
+}
+.correction-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.05rem;
+  height: 1.05rem;
+  padding: 0 0.28rem;
+  border-radius: var(--radius-pill);
+  background: var(--surface-3);
+  color: var(--text-muted);
+  font-size: 0.64rem;
+  font-weight: 700;
+}
+.correction-toggle.active .correction-count {
+  background: var(--accent-weak-hover);
+  color: var(--accent-fg);
+}
+.correction-panel {
+  width: 100%;
+  padding: 0.7rem 0.8rem;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  font-size: 0.82rem;
+  line-height: 1.5;
+  animation: correction-in 0.2s ease-out;
+}
+.correction-panel .inline-correction-prose {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: inherit;
+  color: var(--text);
+}
+.correction-pending {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.2rem 0.1rem;
+  color: var(--text-muted);
+  font-size: 0.78rem;
 }
 .inline-correction-spinner {
-  width: 14px;
-  height: 14px;
+  width: 13px;
+  height: 13px;
   border: 2px solid var(--border-strong);
   border-top-color: var(--accent-fg);
   border-radius: 50%;
   animation: spin 0.75s linear infinite;
   flex-shrink: 0;
 }
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-.inline-correction.ok {
-  border-left: 3px solid var(--success);
-  background: var(--success-weak);
-}
-.inline-correction.has-issues {
-  border-left: 3px solid var(--accent);
-}
-.inline-correction.failed {
-  border-left: 3px solid var(--danger);
-  background: var(--danger-weak);
-}
-.inline-correction.prose-feedback .inline-correction-prose {
+.correction-error {
   margin: 0;
-  white-space: pre-wrap;
-  word-break: break-word;
-  font-family: inherit;
-  font-size: 0.82rem;
-  line-height: 1.55;
-  color: var(--text);
-}
-.inline-correction-error,
-.inline-correction-warn {
-  margin: 0.35rem 0 0;
   font-size: 0.78rem;
   line-height: 1.4;
-}
-.inline-correction-error {
   color: var(--danger-fg);
 }
-.inline-correction-warn {
-  color: var(--warn-fg);
-}
-.inline-correction-header {
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
-  margin-bottom: 0.45rem;
-}
-.inline-correction-icon {
+
+/* 母语/混说轮:气泡角标 + 讲解面板(取代红绿 diff) */
+.native-badge {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 1.25rem;
-  height: 1.25rem;
-  border-radius: 50%;
-  font-size: 0.7rem;
-  font-weight: 700;
-  flex-shrink: 0;
-}
-.ok-icon {
-  background: var(--success-weak);
-  color: var(--success-fg);
-}
-.warn-icon {
+  gap: 0.2rem;
+  margin-right: 0.4rem;
+  padding: 0.06rem 0.36rem;
+  border-radius: var(--radius-pill);
   background: var(--accent-weak);
   color: var(--accent-fg);
-  font-size: 0.55rem;
-}
-.inline-correction-title {
+  font-size: 0.64rem;
   font-weight: 600;
-  font-size: 0.78rem;
-  letter-spacing: 0.02em;
-  color: var(--text-muted);
-  text-transform: uppercase;
+  vertical-align: middle;
+  white-space: nowrap;
 }
-.inline-correction-label {
-  display: block;
+.gap-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+.gap-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.gap-label {
   font-size: 0.68rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--text-dim);
-  margin-bottom: 0.2rem;
 }
-.inline-correction-tip,
-.inline-correction-sentence .speakable-text {
+.gap-explanation {
   margin: 0;
   color: var(--text);
+  line-height: 1.55;
 }
-.inline-correction-sentence {
-  margin-top: 0.35rem;
-  padding: 0.45rem 0.55rem;
+.gap-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.gap-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  padding: 0.25rem 0.5rem;
   border-radius: var(--radius-sm);
   background: var(--surface-3);
+  border: 1px solid var(--border);
 }
-.inline-correction-sentence.natural {
-  border-left: 2px solid var(--success);
+.gap-chip-text {
+  font-weight: 600;
+  color: var(--text);
+}
+.gap-chip-gloss {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+}
+.gap-usage {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  line-height: 1.45;
 }
 
 /* Speak button */
@@ -835,28 +898,24 @@ body,
   line-height: 1.4;
   color: var(--danger-fg);
 }
-.inline-correction-issues {
+.issues {
   list-style: none;
   padding: 0;
-  margin: 0.55rem 0 0;
+  margin: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.45rem;
 }
-.inline-correction-issues li {
-  padding: 0.5rem 0.6rem;
-  border-radius: var(--radius-sm);
-  background: var(--surface-3);
-  border-left: 3px solid var(--border-strong);
+.issues li {
+  padding: 0.6rem 0;
 }
-.inline-correction-issues li.sev-minor {
-  border-left-color: var(--text-dim);
+.issues li + li {
+  border-top: 1px solid var(--border);
 }
-.inline-correction-issues li.sev-moderate {
-  border-left-color: var(--warn);
+.issues li:first-child {
+  padding-top: 0;
 }
-.inline-correction-issues li.sev-major {
-  border-left-color: var(--danger);
+.issues li:last-child {
+  padding-bottom: 0;
 }
 .issue-head {
   display: flex;
@@ -878,6 +937,12 @@ body,
   font-size: 0.62rem;
   text-transform: uppercase;
   color: var(--text-dim);
+}
+.issue-sev.sev-moderate {
+  color: var(--warn-fg);
+}
+.issue-sev.sev-major {
+  color: var(--danger-fg);
 }
 .issue-diff {
   margin: 0;

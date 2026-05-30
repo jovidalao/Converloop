@@ -127,13 +127,23 @@ export async function getRecentTurnsForConversation(
   return rows.reverse(); // 时间正序,喂 prompt 更自然
 }
 
+// 历史里某轮的"用户行":母语/混说轮(有 expression_gap)用导师转换出的地道目标语,
+// 让后续对话在目标语里连贯延续;否则用原始输入。
+function userLineForHistory(t: Turn): string {
+  const { analysis } = parseTurnFeedback(t.analysisJson);
+  const target = analysis?.expression_gap?.target_expression?.trim();
+  return target || t.userInput;
+}
+
 // 把某会话最近几轮格式化成对话 / 导师 agent 都能用的历史文本。
 export async function formatRecentHistory(
   conversationId: string,
   limit = 6,
 ): Promise<string> {
   const turns = await getRecentTurnsForConversation(conversationId, limit);
-  return turns.map((t) => `User: ${t.userInput}\nPartner: ${t.reply}`).join("\n\n");
+  return turns
+    .map((t) => `User: ${userLineForHistory(t)}\nPartner: ${t.reply}`)
+    .join("\n\n");
 }
 
 // 跨会话的全局转写。维护 agent 用,刻意不按会话隔离(档案是全局的)。
