@@ -91,6 +91,7 @@ function App() {
               className="reopen-sidebar icon-btn"
               onClick={() => setCollapsed(false)}
               title="展开侧栏"
+              aria-label="展开侧栏"
             >
               <IconSidebar />
             </button>

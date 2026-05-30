@@ -59,10 +59,20 @@ export function Sidebar({
   return (
     <aside className="sidebar">
       <div className="sidebar-toolbar" data-tauri-drag-region>
-        <button className="icon-btn" onClick={onToggleCollapse} title="收起侧栏">
+        <button
+          className="icon-btn"
+          onClick={onToggleCollapse}
+          title="收起侧栏"
+          aria-label="收起侧栏"
+        >
           <IconSidebar />
         </button>
-        <button className="icon-btn" onClick={onNewChat} title="新对话">
+        <button
+          className="icon-btn"
+          onClick={onNewChat}
+          title="新对话"
+          aria-label="新对话"
+        >
           <IconCompose />
         </button>
       </div>
@@ -109,6 +119,7 @@ export function Sidebar({
                 <button
                   className="conv-action"
                   title="重命名"
+                  aria-label="重命名"
                   onClick={(e) => {
                     e.stopPropagation();
                     startEdit(c);
@@ -119,6 +130,7 @@ export function Sidebar({
                 <button
                   className="conv-action"
                   title="删除"
+                  aria-label="删除"
                   onClick={(e) => {
                     e.stopPropagation();
                     if (confirm(`删除对话「${c.title}」?此操作不可撤销。`)) {

@@ -356,6 +356,9 @@ export function ChatView({ conversationId, onActivity }: ChatViewProps) {
         ref={messagesRef}
         onScroll={syncStickToBottom}
       >
+        {turns.length === 0 && !streaming && (
+          <div className="chat-empty">用目标语言说点什么,开始对话吧。</div>
+        )}
         {turns.map((turn) => (
           <div key={turn.id} className="turn-block">
             <UserTurn turn={turn} nativeLanguage={nativeLanguage} />
@@ -402,6 +405,7 @@ export function ChatView({ conversationId, onActivity }: ChatViewProps) {
             className="send-btn"
             disabled={replyBusy || !input.trim()}
             title="发送"
+            aria-label="发送"
           >
             {replyBusy ? (
               <span className="send-spinner" aria-hidden />

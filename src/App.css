@@ -41,6 +41,9 @@
   --radius-lg: 16px;
   --radius-pill: 999px;
 
+  /* Full-width top bar height; scrolling views pad their top by this + a little. */
+  --topbar-h: 3rem;
+
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
   --shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
   --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.32);
@@ -307,7 +310,7 @@ body,
   top: 0;
   left: 0;
   right: 0;
-  height: 3rem;
+  height: var(--topbar-h);
   z-index: 10;
   display: flex;
   align-items: center;
@@ -372,7 +375,7 @@ body,
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 3.4rem 1rem 0.75rem;
+  padding: calc(var(--topbar-h) + 0.4rem) 1rem 0.75rem;
   display: flex;
   flex-direction: column;
   gap: 1.1rem;
@@ -381,6 +384,14 @@ body,
   display: flex;
   flex-direction: column;
   gap: 0.55rem;
+}
+/* Shown when a conversation has no turns yet. */
+.chat-empty {
+  margin: auto;
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  line-height: 1.6;
 }
 .turn-user {
   align-self: flex-end;
@@ -439,10 +450,11 @@ body,
   flex: 1;
   min-width: 0;
 }
-/* Partner reply is borderless plain text (ChatGPT-style), actions sit below. */
+/* Partner reply is borderless plain text (ChatGPT-style), spans the full
+   chat column. Actions sit below. */
 .msg.partner {
-  align-self: flex-start;
-  max-width: min(94%, 580px);
+  align-self: stretch;
+  max-width: none;
   background: transparent;
   border: none;
   padding: 0.1rem 0;
@@ -784,12 +796,12 @@ body,
 
 /* Reply explanation ("讲解" under partner bubble) */
 .turn-partner {
-  align-self: flex-start;
+  align-self: stretch;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 0.4rem;
-  max-width: min(88%, 520px);
+  max-width: none;
 }
 .explain-wrap {
   display: flex;
@@ -1062,10 +1074,15 @@ body,
 
 /* Forms (settings / profile) */
 .form {
-  padding: 3.4rem 1.5rem 1.5rem;
+  padding: calc(var(--topbar-h) + 0.4rem) 1.5rem 1.5rem;
   max-width: 660px;
   overflow-y: auto;
   height: 100%;
+}
+.muted {
+  color: var(--text-dim);
+  font-size: 0.82rem;
+  line-height: 1.45;
 }
 .form h2 {
   margin-top: 0;
@@ -1178,10 +1195,17 @@ button.secondary:hover:not(:disabled) {
   align-items: center;
   flex-wrap: wrap;
 }
+/* Profile is a single full-height column: header/hint/buttons take their
+   natural height, the editor flexes to fill whatever's left. Robust on resize
+   (no magic offset that goes negative when the window shrinks). */
+.profile-form {
+  display: flex;
+  flex-direction: column;
+}
 .profile-editor {
+  flex: 1;
+  min-height: 120px;
   width: 100%;
-  height: calc(100% - 7rem);
-  min-height: 300px;
   font-family: var(--font-mono);
   font-size: 0.85rem;
   line-height: 1.5;

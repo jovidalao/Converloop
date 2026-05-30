@@ -40,7 +40,7 @@ export function ProfileView() {
   }
 
   return (
-    <div className="form">
+    <div className="form profile-form">
       <h2>学习者档案</h2>
       <p className="muted">
         对话 agent 读这份档案做个性化回复。<code>## My notes</code> 是你的手写区,AI 永不改动。
