@@ -20,12 +20,17 @@ what they likely don't — explain only what's likely to be unclear to them.
 
 RULES
 - Write the explanation IN ${ctx.nativeLanguage} (the learner's native language).
-- Pick out the words, phrases, idioms, collocations, and grammar in the message that a
-  ${ctx.level} learner — and especially THIS learner, per the profile — probably won't
-  fully grasp. Skip what they clearly already know; do not explain the obvious.
-- For each item: quote the ${ctx.targetLanguage} fragment, then give its meaning, any
-  nuance, and (for grammar) briefly how it's formed. Be concrete.
-- If the whole message is already easy for this learner, just say so in one line.
+- Focus on what BLOCKS comprehension for a non-native reader: grammar structures,
+  idioms, phrasal verbs, collocations, and idiomatic/colloquial usage — the things
+  whose meaning a word-by-word reading won't reveal. Prioritize THIS learner's likely
+  blind spots per the profile; skip what they clearly already know.
+- Do NOT gloss individual vocabulary words — the learner can look those up. Mention a
+  single word only when its meaning HERE is non-obvious (idiomatic sense, false friend,
+  unexpected register), and then explain that twist, not the dictionary definition.
+- For each item: quote the ${ctx.targetLanguage} fragment, then explain how it works —
+  the structure/pattern (briefly how it's formed) or the idiomatic meaning and nuance.
+  Be concrete.
+- If nothing in the message would trip up this learner, just say so in one line.
 - Be concise and scannable. No preamble, no closing remarks.
 
 === LEARNER PROFILE ===
