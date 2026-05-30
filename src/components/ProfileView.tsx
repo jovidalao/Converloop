@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { loadConfig } from "../config";
 import { readProfile, writeProfile } from "../profile/profile";
 import { runMaintainerNow } from "../profile/maintainer-runner";
+import { Button } from "./ui/button";
+import { Textarea } from "./ui/textarea";
 
 export function ProfileView() {
   const [md, setMd] = useState("");
@@ -40,28 +42,34 @@ export function ProfileView() {
   }
 
   return (
-    <div className="form profile-form">
-      <h2>学习者档案</h2>
-      <p className="muted">
-        对话 agent 读这份档案做个性化回复。<code>## My notes</code> 是你的手写区,AI 永不改动。
+    <div className="flex h-full max-w-[660px] flex-col overflow-y-auto px-6 pt-[3.4rem] pb-6">
+      <h2 className="mt-0 mb-2 text-lg font-semibold tracking-tight">
+        学习者档案
+      </h2>
+      <p className="text-[0.82rem] leading-snug text-muted-foreground">
+        对话 agent 读这份档案做个性化回复。
+        <code className="rounded bg-muted px-1 py-0.5 font-mono text-[0.85em] text-foreground">
+          ## My notes
+        </code>{" "}
+        是你的手写区,AI 永不改动。
       </p>
-      <textarea
-        className="profile-editor"
+      <Textarea
+        className="mt-3 min-h-[120px] flex-1 resize-none font-mono text-[0.85rem] leading-normal"
         value={md}
         onChange={(e) => setMd(e.target.value)}
         spellCheck={false}
       />
-      <div className="row" style={{ marginTop: "0.75rem" }}>
-        <button onClick={save}>保存我的编辑</button>
-        <button className="secondary" onClick={refresh} disabled={busy}>
+      <div className="mt-3 flex items-end gap-2">
+        <Button onClick={save}>保存我的编辑</Button>
+        <Button variant="secondary" onClick={refresh} disabled={busy}>
           {busy ? "刷新中…" : "用 AI 刷新档案"}
-        </button>
+        </Button>
       </div>
       {status && (
         <p
-          className={
-            status.startsWith("✓") ? "status" : "status status--warn"
-          }
+          className={`mt-2 break-words text-[0.82rem] ${
+            status.startsWith("✓") ? "text-primary" : "text-warning"
+          }`}
         >
           {status}
         </p>

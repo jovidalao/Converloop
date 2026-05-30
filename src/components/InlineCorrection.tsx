@@ -1,6 +1,9 @@
 import { useState, type ReactNode } from "react";
 import type { Issue, TutorAnalysis } from "../agents/schema";
 import { SpeakableText } from "./SpeakButton";
+import { Spinner } from "./ui/spinner";
+import { actionBtn, actionBtnActive } from "@/lib/ui";
+import { cn } from "@/lib/utils";
 import { IconSparkles, IconBookOpen, IconCheck, IconLanguages } from "./icons";
 
 const CATEGORY_LABEL: Record<Issue["category"], string> = {
@@ -13,10 +16,10 @@ const CATEGORY_LABEL: Record<Issue["category"], string> = {
   naturalness: "自然度",
 };
 
-const SEVERITY_CLASS: Record<Issue["severity"], string> = {
-  minor: "sev-minor",
-  moderate: "sev-moderate",
-  major: "sev-major",
+const SEVERITY_COLOR: Record<Issue["severity"], string> = {
+  minor: "text-muted-foreground",
+  moderate: "text-warning",
+  major: "text-destructive",
 };
 
 const SEVERITY_LABEL: Record<Issue["severity"], string> = {
@@ -95,8 +98,11 @@ export function UserSentence({
   // 母语/混说轮:原样显示 + 角标(直接标出母语名),不做红绿 diff。
   if (analysis?.expression_gap) {
     return (
-      <span className="native-sentence">
-        <span className="native-badge" title="用母语/混说输入">
+      <span className="align-middle">
+        <span
+          className="mr-1.5 inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-accent px-1.5 py-[0.06rem] align-middle text-[0.64rem] font-semibold leading-none text-primary"
+          title="用母语/混说输入"
+        >
           <IconLanguages size={12} />
           {nativeLanguage?.trim() || "母语"}
         </span>
@@ -112,14 +118,18 @@ export function UserSentence({
   if (!hasDiff) return <>{text}</>;
 
   return (
-    <span className="sentence-diff">
+    <span>
       {segments.map((seg, i) =>
         seg.kind === "same" ? (
           <span key={i}>{seg.text}</span>
         ) : (
           <span key={i}>
-            <del className="diff-del">{seg.original}</del>{" "}
-            <ins className="diff-ins">{seg.corrected}</ins>
+            <del className="text-destructive line-through decoration-destructive decoration-[1.5px]">
+              {seg.original}
+            </del>{" "}
+            <ins className="font-semibold text-success no-underline">
+              {seg.corrected}
+            </ins>
           </span>
         ),
       )}
@@ -155,17 +165,20 @@ export function InlineCorrection({
   const showProse = !analysis && !!proseFeedback?.trim();
 
   return (
-    <div className="correction">
-      <div className="correction-actions">
+    <div className="flex w-full flex-col items-end gap-1.5">
+      <div className="-mr-[0.3rem] flex items-center gap-0.5">
         {leading}
         {showPending && (
-          <span className="correction-pending" aria-live="polite">
-            <span className="inline-correction-spinner" aria-hidden />
+          <span
+            className="inline-flex items-center gap-1.5 px-0.5 py-0.5 text-[0.78rem] text-muted-foreground"
+            aria-live="polite"
+          >
+            <Spinner />
             正在分析…
           </span>
         )}
         {allCorrect && (
-          <span className="correction-status">
+          <span className="inline-flex items-center gap-1 px-1.5 py-1 text-[0.76rem] text-success">
             <IconCheck size={14} />
             表达正确
           </span>
@@ -173,7 +186,7 @@ export function InlineCorrection({
         {gap && (
           <button
             type="button"
-            className={`correction-toggle${gapOpen ? " active" : ""}`}
+            className={cn(actionBtn, gapOpen && actionBtnActive)}
             aria-expanded={gapOpen}
             onClick={() => setGapOpen((v) => !v)}
           >
@@ -184,7 +197,7 @@ export function InlineCorrection({
         {natural && (
           <button
             type="button"
-            className={`correction-toggle${natural.open ? " active" : ""}`}
+            className={cn(actionBtn, natural.open && actionBtnActive)}
             aria-expanded={natural.open}
             onClick={natural.onToggle}
           >
@@ -195,65 +208,101 @@ export function InlineCorrection({
         {hasIssues && (
           <button
             type="button"
-            className={`correction-toggle${grammarOpen ? " active" : ""}`}
+            className={cn(actionBtn, grammarOpen && actionBtnActive)}
             aria-expanded={grammarOpen}
             onClick={() => setGrammarOpen((v) => !v)}
           >
             <IconBookOpen size={15} />
             语法详解
-            <span className="correction-count">{analysis?.issues.length ?? 0}</span>
+            <span className="inline-flex h-[1.05rem] min-w-[1.05rem] items-center justify-center rounded-full bg-background px-1 text-[0.64rem] font-bold text-muted-foreground">
+              {analysis?.issues.length ?? 0}
+            </span>
           </button>
         )}
       </div>
 
       {gap && gapOpen && (
-        <div className="correction-panel gap-panel">
-          <div className="gap-section">
-            <span className="gap-label">地道表达</span>
+        <div className="flex w-full animate-in flex-col gap-[0.65rem] rounded-lg border bg-card p-3 text-[0.82rem] leading-normal shadow-sm fade-in-0 slide-in-from-bottom-1 duration-200">
+          <div className="flex flex-col gap-1">
+            <span className="text-[0.68rem] font-semibold uppercase tracking-wide text-muted-foreground">
+              地道表达
+            </span>
             <SpeakableText text={gap.target_expression} />
           </div>
-          <div className="gap-section">
-            <span className="gap-label">讲解</span>
-            <p className="gap-explanation">{gap.explanation}</p>
+          <div className="flex flex-col gap-1">
+            <span className="text-[0.68rem] font-semibold uppercase tracking-wide text-muted-foreground">
+              讲解
+            </span>
+            <p className="m-0 leading-relaxed text-foreground">
+              {gap.explanation}
+            </p>
           </div>
           {gap.key_items.length > 0 && (
-            <div className="gap-section">
-              <span className="gap-label">关键词 / 句式</span>
-              <div className="gap-chips">
+            <div className="flex flex-col gap-1">
+              <span className="text-[0.68rem] font-semibold uppercase tracking-wide text-muted-foreground">
+                关键词 / 句式
+              </span>
+              <div className="flex flex-wrap gap-1.5">
                 {gap.key_items.map((it, i) => (
-                  <span key={i} className="gap-chip" title={it.gloss}>
-                    <span className="gap-chip-text">{it.text}</span>
-                    <span className="gap-chip-gloss">{it.gloss}</span>
+                  <span
+                    key={i}
+                    className="inline-flex items-baseline gap-1.5 rounded-md border bg-background px-2 py-1"
+                    title={it.gloss}
+                  >
+                    <span className="font-semibold text-foreground">
+                      {it.text}
+                    </span>
+                    <span className="text-[0.72rem] text-muted-foreground">
+                      {it.gloss}
+                    </span>
                   </span>
                 ))}
               </div>
             </div>
           )}
           {gap.usage_note?.trim() && (
-            <p className="gap-usage">{gap.usage_note.trim()}</p>
+            <p className="m-0 text-[0.78rem] leading-snug text-muted-foreground">
+              {gap.usage_note.trim()}
+            </p>
           )}
         </div>
       )}
 
       {hasIssues && grammarOpen && analysis && (
-        <div className="correction-panel">
-          <ul className="issues">
+        <div className="w-full animate-in rounded-lg border bg-card p-3 text-[0.82rem] shadow-sm fade-in-0 slide-in-from-bottom-1 duration-200">
+          <ul className="m-0 flex list-none flex-col p-0">
             {analysis.issues.map((iss, i) => (
-              <li key={i}>
-                <div className="issue-head">
-                  <span className="issue-cat">{CATEGORY_LABEL[iss.category]}</span>
-                  <span className={`issue-sev ${SEVERITY_CLASS[iss.severity]}`}>
+              <li
+                key={i}
+                className="border-t py-[0.6rem] first:border-t-0 first:pt-0 last:pb-0"
+              >
+                <div className="mb-1.5 flex items-center gap-1.5">
+                  <span className="rounded bg-accent px-1.5 py-0.5 text-[0.68rem] font-semibold uppercase tracking-wide text-primary">
+                    {CATEGORY_LABEL[iss.category]}
+                  </span>
+                  <span
+                    className={cn(
+                      "text-[0.62rem] uppercase",
+                      SEVERITY_COLOR[iss.severity],
+                    )}
+                  >
                     {SEVERITY_LABEL[iss.severity]}
                   </span>
                 </div>
-                <p className="issue-diff">
-                  <del>{iss.span_original}</del>
-                  <span className="issue-arrow" aria-hidden>
+                <p className="m-0 text-[0.84rem]">
+                  <del className="text-destructive line-through decoration-destructive">
+                    {iss.span_original}
+                  </del>
+                  <span className="mx-1.5 text-xs text-muted-foreground" aria-hidden>
                     →
                   </span>
-                  <ins>{iss.span_corrected}</ins>
+                  <ins className="font-medium text-success no-underline">
+                    {iss.span_corrected}
+                  </ins>
                 </p>
-                <p className="issue-explain">{iss.explanation}</p>
+                <p className="mt-1.5 mb-0 text-[0.78rem] leading-snug text-muted-foreground">
+                  {iss.explanation}
+                </p>
               </li>
             ))}
           </ul>
@@ -261,12 +310,18 @@ export function InlineCorrection({
       )}
 
       {showProse && (
-        <div className="correction-panel">
-          <pre className="inline-correction-prose">{proseFeedback!.trim()}</pre>
+        <div className="w-full animate-in rounded-lg border bg-card p-3 text-[0.82rem] shadow-sm fade-in-0 slide-in-from-bottom-1 duration-200">
+          <pre className="m-0 whitespace-pre-wrap break-words font-sans text-foreground">
+            {proseFeedback!.trim()}
+          </pre>
         </div>
       )}
 
-      {error && <p className="correction-error" role="alert">{error}</p>}
+      {error && (
+        <p className="text-[0.78rem] leading-snug text-destructive" role="alert">
+          {error}
+        </p>
+      )}
     </div>
   );
 }

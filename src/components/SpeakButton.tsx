@@ -6,6 +6,8 @@ import {
   subscribePlayback,
 } from "../tts/playback";
 import { MissingTtsApiKeyError, speakText } from "../tts/speak";
+import { Spinner } from "./ui/spinner";
+import { cn } from "@/lib/utils";
 import { IconVolume } from "./icons";
 
 // 正在播放时的动态条形(像声波),清晰地告诉用户"在响"。
@@ -19,7 +21,24 @@ function PlayingBars() {
   );
 }
 
-export function SpeakButton({ text }: { text: string }) {
+// bar: 扁平,融入操作行;round: 独立圆钮(地道表达面板里)。
+const SPEAK_BASE: Record<"bar" | "round", string> = {
+  bar: "size-[1.85rem] rounded-md text-muted-foreground hover:bg-accent hover:text-foreground",
+  round:
+    "size-[1.65rem] rounded-full bg-accent text-primary hover:bg-accent/70",
+};
+const SPEAK_PLAYING: Record<"bar" | "round", string> = {
+  bar: "text-success hover:text-success",
+  round: "bg-success/15 text-success hover:bg-success/15",
+};
+
+export function SpeakButton({
+  text,
+  variant = "bar",
+}: {
+  text: string;
+  variant?: "bar" | "round";
+}) {
   // 播放状态来自全局播放器,所以自动朗读时本按钮也会亮起。
   const playingKey = useSyncExternalStore(subscribePlayback, getPlayingKey);
   const playing = playingKey === text;
@@ -50,25 +69,32 @@ export function SpeakButton({ text }: { text: string }) {
   }
 
   return (
-    <span className="speak-btn-wrap">
+    <span className="relative inline-flex shrink-0">
       <button
         type="button"
-        className={`speak-btn${playing ? " playing" : ""}`}
+        className={cn(
+          "inline-flex items-center justify-center transition-colors disabled:cursor-default disabled:opacity-45",
+          SPEAK_BASE[variant],
+          playing && SPEAK_PLAYING[variant],
+        )}
         onClick={() => void handleClick()}
         disabled={loading || !text.trim()}
         aria-label={playing ? "停止朗读" : "朗读"}
         title={playing ? "停止朗读" : "朗读"}
       >
         {loading ? (
-          <span className="speak-btn-spinner" aria-hidden />
+          <Spinner className="size-3" />
         ) : playing ? (
           <PlayingBars />
         ) : (
-          <IconVolume size={18} />
+          <IconVolume size={variant === "round" ? 15 : 18} />
         )}
       </button>
       {error && (
-        <span className="speak-btn-error" role="alert">
+        <span
+          className="pointer-events-none absolute right-0 top-[calc(100%+4px)] z-[2] w-max max-w-[220px] rounded bg-destructive/15 px-1.5 py-1 text-[0.68rem] leading-tight text-destructive"
+          role="alert"
+        >
           {error}
         </span>
       )}
@@ -78,9 +104,11 @@ export function SpeakButton({ text }: { text: string }) {
 
 export function SpeakableText({ text }: { text: string }) {
   return (
-    <div className="speakable-row">
-      <span className="speakable-text">{text}</span>
-      <SpeakButton text={text} />
+    <div className="flex items-start gap-1.5">
+      <span className="min-w-0 flex-1 whitespace-pre-wrap leading-snug">
+        {text}
+      </span>
+      <SpeakButton text={text} variant="round" />
     </div>
   );
 }

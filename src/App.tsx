@@ -4,6 +4,7 @@ import { ProfileView } from "./components/ProfileView";
 import { SettingsView } from "./components/SettingsView";
 import { Sidebar, type MainView } from "./components/Sidebar";
 import { IconSidebar } from "./components/icons";
+import { Button } from "./components/ui/button";
 import {
   type ConversationMeta,
   listConversations,
@@ -13,7 +14,6 @@ import {
   ensureActiveConversation,
   setActiveConversationId,
 } from "./db/conversations";
-import "./App.css";
 
 function App() {
   const [conversations, setConversations] = useState<ConversationMeta[]>([]);
@@ -59,7 +59,12 @@ function App() {
     }
   }
 
-  if (!activeId) return <div className="app loading">加载中…</div>;
+  if (!activeId)
+    return (
+      <div className="flex h-full min-h-screen items-center justify-center text-muted-foreground">
+        加载中…
+      </div>
+    );
 
   const topbarTitle =
     view === "profile"
@@ -69,7 +74,7 @@ function App() {
         : (conversations.find((c) => c.id === activeId)?.title ?? "");
 
   return (
-    <div className={collapsed ? "app sidebar-collapsed" : "app"}>
+    <div className="relative flex h-full min-h-screen">
       {!collapsed && (
         <Sidebar
           conversations={conversations}
@@ -83,22 +88,34 @@ function App() {
           onToggleCollapse={() => setCollapsed(true)}
         />
       )}
-      <main className="view">
+      <main className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
         {/* 贯穿整宽的顶栏:既是窗口拖拽区,又做自顶向下的滚动渐变模糊 */}
-        <div className="topbar" data-tauri-drag-region>
+        <div
+          data-tauri-drag-region
+          className={`absolute inset-x-0 top-0 z-10 flex h-12 items-center gap-1.5 bg-background/60 backdrop-blur-lg backdrop-saturate-150 [mask-image:linear-gradient(to_bottom,#000_52%,transparent)] [-webkit-mask-image:linear-gradient(to_bottom,#000_52%,transparent)] ${
+            collapsed ? "pl-20" : "px-5"
+          }`}
+        >
           {collapsed && (
-            <button
-              className="reopen-sidebar icon-btn"
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-8 text-muted-foreground"
               onClick={() => setCollapsed(false)}
               title="展开侧栏"
               aria-label="展开侧栏"
             >
               <IconSidebar />
-            </button>
+            </Button>
           )}
-          <span className="topbar-title">{topbarTitle}</span>
+          <span className="pointer-events-none truncate text-sm font-semibold tracking-tight">
+            {topbarTitle}
+          </span>
         </div>
-        <div className="view-panel" hidden={view !== "chat"}>
+        <div
+          className="flex min-h-0 flex-1 flex-col data-[hidden=true]:hidden"
+          data-hidden={view !== "chat"}
+        >
           <ChatView
             key={activeId}
             conversationId={activeId}

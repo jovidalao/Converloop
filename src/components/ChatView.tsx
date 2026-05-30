@@ -8,6 +8,9 @@ import { InlineCorrection, UserSentence } from "./InlineCorrection";
 import { SpeakButton } from "./SpeakButton";
 import { ReplyExplanation } from "./ReplyExplanation";
 import { Markdown } from "./Markdown";
+import { Spinner } from "./ui/spinner";
+import { actionBtn, actionBtnActive } from "@/lib/ui";
+import { cn } from "@/lib/utils";
 import {
   IconCopy,
   IconCheck,
@@ -31,7 +34,7 @@ function CopyButton({ text }: { text: string }) {
   return (
     <button
       type="button"
-      className="msg-action"
+      className={actionBtn}
       title="复制"
       onClick={() => {
         void navigator.clipboard.writeText(text).then(() => {
@@ -97,10 +100,10 @@ function PartnerReply({ text, autoOpen = false }: { text: string; autoOpen?: boo
   const showBilingual = open && (view || error);
 
   return (
-    <div className="turn-partner">
-      <div className="msg partner">
+    <div className="flex max-w-none flex-col items-start gap-1.5 self-stretch">
+      <div className="self-stretch py-[0.1rem] text-foreground">
         {showBilingual && error ? (
-          <span className="explain-error" role="alert">
+          <span className="text-sm leading-snug text-destructive" role="alert">
             {error}
           </span>
         ) : showBilingual && view ? (
@@ -127,17 +130,13 @@ function PartnerReply({ text, autoOpen = false }: { text: string; autoOpen?: boo
         trailingActions={
           <button
             type="button"
-            className={`msg-action${showBilingual ? " active" : ""}`}
+            className={cn(actionBtn, showBilingual && actionBtnActive)}
             onClick={toggle}
             disabled={loading}
             aria-pressed={!!showBilingual}
             title="目标语言/母语逐句对照"
           >
-            {loading ? (
-              <span className="speak-btn-spinner" aria-hidden />
-            ) : (
-              <IconLanguages size={16} />
-            )}
+            {loading ? <Spinner /> : <IconLanguages size={16} />}
             <span>双语阅读</span>
           </button>
         }
@@ -184,19 +183,19 @@ function UserTurn({
   const idiomatic = idiomaticText(turn.analysis);
   const [naturalOpen, setNaturalOpen] = useState(true);
   return (
-    <div className="turn-user">
-      <div className="msg user">
+    <div className="flex max-w-[min(88%,520px)] flex-col items-end gap-1.5 self-end">
+      <div className="whitespace-pre-wrap rounded-2xl rounded-br-[5px] border bg-secondary px-3.5 py-2.5 text-[0.95rem] leading-normal text-foreground shadow-sm">
         <UserSentence
           text={turn.userText}
           analysis={turn.analysis}
           nativeLanguage={nativeLanguage}
         />
         {idiomatic && naturalOpen && (
-          <div className="user-natural">
-            <span className="user-natural-icon" aria-hidden>
+          <div className="mt-[0.55rem] flex items-start gap-1.5 border-t pt-[0.55rem] text-[0.85rem] leading-normal text-muted-foreground">
+            <span className="mt-[0.12rem] inline-flex shrink-0 text-primary" aria-hidden>
               <IconSparkles size={14} />
             </span>
-            <span className="user-natural-text">{idiomatic}</span>
+            <span className="min-w-0 flex-1">{idiomatic}</span>
           </div>
         )}
       </div>
@@ -350,17 +349,19 @@ export function ChatView({ conversationId, onActivity }: ChatViewProps) {
   }
 
   return (
-    <div className="chat">
+    <div className="flex min-h-0 w-full flex-1 flex-col">
       <div
-        className="messages"
+        className="flex min-h-0 flex-1 flex-col gap-[1.1rem] overflow-y-auto overscroll-contain px-4 pt-[3.4rem] pb-3"
         ref={messagesRef}
         onScroll={syncStickToBottom}
       >
         {turns.length === 0 && !streaming && (
-          <div className="chat-empty">用目标语言说点什么,开始对话吧。</div>
+          <div className="m-auto text-center text-sm leading-relaxed text-muted-foreground">
+            用目标语言说点什么,开始对话吧。
+          </div>
         )}
         {turns.map((turn) => (
-          <div key={turn.id} className="turn-block">
+          <div key={turn.id} className="flex flex-col gap-[0.55rem]">
             <UserTurn turn={turn} nativeLanguage={nativeLanguage} />
             {turn.partnerText && (
               <PartnerReply
@@ -371,16 +372,20 @@ export function ChatView({ conversationId, onActivity }: ChatViewProps) {
           </div>
         ))}
         {streaming && (
-          <div className="msg partner streaming">
+          <div className="self-stretch py-[0.1rem] text-foreground opacity-70">
             <Markdown>{streaming}</Markdown>
           </div>
         )}
         <div ref={endRef} />
       </div>
-      {error && <div className="error">{error}</div>}
-      <div className="composer-dock">
+      {error && (
+        <div className="mx-4 rounded-md bg-destructive/15 px-3 py-2 text-sm text-destructive">
+          {error}
+        </div>
+      )}
+      <div className="shrink-0 px-4 pt-[0.4rem] pb-[1.1rem]">
         <form
-          className="composer"
+          className="flex items-end gap-1.5 rounded-[26px] border bg-card py-[0.35rem] pr-[0.4rem] pl-4 shadow transition-colors focus-within:border-ring"
           onSubmit={(e) => {
             e.preventDefault();
             void send();
@@ -399,19 +404,16 @@ export function ChatView({ conversationId, onActivity }: ChatViewProps) {
             rows={1}
             placeholder="用目标语言输入一句话…"
             disabled={replyBusy}
+            className="max-h-[calc(1.4em*3+0.9rem)] min-w-0 flex-1 resize-none border-none bg-transparent py-[0.45rem] text-[0.95rem] leading-snug outline-none placeholder:text-muted-foreground"
           />
           <button
             type="submit"
-            className="send-btn"
+            className="inline-flex size-[2.1rem] shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-opacity disabled:opacity-40"
             disabled={replyBusy || !input.trim()}
             title="发送"
             aria-label="发送"
           >
-            {replyBusy ? (
-              <span className="send-spinner" aria-hidden />
-            ) : (
-              <IconSend size={18} />
-            )}
+            {replyBusy ? <Spinner className="size-3.5" /> : <IconSend size={18} />}
           </button>
         </form>
       </div>

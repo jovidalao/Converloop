@@ -1,6 +1,9 @@
 import { useState, type ReactNode } from "react";
 import { explainReply, MissingApiKeyError } from "../orchestrator";
 import { Markdown } from "./Markdown";
+import { Spinner } from "./ui/spinner";
+import { actionBtn, actionBtnActive } from "@/lib/ui";
+import { cn } from "@/lib/utils";
 import { IconBookOpen } from "./icons";
 
 // "讲解"按钮:点一下,按用户掌握情况流式讲解这条回复。
@@ -56,34 +59,30 @@ export function ReplyExplanation({
   const expanded = open && (explanation || error);
 
   return (
-    <div className="explain-wrap">
-      <div className="msg-actions">
+    <div className="flex w-full flex-col gap-1.5">
+      <div className="-ml-[0.3rem] flex items-center gap-0.5">
         {actions}
         <button
           type="button"
-          className={`msg-action${expanded ? " active" : ""}`}
+          className={cn(actionBtn, expanded && actionBtnActive)}
           onClick={handleClick}
           disabled={loading}
           aria-expanded={!!expanded}
           title="根据你的掌握情况讲解这条回复"
         >
-          {loading ? (
-            <span className="speak-btn-spinner" aria-hidden />
-          ) : (
-            <IconBookOpen size={16} />
-          )}
+          {loading ? <Spinner /> : <IconBookOpen size={16} />}
           <span>讲解</span>
         </button>
         {trailingActions}
       </div>
       {open && (explanation || error) && (
-        <div className="explain-panel">
+        <div className="w-full animate-in rounded-lg border bg-card p-3 shadow-sm fade-in-0 slide-in-from-bottom-1 duration-300">
           {error ? (
-            <span className="explain-error" role="alert">
+            <span className="text-sm leading-snug text-destructive" role="alert">
               {error}
             </span>
           ) : (
-            <div className="explain-body">
+            <div className="text-[0.82rem] leading-normal text-foreground">
               <Markdown>{explanation}</Markdown>
             </div>
           )}

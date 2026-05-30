@@ -1,0 +1,84 @@
+/* Prose styling for react-markdown output (explanation / bilingual panels).
+   These rules style HTML generated at runtime, so they can't be Tailwind
+   utilities — colors read shadcn semantic tokens so they track light/dark. */
+.markdown > :first-child {
+  margin-top: 0;
+}
+.markdown > :last-child {
+  margin-bottom: 0;
+}
+.markdown p {
+  margin: 0.5rem 0;
+}
+.markdown h1,
+.markdown h2,
+.markdown h3,
+.markdown h4 {
+  margin: 0.7rem 0 0.4rem;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--foreground);
+}
+.markdown ul,
+.markdown ol {
+  margin: 0.4rem 0;
+  padding-left: 1.25rem;
+}
+.markdown li {
+  margin: 0.25rem 0;
+}
+.markdown li > p {
+  margin: 0.2rem 0;
+}
+.markdown strong {
+  color: var(--foreground);
+  font-weight: 600;
+}
+.markdown code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  padding: 0.05rem 0.3rem;
+  border-radius: 0.3rem;
+  background: var(--muted);
+  color: var(--foreground);
+}
+.markdown pre {
+  margin: 0.5rem 0;
+  padding: 0.6rem 0.75rem;
+  border-radius: 0.5rem;
+  background: var(--muted);
+  overflow-x: auto;
+}
+.markdown pre code {
+  padding: 0;
+  background: none;
+  color: inherit;
+}
+.markdown blockquote {
+  margin: 0.5rem 0;
+  padding: 0.1rem 0.75rem;
+  border-left: 3px solid var(--border);
+  color: var(--muted-foreground);
+}
+.markdown a {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.markdown table {
+  border-collapse: collapse;
+  margin: 0.5rem 0;
+}
+.markdown th,
+.markdown td {
+  border: 1px solid var(--border);
+  padding: 0.3rem 0.5rem;
+}
+
+/* Bilingual line-by-line reading: translation (em → .bi-tr) is smaller & dimmer. */
+.bilingual .bi-tr {
+  font-size: 0.82em;
+  font-style: normal;
+  color: var(--muted-foreground);
+  opacity: 0.85;
+}
