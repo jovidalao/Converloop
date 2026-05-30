@@ -56,7 +56,7 @@ export async function speakText(text: string): Promise<ArrayBuffer> {
 export async function autoSpeakReply(text: string): Promise<void> {
   try {
     const audio = await speakText(text);
-    await playSpeech(audio);
+    await playSpeech(audio, text);
   } catch (e) {
     if (e instanceof MissingTtsApiKeyError) return;
     console.warn("自动朗读失败:", e);

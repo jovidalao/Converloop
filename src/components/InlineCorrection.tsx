@@ -66,17 +66,19 @@ function buildDiffSegments(original: string, issues: Issue[]): DiffSegment[] {
 export function UserSentence({
   text,
   analysis,
+  nativeLanguage,
 }: {
   text: string;
   analysis: TutorAnalysis | null;
+  nativeLanguage?: string;
 }) {
-  // 母语/混说轮:原样显示 + 角标,不做红绿 diff(没有目标语原句可改)。
+  // 母语/混说轮:原样显示 + 角标(直接标出母语名),不做红绿 diff。
   if (analysis?.expression_gap) {
     return (
       <span className="native-sentence">
         <span className="native-badge" title="用母语/混说输入">
           <IconLanguages size={12} />
-          母语
+          {nativeLanguage?.trim() || "母语"}
         </span>
         {text}
       </span>

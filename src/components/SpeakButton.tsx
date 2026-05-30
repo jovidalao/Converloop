@@ -1,6 +1,22 @@
-import { useState } from "react";
-import { playSpeech, stopSpeech } from "../tts/playback";
+import { useState, useSyncExternalStore } from "react";
+import {
+  getPlayingKey,
+  playSpeech,
+  stopSpeech,
+  subscribePlayback,
+} from "../tts/playback";
 import { MissingTtsApiKeyError, speakText } from "../tts/speak";
+
+// 正在播放时的动态条形(像声波),清晰地告诉用户"在响"。
+function PlayingBars() {
+  return (
+    <span className="speak-bars" aria-hidden>
+      <span />
+      <span />
+      <span />
+    </span>
+  );
+}
 
 function SpeakerIcon() {
   return (
@@ -23,26 +39,27 @@ function SpeakerIcon() {
 }
 
 export function SpeakButton({ text }: { text: string }) {
-  const [state, setState] = useState<"idle" | "loading" | "playing">("idle");
+  // 播放状态来自全局播放器,所以自动朗读时本按钮也会亮起。
+  const playingKey = useSyncExternalStore(subscribePlayback, getPlayingKey);
+  const playing = playingKey === text;
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function handleClick() {
-    if (state === "playing") {
+    if (playing) {
       stopSpeech();
-      setState("idle");
       return;
     }
-    if (!text.trim() || state === "loading") return;
+    if (!text.trim() || loading) return;
 
     setError(null);
-    setState("loading");
+    setLoading(true);
     try {
       const audio = await speakText(text);
-      setState("playing");
-      await playSpeech(audio);
-      setState("idle");
+      setLoading(false);
+      await playSpeech(audio, text);
     } catch (e) {
-      setState("idle");
+      setLoading(false);
       if (e instanceof MissingTtsApiKeyError) {
         setError(e.message);
       } else {
@@ -55,14 +72,16 @@ export function SpeakButton({ text }: { text: string }) {
     <span className="speak-btn-wrap">
       <button
         type="button"
-        className={`speak-btn${state === "playing" ? " playing" : ""}`}
+        className={`speak-btn${playing ? " playing" : ""}`}
         onClick={() => void handleClick()}
-        disabled={state === "loading" || !text.trim()}
-        aria-label={state === "playing" ? "停止朗读" : "朗读"}
-        title={state === "playing" ? "停止朗读" : "朗读"}
+        disabled={loading || !text.trim()}
+        aria-label={playing ? "停止朗读" : "朗读"}
+        title={playing ? "停止朗读" : "朗读"}
       >
-        {state === "loading" ? (
+        {loading ? (
           <span className="speak-btn-spinner" aria-hidden />
+        ) : playing ? (
+          <PlayingBars />
         ) : (
           <SpeakerIcon />
         )}

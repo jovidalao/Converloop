@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { runTurn, MissingApiKeyError } from "../orchestrator";
 import { loadChatHistory, type ChatTurn } from "../db/turns";
+import { loadConfig } from "../config";
 import { maybeAutoTitle, touchConversation } from "../db/conversations";
 import { InlineCorrection, UserSentence } from "./InlineCorrection";
 import { SpeakButton } from "./SpeakButton";
@@ -35,6 +36,20 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
+// 用户消息下方的操作:复制 + 朗读「纠正后的句子」。
+// 母语/混说轮(expression_gap)没有目标语正句可读,所以不显示朗读。
+function UserMessageActions({ turn }: { turn: ChatTurn }) {
+  const analysis = turn.analysis;
+  const corrected = analysis?.corrected?.trim() || turn.userText;
+  const canSpeak = !!analysis && !analysis.expression_gap;
+  return (
+    <div className="msg-actions user">
+      <CopyButton text={corrected} />
+      {canSpeak && <SpeakButton text={corrected} />}
+    </div>
+  );
+}
+
 export function ChatView({ conversationId, onActivity }: ChatViewProps) {
   const [turns, setTurns] = useState<ChatTurn[]>([]);
   const [input, setInput] = useState("");
@@ -43,9 +58,19 @@ export function ChatView({ conversationId, onActivity }: ChatViewProps) {
   const [error, setError] = useState<string | null>(null);
   const messagesRef = useRef<HTMLDivElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const stickToBottomRef = useRef(true);
   const turnGenRef = useRef(0);
   const replyCommittedRef = useRef(false);
+  const [nativeLanguage] = useState(() => loadConfig().nativeLanguage);
+
+  // 输入框随内容增高,最多三行,超过后内部滚动。
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [input]);
 
   function syncStickToBottom() {
     const el = messagesRef.current;
@@ -157,8 +182,13 @@ export function ChatView({ conversationId, onActivity }: ChatViewProps) {
           <div key={turn.id} className="turn-block">
             <div className="turn-user">
               <div className="msg user">
-                <UserSentence text={turn.userText} analysis={turn.analysis} />
+                <UserSentence
+                  text={turn.userText}
+                  analysis={turn.analysis}
+                  nativeLanguage={nativeLanguage}
+                />
               </div>
+              <UserMessageActions turn={turn} />
               {(turn.analysisPending ||
                 turn.analysis ||
                 turn.analysisProse ||
@@ -199,9 +229,17 @@ export function ChatView({ conversationId, onActivity }: ChatViewProps) {
             void send();
           }}
         >
-          <input
+          <textarea
+            ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                void send();
+              }
+            }}
+            rows={1}
             placeholder="用目标语言输入一句话…"
             disabled={replyBusy}
           />

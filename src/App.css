@@ -436,7 +436,7 @@ body,
 }
 .composer {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: 0.4rem;
   padding: 0.35rem 0.4rem 0.35rem 1rem;
   border: 1px solid var(--border);
@@ -447,15 +447,21 @@ body,
 .composer:focus-within {
   border-color: var(--border-strong);
 }
-.composer input {
+.composer textarea {
   flex: 1;
   min-width: 0;
   border: none;
   background: transparent;
   padding: 0.45rem 0;
   font-size: 0.95rem;
+  font-family: inherit;
+  line-height: 1.4;
+  resize: none;
+  /* 最多三行,超出后内部滚动 */
+  max-height: calc(1.4em * 3 + 0.9rem);
+  overflow-y: auto;
 }
-.composer input:focus {
+.composer textarea:focus {
   outline: none;
   border: none;
 }
@@ -622,8 +628,16 @@ body,
   color: var(--accent-fg);
   font-size: 0.64rem;
   font-weight: 600;
+  line-height: 1; /* 不继承气泡的 1.5,否则角标被撑高、相对首行偏移 */
   vertical-align: middle;
   white-space: nowrap;
+}
+/* 角标垂直对齐到第一行文字的中线 */
+.native-sentence {
+  vertical-align: middle;
+}
+.native-badge svg {
+  display: block;
 }
 .gap-panel {
   display: flex;
@@ -768,11 +782,16 @@ body,
   gap: 0.1rem;
   margin-left: -0.3rem;
 }
+/* 用户消息下方:靠右对齐,贴着气泡右边缘 */
+.msg-actions.user {
+  margin-left: 0;
+  margin-right: -0.3rem;
+}
 .msg-action {
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
-  padding: 0.3rem 0.45rem;
+  padding: 0.3rem 0.5rem;
   border-radius: var(--radius-sm);
   background: transparent;
   border: none;
@@ -785,13 +804,16 @@ body,
   background: var(--surface-2);
   color: var(--text);
 }
+/* 展开(讲解)时:加底色表示当前展开,跟用户消息下方的切换按钮一致 */
 .msg-action.active {
+  background: var(--accent-weak);
   color: var(--accent-fg);
 }
 /* Speak button adopts the flat action-bar look inside .msg-actions */
 .msg-actions .speak-btn {
   width: 1.85rem;
   height: 1.85rem;
+  border-radius: var(--radius-sm);
   background: transparent;
   border: none;
   color: var(--text-dim);
@@ -800,10 +822,44 @@ body,
   background: var(--surface-2);
   color: var(--text);
 }
+/* 正在播放:加底色 + 主题色,一眼能看出"在响" */
 .msg-actions .speak-btn.playing {
-  background: transparent;
-  border: none;
+  background: var(--success-weak);
   color: var(--success-fg);
+}
+.msg-actions .speak-btn.playing:hover:not(:disabled) {
+  background: var(--success-weak);
+  color: var(--success-fg);
+}
+/* 声波动画条 */
+.speak-bars {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 14px;
+}
+.speak-bars span {
+  width: 2.5px;
+  height: 100%;
+  border-radius: 1px;
+  background: currentColor;
+  transform-origin: center;
+  animation: speak-bar 0.9s ease-in-out infinite;
+}
+.speak-bars span:nth-child(1) {
+  animation-delay: -0.3s;
+}
+.speak-bars span:nth-child(3) {
+  animation-delay: -0.15s;
+}
+@keyframes speak-bar {
+  0%,
+  100% {
+    transform: scaleY(0.35);
+  }
+  50% {
+    transform: scaleY(1);
+  }
 }
 .explain-panel {
   width: 100%;

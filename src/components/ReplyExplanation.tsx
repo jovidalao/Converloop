@@ -51,11 +51,7 @@ export function ReplyExplanation({
     setOpen((o) => !o);
   }
 
-  const label = loading
-    ? "讲解中…"
-    : open && (explanation || error)
-      ? "收起"
-      : "讲解";
+  const expanded = open && (explanation || error);
 
   return (
     <div className="explain-wrap">
@@ -63,13 +59,18 @@ export function ReplyExplanation({
         {actions}
         <button
           type="button"
-          className={`msg-action${open && (explanation || error) ? " active" : ""}`}
+          className={`msg-action${expanded ? " active" : ""}`}
           onClick={handleClick}
           disabled={loading}
+          aria-expanded={!!expanded}
           title="根据你的掌握情况讲解这条回复"
         >
-          <IconExplain size={16} />
-          <span>{label}</span>
+          {loading ? (
+            <span className="speak-btn-spinner" aria-hidden />
+          ) : (
+            <IconExplain size={16} />
+          )}
+          <span>讲解</span>
         </button>
       </div>
       {open && (explanation || error) && (
