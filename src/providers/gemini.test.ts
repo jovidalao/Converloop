@@ -10,19 +10,19 @@ import {
 const cfg: GeminiConfig = {
   baseUrl: "https://generativelanguage.googleapis.com/v1beta",
   apiKey: "test-key",
-  model: "gemini-3.5-flash",
+  model: "gemini-2.0-flash",
 };
 
 describe("gemini REST alignment", () => {
   it("generate URL matches official path", () => {
     expect(geminiGenerateUrl(cfg)).toBe(
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent",
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
     );
   });
 
   it("stream URL uses streamGenerateContent with alt=sse", () => {
     expect(geminiStreamUrl(cfg)).toBe(
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:streamGenerateContent?alt=sse",
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse",
     );
   });
 
@@ -85,5 +85,13 @@ describe("gemini REST alignment", () => {
       temperature: 0.3,
     });
     expect(body.generationConfig).toEqual({ temperature: 0.3 });
+  });
+
+  it("json_object mode sets responseMimeType without schema", () => {
+    const body = buildGeminiRequestBody({
+      messages: [{ role: "user", content: "Hi" }],
+      jsonObject: true,
+    });
+    expect(body.generationConfig).toEqual({ responseMimeType: "application/json" });
   });
 });

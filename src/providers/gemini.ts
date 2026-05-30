@@ -92,6 +92,8 @@ export function buildGeminiRequestBody(opts: GenerateOptions): Body {
   if (opts.jsonSchema) {
     generationConfig.responseMimeType = "application/json";
     generationConfig.responseSchema = toGeminiSchema(opts.jsonSchema.schema);
+  } else if (opts.jsonObject) {
+    generationConfig.responseMimeType = "application/json";
   }
   if (Object.keys(generationConfig).length > 0) body.generationConfig = generationConfig;
   return body;

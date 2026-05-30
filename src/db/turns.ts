@@ -1,4 +1,4 @@
-import { desc, count } from "drizzle-orm";
+import { desc, count, eq } from "drizzle-orm";
 import { db } from "./client";
 import { turn, type Turn } from "./schema";
 import type { TutorAnalysis } from "../agents/schema";
@@ -7,14 +7,55 @@ export async function persistTurn(
   userInput: string,
   reply: string,
   analysis: TutorAnalysis | null,
-): Promise<void> {
+  id = crypto.randomUUID(),
+): Promise<string> {
   await db.insert(turn).values({
-    id: crypto.randomUUID(),
+    id,
     createdAt: Date.now(),
     userInput,
     reply,
     analysisJson: analysis ? JSON.stringify(analysis) : null,
   });
+  return id;
+}
+
+export async function updateTurnAnalysis(
+  id: string,
+  analysis: TutorAnalysis | null,
+): Promise<void> {
+  await db
+    .update(turn)
+    .set({ analysisJson: analysis ? JSON.stringify(analysis) : null })
+    .where(eq(turn.id, id));
+}
+
+export interface ChatTurn {
+  id: string;
+  userText: string;
+  partnerText?: string;
+  analysis: TutorAnalysis | null;
+  analysisPending?: boolean;
+  analysisError?: string | null;
+}
+
+// 从 DB 恢复聊天(时间正序),供 ChatView 挂载时加载。
+export async function loadChatHistory(limit = 200): Promise<ChatTurn[]> {
+  const turns = await getRecentTurns(limit);
+  return turns.map((t) => ({
+    id: t.id,
+    userText: t.userInput,
+    partnerText: t.reply,
+    analysis: parseTurnAnalysis(t.analysisJson),
+  }));
+}
+
+export function parseTurnAnalysis(json: string | null): TutorAnalysis | null {
+  if (!json) return null;
+  try {
+    return JSON.parse(json) as TutorAnalysis;
+  } catch {
+    return null;
+  }
 }
 
 export async function getRecentTurns(limit = 6): Promise<Turn[]> {

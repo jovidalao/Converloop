@@ -30,7 +30,9 @@ function App() {
         ))}
       </nav>
       <main className="view">
-        {tab === "chat" && <ChatView />}
+        <div className="view-panel" hidden={tab !== "chat"}>
+          <ChatView />
+        </div>
         {tab === "profile" && <ProfileView />}
         {tab === "settings" && <SettingsView />}
       </main>

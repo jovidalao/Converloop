@@ -1,9 +1,10 @@
 import { getSecret } from "./keychain";
 import { createOpenAIProvider } from "./providers/openai";
 import { createGeminiProvider } from "./providers/gemini";
+import { createAnthropicProvider } from "./providers/anthropic";
 import type { ModelProvider } from "./providers/types";
 
-export type ProviderType = "openai" | "gemini";
+export type ProviderType = "openai" | "gemini" | "anthropic";
 
 // 非密配置存 localStorage;API key 存 OS keychain(见 keychain.ts)。
 export interface AppConfig {
@@ -27,13 +28,18 @@ export const PROVIDER_PRESETS: Record<
 > = {
   openai: {
     label: "OpenAI 兼容(OpenAI / OpenRouter / LM Studio)",
-    baseUrl: "https://api.openai.com/v1",
+    baseUrl: "http://192.168.31.154:8045/v1",
     model: "gpt-4o-mini",
   },
   gemini: {
-    label: "Gemini(原生)",
-    baseUrl: "https://generativelanguage.googleapis.com/v1beta",
-    model: "gemini-3.5-flash",
+    label: "Gemini (原生 API)",
+    baseUrl: "http://192.168.31.154:8045/v1beta",
+    model: "gemini-2.0-flash",
+  },
+  anthropic: {
+    label: "Anthropic (Claude)",
+    baseUrl: "http://192.168.31.154:8045/v1",
+    model: "claude-sonnet-4-20250514",
   },
 };
 
@@ -69,6 +75,13 @@ export async function getProvider(): Promise<ModelProvider | null> {
   if (!apiKey) return null;
   if (config.providerType === "gemini") {
     return createGeminiProvider({
+      baseUrl: config.baseUrl,
+      apiKey,
+      model: config.model,
+    });
+  }
+  if (config.providerType === "anthropic") {
+    return createAnthropicProvider({
       baseUrl: config.baseUrl,
       apiKey,
       model: config.model,

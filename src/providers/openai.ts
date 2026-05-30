@@ -20,11 +20,42 @@ function buildBody(cfg: OpenAIConfig, opts: GenerateOptions, stream: boolean): B
       json_schema: {
         name: opts.jsonSchema.name,
         schema: opts.jsonSchema.schema,
-        strict: true,
+        strict: false,
       },
     };
+  } else if (opts.jsonObject) {
+    body.response_format = { type: "json_object" };
   }
   return body;
+}
+
+/** 兼容 content / parsed / 旧版 text 等字段。 */
+export function extractOpenAIMessageContent(json: unknown): string {
+  const root = json as {
+    error?: { message?: string };
+    choices?: {
+      message?: {
+        content?: string | null;
+        parsed?: unknown;
+        refusal?: string | null;
+      };
+      text?: string;
+    }[];
+  };
+  if (root.error?.message) throw new Error(root.error.message);
+
+  const choice = root.choices?.[0];
+  if (!choice) return "";
+
+  const msg = choice.message;
+  if (msg?.refusal) throw new Error(msg.refusal);
+
+  if (msg?.parsed !== undefined && msg.parsed !== null) {
+    return typeof msg.parsed === "string" ? msg.parsed : JSON.stringify(msg.parsed);
+  }
+  if (typeof msg?.content === "string" && msg.content.length > 0) return msg.content;
+  if (typeof choice.text === "string") return choice.text;
+  return msg?.content ?? "";
 }
 
 function authHeaders(cfg: OpenAIConfig): Record<string, string> {
@@ -73,7 +104,7 @@ export function createOpenAIProvider(cfg: OpenAIConfig): ModelProvider {
         body: buildBody(cfg, opts, false),
       });
       const json = JSON.parse(text);
-      return json.choices?.[0]?.message?.content ?? "";
+      return extractOpenAIMessageContent(json);
     },
 
     async stream(opts, onDelta) {

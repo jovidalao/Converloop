@@ -3,13 +3,19 @@ import { converse } from "./agents/conversation";
 import { analyze } from "./agents/tutor";
 import type { TutorAnalysis } from "./agents/schema";
 import { getWeakList, recordAnalysis } from "./db/mastery";
-import { formatRecentHistory, persistTurn } from "./db/turns";
+import {
+  formatRecentHistory,
+  persistTurn,
+  updateTurnAnalysis,
+} from "./db/turns";
 import { readProfile, profileSliceForConversation } from "./profile/profile";
 import { maybeRunMaintainer } from "./profile/maintainer-runner";
 
 export interface TurnCallbacks {
   onReplyDelta: (delta: string) => void;
-  onAnalysis: (analysis: TutorAnalysis | null) => void;
+  /** 对话流式结束、可继续输入时触发;批改仍在后台进行。 */
+  onReplyComplete?: (reply: string) => void;
+  onAnalysis: (analysis: TutorAnalysis | null, error?: string) => void;
 }
 
 export interface TurnResult {
@@ -56,19 +62,38 @@ export async function runTurn(
     weakList,
     history,
     userInput,
-  }).then((a) => {
-    cb.onAnalysis(a);
-    return a;
   });
 
-  const [reply, analysis] = await Promise.all([replyPromise, analysisPromise]);
+  const reply = await replyPromise;
+  const turnId = await persistTurn(userInput, reply, null);
+  cb.onReplyComplete?.(reply);
 
-  // 记账(代码侧)+ 持久化本轮。
-  if (analysis) await recordAnalysis(analysis);
-  await persistTurn(userInput, reply, analysis);
+  // 批改、记账、补全 analysis_json 在后台跑,不阻塞下一轮输入。
+  void analysisPromise
+    .then(async ({ analysis, error }) => {
+      if (analysis) {
+        cb.onAnalysis(analysis);
+        try {
+          await recordAnalysis(analysis);
+          await updateTurnAnalysis(turnId, analysis);
+          void maybeRunMaintainer();
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          console.error("批改记账失败:", e);
+          cb.onAnalysis(analysis, `批改已显示但保存失败: ${msg}`);
+        }
+      } else {
+        cb.onAnalysis(
+          null,
+          error ?? "批改未能完成,请查看控制台日志。",
+        );
+      }
+    })
+    .catch((e) => {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error("批改失败:", e);
+      cb.onAnalysis(null, `批改失败: ${msg}`);
+    });
 
-  // 每 N 轮在后台刷新 MD 档案,不阻塞本轮返回。
-  void maybeRunMaintainer();
-
-  return { reply, analysis };
+  return { reply, analysis: null };
 }
