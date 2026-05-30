@@ -1,6 +1,7 @@
 import { getProvider, loadConfig } from "./config";
 import { converse } from "./agents/conversation";
 import { explain } from "./agents/explain";
+import { bilingual } from "./agents/bilingual";
 import { analyze } from "./agents/tutor";
 import type { TutorAnalysis } from "./agents/schema";
 import { getWeakList, recordAnalysis } from "./db/mastery";
@@ -126,6 +127,27 @@ export async function explainReply(
       targetLanguage: config.targetLanguage,
       level: config.level,
       profileSlice,
+      reply,
+    },
+    onDelta,
+  );
+}
+
+// 双语阅读:把一条对话回复做成目标语言/母语逐句对照。
+// 不读档案、不持久化——便宜,需要时重新生成即可。
+export async function bilingualReply(
+  reply: string,
+  onDelta: (delta: string) => void,
+): Promise<string> {
+  const provider = await getProvider();
+  if (!provider) throw new MissingApiKeyError();
+
+  const config = loadConfig();
+  return bilingual(
+    provider,
+    {
+      nativeLanguage: config.nativeLanguage,
+      targetLanguage: config.targetLanguage,
       reply,
     },
     onDelta,

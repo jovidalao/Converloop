@@ -9,9 +9,11 @@ import { IconBookOpen } from "./icons";
 export function ReplyExplanation({
   text,
   actions,
+  trailingActions,
 }: {
   text: string;
   actions?: ReactNode;
+  trailingActions?: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -72,6 +74,7 @@ export function ReplyExplanation({
           )}
           <span>讲解</span>
         </button>
+        {trailingActions}
       </div>
       {open && (explanation || error) && (
         <div className="explain-panel">

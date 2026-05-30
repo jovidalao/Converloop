@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { runTurn, MissingApiKeyError } from "../orchestrator";
+import { runTurn, bilingualReply, MissingApiKeyError } from "../orchestrator";
 import { loadChatHistory, type ChatTurn } from "../db/turns";
 import type { TutorAnalysis } from "../agents/schema";
 import { loadConfig } from "../config";
@@ -8,7 +8,13 @@ import { InlineCorrection, UserSentence } from "./InlineCorrection";
 import { SpeakButton } from "./SpeakButton";
 import { ReplyExplanation } from "./ReplyExplanation";
 import { Markdown } from "./Markdown";
-import { IconCopy, IconCheck, IconSend, IconSparkles } from "./icons";
+import {
+  IconCopy,
+  IconCheck,
+  IconSend,
+  IconSparkles,
+  IconLanguages,
+} from "./icons";
 import { stopSpeech } from "../tts/playback";
 import { createReplySpeaker } from "../tts/stream";
 
@@ -35,6 +41,102 @@ function CopyButton({ text }: { text: string }) {
     >
       {copied ? <IconCheck size={16} /> : <IconCopy size={16} />}
     </button>
+  );
+}
+
+// 一条 AI 回复:气泡(原文 / 双语对照可切换)+ 操作行(复制 / 朗读 / 讲解 / 双语阅读)。
+// 双语对照按需 AI 生成、替换显示原文,再点恢复;状态留在组件内,不持久化。
+// 关键:朗读始终读原文(目标语言版),SpeakButton 永远拿原始 text。
+function PartnerReply({ text }: { text: string }) {
+  const [open, setOpen] = useState(false); // 当前是否显示双语对照
+  const [loading, setLoading] = useState(false);
+  const [bilingual, setBilingual] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  async function generate() {
+    setLoading(true);
+    setError(null);
+    setBilingual("");
+    let acc = "";
+    try {
+      await bilingualReply(text, (d) => {
+        acc += d;
+        setBilingual(acc);
+      });
+    } catch (e) {
+      setError(
+        e instanceof MissingApiKeyError
+          ? e.message
+          : e instanceof Error
+            ? e.message
+            : String(e),
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function toggle() {
+    if (loading) return;
+    if (!bilingual && !error) {
+      setOpen(true);
+      void generate();
+      return;
+    }
+    setOpen((o) => !o);
+  }
+
+  const showBilingual = open && (bilingual || error);
+
+  return (
+    <div className="turn-partner">
+      <div className="msg partner">
+        {showBilingual && error ? (
+          <span className="explain-error" role="alert">
+            {error}
+          </span>
+        ) : showBilingual ? (
+          <Markdown
+            className="bilingual"
+            components={{
+              em: ({ children }) => (
+                <span className="bi-tr">{children}</span>
+              ),
+            }}
+          >
+            {bilingual}
+          </Markdown>
+        ) : (
+          <Markdown>{text}</Markdown>
+        )}
+      </div>
+      <ReplyExplanation
+        text={text}
+        actions={
+          <>
+            <CopyButton text={text} />
+            <SpeakButton text={text} />
+          </>
+        }
+        trailingActions={
+          <button
+            type="button"
+            className={`msg-action${showBilingual ? " active" : ""}`}
+            onClick={toggle}
+            disabled={loading}
+            aria-pressed={!!showBilingual}
+            title="目标语言/母语逐句对照"
+          >
+            {loading ? (
+              <span className="speak-btn-spinner" aria-hidden />
+            ) : (
+              <IconLanguages size={16} />
+            )}
+            <span>双语阅读</span>
+          </button>
+        }
+      />
+    </div>
   );
 }
 
@@ -247,22 +349,7 @@ export function ChatView({ conversationId, onActivity }: ChatViewProps) {
         {turns.map((turn) => (
           <div key={turn.id} className="turn-block">
             <UserTurn turn={turn} nativeLanguage={nativeLanguage} />
-            {turn.partnerText && (
-              <div className="turn-partner">
-                <div className="msg partner">
-                  <Markdown>{turn.partnerText}</Markdown>
-                </div>
-                <ReplyExplanation
-                  text={turn.partnerText}
-                  actions={
-                    <>
-                      <CopyButton text={turn.partnerText} />
-                      <SpeakButton text={turn.partnerText} />
-                    </>
-                  }
-                />
-              </div>
-            )}
+            {turn.partnerText && <PartnerReply text={turn.partnerText} />}
           </div>
         ))}
         {streaming && (
