@@ -1,5 +1,6 @@
 import { getProvider, loadConfig } from "./config";
 import { converse } from "./agents/conversation";
+import { explain } from "./agents/explain";
 import { analyze } from "./agents/tutor";
 import type { TutorAnalysis } from "./agents/schema";
 import { getWeakList, recordAnalysis } from "./db/mastery";
@@ -103,4 +104,29 @@ export async function runTurn(
     });
 
   return { reply, analysis: null };
+}
+
+// 按需讲解某条对话回复:读 MD 档案(和对话 agent 同源),流式输出母语讲解。
+// 不在热路径,不持久化——讲解便宜,需要时重新生成即可。
+export async function explainReply(
+  reply: string,
+  onDelta: (delta: string) => void,
+): Promise<string> {
+  const provider = await getProvider();
+  if (!provider) throw new MissingApiKeyError();
+
+  const config = loadConfig();
+  const profileSlice = profileSliceForConversation(await readProfile(config));
+
+  return explain(
+    provider,
+    {
+      nativeLanguage: config.nativeLanguage,
+      targetLanguage: config.targetLanguage,
+      level: config.level,
+      profileSlice,
+      reply,
+    },
+    onDelta,
+  );
 }

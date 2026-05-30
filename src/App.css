@@ -347,6 +347,129 @@ body,
 .msg.partner .speakable-row {
   align-items: flex-start;
 }
+
+/* Reply explanation ("讲解" under partner bubble) */
+.turn-partner {
+  align-self: flex-start;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.4rem;
+  max-width: min(88%, 520px);
+}
+.explain-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  width: 100%;
+}
+.explain-btn {
+  align-self: flex-start;
+  padding: 0.2rem 0.6rem;
+  font-size: 0.74rem;
+  border-radius: 999px;
+  background: rgba(154, 160, 255, 0.12);
+  border: 1px solid rgba(154, 160, 255, 0.28);
+  color: #b8bcff;
+  transition: background 0.15s, color 0.15s;
+}
+.explain-btn:hover:not(:disabled) {
+  background: rgba(154, 160, 255, 0.22);
+  color: #d8dcff;
+}
+.explain-panel {
+  width: 100%;
+  padding: 0.7rem 0.85rem;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(38, 36, 52, 0.98), rgba(30, 30, 38, 0.95));
+  border: 1px solid rgba(154, 160, 255, 0.22);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  animation: correction-in 0.28s ease-out;
+}
+.explain-body {
+  word-break: break-word;
+  font-size: 0.82rem;
+  line-height: 1.55;
+  color: #d8d6e0;
+}
+
+/* Markdown rendering (explanation panel, and reusable elsewhere) */
+.markdown > :first-child {
+  margin-top: 0;
+}
+.markdown > :last-child {
+  margin-bottom: 0;
+}
+.markdown p {
+  margin: 0.5rem 0;
+}
+.markdown h1,
+.markdown h2,
+.markdown h3,
+.markdown h4 {
+  margin: 0.7rem 0 0.4rem;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: #e7e5ef;
+}
+.markdown ul,
+.markdown ol {
+  margin: 0.4rem 0;
+  padding-left: 1.25rem;
+}
+.markdown li {
+  margin: 0.25rem 0;
+}
+.markdown li > p {
+  margin: 0.2rem 0;
+}
+.markdown strong {
+  color: #eceaf4;
+  font-weight: 600;
+}
+.markdown code {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 0.85em;
+  padding: 0.05rem 0.3rem;
+  border-radius: 4px;
+  background: rgba(154, 160, 255, 0.14);
+  color: #d8dcff;
+}
+.markdown pre {
+  margin: 0.5rem 0;
+  padding: 0.6rem 0.75rem;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.28);
+  overflow-x: auto;
+}
+.markdown pre code {
+  padding: 0;
+  background: none;
+  color: inherit;
+}
+.markdown blockquote {
+  margin: 0.5rem 0;
+  padding: 0.1rem 0.75rem;
+  border-left: 3px solid rgba(154, 160, 255, 0.4);
+  color: #c0bece;
+}
+.markdown a {
+  color: #b8bcff;
+}
+.markdown table {
+  border-collapse: collapse;
+  margin: 0.5rem 0;
+}
+.markdown th,
+.markdown td {
+  border: 1px solid #3a3a44;
+  padding: 0.3rem 0.5rem;
+}
+.explain-error {
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: #ffb4b4;
+}
 .inline-correction-issues {
   list-style: none;
   padding: 0;

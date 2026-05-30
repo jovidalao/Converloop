@@ -3,6 +3,7 @@ import { runTurn, MissingApiKeyError } from "../orchestrator";
 import { loadChatHistory, type ChatTurn } from "../db/turns";
 import { InlineCorrection } from "./InlineCorrection";
 import { SpeakableText } from "./SpeakButton";
+import { ReplyExplanation } from "./ReplyExplanation";
 import { stopSpeech } from "../tts/playback";
 import { autoSpeakReply } from "../tts/speak";
 
@@ -136,8 +137,11 @@ export function ChatView() {
               )}
             </div>
             {turn.partnerText && (
-              <div className="msg partner">
-                <SpeakableText text={turn.partnerText} />
+              <div className="turn-partner">
+                <div className="msg partner">
+                  <SpeakableText text={turn.partnerText} />
+                </div>
+                <ReplyExplanation text={turn.partnerText} />
               </div>
             )}
           </div>
