@@ -56,26 +56,35 @@ fn apply_traffic_lights_inset(win: &tauri::WebviewWindow) {
     let _ = win.set_traffic_lights_inset(TRAFFIC_LIGHTS_X, TRAFFIC_LIGHTS_Y);
 }
 
-/// decorum 在 on_window_ready / resize 会复位为默认 inset,需在之后再次应用自定义位置。
+/// 把交通灯钉在自定义位置。关键是「绘制前」重定位:监听 AppKit 原生的
+/// NSWindowDidResizeNotification(主线程、同步、绘制前派发),在回调里重设 inset。
+/// 不再用 Tauri 的 on_window_event(它在绘制后才触发,会看到灯先跳回默认位再跳回来),
+/// 也不注册 decorum 插件(它内置的 resize delegate 会复位到默认位、和我们打架)。
 #[cfg(target_os = "macos")]
 fn setup_traffic_lights(win: tauri::WebviewWindow) {
-    use tauri::Listener;
+    use block2::RcBlock;
+    use core::ptr::NonNull;
+    use objc2_app_kit::NSWindowDidResizeNotification;
+    use objc2_foundation::{NSNotification, NSNotificationCenter};
 
+    // 启动时定位一次。
     apply_traffic_lights_inset(&win);
 
-    let win_page = win.clone();
-    win.listen("decorum-page-load", move |_| {
-        apply_traffic_lights_inset(&win_page);
+    let win_cb = win.clone();
+    let block = RcBlock::new(move |_n: NonNull<NSNotification>| {
+        apply_traffic_lights_inset(&win_cb);
     });
-
-    // decorum 复位发生在 resize 的同一主线程回调里;同步重应用(不要 spawn 到
-    // 异步运行时),否则中间空档会让交通灯先跳回默认位再跳回来,肉眼可见闪烁。
-    let win_resize = win.clone();
-    win.on_window_event(move |event| {
-        if matches!(event, tauri::WindowEvent::Resized { .. }) {
-            apply_traffic_lights_inset(&win_resize);
-        }
-    });
+    unsafe {
+        let observer = NSNotificationCenter::defaultCenter()
+            .addObserverForName_object_queue_usingBlock(
+                Some(NSWindowDidResizeNotification),
+                None,
+                None,
+                &block,
+            );
+        // observer 要活到进程结束;单窗口应用,直接泄漏即可。
+        core::mem::forget(observer);
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -109,7 +118,6 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_decorum::init())
         .plugin(
             tauri_plugin_sql::Builder::default()
                 .add_migrations("sqlite:lang-agent.db", migrations)
