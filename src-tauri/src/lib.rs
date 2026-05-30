@@ -68,13 +68,12 @@ fn setup_traffic_lights(win: tauri::WebviewWindow) {
         apply_traffic_lights_inset(&win_page);
     });
 
+    // decorum 复位发生在 resize 的同一主线程回调里;同步重应用(不要 spawn 到
+    // 异步运行时),否则中间空档会让交通灯先跳回默认位再跳回来,肉眼可见闪烁。
     let win_resize = win.clone();
     win.on_window_event(move |event| {
         if matches!(event, tauri::WindowEvent::Resized { .. }) {
-            let w = win_resize.clone();
-            tauri::async_runtime::spawn(async move {
-                apply_traffic_lights_inset(&w);
-            });
+            apply_traffic_lights_inset(&win_resize);
         }
     });
 }
