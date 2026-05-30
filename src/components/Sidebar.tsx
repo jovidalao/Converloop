@@ -1,5 +1,12 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { ConversationMeta } from "../db/conversations";
+import {
+  IconSidebar,
+  IconCompose,
+  IconSearch,
+  IconProfile,
+  IconSettings,
+} from "./icons";
 
 export type MainView = "chat" | "profile" | "settings";
 
@@ -12,6 +19,7 @@ interface SidebarProps {
   onRename: (id: string, title: string) => void;
   onDelete: (id: string) => void;
   onOpenView: (view: MainView) => void;
+  onToggleCollapse: () => void;
 }
 
 export function Sidebar({
@@ -23,9 +31,17 @@ export function Sidebar({
   onRename,
   onDelete,
   onOpenView,
+  onToggleCollapse,
 }: SidebarProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
+  const [query, setQuery] = useState("");
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return conversations;
+    return conversations.filter((c) => c.title.toLowerCase().includes(q));
+  }, [conversations, query]);
 
   function startEdit(c: ConversationMeta) {
     setEditingId(c.id);
@@ -42,15 +58,28 @@ export function Sidebar({
 
   return (
     <aside className="sidebar">
-      <div className="sidebar-top">
-        <span className="brand">lang-agent</span>
-        <button className="new-chat" onClick={onNewChat} title="新对话">
-          ＋ 新对话
+      <div className="sidebar-toolbar" data-tauri-drag-region>
+        <button className="icon-btn" onClick={onToggleCollapse} title="收起侧栏">
+          <IconSidebar />
+        </button>
+        <button className="icon-btn" onClick={onNewChat} title="新对话">
+          <IconCompose />
         </button>
       </div>
 
+      <div className="sidebar-search">
+        <IconSearch size={15} />
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="搜索对话"
+          spellCheck={false}
+        />
+      </div>
+
       <nav className="conv-list">
-        {conversations.map((c) => {
+        <div className="conv-section">最近</div>
+        {filtered.map((c) => {
           const active = view === "chat" && c.id === activeId;
           if (editingId === c.id) {
             return (
@@ -103,6 +132,9 @@ export function Sidebar({
             </div>
           );
         })}
+        {filtered.length === 0 && (
+          <div className="conv-empty">没有匹配的对话</div>
+        )}
       </nav>
 
       <div className="sidebar-bottom">
@@ -110,12 +142,14 @@ export function Sidebar({
           className={view === "profile" ? "nav-link active" : "nav-link"}
           onClick={() => onOpenView("profile")}
         >
+          <IconProfile size={17} />
           档案
         </button>
         <button
           className={view === "settings" ? "nav-link active" : "nav-link"}
           onClick={() => onOpenView("settings")}
         >
+          <IconSettings size={17} />
           设置
         </button>
       </div>

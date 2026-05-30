@@ -110,6 +110,7 @@ body,
   display: flex;
   height: 100%;
   min-height: 100vh;
+  position: relative;
 }
 .app.loading {
   align-items: center;
@@ -117,36 +118,82 @@ body,
   color: var(--text-dim);
 }
 
-/* Sidebar (conversation list) */
+/* Sidebar — a card floating on the window background. The macOS traffic
+   lights are repositioned natively (decorum, in Rust) to sit inside it. */
 .sidebar {
+  --sidebar-margin: 0.55rem;
+  /* 与原生交通灯距卡片顶/左相等: toolbar 上内边距 + (icon 高 - 灯直径)/2 */
+  --traffic-inset: calc(0.15rem + (2rem - 12px) / 2);
   flex-shrink: 0;
-  width: 240px;
+  width: 248px;
+  margin: var(--sidebar-margin);
   display: flex;
   flex-direction: column;
   background: var(--surface);
-  border-right: 1px solid var(--border);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
 }
-.sidebar-top {
+.sidebar-toolbar {
   display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-  padding: 0.75rem;
-  border-bottom: 1px solid var(--border);
+  align-items: center;
+  gap: 0.15rem;
+  /* 交通灯区 + 间距; 与 lib.rs TRAFFIC_LIGHTS_X(≈ margin + traffic-inset) 对应 */
+  padding: 0.15rem 0.5rem 0.3rem
+    calc(var(--traffic-inset) + 52px + 0.35rem);
 }
-.brand {
-  font-weight: 600;
-  color: var(--accent-fg);
-  font-size: 0.95rem;
-  letter-spacing: -0.01em;
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
 }
-.new-chat {
-  text-align: left;
+.icon-btn:hover:not(:disabled) {
   background: var(--surface-2);
-  border: 1px solid var(--border-strong);
   color: var(--text);
 }
-.new-chat:hover {
-  background: var(--surface-3);
+.sidebar-search {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0.2rem 0.55rem 0.5rem;
+  padding: 0.4rem 0.6rem;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--text-dim);
+}
+.sidebar-search input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: var(--text);
+  font-size: 0.85rem;
+}
+.sidebar-search input:focus {
+  outline: none;
+  border: none;
+}
+
+.conv-section {
+  padding: 0.4rem 0.65rem 0.25rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+}
+.conv-empty {
+  padding: 0.5rem 0.65rem;
+  font-size: 0.82rem;
+  color: var(--text-dim);
 }
 
 .conv-list {
@@ -211,25 +258,37 @@ body,
 
 .sidebar-bottom {
   display: flex;
-  gap: 0.25rem;
+  flex-direction: column;
+  gap: 0.1rem;
   padding: 0.5rem;
   border-top: 1px solid var(--border);
 }
 .nav-link {
-  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
   background: transparent;
   border: none;
   color: var(--text-muted);
-  padding: 0.4rem;
+  padding: 0.45rem 0.55rem;
   border-radius: var(--radius-sm);
   font-size: 0.85rem;
+  text-align: left;
 }
 .nav-link:hover {
   background: var(--surface-2);
+  color: var(--text);
 }
 .nav-link.active {
   background: var(--surface-3);
   color: var(--text);
+}
+
+.reopen-sidebar {
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
 }
 
 .view {
@@ -238,6 +297,53 @@ body,
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  position: relative;
+}
+
+/* Top bar: full-width window drag region + iOS-style scroll-edge blur.
+   Content scrolls beneath and frosts as it reaches the top. */
+.topbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3rem;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0 1.25rem;
+  background: color-mix(in srgb, var(--bg) 60%, transparent);
+  -webkit-backdrop-filter: blur(16px) saturate(1.5);
+  backdrop-filter: blur(16px) saturate(1.5);
+  -webkit-mask-image: linear-gradient(to bottom, #000 52%, transparent);
+  mask-image: linear-gradient(to bottom, #000 52%, transparent);
+}
+.app.sidebar-collapsed .topbar {
+  /* clear the macOS traffic lights when the sidebar is hidden */
+  padding-left: 5rem;
+}
+.topbar-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  /* don't swallow the drag: clicks fall through to the .topbar drag region */
+  pointer-events: none;
+}
+
+/* Recommended by Tauri for touch/pen drag; harmless for mouse. */
+*[data-tauri-drag-region] {
+  app-region: drag;
+  -webkit-app-region: drag;
+}
+/* Interactive children inside a drag region must opt out. */
+[data-tauri-drag-region] button {
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
 }
 
 .view-panel {
@@ -266,7 +372,7 @@ body,
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 1.5rem 1rem 0.75rem;
+  padding: 3.4rem 1rem 0.75rem;
   display: flex;
   flex-direction: column;
   gap: 1.1rem;
@@ -297,25 +403,72 @@ body,
   border-bottom-right-radius: 5px;
   box-shadow: var(--shadow-sm);
 }
+/* Partner reply is borderless plain text (ChatGPT-style), actions sit below. */
 .msg.partner {
   align-self: flex-start;
-  max-width: min(88%, 520px);
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-bottom-left-radius: 5px;
+  max-width: min(94%, 580px);
+  background: transparent;
+  border: none;
+  padding: 0.1rem 0;
+  color: var(--text);
 }
 .msg.streaming {
-  opacity: 0.85;
+  opacity: 0.7;
+}
+
+/* Floating composer dock */
+.composer-dock {
+  flex-shrink: 0;
+  padding: 0.4rem 1rem 1.1rem;
 }
 .composer {
   display: flex;
-  gap: 0.5rem;
-  padding: 0.75rem 1rem;
-  border-top: 1px solid var(--border);
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.4rem 0.35rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 26px;
   background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.composer:focus-within {
+  border-color: var(--border-strong);
 }
 .composer input {
   flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  padding: 0.45rem 0;
+  font-size: 0.95rem;
+}
+.composer input:focus {
+  outline: none;
+  border: none;
+}
+.send-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.1rem;
+  height: 2.1rem;
+  flex-shrink: 0;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--accent);
+  border: none;
+  color: var(--accent-text);
+}
+.send-btn:disabled {
+  opacity: 0.4;
+}
+.send-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.75s linear infinite;
 }
 .error {
   margin: 0 1rem;
@@ -544,18 +697,50 @@ body,
   gap: 0.4rem;
   width: 100%;
 }
-.explain-btn {
-  align-self: flex-start;
-  padding: 0.2rem 0.6rem;
-  font-size: 0.74rem;
-  border-radius: var(--radius-pill);
-  background: var(--accent-weak);
-  border: 1px solid var(--accent-weak-hover);
-  color: var(--accent-fg);
+
+/* Message action bar (copy / speak / explain) under a partner reply */
+.msg-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.1rem;
+  margin-left: -0.3rem;
+}
+.msg-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.3rem 0.45rem;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  font-size: 0.76rem;
+  line-height: 1;
   transition: background 0.15s, color 0.15s;
 }
-.explain-btn:hover:not(:disabled) {
-  background: var(--accent-weak-hover);
+.msg-action:hover:not(:disabled) {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.msg-action.active {
+  color: var(--accent-fg);
+}
+/* Speak button adopts the flat action-bar look inside .msg-actions */
+.msg-actions .speak-btn {
+  width: 1.85rem;
+  height: 1.85rem;
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+}
+.msg-actions .speak-btn:hover:not(:disabled) {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.msg-actions .speak-btn.playing {
+  background: transparent;
+  border: none;
+  color: var(--success-fg);
 }
 .explain-panel {
   width: 100%;
@@ -722,8 +907,8 @@ body,
 
 /* Forms (settings / profile) */
 .form {
-  padding: 1.25rem 1.5rem;
-  max-width: 640px;
+  padding: 3.4rem 1.5rem 1.5rem;
+  max-width: 660px;
   overflow-y: auto;
   height: 100%;
 }

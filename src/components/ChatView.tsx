@@ -3,8 +3,9 @@ import { runTurn, MissingApiKeyError } from "../orchestrator";
 import { loadChatHistory, type ChatTurn } from "../db/turns";
 import { maybeAutoTitle, touchConversation } from "../db/conversations";
 import { InlineCorrection } from "./InlineCorrection";
-import { SpeakableText } from "./SpeakButton";
+import { SpeakButton } from "./SpeakButton";
 import { ReplyExplanation } from "./ReplyExplanation";
+import { IconCopy, IconCheck, IconSend } from "./icons";
 import { stopSpeech } from "../tts/playback";
 import { autoSpeakReply } from "../tts/speak";
 
@@ -12,6 +13,26 @@ interface ChatViewProps {
   conversationId: string;
   /** 本会话新一轮持久化后触发(标题可能变了、排序要刷新)。 */
   onActivity?: () => void;
+}
+
+// 复制这条回复。复制后短暂显示对勾。
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      className="msg-action"
+      title="复制"
+      onClick={() => {
+        void navigator.clipboard.writeText(text).then(() => {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1200);
+        });
+      }}
+    >
+      {copied ? <IconCheck size={16} /> : <IconCopy size={16} />}
+    </button>
+  );
 }
 
 export function ChatView({ conversationId, onActivity }: ChatViewProps) {
@@ -150,10 +171,16 @@ export function ChatView({ conversationId, onActivity }: ChatViewProps) {
             </div>
             {turn.partnerText && (
               <div className="turn-partner">
-                <div className="msg partner">
-                  <SpeakableText text={turn.partnerText} />
-                </div>
-                <ReplyExplanation text={turn.partnerText} />
+                <div className="msg partner">{turn.partnerText}</div>
+                <ReplyExplanation
+                  text={turn.partnerText}
+                  actions={
+                    <>
+                      <CopyButton text={turn.partnerText} />
+                      <SpeakButton text={turn.partnerText} />
+                    </>
+                  }
+                />
               </div>
             )}
           </div>
@@ -162,23 +189,34 @@ export function ChatView({ conversationId, onActivity }: ChatViewProps) {
         <div ref={endRef} />
       </div>
       {error && <div className="error">{error}</div>}
-      <form
-        className="composer"
-        onSubmit={(e) => {
-          e.preventDefault();
-          void send();
-        }}
-      >
-        <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="用目标语言输入一句话…"
-          disabled={replyBusy}
-        />
-        <button type="submit" disabled={replyBusy || !input.trim()}>
-          {replyBusy ? "…" : "发送"}
-        </button>
-      </form>
+      <div className="composer-dock">
+        <form
+          className="composer"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void send();
+          }}
+        >
+          <input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="用目标语言输入一句话…"
+            disabled={replyBusy}
+          />
+          <button
+            type="submit"
+            className="send-btn"
+            disabled={replyBusy || !input.trim()}
+            title="发送"
+          >
+            {replyBusy ? (
+              <span className="send-spinner" aria-hidden />
+            ) : (
+              <IconSend size={18} />
+            )}
+          </button>
+        </form>
+      </div>
     </div>
   );
 }

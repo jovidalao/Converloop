@@ -1,10 +1,18 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { explainReply, MissingApiKeyError } from "../orchestrator";
 import { Markdown } from "./Markdown";
+import { IconExplain } from "./icons";
 
 // "讲解"按钮:点一下,按用户掌握情况流式讲解这条回复。
 // 状态留在组件内(临时,不持久化)——再点收起/展开,已生成的复用。
-export function ReplyExplanation({ text }: { text: string }) {
+// actions: 同一行靠前渲染的其它操作(复制 / 发音)。
+export function ReplyExplanation({
+  text,
+  actions,
+}: {
+  text: string;
+  actions?: ReactNode;
+}) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [explanation, setExplanation] = useState("");
@@ -46,20 +54,24 @@ export function ReplyExplanation({ text }: { text: string }) {
   const label = loading
     ? "讲解中…"
     : open && (explanation || error)
-      ? "收起讲解"
+      ? "收起"
       : "讲解";
 
   return (
     <div className="explain-wrap">
-      <button
-        type="button"
-        className="explain-btn"
-        onClick={handleClick}
-        disabled={loading}
-        title="根据你的掌握情况讲解这条回复"
-      >
-        {label}
-      </button>
+      <div className="msg-actions">
+        {actions}
+        <button
+          type="button"
+          className={`msg-action${open && (explanation || error) ? " active" : ""}`}
+          onClick={handleClick}
+          disabled={loading}
+          title="根据你的掌握情况讲解这条回复"
+        >
+          <IconExplain size={16} />
+          <span>{label}</span>
+        </button>
+      </div>
       {open && (explanation || error) && (
         <div className="explain-panel">
           {error ? (

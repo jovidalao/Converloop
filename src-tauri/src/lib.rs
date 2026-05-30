@@ -43,6 +43,42 @@ CREATE TABLE IF NOT EXISTS conversation (
 const ADD_TURN_CONVERSATION_ID: &str =
     "ALTER TABLE turn ADD COLUMN conversation_id TEXT;";
 
+// 红灯距白卡片左/上相等: x ≈ 0.55rem + 0.15rem + (2rem−12px)/2 → 21pt(16px 根字号下)。
+// y 保持与 .icon-btn 垂直中心同排。
+#[cfg(target_os = "macos")]
+const TRAFFIC_LIGHTS_X: f32 = 21.0;
+#[cfg(target_os = "macos")]
+const TRAFFIC_LIGHTS_Y: f32 = 33.0;
+
+#[cfg(target_os = "macos")]
+fn apply_traffic_lights_inset(win: &tauri::WebviewWindow) {
+    use tauri_plugin_decorum::WebviewWindowExt;
+    let _ = win.set_traffic_lights_inset(TRAFFIC_LIGHTS_X, TRAFFIC_LIGHTS_Y);
+}
+
+/// decorum 在 on_window_ready / resize 会复位为默认 inset,需在之后再次应用自定义位置。
+#[cfg(target_os = "macos")]
+fn setup_traffic_lights(win: tauri::WebviewWindow) {
+    use tauri::Listener;
+
+    apply_traffic_lights_inset(&win);
+
+    let win_page = win.clone();
+    win.listen("decorum-page-load", move |_| {
+        apply_traffic_lights_inset(&win_page);
+    });
+
+    let win_resize = win.clone();
+    win.on_window_event(move |event| {
+        if matches!(event, tauri::WindowEvent::Resized { .. }) {
+            let w = win_resize.clone();
+            tauri::async_runtime::spawn(async move {
+                apply_traffic_lights_inset(&w);
+            });
+        }
+    });
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let migrations = vec![
@@ -74,11 +110,22 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_decorum::init())
         .plugin(
             tauri_plugin_sql::Builder::default()
                 .add_migrations("sqlite:lang-agent.db", migrations)
                 .build(),
         )
+        .setup(|app| {
+            #[cfg(target_os = "macos")]
+            {
+                use tauri::Manager;
+                if let Some(win) = app.get_webview_window("main") {
+                    setup_traffic_lights(win);
+                }
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             keychain::set_secret,
             keychain::get_secret,
