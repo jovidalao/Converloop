@@ -2,16 +2,16 @@
 
 AI 语言学习 agent 的**开源桌面端**(v1)。
 
-## 如果你是被叫来"开始开发"的新会话,先读这里
+## 如果你是新会话,先读这里
 
-**当前状态:设计已完成,代码尚未开始。** 这个仓库目前只有 `docs/` 设计文档,没有任何应用代码、没有 scaffold、没有 package.json。
-
-**你的第一步:** 打开 [docs/build-plan.md](docs/build-plan.md),从第一个未完成的任务开始(目前是 Task 0:scaffold Tauri 项目)。按顺序做,每个任务都有验收标准,做完一个再下一个。
+**当前状态:v1 核心链路已完成并可用。** scaffold、SQLite、三个 provider、导师 + 对话 + 编排、MD 档案 + 维护 agent、多会话、按需讲解、朗读(TTS)、母语/混说表达缺口都已落地。剩下的「下一步」(每日复习页、维护 agent 的会话结束触发、Anthropic 缓存断点)见 [architecture.md#状态--路线图](docs/architecture.md#状态--路线图)。
 
 **动手前必读(15 分钟):**
-1. [docs/README.md](docs/README.md) — 设计总览
-2. [docs/architecture.md](docs/architecture.md) — v1 范围、数据流、存储、schema
-3. 三个 agent 契约:[conversation](docs/conversation-agent.md) / [tutor](docs/tutor-agent.md) / [profile-maintainer](docs/profile-maintainer-agent.md)
+1. [docs/README.md](docs/README.md) — 设计总览与索引
+2. [docs/architecture.md](docs/architecture.md) — 范围、数据流、存储/schema、provider、密钥、状态/路线图、踩坑记录
+3. 三个 agent 契约:[conversation](docs/conversation-agent.md) / [tutor](docs/tutor-agent.md) / [profile-maintainer](docs/profile-maintainer-agent.md);母语/混说链路 [expression-gap](docs/expression-gap.md)
+
+> prompt 在 docs(契约)与 `src/agents/*.ts`(实现)各一份,改一处记得同步另一处。
 
 ## 它是什么
 
@@ -20,8 +20,8 @@ AI 语言学习 agent 的**开源桌面端**(v1)。
 ## v1 范围(刻意收窄,别越界)
 
 - ✅ Tauri 桌面端 · BYOK · 多 agent 流水线 · 本地 SQLite · LLM 维护的 MD 档案
-- ❌ 没有云/同步/计费/Web/手机/托管模型/语音/抽认卡 SRS
-- 不假设本地 LLM:默认 BYOK 托管模型(OpenAI/Claude/OpenRouter)
+- ❌ 没有云/同步/计费/Web/手机/托管模型/抽认卡 SRS
+- 不假设本地 LLM:默认 BYOK 托管模型(OpenAI 兼容 / Anthropic / Gemini)
 
 ## 技术栈(已定,别再选型)
 
@@ -40,6 +40,6 @@ AI 语言学习 agent 的**开源桌面端**(v1)。
 
 ## 工作方式
 
-- 小步增量:一次一个 build-plan 任务,达到验收标准再继续。
+- 小步增量:一次一个改动,自己定可验证的验收标准,达到了再继续。
 - 改动只服务当前任务,别顺手"改进"无关代码。
 - 不确定就先问,别替我假设产品决策。

@@ -206,22 +206,24 @@ const ReviewSet = z.object({ cards: z.array(ReviewCard) });
 
 ---
 
-## 6. 涉及文件 / 实现任务(build-plan 追加项)
+## 6. 实现状态(按子任务)
 
-| # | 任务 | 验收 |
+| # | 任务 | 状态 |
 |---|------|------|
-| A | schema:`ExpressionGap` + `MasteryType=expression_gap` | `tutorJsonSchema()` 含新字段;单测过 |
-| B | tutor prompt:加 EXPRESSION GAP 段(§7);prose 回退也加一段 | 母语输入能返回 `expression_gap` |
-| C | 记账:`SignalKind=gap`、`applySignal`、`deriveSignals`、`Signal.note`、`upsertSignal` 写 notes | mastery-logic 单测覆盖 gap + key_items |
-| D | 纠正 UI:气泡角标 + 专属面板(§4) | 母语/混说轮渲染正确,深色适配 |
-| E | 复习页:`review` 视图 + 导航 + `review_day` 迁移(v5) | 打开生成并缓存,换一批可用 |
-| F | `reviewGenerator` agent + Zod schema(§5、§8) | 读 SQLite 产出结构化卡片 |
-| G | 复习记账闭环:「会了」→ correct 信号 | 点击后 mastery 状态推进、当天去重 |
-| H | maintainer:MD 新增「想说但说不出的情景」区块 | gap 进 profile,对话 agent 可被动复用 |
+| A | schema:`ExpressionGap` + `MasteryType=expression_gap` | ✅ 已实现 |
+| B | tutor prompt:加 EXPRESSION GAP 段(§7)+ prose 回退 | ✅ 已实现(字段按 §0 收窄) |
+| C | 记账:`SignalKind=gap`、`applySignal`、`deriveSignals`、`Signal.note`、`upsertSignal` 写 notes | ✅ 已实现,单测覆盖 |
+| D | 纠正 UI:气泡角标 + 专属面板(§4) | ✅ 已实现 |
+| E | 复习页:`review` 视图 + 导航 + `review_day` 迁移 | ⏳ 未实现(路线图) |
+| F | `reviewGenerator` agent + Zod schema(§5、§8) | ⏳ 未实现(路线图) |
+| G | 复习记账闭环:「会了」→ correct 信号 | ⏳ 未实现(路线图) |
+| H | maintainer:MD 新增「想说但说不出的情景」区块 | ⏳ 未实现(路线图) |
 
 ---
 
-## 7. 完整 tutor system prompt(替换 `src/agents/tutor.ts` 的 `systemPrompt`)
+## 7. tutor system prompt(参考)
+
+> 下面是带 EXPRESSION GAP 段的完整 prompt 设计稿。**已落地版**在 `src/agents/tutor.ts`,按 §0 收窄了字段(去掉 `intended_meaning` / `template`,留到复习页再加)。两者改动需同步。
 
 ```text
 You are a precise language tutor analyzing a single message from a

@@ -76,10 +76,13 @@ export const TutorAnalysis = z.object({
   natural: z.string(),                 // 更地道的说法(可能 = corrected)
   issues: z.array(Issue),              // is_correct 为 true 时为空
   mastery_updates: z.array(MasteryUpdate),
+  expression_gap: ExpressionGap.nullable().optional(), // 母语/混说输入时填充,见下
 });
 
 export type TutorAnalysis = z.infer<typeof TutorAnalysis>;
 ```
+
+> **母语 / 混说输入**走同一个 tutor 调用的扩展契约:`MasteryType` 多一个 `expression_gap`,`TutorAnalysis` 多一个可选 `expression_gap` 块,prompt 多一段 EXPRESSION GAP 检测。完整定义、记账(`gap` 信号)、UI 分流见 **[expression-gap.md](./expression-gap.md)**。本文件下面的 schema / prompt 是「目标语产出错误」这条主链路;实现代码(`src/agents/{schema,tutor}.ts`)是两者合并后的版本。
 
 **为什么错误信号不进 `mastery_updates`:** 每个 `issue` 天然就是一个错误信号,代码遍历 `issues[]` 时按 `mastery_key` 自动生成 `error` 信号即可。让 LLM 再抄一遍只会制造不一致。`mastery_updates` 专门捕捉 `issues` 表达不了的两件事:**用户做对了**(正面证据,推动 struggling→known)和**新引入的点**。
 
