@@ -967,15 +967,12 @@ body,
 .markdown a {
   color: var(--accent-fg);
 }
-/* 双语对照(行间对照):保留原文段落布局,每句后内联母语译文,小一号、更浅。 */
+/* 双语对照(行间对照):走 Markdown 渲染保留原文格式,译文(em→bi-tr)小一号、更浅。 */
 .bilingual .bi-tr {
   font-size: 0.82em;
   font-style: normal;
   color: var(--text-dim);
   opacity: 0.8;
-}
-.bilingual .bi-tr::before {
-  content: " ";
 }
 .markdown table {
   border-collapse: collapse;

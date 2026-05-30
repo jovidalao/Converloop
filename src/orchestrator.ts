@@ -133,23 +133,16 @@ export async function explainReply(
   );
 }
 
-// 双语阅读:把一条对话回复做成目标语言/母语逐句对照。
+// 双语阅读:把一条对话回复做成目标语言/母语逐句对照(双语 Markdown)。
 // 不读档案、不持久化——便宜,需要时重新生成即可。
-export async function bilingualReply(
-  reply: string,
-  onDelta: (delta: string) => void,
-): Promise<string> {
+export async function bilingualReply(reply: string): Promise<string> {
   const provider = await getProvider();
   if (!provider) throw new MissingApiKeyError();
 
   const config = loadConfig();
-  return bilingual(
-    provider,
-    {
-      nativeLanguage: config.nativeLanguage,
-      targetLanguage: config.targetLanguage,
-      reply,
-    },
-    onDelta,
-  );
+  return bilingual(provider, {
+    nativeLanguage: config.nativeLanguage,
+    targetLanguage: config.targetLanguage,
+    reply,
+  });
 }

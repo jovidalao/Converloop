@@ -51,20 +51,16 @@ function CopyButton({ text }: { text: string }) {
 function PartnerReply({ text, autoOpen = false }: { text: string; autoOpen?: boolean }) {
   const [open, setOpen] = useState(false); // 当前是否显示双语对照
   const [loading, setLoading] = useState(false);
-  const [bilingual, setBilingual] = useState("");
+  const [view, setView] = useState<string | null>(null); // 双语 Markdown
   const [error, setError] = useState<string | null>(null);
   const didAutoOpen = useRef(false);
 
   async function generate() {
     setLoading(true);
     setError(null);
-    setBilingual("");
-    let acc = "";
+    setView(null);
     try {
-      await bilingualReply(text, (d) => {
-        acc += d;
-        setBilingual(acc);
-      });
+      setView(await bilingualReply(text));
     } catch (e) {
       setError(
         e instanceof MissingApiKeyError
@@ -80,7 +76,7 @@ function PartnerReply({ text, autoOpen = false }: { text: string; autoOpen?: boo
 
   function toggle() {
     if (loading) return;
-    if (!bilingual && !error) {
+    if (!view && !error) {
       setOpen(true);
       void generate();
       return;
@@ -98,7 +94,7 @@ function PartnerReply({ text, autoOpen = false }: { text: string; autoOpen?: boo
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoOpen]);
 
-  const showBilingual = open && (bilingual || error);
+  const showBilingual = open && (view || error);
 
   return (
     <div className="turn-partner">
@@ -107,16 +103,14 @@ function PartnerReply({ text, autoOpen = false }: { text: string; autoOpen?: boo
           <span className="explain-error" role="alert">
             {error}
           </span>
-        ) : showBilingual ? (
+        ) : showBilingual && view ? (
           <Markdown
             className="bilingual"
             components={{
-              em: ({ children }) => (
-                <span className="bi-tr">{children}</span>
-              ),
+              em: ({ children }) => <span className="bi-tr">{children}</span>,
             }}
           >
-            {bilingual}
+            {view}
           </Markdown>
         ) : (
           <Markdown>{text}</Markdown>
