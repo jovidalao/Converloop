@@ -133,24 +133,22 @@ export function InlineCorrection({
   pending,
   error,
   leading,
+  natural,
 }: {
   analysis: TutorAnalysis | null;
   proseFeedback?: string | null;
   pending: boolean;
   error?: string | null;
-  // 同一行靠前渲染的其它操作(复制 / 播放),放在「更地道」「语法详解」按钮左边。
+  // 同一行靠前渲染的其它操作(复制 / 播放),放在切换按钮左边。
   leading?: ReactNode;
+  // 「地道表达」切换:内容显示在用户气泡内(见 ChatView),此处只给开关按钮。
+  natural?: { open: boolean; onToggle: () => void };
 }) {
-  // 讲解、更地道默认展开,语法详解默认收起;各 icon 各自切换。
+  // 讲解默认展开,语法详解默认收起;各 icon 各自切换。
   const [gapOpen, setGapOpen] = useState(true);
-  const [naturalOpen, setNaturalOpen] = useState(true);
   const [grammarOpen, setGrammarOpen] = useState(false);
 
   const gap = analysis?.expression_gap ?? null;
-  const natural = analysis?.natural ?? "";
-  const corrected = analysis?.corrected ?? "";
-  // 母语/混说轮:讲解取代"更地道"与"表达正确";语法详解仍用于混说里的目标语错误。
-  const showNatural = !!analysis && !gap && natural.trim().length > 0 && natural !== corrected;
   const hasIssues = !!analysis && analysis.issues.length > 0;
   const allCorrect = !!analysis && !gap && analysis.is_correct && !hasIssues;
   const showPending = pending && !analysis && !proseFeedback;
@@ -183,15 +181,15 @@ export function InlineCorrection({
             讲解
           </button>
         )}
-        {showNatural && (
+        {natural && (
           <button
             type="button"
-            className={`correction-toggle${naturalOpen ? " active" : ""}`}
-            aria-expanded={naturalOpen}
-            onClick={() => setNaturalOpen((v) => !v)}
+            className={`correction-toggle${natural.open ? " active" : ""}`}
+            aria-expanded={natural.open}
+            onClick={natural.onToggle}
           >
             <IconSparkles size={15} />
-            更地道
+            地道表达
           </button>
         )}
         {hasIssues && (
@@ -234,12 +232,6 @@ export function InlineCorrection({
           {gap.usage_note?.trim() && (
             <p className="gap-usage">{gap.usage_note.trim()}</p>
           )}
-        </div>
-      )}
-
-      {showNatural && naturalOpen && (
-        <div className="correction-panel">
-          <SpeakableText text={natural} />
         </div>
       )}
 

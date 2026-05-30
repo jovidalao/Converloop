@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { runTurn, MissingApiKeyError } from "../orchestrator";
 import { loadChatHistory, type ChatTurn } from "../db/turns";
+import type { TutorAnalysis } from "../agents/schema";
 import { loadConfig } from "../config";
 import { maybeAutoTitle, touchConversation } from "../db/conversations";
 import { InlineCorrection, UserSentence } from "./InlineCorrection";
 import { SpeakButton } from "./SpeakButton";
 import { ReplyExplanation } from "./ReplyExplanation";
 import { Markdown } from "./Markdown";
-import { IconCopy, IconCheck, IconSend } from "./icons";
+import { IconCopy, IconCheck, IconSend, IconSparkles } from "./icons";
 import { stopSpeech } from "../tts/playback";
 import { autoSpeakReply } from "../tts/speak";
 
@@ -37,18 +38,73 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
-// 用户消息操作:复制 + 朗读「纠正后的句子」。作为 leading 渲染进批改的操作行,
-// 排在「更地道」「语法详解」按钮左边(同一行)。
+// 「更地道」改写:仅纯目标语轮,有且与改正句不同才返回,否则 null。
+// 直接显示在用户气泡内(分割线下方),不再用 toggle 面板。
+function idiomaticText(analysis: TutorAnalysis | null): string | null {
+  if (!analysis || analysis.expression_gap) return null;
+  const natural = analysis.natural?.trim();
+  if (!natural) return null;
+  const corrected = analysis.corrected?.trim();
+  return natural === corrected ? null : natural;
+}
+
+// 用户消息操作:复制 + 朗读。朗读优先读「地道表达」改写,没有则读纠正后的句子。
+// 作为 leading 渲染进批改操作行,排在切换按钮左边(同一行)。
 // 母语/混说轮(expression_gap)没有目标语正句可读,所以不显示朗读。
 function UserMessageActions({ turn }: { turn: ChatTurn }) {
   const analysis = turn.analysis;
   const corrected = analysis?.corrected?.trim() || turn.userText;
+  const speakTarget = idiomaticText(analysis) ?? corrected;
   const canSpeak = !!analysis && !analysis.expression_gap;
   return (
     <>
       <CopyButton text={corrected} />
-      {canSpeak && <SpeakButton text={corrected} />}
+      {canSpeak && <SpeakButton text={speakTarget} />}
     </>
+  );
+}
+
+// 用户这一轮:气泡(原句 + 可切换的「地道表达」改写)+ 操作行 / 批改。
+// 「地道表达」的开关状态留在这里,同时驱动气泡内容和操作行里的切换按钮。
+function UserTurn({
+  turn,
+  nativeLanguage,
+}: {
+  turn: ChatTurn;
+  nativeLanguage: string;
+}) {
+  const idiomatic = idiomaticText(turn.analysis);
+  const [naturalOpen, setNaturalOpen] = useState(true);
+  return (
+    <div className="turn-user">
+      <div className="msg user">
+        <UserSentence
+          text={turn.userText}
+          analysis={turn.analysis}
+          nativeLanguage={nativeLanguage}
+        />
+        {idiomatic && naturalOpen && (
+          <div className="user-natural">
+            <span className="user-natural-icon" aria-hidden>
+              <IconSparkles size={14} />
+            </span>
+            <span className="user-natural-text">{idiomatic}</span>
+          </div>
+        )}
+      </div>
+      <InlineCorrection
+        analysis={turn.analysis}
+        proseFeedback={turn.analysisProse}
+        pending={!!turn.analysisPending}
+        error={turn.analysisError}
+        leading={<UserMessageActions turn={turn} />}
+        natural={
+          idiomatic
+            ? { open: naturalOpen, onToggle: () => setNaturalOpen((v) => !v) }
+            : undefined
+        }
+      />
+    </div>
   );
 }
 
@@ -182,22 +238,7 @@ export function ChatView({ conversationId, onActivity }: ChatViewProps) {
       >
         {turns.map((turn) => (
           <div key={turn.id} className="turn-block">
-            <div className="turn-user">
-              <div className="msg user">
-                <UserSentence
-                  text={turn.userText}
-                  analysis={turn.analysis}
-                  nativeLanguage={nativeLanguage}
-                />
-              </div>
-              <InlineCorrection
-                analysis={turn.analysis}
-                proseFeedback={turn.analysisProse}
-                pending={!!turn.analysisPending}
-                error={turn.analysisError}
-                leading={<UserMessageActions turn={turn} />}
-              />
-            </div>
+            <UserTurn turn={turn} nativeLanguage={nativeLanguage} />
             {turn.partnerText && (
               <div className="turn-partner">
                 <div className="msg partner">
