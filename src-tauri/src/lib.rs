@@ -29,6 +29,20 @@ CREATE TABLE IF NOT EXISTS turn (
     analysis_json TEXT
 );";
 
+// 会话(ChatGPT/Claude 式左侧对话列表)。每轮归属一个会话;对话/导师 agent 的历史
+// 上下文按 conversation_id 隔离(掌握/维护仍全局)。旧 turn 的 conversation_id 为 NULL,
+// 启动时由 TS 侧 ensureActiveConversation 归档到默认会话。
+const CREATE_CONVERSATION: &str = "\
+CREATE TABLE IF NOT EXISTS conversation (
+    id         TEXT PRIMARY KEY NOT NULL,
+    title      TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);";
+
+const ADD_TURN_CONVERSATION_ID: &str =
+    "ALTER TABLE turn ADD COLUMN conversation_id TEXT;";
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let migrations = vec![
@@ -42,6 +56,18 @@ pub fn run() {
             version: 2,
             description: "create_turn",
             sql: CREATE_TURN,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 3,
+            description: "create_conversation",
+            sql: CREATE_CONVERSATION,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 4,
+            description: "add_turn_conversation_id",
+            sql: ADD_TURN_CONVERSATION_ID,
             kind: MigrationKind::Up,
         },
     ];

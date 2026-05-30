@@ -1,7 +1,7 @@
 import { getProvider, loadConfig } from "../config";
 import { getMaintainerData } from "../db/mastery";
 import {
-  formatRecentHistory,
+  formatRecentHistoryGlobal,
   getRecentlyIntroduced,
   getTurnCount,
 } from "../db/turns";
@@ -21,7 +21,7 @@ async function runJob(): Promise<MaintainerResult> {
   const currentMd = await readProfile(config);
   const data = await getMaintainerData();
   const recentlyIntroduced = await getRecentlyIntroduced();
-  const transcript = await formatRecentHistory(20);
+  const transcript = await formatRecentHistoryGlobal(20);
 
   return runMaintainer(provider, {
     nativeLanguage: config.nativeLanguage,

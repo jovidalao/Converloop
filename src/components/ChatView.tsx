@@ -1,13 +1,20 @@
 import { useEffect, useRef, useState } from "react";
 import { runTurn, MissingApiKeyError } from "../orchestrator";
 import { loadChatHistory, type ChatTurn } from "../db/turns";
+import { maybeAutoTitle, touchConversation } from "../db/conversations";
 import { InlineCorrection } from "./InlineCorrection";
 import { SpeakableText } from "./SpeakButton";
 import { ReplyExplanation } from "./ReplyExplanation";
 import { stopSpeech } from "../tts/playback";
 import { autoSpeakReply } from "../tts/speak";
 
-export function ChatView() {
+interface ChatViewProps {
+  conversationId: string;
+  /** 本会话新一轮持久化后触发(标题可能变了、排序要刷新)。 */
+  onActivity?: () => void;
+}
+
+export function ChatView({ conversationId, onActivity }: ChatViewProps) {
   const [turns, setTurns] = useState<ChatTurn[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState("");
@@ -33,8 +40,8 @@ export function ChatView() {
   }
 
   useEffect(() => {
-    void loadChatHistory().then(setTurns);
-  }, []);
+    void loadChatHistory(conversationId).then(setTurns);
+  }, [conversationId]);
 
   useEffect(() => {
     if (!stickToBottomRef.current) return;
@@ -52,6 +59,7 @@ export function ChatView() {
     const text = input.trim();
     if (!text || replyBusy) return;
     stopSpeech();
+    const isFirstMessage = turns.length === 0;
     const turnGen = ++turnGenRef.current;
     const turnId = crypto.randomUUID();
     stickToBottomRef.current = true;
@@ -71,7 +79,7 @@ export function ChatView() {
     setStreaming("");
     let acc = "";
     try {
-      const result = await runTurn(text, {
+      const result = await runTurn(text, conversationId, {
         onReplyDelta: (d) => {
           acc += d;
           setStreaming(acc);
@@ -93,6 +101,10 @@ export function ChatView() {
       if (turnGenRef.current === turnGen && !replyCommittedRef.current) {
         commitPartnerReply(turnId, result.reply);
       }
+      // 轮次已持久化:更新会话排序,首条消息顺带自动命名,再刷新侧边栏。
+      await touchConversation(conversationId);
+      if (isFirstMessage) await maybeAutoTitle(conversationId, text);
+      onActivity?.();
     } catch (e) {
       patchTurn(turnId, {
         analysisPending: false,

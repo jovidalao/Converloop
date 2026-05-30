@@ -1,40 +1,86 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ChatView } from "./components/ChatView";
 import { ProfileView } from "./components/ProfileView";
 import { SettingsView } from "./components/SettingsView";
+import { Sidebar, type MainView } from "./components/Sidebar";
+import {
+  type ConversationMeta,
+  listConversations,
+  createConversation,
+  renameConversation,
+  deleteConversation,
+  ensureActiveConversation,
+  setActiveConversationId,
+} from "./db/conversations";
 import "./App.css";
 
-type Tab = "chat" | "profile" | "settings";
-
-const TABS: { id: Tab; label: string }[] = [
-  { id: "chat", label: "聊天" },
-  { id: "profile", label: "档案" },
-  { id: "settings", label: "设置" },
-];
-
 function App() {
-  const [tab, setTab] = useState<Tab>("chat");
+  const [conversations, setConversations] = useState<ConversationMeta[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [view, setView] = useState<MainView>("chat");
+
+  const refresh = useCallback(() => listConversations().then(setConversations), []);
+
+  useEffect(() => {
+    void (async () => {
+      const id = await ensureActiveConversation();
+      setActiveId(id);
+      await refresh();
+    })();
+  }, [refresh]);
+
+  function selectConversation(id: string) {
+    setActiveId(id);
+    setActiveConversationId(id);
+    setView("chat");
+  }
+
+  async function newChat() {
+    const id = await createConversation();
+    await refresh();
+    selectConversation(id);
+  }
+
+  async function rename(id: string, title: string) {
+    await renameConversation(id, title);
+    await refresh();
+  }
+
+  async function remove(id: string) {
+    await deleteConversation(id);
+    const rest = await listConversations();
+    setConversations(rest);
+    if (id === activeId) {
+      const nextId = rest[0]?.id ?? (await createConversation());
+      if (!rest[0]) await refresh();
+      selectConversation(nextId);
+    }
+  }
+
+  if (!activeId) return <div className="app loading">加载中…</div>;
 
   return (
     <div className="app">
-      <nav className="tabs">
-        <span className="brand">lang-agent</span>
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            className={t.id === tab ? "tab active" : "tab"}
-            onClick={() => setTab(t.id)}
-          >
-            {t.label}
-          </button>
-        ))}
-      </nav>
+      <Sidebar
+        conversations={conversations}
+        activeId={activeId}
+        view={view}
+        onSelect={selectConversation}
+        onNewChat={() => void newChat()}
+        onRename={(id, t) => void rename(id, t)}
+        onDelete={(id) => void remove(id)}
+        onOpenView={setView}
+      />
       <main className="view">
-        <div className="view-panel" hidden={tab !== "chat"}>
-          <ChatView />
+        <div className="view-panel" hidden={view !== "chat"}>
+          <ChatView
+            key={activeId}
+            conversationId={activeId}
+            onActivity={() => void refresh()}
+          />
         </div>
-        {tab === "profile" && <ProfileView />}
-        {tab === "settings" && <SettingsView />}
+        {view === "profile" && <ProfileView />}
+        {view === "settings" && <SettingsView />}
       </main>
     </div>
   );

@@ -4,6 +4,7 @@ import { turn, type Turn } from "./schema";
 import type { TutorAnalysis } from "../agents/schema";
 
 export async function persistTurn(
+  conversationId: string,
   userInput: string,
   reply: string,
   analysis: TutorAnalysis | null,
@@ -15,6 +16,7 @@ export async function persistTurn(
     userInput,
     reply,
     analysisJson: analysis ? JSON.stringify(analysis) : null,
+    conversationId,
   });
   return id;
 }
@@ -79,9 +81,12 @@ export function parseTurnFeedback(json: string | null): {
   }
 }
 
-// 从 DB 恢复聊天(时间正序),供 ChatView 挂载时加载。
-export async function loadChatHistory(limit = 200): Promise<ChatTurn[]> {
-  const turns = await getRecentTurns(limit);
+// 从 DB 恢复某会话的聊天(时间正序),供 ChatView 挂载时加载。
+export async function loadChatHistory(
+  conversationId: string,
+  limit = 200,
+): Promise<ChatTurn[]> {
+  const turns = await getRecentTurnsForConversation(conversationId, limit);
   return turns.map((t) => {
     const { analysis, prose } = parseTurnFeedback(t.analysisJson);
     return {
@@ -98,6 +103,7 @@ export function parseTurnAnalysis(json: string | null): TutorAnalysis | null {
   return parseTurnFeedback(json).analysis;
 }
 
+// 全局最近 turns(跨会话)。维护 agent 的 getRecentlyIntroduced 用,刻意不按会话隔离。
 export async function getRecentTurns(limit = 6): Promise<Turn[]> {
   const rows = await db
     .select()
@@ -107,8 +113,31 @@ export async function getRecentTurns(limit = 6): Promise<Turn[]> {
   return rows.reverse(); // 时间正序,喂 prompt 更自然
 }
 
-// 把最近几轮格式化成对话 / 导师 agent 都能用的历史文本。
-export async function formatRecentHistory(limit = 6): Promise<string> {
+// 某会话内的最近 turns。对话/导师 agent 的上下文按会话隔离,话题不串。
+export async function getRecentTurnsForConversation(
+  conversationId: string,
+  limit = 6,
+): Promise<Turn[]> {
+  const rows = await db
+    .select()
+    .from(turn)
+    .where(eq(turn.conversationId, conversationId))
+    .orderBy(desc(turn.createdAt))
+    .limit(limit);
+  return rows.reverse(); // 时间正序,喂 prompt 更自然
+}
+
+// 把某会话最近几轮格式化成对话 / 导师 agent 都能用的历史文本。
+export async function formatRecentHistory(
+  conversationId: string,
+  limit = 6,
+): Promise<string> {
+  const turns = await getRecentTurnsForConversation(conversationId, limit);
+  return turns.map((t) => `User: ${t.userInput}\nPartner: ${t.reply}`).join("\n\n");
+}
+
+// 跨会话的全局转写。维护 agent 用,刻意不按会话隔离(档案是全局的)。
+export async function formatRecentHistoryGlobal(limit = 6): Promise<string> {
   const turns = await getRecentTurns(limit);
   return turns.map((t) => `User: ${t.userInput}\nPartner: ${t.reply}`).join("\n\n");
 }

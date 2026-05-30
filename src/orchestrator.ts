@@ -38,6 +38,7 @@ export class MissingApiKeyError extends Error {
 // 导师崩了不影响对话(降级:analysis=null,本轮不更新 mastery)。
 export async function runTurn(
   userInput: string,
+  conversationId: string,
   cb: TurnCallbacks,
 ): Promise<TurnResult> {
   const provider = await getProvider();
@@ -50,8 +51,8 @@ export async function runTurn(
     level: config.level,
   };
 
-  // 共享上下文(两个 agent 都读),先查好再喂。
-  const history = await formatRecentHistory();
+  // 共享上下文(两个 agent 都读),先查好再喂。按当前会话隔离,话题不串。
+  const history = await formatRecentHistory(conversationId);
   const weakList = await getWeakList();
   const profileSlice = profileSliceForConversation(await readProfile(config));
 
@@ -69,7 +70,7 @@ export async function runTurn(
   });
 
   const reply = await replyPromise;
-  const turnId = await persistTurn(userInput, reply, null);
+  const turnId = await persistTurn(conversationId, userInput, reply, null);
   cb.onReplyComplete?.(reply);
 
   // 批改、记账、补全 analysis_json 在后台跑,不阻塞下一轮输入。
