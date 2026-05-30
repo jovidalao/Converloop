@@ -9,7 +9,6 @@ import {
   setCachedSpeech,
 } from "./cache";
 import { synthesizeMimo } from "./mimo";
-import { playSpeech } from "./playback";
 
 export { MissingTtsApiKeyError };
 export { clearTtsCache, getTtsCacheCount } from "./cache";
@@ -50,15 +49,4 @@ export async function speakText(text: string): Promise<ArrayBuffer> {
 
   inflight.set(cacheKey, promise);
   return promise;
-}
-
-/** AI 回复完成后自动朗读;无 TTS key 时静默跳过。 */
-export async function autoSpeakReply(text: string): Promise<void> {
-  try {
-    const audio = await speakText(text);
-    await playSpeech(audio, text);
-  } catch (e) {
-    if (e instanceof MissingTtsApiKeyError) return;
-    console.warn("自动朗读失败:", e);
-  }
 }

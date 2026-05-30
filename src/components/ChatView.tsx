@@ -10,7 +10,7 @@ import { ReplyExplanation } from "./ReplyExplanation";
 import { Markdown } from "./Markdown";
 import { IconCopy, IconCheck, IconSend, IconSparkles } from "./icons";
 import { stopSpeech } from "../tts/playback";
-import { autoSpeakReply } from "../tts/speak";
+import { createReplySpeaker } from "../tts/stream";
 
 interface ChatViewProps {
   conversationId: string;
@@ -156,7 +156,6 @@ export function ChatView({ conversationId, onActivity }: ChatViewProps) {
     patchTurn(turnId, { partnerText: reply });
     setStreaming("");
     setReplyBusy(false);
-    void autoSpeakReply(reply);
   }
 
   async function send() {
@@ -182,16 +181,20 @@ export function ChatView({ conversationId, onActivity }: ChatViewProps) {
     setReplyBusy(true);
     setStreaming("");
     let acc = "";
+    // 边收流边分句朗读:第一句一就绪即出声,后续句子在后台合成、无缝续播。
+    const speaker = createReplySpeaker();
     try {
       const result = await runTurn(text, conversationId, {
         onReplyDelta: (d) => {
           acc += d;
           setStreaming(acc);
+          speaker.push(acc);
         },
         onReplyComplete: (reply) => {
           if (turnGenRef.current !== turnGen) return;
           replyCommittedRef.current = true;
           commitPartnerReply(turnId, reply);
+          speaker.finish(reply);
         },
         onAnalysis: (a, opts) => {
           patchTurn(turnId, {
@@ -204,12 +207,15 @@ export function ChatView({ conversationId, onActivity }: ChatViewProps) {
       });
       if (turnGenRef.current === turnGen && !replyCommittedRef.current) {
         commitPartnerReply(turnId, result.reply);
+        speaker.finish(result.reply);
       }
       // 轮次已持久化:更新会话排序,首条消息顺带自动命名,再刷新侧边栏。
       await touchConversation(conversationId);
       if (isFirstMessage) await maybeAutoTitle(conversationId, text);
       onActivity?.();
     } catch (e) {
+      stopSpeech(); // 出错则停掉已在播的分句,并让朗读会话失效。
+      speaker.abort();
       patchTurn(turnId, {
         analysisPending: false,
         analysisError: "发送失败,本轮未批改",
@@ -225,6 +231,8 @@ export function ChatView({ conversationId, onActivity }: ChatViewProps) {
       if (turnGenRef.current === turnGen) {
         setStreaming("");
         setReplyBusy(false);
+      } else {
+        speaker.abort(); // 轮次已被新消息取代,停止本轮合成(播放已由新 send 的 stopSpeech 接管)。
       }
     }
   }
