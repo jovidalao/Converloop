@@ -6,7 +6,7 @@ import type { ModelProvider } from "./providers/types";
 
 export type ProviderType = "openai" | "gemini" | "anthropic";
 
-// 非密配置存 localStorage;API key 存 OS keychain(见 keychain.ts)。
+// 非密配置存 localStorage;API key 走设备绑定加密文件(见 keychain.ts → Rust secrets.rs)。
 export interface AppConfig {
   providerType: ProviderType;
   baseUrl: string;

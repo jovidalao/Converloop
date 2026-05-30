@@ -8,7 +8,7 @@ function defaultLlmApiKey(): string | undefined {
   return key || undefined;
 }
 
-/** 首次启动时把 .env 里的默认 LLM key 写入 keychain(MiMo TTS 需单独配置,已有 key 的不覆盖)。 */
+/** 首次启动时把 .env 里的默认 LLM key 写入加密存储(MiMo TTS 需单独配置,已有 key 的不覆盖)。 */
 export async function ensureDefaultApiKeys(): Promise<void> {
   const apiKey = defaultLlmApiKey();
   if (!apiKey) return;

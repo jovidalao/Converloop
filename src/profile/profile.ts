@@ -16,6 +16,9 @@ function today(): string {
 export function defaultProfile(config: AppConfig): string {
   return `# Learner Profile  ·  ${config.nativeLanguage} → ${config.targetLanguage} · ${config.level} · updated ${today()}
 
+## About me
+-
+
 ## Working on
 -
 

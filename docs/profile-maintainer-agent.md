@@ -63,6 +63,12 @@ HARD RULES
 - The structured mastery data is the source of truth for what the user struggles
   with or has mastered. The transcript is the source of truth for interests,
   tone, and conversational tendencies. Do not contradict the counts.
+- "## About me" holds DURABLE personal facts the user has shared about their life
+  (job, studies and what stage, location, family, ongoing situations) so the
+  conversation agent remembers who they are across sessions. Add or update a fact
+  only when the transcript clearly states it; carry existing facts forward; drop
+  ones the user has contradicted. Never guess or infer beyond what was said. Skip
+  one-off small talk that is not a lasting fact about the person.
 - NEVER touch the "## My notes" section — copy it through verbatim. It belongs to
   the user.
 - Keep it concise: at most 6 bullets per section. Prune items that are stale
@@ -76,6 +82,7 @@ OUTPUT
 - Return ONLY the full updated profile in Markdown, using exactly these section
   headers, in this order:
     # Learner Profile  ·  {native} → {target} · {level} · updated {today}
+    ## About me
     ## Working on
     ## Comfortable with
     ## Avoids / rarely attempts
@@ -109,7 +116,7 @@ Produce the updated profile now.
 
 MD 是 prose,没法 schema 校验,但要做轻量 sanity check,**任何一项不过就丢弃本次结果、保留旧 MD**:
 
-- 含全部 6 个必需的 `##` 段标题;
+- 含全部 7 个必需的 `##` 段标题(含 `## About me`);
 - `## My notes` 的内容和输入**逐字一致**(防 agent 改用户笔记);
 - 长度没有异常坍缩(比如不到旧版的 30%,疑似把内容吃掉了);
 - 通过后**原子写入**(写临时文件再 rename),避免对话 agent 读到半截文件。
@@ -118,6 +125,9 @@ MD 是 prose,没法 schema 校验,但要做轻量 sanity check,**任何一项不
 
 ```md
 # Learner Profile  ·  Chinese → English · B1 · updated 2026-05-29
+
+## About me
+- 前端工程师,最近换了新工作;在职读研
 
 ## Working on
 - 冠词 a/an/the —— 仍不稳,抽象名词前尤其

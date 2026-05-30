@@ -1,6 +1,6 @@
-mod keychain;
 mod llm;
 mod profile;
+mod secrets;
 
 use tauri_plugin_sql::{Migration, MigrationKind};
 
@@ -127,9 +127,9 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            keychain::set_secret,
-            keychain::get_secret,
-            keychain::delete_secret,
+            secrets::set_secret,
+            secrets::get_secret,
+            secrets::delete_secret,
             llm::llm_request,
             llm::llm_stream,
             profile::read_profile,

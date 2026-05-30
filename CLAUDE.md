@@ -28,7 +28,7 @@ AI 语言学习 agent 的**开源桌面端**(v1)。
 - Tauri v2 + React + TypeScript + Vite
 - SQLite:`tauri-plugin-sql`(Rust 侧)+ Drizzle 的 **sqlite-proxy** driver 桥接
 - Zod(schema)+ `zod-to-json-schema`(给 LLM 结构化输出)
-- 密钥:OS keychain(`tauri-plugin-stronghold` 或系统 keyring),**绝不明文**
+- 密钥:应用自管的设备绑定加密文件(`src-tauri/src/secrets.rs`,XChaCha20-Poly1305,无主密码 → 混淆级),**绝不明文**。要真加密再上 `tauri-plugin-stronghold`(主密码)
 - 包管理:pnpm
 
 ## 架构铁律(改之前先理解为什么)

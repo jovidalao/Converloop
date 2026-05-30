@@ -6,6 +6,7 @@ import { maybeAutoTitle, touchConversation } from "../db/conversations";
 import { InlineCorrection, UserSentence } from "./InlineCorrection";
 import { SpeakButton } from "./SpeakButton";
 import { ReplyExplanation } from "./ReplyExplanation";
+import { Markdown } from "./Markdown";
 import { IconCopy, IconCheck, IconSend } from "./icons";
 import { stopSpeech } from "../tts/playback";
 import { autoSpeakReply } from "../tts/speak";
@@ -36,17 +37,18 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
-// 用户消息下方的操作:复制 + 朗读「纠正后的句子」。
+// 用户消息操作:复制 + 朗读「纠正后的句子」。作为 leading 渲染进批改的操作行,
+// 排在「更地道」「语法详解」按钮左边(同一行)。
 // 母语/混说轮(expression_gap)没有目标语正句可读,所以不显示朗读。
 function UserMessageActions({ turn }: { turn: ChatTurn }) {
   const analysis = turn.analysis;
   const corrected = analysis?.corrected?.trim() || turn.userText;
   const canSpeak = !!analysis && !analysis.expression_gap;
   return (
-    <div className="msg-actions user">
+    <>
       <CopyButton text={corrected} />
       {canSpeak && <SpeakButton text={corrected} />}
-    </div>
+    </>
   );
 }
 
@@ -188,22 +190,19 @@ export function ChatView({ conversationId, onActivity }: ChatViewProps) {
                   nativeLanguage={nativeLanguage}
                 />
               </div>
-              <UserMessageActions turn={turn} />
-              {(turn.analysisPending ||
-                turn.analysis ||
-                turn.analysisProse ||
-                turn.analysisError) && (
-                <InlineCorrection
-                  analysis={turn.analysis}
-                  proseFeedback={turn.analysisProse}
-                  pending={!!turn.analysisPending}
-                  error={turn.analysisError}
-                />
-              )}
+              <InlineCorrection
+                analysis={turn.analysis}
+                proseFeedback={turn.analysisProse}
+                pending={!!turn.analysisPending}
+                error={turn.analysisError}
+                leading={<UserMessageActions turn={turn} />}
+              />
             </div>
             {turn.partnerText && (
               <div className="turn-partner">
-                <div className="msg partner">{turn.partnerText}</div>
+                <div className="msg partner">
+                  <Markdown>{turn.partnerText}</Markdown>
+                </div>
                 <ReplyExplanation
                   text={turn.partnerText}
                   actions={
@@ -217,7 +216,11 @@ export function ChatView({ conversationId, onActivity }: ChatViewProps) {
             )}
           </div>
         ))}
-        {streaming && <div className="msg partner streaming">{streaming}</div>}
+        {streaming && (
+          <div className="msg partner streaming">
+            <Markdown>{streaming}</Markdown>
+          </div>
+        )}
         <div ref={endRef} />
       </div>
       {error && <div className="error">{error}</div>}

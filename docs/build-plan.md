@@ -29,9 +29,9 @@
 
 ### [x] Task 2 · Provider 适配器(BYOK)
 - 定义 `ModelProvider` 接口(`generate` / `stream`);实现 **一个 OpenAI 兼容适配器**(覆盖 OpenAI/OpenRouter/LM Studio)。Anthropic 适配器留到 v1 后期。
-- API key 从设置读,存 OS keychain,**不明文**。
+- API key 从设置读,加密存本地,**不明文**。(原为 OS keychain,已由阶段 E 改为设备绑定加密文件。)
 - **验收:** 用用户填的 key,一个硬编码 prompt 能拿到文本返回(stream 和非 stream 各跑通一次)。
-- ✅ 已实现。`src/providers/{types,openai}.ts` · key 走 Rust `keyring`(`src/keychain.ts`)· 非密配置 localStorage(`src/config.ts`)。
+- ✅ 已实现。`src/providers/{types,openai}.ts` · key 走 Rust 加密存储(`src/keychain.ts` → `src-tauri/src/secrets.rs`,见阶段 E)· 非密配置 localStorage(`src/config.ts`)。
 - 关键决策:**LLM HTTP 走 Rust**(`src-tauri/src/llm.rs` 的 `llm_request`/`llm_stream`,reqwest),绕过 webview CORS;流式用 reqwest `bytes_stream` + tauri `Channel` 推到前端,前端解析 SSE。provider 解析全在 TS,保持 agent-core provider 无关。
 - ⏳ 实时 key 测试:设置页 → "测试连接(流式 + 非流式)"按钮一键跑通(填 key 后)。自定义命令无需 capability 权限(已由 Task 7 探针证明)。
 
@@ -93,3 +93,22 @@
 ## 阶段 0(并行,不写代码)
 开工同时:拿 10–20 个真实句子手动验证三个 prompt,重点盯 Tutor 的 `mastery_key` 跨句**稳定性**。发现问题改 docs 里的 prompt,再同步到代码。
 - ⏳ 仍待人工:需填 key、用真实句子在聊天里跑,凭判断盯 `mastery_key` 跨句是否稳定。prompt 现在 docs 与代码各一份(`src/agents/*.ts`),改 prompt 记得两处同步。
+
+---
+
+## 阶段 E —— 增强(v1 后)
+
+### [x] Task 9 · 用户个人记忆(About me)
+- 档案加 `## About me` 段:持久个人事实(职业 / 在读及阶段 / 生活情况),让对话 agent 跨会话"记得这个人"。
+- 维护 agent 从 transcript 抽取持久事实写入(只写明说的,不臆测,不写一次性闲聊);对话 agent 读切片时自然引用。
+- **验收:** 用户说了个人情况若干轮后,`## About me` 被更新;对话回复自然带入而不复述清单。
+- ✅ 模板(`src/profile/profile.ts`)+ 必需段落(`src/profile/sanity.ts`,现 7 段)+ 维护/对话 prompt(`src/agents/{maintainer,conversation}.ts` 与 docs)+ 测试(`sanity.test.ts`)。
+- 注:`## About me` 由维护 agent 维护(区别于 `## My notes` 用户手写区,后者逐字保留)。未加密(范围按用户选定:仅 API key 加密)。
+
+### [x] Task 10 · API key 改为应用自管加密存储(取代 OS keychain)
+- 弃 OS keychain(开发期反复弹授权 / 重签丢访问)。改为应用自管:`src-tauri/src/secrets.rs`,XChaCha20-Poly1305 加密,密钥 = 本地随机 keyfile(0600)+ 机器标识 SHA-256 派生 → 设备绑定、无主密码。
+- Tauri 命令名沿用 `set/get/delete_secret`,前端零改动(`src/keychain.ts` 等)。
+- **验收:** 填 key → 重启仍能读回并跑通;`secrets.json` 内为密文;拷到别的机器解不开。
+- ✅ `secrets.rs` + `Cargo.toml`(chacha20poly1305/sha2/rand/base64/machine-uid,去 keyring)+ `lib.rs`(mod/handler 改名)。`cargo build` 通过。
+- ⚠️ 安全上限:无主密码 = 混淆级,挡误传 / 随手翻,挡不住能读你磁盘的攻击者。要真加密需主密码(`tauri-plugin-stronghold`)。
+- ⚠️ 迁移:旧 key 在 OS keychain 里,切换后读不到 → 用户在设置页重填一次(key 可重填,故不写迁移代码)。

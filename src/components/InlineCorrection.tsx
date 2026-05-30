@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import type { Issue, TutorAnalysis } from "../agents/schema";
 import { SpeakableText } from "./SpeakButton";
 import { IconSparkles, IconBookOpen, IconCheck, IconLanguages } from "./icons";
@@ -29,17 +29,37 @@ type DiffSegment =
   | { kind: "same"; text: string }
   | { kind: "change"; original: string; corrected: string };
 
+const isWordChar = (ch: string | undefined): boolean =>
+  !!ch && /[\p{L}\p{N}]/u.test(ch);
+
+// 按词边界查找 span:两端是字母/数字时要求是独立单词,避免短 span(如 "is")
+// 命中更大单词的内部(如 "th[is]")。找不到合规位置返回 -1(交由调用方跳过)。
+function indexOfWord(hay: string, needle: string, from: number): number {
+  if (!needle) return -1;
+  const guardStart = isWordChar(needle[0]);
+  const guardEnd = isWordChar(needle[needle.length - 1]);
+  let idx = hay.indexOf(needle, from);
+  while (idx !== -1) {
+    const end = idx + needle.length;
+    const leftOk = !guardStart || idx === 0 || !isWordChar(hay[idx - 1]);
+    const rightOk = !guardEnd || end === hay.length || !isWordChar(hay[end]);
+    if (leftOk && rightOk) return idx;
+    idx = hay.indexOf(needle, idx + 1);
+  }
+  return -1;
+}
+
 // 把原句按 issues 重建成 inline diff:错的 span 标红删除线,后面跟绿色改写。
 // 定位不到的 issue 直接跳过(仍会出现在「语法详解」里),所以永远能渲染。
-function buildDiffSegments(original: string, issues: Issue[]): DiffSegment[] {
+export function buildDiffSegments(original: string, issues: Issue[]): DiffSegment[] {
   type Placed = { idx: number; end: number; corrected: string };
   const placed: Placed[] = [];
   let from = 0;
   for (const iss of issues) {
     const span = iss.span_original;
     if (!span || span === iss.span_corrected) continue;
-    let idx = original.indexOf(span, from);
-    if (idx === -1) idx = original.indexOf(span);
+    let idx = indexOfWord(original, span, from);
+    if (idx === -1) idx = indexOfWord(original, span, 0);
     if (idx === -1) continue;
     placed.push({ idx, end: idx + span.length, corrected: iss.span_corrected });
     from = idx + span.length;
@@ -112,51 +132,40 @@ export function InlineCorrection({
   proseFeedback,
   pending,
   error,
+  leading,
 }: {
   analysis: TutorAnalysis | null;
   proseFeedback?: string | null;
   pending: boolean;
   error?: string | null;
+  // 同一行靠前渲染的其它操作(复制 / 播放),放在「更地道」「语法详解」按钮左边。
+  leading?: ReactNode;
 }) {
   // 讲解、更地道默认展开,语法详解默认收起;各 icon 各自切换。
   const [gapOpen, setGapOpen] = useState(true);
   const [naturalOpen, setNaturalOpen] = useState(true);
   const [grammarOpen, setGrammarOpen] = useState(false);
 
-  if (pending && !analysis && !proseFeedback) {
-    return (
-      <div className="correction-pending" aria-live="polite">
-        <span className="inline-correction-spinner" aria-hidden />
-        <span>正在分析你的表达…</span>
-      </div>
-    );
-  }
-
-  if (!analysis) {
-    if (proseFeedback?.trim()) {
-      return (
-        <div className="correction-panel">
-          <pre className="inline-correction-prose">{proseFeedback.trim()}</pre>
-        </div>
-      );
-    }
-    if (error) {
-      return <p className="correction-error" role="alert">{error}</p>;
-    }
-    return null;
-  }
-
-  const gap = analysis.expression_gap ?? null;
-  const natural = analysis.natural ?? "";
-  const corrected = analysis.corrected ?? "";
+  const gap = analysis?.expression_gap ?? null;
+  const natural = analysis?.natural ?? "";
+  const corrected = analysis?.corrected ?? "";
   // 母语/混说轮:讲解取代"更地道"与"表达正确";语法详解仍用于混说里的目标语错误。
-  const showNatural = !gap && natural.trim().length > 0 && natural !== corrected;
-  const hasIssues = analysis.issues.length > 0;
-  const allCorrect = !gap && analysis.is_correct && !hasIssues;
+  const showNatural = !!analysis && !gap && natural.trim().length > 0 && natural !== corrected;
+  const hasIssues = !!analysis && analysis.issues.length > 0;
+  const allCorrect = !!analysis && !gap && analysis.is_correct && !hasIssues;
+  const showPending = pending && !analysis && !proseFeedback;
+  const showProse = !analysis && !!proseFeedback?.trim();
 
   return (
     <div className="correction">
       <div className="correction-actions">
+        {leading}
+        {showPending && (
+          <span className="correction-pending" aria-live="polite">
+            <span className="inline-correction-spinner" aria-hidden />
+            正在分析…
+          </span>
+        )}
         {allCorrect && (
           <span className="correction-status">
             <IconCheck size={14} />
@@ -194,7 +203,7 @@ export function InlineCorrection({
           >
             <IconBookOpen size={15} />
             语法详解
-            <span className="correction-count">{analysis.issues.length}</span>
+            <span className="correction-count">{analysis?.issues.length ?? 0}</span>
           </button>
         )}
       </div>
@@ -234,7 +243,7 @@ export function InlineCorrection({
         </div>
       )}
 
-      {hasIssues && grammarOpen && (
+      {hasIssues && grammarOpen && analysis && (
         <div className="correction-panel">
           <ul className="issues">
             {analysis.issues.map((iss, i) => (
@@ -259,7 +268,13 @@ export function InlineCorrection({
         </div>
       )}
 
-      {error && <p className="correction-error">{error}</p>}
+      {showProse && (
+        <div className="correction-panel">
+          <pre className="inline-correction-prose">{proseFeedback!.trim()}</pre>
+        </div>
+      )}
+
+      {error && <p className="correction-error" role="alert">{error}</p>}
     </div>
   );
 }

@@ -47,11 +47,22 @@ export function IconSearch(p: { size?: number }) {
   );
 }
 
+// Lucide "copy"
 export function IconCopy(p: { size?: number }) {
   return (
     <Svg {...p}>
-      <rect x="9" y="9" width="11" height="11" rx="2" />
-      <path d="M5 15V5a2 2 0 0 1 2-2h10" />
+      <rect x="8" y="8" width="14" height="14" rx="2" ry="2" />
+      <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
+    </Svg>
+  );
+}
+
+// Lucide "volume-1" — 朗读 / 播放语音(单声波,比 volume-2 更方正、不显扁)
+export function IconVolume(p: { size?: number }) {
+  return (
+    <Svg {...p}>
+      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+      <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
     </Svg>
   );
 }
@@ -60,16 +71,6 @@ export function IconCheck(p: { size?: number }) {
   return (
     <Svg {...p}>
       <polyline points="20 6 9 17 4 12" />
-    </Svg>
-  );
-}
-
-export function IconExplain(p: { size?: number }) {
-  return (
-    <Svg {...p}>
-      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z" />
-      <line x1="8" y1="9" x2="16" y2="9" />
-      <line x1="8" y1="13" x2="13" y2="13" />
     </Svg>
   );
 }

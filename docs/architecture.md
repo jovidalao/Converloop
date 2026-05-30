@@ -93,7 +93,7 @@ LIMIT 15;
 
 1. **半天,不写代码:** 真实句子手动验证三个 prompt,重点盯 Tutor 的 `mastery_key` 跨句**稳定性**。
 2. **第一周第一个编码任务 = 技术探针:** 验证 Tauri webview 里 **Drizzle + SQLite** 能读写 + 跑 migration(webview 不是 Node,不开箱即用,用 Drizzle sqlite-proxy 或 wa-sqlite)。
-3. **密钥存 OS keychain**(`tauri-plugin-stronghold` / 系统 keyring),绝不明文。
+3. **密钥存设备绑定加密文件**(应用自管,无主密码 → 混淆级;`src-tauri/src/secrets.rs`:XChaCha20-Poly1305,密钥 = 本地随机 keyfile + 机器标识派生),绝不明文。要真加密需主密码,届时换 `tauri-plugin-stronghold`。
 4. 然后正式开发。
 
 ## 复习去哪了

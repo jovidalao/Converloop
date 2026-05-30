@@ -809,8 +809,9 @@ body,
   background: var(--accent-weak);
   color: var(--accent-fg);
 }
-/* Speak button adopts the flat action-bar look inside .msg-actions */
-.msg-actions .speak-btn {
+/* Speak button adopts the flat action-bar look inside .msg-actions / .correction-actions */
+.msg-actions .speak-btn,
+.correction-actions .speak-btn {
   width: 1.85rem;
   height: 1.85rem;
   border-radius: var(--radius-sm);
@@ -818,16 +819,19 @@ body,
   border: none;
   color: var(--text-dim);
 }
-.msg-actions .speak-btn:hover:not(:disabled) {
+.msg-actions .speak-btn:hover:not(:disabled),
+.correction-actions .speak-btn:hover:not(:disabled) {
   background: var(--surface-2);
   color: var(--text);
 }
 /* 正在播放:加底色 + 主题色,一眼能看出"在响" */
-.msg-actions .speak-btn.playing {
+.msg-actions .speak-btn.playing,
+.correction-actions .speak-btn.playing {
   background: var(--success-weak);
   color: var(--success-fg);
 }
-.msg-actions .speak-btn.playing:hover:not(:disabled) {
+.msg-actions .speak-btn.playing:hover:not(:disabled),
+.correction-actions .speak-btn.playing:hover:not(:disabled) {
   background: var(--success-weak);
   color: var(--success-fg);
 }

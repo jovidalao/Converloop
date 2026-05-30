@@ -77,13 +77,13 @@ export function SettingsView() {
     await setSecret(keyAccount, keyInput.trim());
     setKeyInput("");
     setHasKey(true);
-    setStatus("API key 已保存到 OS keychain。");
+    setStatus("API key 已加密保存到本地。");
   }
 
   async function clearKey() {
     await deleteSecret(keyAccount);
     setHasKey(false);
-    setStatus("API key 已从 keychain 清除。");
+    setStatus("API key 已从本地清除。");
   }
 
   function updateTts<K extends keyof TtsConfig>(k: K, v: TtsConfig[K]) {
@@ -97,13 +97,13 @@ export function SettingsView() {
     await setSecret(MIMO_TTS_KEY_ACCOUNT, ttsKeyInput.trim());
     setTtsKeyInput("");
     setHasTtsKey(true);
-    setTtsStatus("MiMo TTS API key 已保存到 OS keychain。");
+    setTtsStatus("MiMo TTS API key 已加密保存到本地。");
   }
 
   async function clearTtsKey() {
     await deleteSecret(MIMO_TTS_KEY_ACCOUNT);
     setHasTtsKey(false);
-    setTtsStatus("MiMo TTS API key 已从 keychain 清除。");
+    setTtsStatus("MiMo TTS API key 已从本地清除。");
   }
 
   async function testTts() {

@@ -3,6 +3,9 @@ import { sanityCheck, extractMyNotes, applyPreservedMyNotes } from "./sanity";
 
 const oldMd = `# Learner Profile · Chinese → English · B1 · updated 2026-05-29
 
+## About me
+- 前端工程师,最近换了新工作;在读在职研究生
+
 ## Working on
 - 冠词 a/an/the —— 抽象名词前尤其不稳
 - 一般过去时与现在完成时的区分
@@ -30,6 +33,9 @@ const MY_NOTES = "我自己记的:多练时态,周末复习介词搭配。\n";
 
 function withSections(myNotes: string, working = "- 冠词 a/an/the"): string {
   return `# Learner Profile · Chinese → English · B1 · updated 2026-05-30
+
+## About me
+- 前端工程师
 
 ## Working on
 ${working}
@@ -71,7 +77,8 @@ describe("sanityCheck", () => {
   });
 
   it("长度坍缩 → 拒绝(段落全、My notes 原样,但内容被吃掉)", () => {
-    const collapsed = `## Working on
+    const collapsed = `## About me
+## Working on
 ## Comfortable with
 ## Avoids / rarely attempts
 ## Interests
@@ -94,6 +101,9 @@ describe("applyPreservedMyNotes", () => {
 
   it("LLM 漏掉 My notes 时补上", () => {
     const without = `# Learner Profile
+
+## About me
+- 前端工程师
 
 ## Working on
 - x

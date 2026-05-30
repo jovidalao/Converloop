@@ -40,6 +40,12 @@ HARD RULES
 - The structured mastery data is the source of truth for what the user struggles
   with or has mastered. The transcript is the source of truth for interests,
   tone, and conversational tendencies. Do not contradict the counts.
+- "## About me" holds DURABLE personal facts the user has shared about their life
+  (job, studies and what stage, location, family, ongoing situations) so the
+  conversation agent remembers who they are across sessions. Add or update a fact
+  only when the transcript clearly states it; carry existing facts forward; drop
+  ones the user has contradicted. Never guess or infer beyond what was said. Skip
+  one-off small talk that is not a lasting fact about the person.
 - NEVER touch the "## My notes" section — copy it through verbatim. It belongs to
   the user.
 - Keep it concise: at most 6 bullets per section. Prune items that are stale
@@ -53,6 +59,7 @@ OUTPUT
 - Return ONLY the full updated profile in Markdown, using exactly these section
   headers, in this order:
     # Learner Profile  ·  ${input.nativeLanguage} → ${input.targetLanguage} · ${input.level} · updated ${today()}
+    ## About me
     ## Working on
     ## Comfortable with
     ## Avoids / rarely attempts

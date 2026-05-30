@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { explainReply, MissingApiKeyError } from "../orchestrator";
 import { Markdown } from "./Markdown";
-import { IconExplain } from "./icons";
+import { IconBookOpen } from "./icons";
 
 // "讲解"按钮:点一下,按用户掌握情况流式讲解这条回复。
 // 状态留在组件内(临时,不持久化)——再点收起/展开,已生成的复用。
@@ -68,7 +68,7 @@ export function ReplyExplanation({
           {loading ? (
             <span className="speak-btn-spinner" aria-hidden />
           ) : (
-            <IconExplain size={16} />
+            <IconBookOpen size={16} />
           )}
           <span>讲解</span>
         </button>

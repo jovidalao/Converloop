@@ -2,6 +2,7 @@
 // 任何一项不过 → 丢弃本次结果、保留旧 MD。见 docs/profile-maintainer-agent.md#输出处理。
 
 export const REQUIRED_SECTIONS = [
+  "## About me",
   "## Working on",
   "## Comfortable with",
   "## Avoids / rarely attempts",
