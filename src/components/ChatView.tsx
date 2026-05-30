@@ -17,6 +17,7 @@ import {
 } from "./icons";
 import { stopSpeech } from "../tts/playback";
 import { createReplySpeaker } from "../tts/stream";
+import { loadTtsConfig } from "../tts/config";
 
 interface ChatViewProps {
   conversationId: string;
@@ -47,11 +48,12 @@ function CopyButton({ text }: { text: string }) {
 // 一条 AI 回复:气泡(原文 / 双语对照可切换)+ 操作行(复制 / 朗读 / 讲解 / 双语阅读)。
 // 双语对照按需 AI 生成、替换显示原文,再点恢复;状态留在组件内,不持久化。
 // 关键:朗读始终读原文(目标语言版),SpeakButton 永远拿原始 text。
-function PartnerReply({ text }: { text: string }) {
+function PartnerReply({ text, autoOpen = false }: { text: string; autoOpen?: boolean }) {
   const [open, setOpen] = useState(false); // 当前是否显示双语对照
   const [loading, setLoading] = useState(false);
   const [bilingual, setBilingual] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const didAutoOpen = useRef(false);
 
   async function generate() {
     setLoading(true);
@@ -85,6 +87,16 @@ function PartnerReply({ text }: { text: string }) {
     }
     setOpen((o) => !o);
   }
+
+  // 设置里开了「自动开启双语阅读」时,新回复挂载即展开并生成一次。
+  useEffect(() => {
+    if (autoOpen && !didAutoOpen.current) {
+      didAutoOpen.current = true;
+      setOpen(true);
+      void generate();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoOpen]);
 
   const showBilingual = open && (bilingual || error);
 
@@ -222,7 +234,9 @@ export function ChatView({ conversationId, onActivity }: ChatViewProps) {
   const stickToBottomRef = useRef(true);
   const turnGenRef = useRef(0);
   const replyCommittedRef = useRef(false);
+  const liveTurnIdsRef = useRef<Set<string>>(new Set()); // 本会话内新发的轮次,自动双语只作用于它们
   const [nativeLanguage] = useState(() => loadConfig().nativeLanguage);
+  const [autoBilingual] = useState(() => loadConfig().autoBilingual);
 
   // 输入框随内容增高,最多三行,超过后内部滚动。
   useEffect(() => {
@@ -267,6 +281,7 @@ export function ChatView({ conversationId, onActivity }: ChatViewProps) {
     const isFirstMessage = turns.length === 0;
     const turnGen = ++turnGenRef.current;
     const turnId = crypto.randomUUID();
+    liveTurnIdsRef.current.add(turnId);
     stickToBottomRef.current = true;
     setInput("");
     setError(null);
@@ -284,19 +299,20 @@ export function ChatView({ conversationId, onActivity }: ChatViewProps) {
     setStreaming("");
     let acc = "";
     // 边收流边分句朗读:第一句一就绪即出声,后续句子在后台合成、无缝续播。
-    const speaker = createReplySpeaker();
+    // 设置里关掉「自动朗读」时不创建朗读会话(小喇叭仍可手动朗读)。
+    const speaker = loadTtsConfig().autoSpeak ? createReplySpeaker() : null;
     try {
       const result = await runTurn(text, conversationId, {
         onReplyDelta: (d) => {
           acc += d;
           setStreaming(acc);
-          speaker.push(acc);
+          speaker?.push(acc);
         },
         onReplyComplete: (reply) => {
           if (turnGenRef.current !== turnGen) return;
           replyCommittedRef.current = true;
           commitPartnerReply(turnId, reply);
-          speaker.finish(reply);
+          speaker?.finish(reply);
         },
         onAnalysis: (a, opts) => {
           patchTurn(turnId, {
@@ -309,7 +325,7 @@ export function ChatView({ conversationId, onActivity }: ChatViewProps) {
       });
       if (turnGenRef.current === turnGen && !replyCommittedRef.current) {
         commitPartnerReply(turnId, result.reply);
-        speaker.finish(result.reply);
+        speaker?.finish(result.reply);
       }
       // 轮次已持久化:更新会话排序,首条消息顺带自动命名,再刷新侧边栏。
       await touchConversation(conversationId);
@@ -317,7 +333,7 @@ export function ChatView({ conversationId, onActivity }: ChatViewProps) {
       onActivity?.();
     } catch (e) {
       stopSpeech(); // 出错则停掉已在播的分句,并让朗读会话失效。
-      speaker.abort();
+      speaker?.abort();
       patchTurn(turnId, {
         analysisPending: false,
         analysisError: "发送失败,本轮未批改",
@@ -334,7 +350,7 @@ export function ChatView({ conversationId, onActivity }: ChatViewProps) {
         setStreaming("");
         setReplyBusy(false);
       } else {
-        speaker.abort(); // 轮次已被新消息取代,停止本轮合成(播放已由新 send 的 stopSpeech 接管)。
+        speaker?.abort(); // 轮次已被新消息取代,停止本轮合成(播放已由新 send 的 stopSpeech 接管)。
       }
     }
   }
@@ -349,7 +365,12 @@ export function ChatView({ conversationId, onActivity }: ChatViewProps) {
         {turns.map((turn) => (
           <div key={turn.id} className="turn-block">
             <UserTurn turn={turn} nativeLanguage={nativeLanguage} />
-            {turn.partnerText && <PartnerReply text={turn.partnerText} />}
+            {turn.partnerText && (
+              <PartnerReply
+                text={turn.partnerText}
+                autoOpen={autoBilingual && liveTurnIdsRef.current.has(turn.id)}
+              />
+            )}
           </div>
         ))}
         {streaming && (

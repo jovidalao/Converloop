@@ -27,6 +27,8 @@ export interface TtsConfig {
   model: string;
   voice: string;
   stylePrompt: string;
+  /** 新 AI 回复边收流边自动分句朗读。 */
+  autoSpeak: boolean;
 }
 
 const STORAGE_KEY = "lang-agent.tts";
@@ -36,6 +38,7 @@ const DEFAULT_TTS_CONFIG: TtsConfig = {
   model: MIMO_TTS_DEFAULTS.model,
   voice: MIMO_TTS_DEFAULTS.voice,
   stylePrompt: MIMO_TTS_DEFAULTS.stylePrompt,
+  autoSpeak: true,
 };
 
 export function loadTtsConfig(): TtsConfig {

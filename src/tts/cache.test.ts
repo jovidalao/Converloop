@@ -7,6 +7,7 @@ const cfg: TtsConfig = {
   model: "mimo-v2.5-tts",
   voice: "Chloe",
   stylePrompt: "Clear tone.",
+  autoSpeak: true,
 };
 
 describe("buildTtsCacheKey", () => {

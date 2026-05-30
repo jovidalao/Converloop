@@ -14,6 +14,8 @@ export interface AppConfig {
   nativeLanguage: string;
   targetLanguage: string;
   level: string;
+  /** 新 AI 回复自动展开双语对照。 */
+  autoBilingual: boolean;
 }
 
 // 每个 provider 的 key 单独存,切换不丢另一个。
@@ -52,6 +54,7 @@ const DEFAULT_CONFIG: AppConfig = {
   nativeLanguage: "Chinese",
   targetLanguage: "English",
   level: "B1",
+  autoBilingual: false,
 };
 
 export function loadConfig(): AppConfig {

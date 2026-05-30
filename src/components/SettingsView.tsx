@@ -245,6 +245,15 @@ export function SettingsView() {
         </div>
       </div>
 
+      <label className="toggle-field">
+        <input
+          type="checkbox"
+          checked={cfg.autoBilingual}
+          onChange={(e) => update("autoBilingual", e.target.checked)}
+        />
+        <span>AI 回复自动开启双语阅读(逐句对照)</span>
+      </label>
+
       <button className="secondary" onClick={testConnection} disabled={testing}>
         {testing ? "测试中…" : "测试连接(流式 + 非流式)"}
       </button>
@@ -258,6 +267,15 @@ export function SettingsView() {
         聊天中 AI 回复、改正和更地道句子旁的小喇叭会调用 MiMo 语音合成。相同句子会缓存音频,避免重复请求。
         {ttsCacheCount !== null && ` 当前缓存 ${ttsCacheCount} 条。`}
       </p>
+
+      <label className="toggle-field">
+        <input
+          type="checkbox"
+          checked={ttsCfg.autoSpeak}
+          onChange={(e) => updateTts("autoSpeak", e.target.checked)}
+        />
+        <span>AI 回复自动朗读(关掉后仍可点小喇叭手动朗读)</span>
+      </label>
 
       <div className="field">
         <label>MiMo API key {hasTtsKey ? "(已保存 · 留空不改)" : "(未设置)"}</label>
