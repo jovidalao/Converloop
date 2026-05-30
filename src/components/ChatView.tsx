@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { runTurn, MissingApiKeyError } from "../orchestrator";
-import type { TutorAnalysis } from "../agents/schema";
 import { loadChatHistory, type ChatTurn } from "../db/turns";
 import { InlineCorrection } from "./InlineCorrection";
 import { SpeakableText } from "./SpeakButton";
@@ -81,11 +80,12 @@ export function ChatView() {
           replyCommittedRef.current = true;
           commitPartnerReply(turnId, reply);
         },
-        onAnalysis: (a: TutorAnalysis | null, analysisError?: string) => {
+        onAnalysis: (a, opts) => {
           patchTurn(turnId, {
             analysis: a,
+            analysisProse: opts?.proseFeedback ?? null,
             analysisPending: false,
-            analysisError: analysisError ?? null,
+            analysisError: opts?.error ?? null,
           });
         },
       });
@@ -123,9 +123,13 @@ export function ChatView() {
           <div key={turn.id} className="turn-block">
             <div className="turn-user">
               <div className="msg user">{turn.userText}</div>
-              {(turn.analysisPending || turn.analysis || turn.analysisError) && (
+              {(turn.analysisPending ||
+                turn.analysis ||
+                turn.analysisProse ||
+                turn.analysisError) && (
                 <InlineCorrection
                   analysis={turn.analysis}
+                  proseFeedback={turn.analysisProse}
                   pending={!!turn.analysisPending}
                   error={turn.analysisError}
                 />

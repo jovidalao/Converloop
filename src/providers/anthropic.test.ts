@@ -93,4 +93,24 @@ describe("anthropic REST alignment", () => {
       }),
     ).toBe("Hello world");
   });
+
+  it("extractAnthropicContent skips thinking blocks", () => {
+    expect(
+      extractAnthropicContent({
+        content: [
+          { type: "thinking", thinking: "internal" },
+          { type: "text", text: '{"is_correct":true}' },
+        ],
+      }),
+    ).toBe('{"is_correct":true}');
+  });
+
+  it("generate options maxTokens overrides config default", () => {
+    const body = buildAnthropicRequestBody(
+      cfg,
+      { messages: [{ role: "user", content: "x" }], maxTokens: 8192 },
+      false,
+    );
+    expect(body.max_tokens).toBe(8192);
+  });
 });

@@ -16,6 +16,15 @@ export function extractMyNotes(md: string): string {
   return idx === -1 ? "" : md.slice(idx);
 }
 
+/** LLM 常会微调 My notes;写入前强制贴回旧 block,避免整份更新被 sanity 拒绝。 */
+export function applyPreservedMyNotes(oldMd: string, newMd: string): string {
+  const notes = extractMyNotes(oldMd);
+  if (!notes) return newMd;
+  const idx = newMd.indexOf("## My notes");
+  if (idx === -1) return `${newMd.trimEnd()}\n\n${notes}`;
+  return newMd.slice(0, idx) + notes;
+}
+
 export interface SanityResult {
   ok: boolean;
   reason?: string;

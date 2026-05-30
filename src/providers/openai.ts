@@ -14,6 +14,7 @@ type Body = Record<string, unknown>;
 function buildBody(cfg: OpenAIConfig, opts: GenerateOptions, stream: boolean): Body {
   const body: Body = { model: cfg.model, messages: opts.messages, stream };
   if (opts.temperature !== undefined) body.temperature = opts.temperature;
+  if (opts.maxTokens !== undefined) body.max_tokens = opts.maxTokens;
   if (opts.jsonSchema) {
     body.response_format = {
       type: "json_schema",

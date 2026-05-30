@@ -25,14 +25,16 @@ const SEVERITY_LABEL: Record<Issue["severity"], string> = {
 
 export function InlineCorrection({
   analysis,
+  proseFeedback,
   pending,
   error,
 }: {
   analysis: TutorAnalysis | null;
+  proseFeedback?: string | null;
   pending: boolean;
   error?: string | null;
 }) {
-  if (pending && !analysis) {
+  if (pending && !analysis && !proseFeedback) {
     return (
       <div className="inline-correction pending" aria-live="polite">
         <span className="inline-correction-spinner" aria-hidden />
@@ -42,6 +44,19 @@ export function InlineCorrection({
   }
 
   if (!analysis) {
+    if (proseFeedback?.trim()) {
+      return (
+        <div className="inline-correction prose-feedback">
+          <div className="inline-correction-header">
+            <span className="inline-correction-icon warn-icon" aria-hidden>
+              ✦
+            </span>
+            <span className="inline-correction-title">批改建议</span>
+          </div>
+          <pre className="inline-correction-prose">{proseFeedback.trim()}</pre>
+        </div>
+      );
+    }
     if (error) {
       return (
         <div className="inline-correction failed" role="alert">

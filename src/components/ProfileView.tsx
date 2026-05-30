@@ -21,13 +21,19 @@ export function ProfileView() {
     setBusy(true);
     setStatus("AI 正在根据掌握数据 + 近期对话刷新档案…");
     try {
+      await writeProfile(md);
       const r = await runMaintainerNow();
       if (r.written && r.profile) {
         setMd(r.profile);
         setStatus("✓ 档案已更新(通过 sanity check)。");
       } else {
-        setStatus("未更新:" + r.reason);
+        const fresh = await readProfile(loadConfig());
+        setMd(fresh);
+        setStatus(`未更新：${r.reason}`);
       }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setStatus(`刷新失败：${msg}`);
     } finally {
       setBusy(false);
     }
@@ -51,7 +57,15 @@ export function ProfileView() {
           {busy ? "刷新中…" : "用 AI 刷新档案"}
         </button>
       </div>
-      {status && <p className="status">{status}</p>}
+      {status && (
+        <p
+          className={
+            status.startsWith("✓") ? "status" : "status status--warn"
+          }
+        >
+          {status}
+        </p>
+      )}
     </div>
   );
 }

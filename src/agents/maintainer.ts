@@ -1,5 +1,5 @@
 import type { ChatMessage, ModelProvider } from "../providers/types";
-import { sanityCheck } from "../profile/sanity";
+import { applyPreservedMyNotes, sanityCheck } from "../profile/sanity";
 import { writeProfile } from "../profile/profile";
 import type { MaintainerData } from "../db/mastery";
 
@@ -125,6 +125,7 @@ export async function runMaintainer(
     return { written: false, reason: `LLM 调用失败:${e instanceof Error ? e.message : String(e)}` };
   }
 
+  newMd = applyPreservedMyNotes(input.currentMd, newMd);
   const sane = sanityCheck(input.currentMd, newMd);
   if (!sane.ok) return { written: false, reason: sane.reason ?? "sanity check 未通过" };
 

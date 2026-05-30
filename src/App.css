@@ -200,6 +200,15 @@ body,
   background: rgba(58, 26, 26, 0.92);
   border: 1px solid rgba(240, 160, 160, 0.35);
 }
+.inline-correction.prose-feedback .inline-correction-prose {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: inherit;
+  font-size: 0.82rem;
+  line-height: 1.55;
+  color: var(--text, #e8e6f0);
+}
 .inline-correction-error,
 .inline-correction-warn {
   margin: 0.35rem 0 0;
@@ -467,6 +476,9 @@ button.secondary {
   color: #9aa0ff;
   margin-top: 0.5rem;
   word-break: break-word;
+}
+.status.status--warn {
+  color: #e8a87c;
 }
 .settings-divider {
   border: none;

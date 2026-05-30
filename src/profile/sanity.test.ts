@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { sanityCheck, extractMyNotes } from "./sanity";
+import { sanityCheck, extractMyNotes, applyPreservedMyNotes } from "./sanity";
 
 const oldMd = `# Learner Profile · Chinese → English · B1 · updated 2026-05-29
 
@@ -81,6 +81,38 @@ ${MY_NOTES}`;
     const r = sanityCheck(oldMd, collapsed);
     expect(r.ok).toBe(false);
     expect(r.reason).toContain("坍缩");
+  });
+});
+
+describe("applyPreservedMyNotes", () => {
+  it("把 LLM 改过的 My notes 贴回旧版", () => {
+    const llm = withSections("agent 偷偷改了\n");
+    const fixed = applyPreservedMyNotes(oldMd, llm);
+    expect(sanityCheck(oldMd, fixed).ok).toBe(true);
+    expect(extractMyNotes(fixed)).toBe(extractMyNotes(oldMd));
+  });
+
+  it("LLM 漏掉 My notes 时补上", () => {
+    const without = `# Learner Profile
+
+## Working on
+- x
+
+## Comfortable with
+-
+
+## Avoids / rarely attempts
+-
+
+## Interests
+-
+
+## Recently introduced
+-
+`;
+    const fixed = applyPreservedMyNotes(oldMd, without);
+    expect(fixed).toContain("## My notes");
+    expect(sanityCheck(oldMd, fixed).ok).toBe(true);
   });
 });
 

@@ -15,6 +15,8 @@ export interface JsonSchemaSpec {
 export interface GenerateOptions {
   messages: ChatMessage[];
   temperature?: number;
+  /** 非流式生成的输出 token 上限(导师等结构化任务建议 ≥2048)。 */
+  maxTokens?: number;
   jsonSchema?: JsonSchemaSpec;
   /** 简单 JSON 模式(response_format: json_object),兼容不支持 json_schema 的端点。 */
   jsonObject?: boolean;

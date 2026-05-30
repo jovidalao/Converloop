@@ -15,7 +15,10 @@ export interface TurnCallbacks {
   onReplyDelta: (delta: string) => void;
   /** 对话流式结束、可继续输入时触发;批改仍在后台进行。 */
   onReplyComplete?: (reply: string) => void;
-  onAnalysis: (analysis: TutorAnalysis | null, error?: string) => void;
+  onAnalysis: (
+    analysis: TutorAnalysis | null,
+    opts?: { error?: string; proseFeedback?: string },
+  ) => void;
 }
 
 export interface TurnResult {
@@ -70,7 +73,7 @@ export async function runTurn(
 
   // 批改、记账、补全 analysis_json 在后台跑,不阻塞下一轮输入。
   void analysisPromise
-    .then(async ({ analysis, error }) => {
+    .then(async ({ analysis, proseFeedback, error }) => {
       if (analysis) {
         cb.onAnalysis(analysis);
         try {
@@ -80,19 +83,23 @@ export async function runTurn(
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e);
           console.error("批改记账失败:", e);
-          cb.onAnalysis(analysis, `批改已显示但保存失败: ${msg}`);
+          cb.onAnalysis(analysis, { error: `批改已显示但保存失败: ${msg}` });
         }
-      } else {
-        cb.onAnalysis(
-          null,
-          error ?? "批改未能完成,请查看控制台日志。",
-        );
+      } else if (proseFeedback) {
+        try {
+          await updateTurnAnalysis(turnId, null, proseFeedback);
+        } catch (e) {
+          console.error("纯文本批改保存失败:", e);
+        }
+        cb.onAnalysis(null, { proseFeedback });
+      } else if (error) {
+        cb.onAnalysis(null, { error });
       }
     })
     .catch((e) => {
       const msg = e instanceof Error ? e.message : String(e);
       console.error("批改失败:", e);
-      cb.onAnalysis(null, `批改失败: ${msg}`);
+      cb.onAnalysis(null, { error: `批改失败: ${msg}` });
     });
 
   return { reply, analysis: null };

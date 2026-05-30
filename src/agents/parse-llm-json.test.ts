@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { extractJsonText, parseLLMJson, normalizeTutorPayload } from "./parse-llm-json";
+import {
+  extractJsonText,
+  isLikelyTutorJsonPayload,
+  parseLLMJson,
+  normalizeTutorPayload,
+} from "./parse-llm-json";
 import { TutorAnalysis } from "./schema";
 
 describe("extractJsonText", () => {
@@ -40,5 +45,22 @@ describe("normalizeTutorPayload", () => {
 describe("parseLLMJson", () => {
   it("空字符串报错", () => {
     expect(parseLLMJson("  ").ok).toBe(false);
+  });
+
+  it("推理文本给出可读提示", () => {
+    const bad = "-> Type: `collocation`, Label: `介词搭配` (Signal: `introduced`)";
+    const result = parseLLMJson(bad);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toContain("推理过程");
+  });
+});
+
+describe("isLikelyTutorJsonPayload", () => {
+  it("接受合法 JSON 对象", () => {
+    expect(isLikelyTutorJsonPayload('{"is_correct":true}')).toBe(true);
+  });
+
+  it("拒绝推理片段", () => {
+    expect(isLikelyTutorJsonPayload("-> Type: `vocab`")).toBe(false);
   });
 });

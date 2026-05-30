@@ -64,7 +64,7 @@ export function buildAnthropicRequestBody(
   const { system, messages } = toAnthropicMessages(opts.messages);
   const body: Body = {
     model: cfg.model,
-    max_tokens: cfg.maxTokens ?? 4096,
+    max_tokens: opts.maxTokens ?? cfg.maxTokens ?? 4096,
     messages,
     stream,
   };
@@ -99,6 +99,8 @@ function authHeaders(cfg: AnthropicConfig): Record<string, string> {
 
 type ContentBlock =
   | { type: "text"; text: string }
+  | { type: "thinking"; thinking?: string }
+  | { type: "redacted_thinking" }
   | { type: "tool_use"; name: string; input: unknown };
 
 /** 从 Messages 响应抽取文本;tool_use 时返回 JSON 字符串(供导师 agent 解析)。 */
@@ -106,6 +108,7 @@ export function extractAnthropicContent(json: unknown): string {
   const res = json as {
     error?: { message?: string };
     type?: string;
+    stop_reason?: string;
     content?: ContentBlock[];
   };
   if (res.error?.message) throw new Error(res.error.message);
@@ -113,6 +116,7 @@ export function extractAnthropicContent(json: unknown): string {
   const blocks = res.content ?? [];
   const texts: string[] = [];
   for (const block of blocks) {
+    if (block.type === "thinking" || block.type === "redacted_thinking") continue;
     if (block.type === "text") texts.push(block.text);
     if (block.type === "tool_use") {
       return JSON.stringify(block.input);

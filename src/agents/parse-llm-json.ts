@@ -18,6 +18,32 @@ export function extractJsonText(raw: string): string {
   return trimmed;
 }
 
+/** 粗判是否像导师 JSON(用于决定是否触发 json_object 回退)。 */
+export function isLikelyTutorJsonPayload(raw: string): boolean {
+  const text = extractJsonText(raw);
+  if (!text || !text.trimStart().startsWith("{")) return false;
+  try {
+    JSON.parse(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function proseInsteadOfJsonHint(raw: string): string | null {
+  const t = raw.trim();
+  if (!t || t.startsWith("{")) return null;
+  if (
+    /->\s*Type:/i.test(t) ||
+    /\bWait,\s+is\b/i.test(t) ||
+    /Signal:\s*`/i.test(t) ||
+    (/```/.test(t) && !t.includes("{"))
+  ) {
+    return "模型返回了推理过程而非 JSON;请确认代理支持结构化输出(tool/json_schema),或换用官方端点/模型。";
+  }
+  return null;
+}
+
 export function parseLLMJson(raw: string): { ok: true; value: unknown } | { ok: false; error: string } {
   const text = extractJsonText(raw);
   if (!text) {
@@ -27,9 +53,11 @@ export function parseLLMJson(raw: string): { ok: true; value: unknown } | { ok: 
     return { ok: true, value: JSON.parse(text) };
   } catch (e) {
     const hint = e instanceof Error ? e.message : String(e);
+    const prose = proseInsteadOfJsonHint(text);
+    const prefix = prose ?? `返回内容不是合法 JSON(${hint})`;
     return {
       ok: false,
-      error: `返回内容不是合法 JSON(${hint}),开头: ${text.slice(0, 120)}…`,
+      error: `${prefix},开头: ${text.slice(0, 120)}…`,
     };
   }
 }

@@ -89,6 +89,7 @@ export function buildGeminiRequestBody(opts: GenerateOptions): Body {
 
   const generationConfig: Body = {};
   if (opts.temperature !== undefined) generationConfig.temperature = opts.temperature;
+  if (opts.maxTokens !== undefined) generationConfig.maxOutputTokens = opts.maxTokens;
   if (opts.jsonSchema) {
     generationConfig.responseMimeType = "application/json";
     generationConfig.responseSchema = toGeminiSchema(opts.jsonSchema.schema);

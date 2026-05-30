@@ -2,6 +2,7 @@ import type { ChatMessage, ModelProvider } from "../providers/types";
 import { TutorAnalysis, tutorJsonSchema } from "./schema";
 import {
   formatZodError,
+  isLikelyTutorJsonPayload,
   normalizeTutorPayload,
   parseLLMJson,
 } from "./parse-llm-json";
@@ -25,6 +26,8 @@ export interface TutorContext {
 
 export interface AnalyzeResult {
   analysis: TutorAnalysis | null;
+  /** 结构化 JSON 失败时,第二套 prompt 的自然语言批改(直接展示,不入 mastery 账)。 */
+  proseFeedback?: string;
   error?: string;
 }
 
@@ -73,6 +76,33 @@ ${ctx.history || "(none)"}
 ${ctx.userInput}`;
 }
 
+// 第二套:不依赖 JSON schema,固定版式纯文本,供 UI 直接渲染。
+function proseSystemPrompt(ctx: TutorContext): string {
+  return `You are a precise language tutor. A separate agent handles chat;
+you only analyze the user's latest message in ${ctx.targetLanguage}.
+
+Reply in ${ctx.nativeLanguage} using EXACTLY this plain-text template (no JSON, no markdown code fences, no reasoning):
+
+【总评】正确
+或
+【总评】有误
+
+【改正句】<full corrected sentence, or repeat the user sentence if fully correct>
+【更地道】<more idiomatic version, or "同改正句" if same>
+
+【问题列表】
+- （轻微|中等|严重）<类别>：<原片段> → <改正>；<简短说明>
+(If no errors, write one line: - 无)
+
+Rules:
+- Only flag real errors; stylistic preference → 轻微 + 自然度.
+- Do not invent JSON or schema fields.
+- Output only the filled template, nothing else.
+
+=== KNOWN WEAK POINTS ===
+${formatWeakList(ctx.weakList)}`;
+}
+
 function parseTutorRaw(raw: string): AnalyzeResult {
   const parsedJson = parseLLMJson(raw);
   if (!parsedJson.ok) {
@@ -91,39 +121,73 @@ function parseTutorRaw(raw: string): AnalyzeResult {
   };
 }
 
-async function requestTutorRaw(
+const TUTOR_MAX_OUTPUT_TOKENS = 4096;
+
+function fallbackMessages(
+  messages: ChatMessage[],
+  schema: ReturnType<typeof tutorJsonSchema>,
+): ChatMessage[] {
+  return [
+    ...messages,
+    {
+      role: "system",
+      content: `Respond with ONE JSON object only (no markdown, no reasoning). It MUST match this schema:\n${JSON.stringify(schema.schema)}`,
+    },
+  ];
+}
+
+async function requestStructuredTutorRaw(
   provider: ModelProvider,
   messages: ChatMessage[],
 ): Promise<string> {
   const schema = tutorJsonSchema();
+  const base = {
+    messages,
+    temperature: 0,
+    maxTokens: TUTOR_MAX_OUTPUT_TOKENS,
+  } as const;
 
   try {
-    const raw = await provider.generate({
-      messages,
-      temperature: 0,
-      jsonSchema: schema,
-    });
-    if (raw.trim()) return raw;
-    console.warn("json_schema 模式返回空内容,尝试 json_object 回退");
+    const raw = await provider.generate({ ...base, jsonSchema: schema });
+    if (raw.trim() && isLikelyTutorJsonPayload(raw)) return raw;
+    console.warn(
+      "json_schema 模式未返回可解析 JSON,尝试 json_object 回退",
+      raw.trim() ? `开头: ${raw.slice(0, 120)}` : "(空)",
+    );
   } catch (e) {
     console.warn("json_schema 模式请求失败,尝试 json_object 回退:", e);
   }
 
-  const fallbackMessages: ChatMessage[] = [
-    ...messages,
-    {
-      role: "system",
-      content: `Respond with ONE JSON object only (no markdown). It MUST match this schema:\n${JSON.stringify(schema.schema)}`,
-    },
-  ];
   return provider.generate({
-    messages: fallbackMessages,
+    messages: fallbackMessages(messages, schema),
     temperature: 0,
+    maxTokens: TUTOR_MAX_OUTPUT_TOKENS,
     jsonObject: true,
   });
 }
 
-// 结构化分析。失败时返回具体原因,便于 UI 展示。
+async function requestProseFeedback(
+  provider: ModelProvider,
+  ctx: TutorContext,
+): Promise<string> {
+  const messages: ChatMessage[] = [
+    { role: "system", content: proseSystemPrompt(ctx) },
+    { role: "user", content: userPrompt(ctx) },
+  ];
+  return provider.generate({
+    messages,
+    temperature: 0.2,
+    maxTokens: TUTOR_MAX_OUTPUT_TOKENS,
+  });
+}
+
+function stripModelFences(text: string): string {
+  const t = text.trim();
+  const fenced = t.match(/^```(?:\w+)?\s*\n?([\s\S]*?)\n?```\s*$/);
+  return fenced ? fenced[1].trim() : t;
+}
+
+// 结构化分析;JSON 失败时自动走第二套纯文本 prompt 并直接展示,不向用户暴露解析错误。
 export async function analyze(
   provider: ModelProvider,
   ctx: TutorContext,
@@ -133,12 +197,27 @@ export async function analyze(
     { role: "user", content: userPrompt(ctx) },
   ];
   try {
-    const raw = await requestTutorRaw(provider, messages);
-    const result = parseTutorRaw(raw);
-    if (!result.analysis) {
-      console.error("导师解析失败:", result.error, "原始响应:", raw.slice(0, 800));
+    const raw = await requestStructuredTutorRaw(provider, messages);
+    const structured = parseTutorRaw(raw);
+    if (structured.analysis) return structured;
+
+    console.warn(
+      "导师结构化解析失败,启用纯文本第二套:",
+      structured.error,
+      "原始:",
+      raw.slice(0, 400),
+    );
+
+    const proseRaw = await requestProseFeedback(provider, ctx);
+    const proseFeedback = stripModelFences(proseRaw);
+    if (proseFeedback.trim()) {
+      return { analysis: null, proseFeedback };
     }
-    return result;
+
+    return {
+      analysis: null,
+      error: "批改未能生成内容,请重试或检查模型设置。",
+    };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error("导师请求失败:", e);
