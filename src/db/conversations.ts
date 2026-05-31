@@ -18,6 +18,10 @@ export function setActiveConversationId(id: string): void {
   localStorage.setItem(ACTIVE_KEY, id);
 }
 
+export function clearActiveConversationId(): void {
+  localStorage.removeItem(ACTIVE_KEY);
+}
+
 // 最近活动在前(updated_at 倒序),给侧边栏列表用。
 export async function listConversations(): Promise<ConversationMeta[]> {
   return db.select().from(conversation).orderBy(desc(conversation.updatedAt));
@@ -35,8 +39,8 @@ export async function getConversation(
 }
 
 export async function createConversation(
-  title = DEFAULT_CONVERSATION_TITLE,
-  id = crypto.randomUUID(),
+  title: string = DEFAULT_CONVERSATION_TITLE,
+  id: string = crypto.randomUUID(),
   opts: { kind?: ConversationKind; learningAgentId?: string | null } = {},
 ): Promise<string> {
   const now = Date.now();
@@ -49,15 +53,6 @@ export async function createConversation(
     learningAgentId: opts.learningAgentId ?? null,
   });
   return id;
-}
-
-// 会话是否还没有任何 turn(空的「新对话」)。给新建按钮做去重判断用。
-export async function isConversationEmpty(id: string): Promise<boolean> {
-  const [row] = await db
-    .select({ n: count() })
-    .from(turn)
-    .where(eq(turn.conversationId, id));
-  return (row?.n ?? 0) === 0;
 }
 
 export async function renameConversation(
@@ -84,12 +79,18 @@ export async function deleteConversation(id: string): Promise<void> {
   await db.delete(conversation).where(eq(conversation.id, id));
 }
 
-// 启动时调用:确保至少有一个会话,并把 multi-conversation 之前遗留的
-// (conversation_id 为 NULL 的)旧 turn 归档进一个默认会话。返回应激活的会话 id。
-export async function ensureActiveConversation(): Promise<string> {
+// 启动时调用:返回应激活的会话 id。没有任何历史时返回 null,由前端显示未落库的新对话草稿。
+// multi-conversation 之前遗留的 conversation_id 为 NULL 的旧 turn 仍会归档进一个默认会话。
+export async function ensureActiveConversation(): Promise<string | null> {
   let convs = await listConversations();
 
   if (convs.length === 0) {
+    const orphanCount = await countOrphanTurns();
+    if (orphanCount === 0) {
+      clearActiveConversationId();
+      return null;
+    }
+
     const id = await createConversation(DEFAULT_CONVERSATION_TITLE);
     const adopted = await adoptOrphanTurns(id);
     if (adopted > 0) {
@@ -103,18 +104,27 @@ export async function ensureActiveConversation(): Promise<string> {
   const saved = getActiveConversationId();
   if (saved && convs.some((c) => c.id === saved)) return saved;
 
+  if (convs.length === 0) {
+    clearActiveConversationId();
+    return null;
+  }
+
   const active = convs[0].id; // 最近活动的会话
   setActiveConversationId(active);
   return active;
 }
 
-// 把所有 conversation_id 为 NULL 的 turn 归到指定会话。返回归档条数。
-async function adoptOrphanTurns(conversationId: string): Promise<number> {
-  const [before] = await db
+async function countOrphanTurns(): Promise<number> {
+  const [row] = await db
     .select({ n: count() })
     .from(turn)
     .where(isNull(turn.conversationId));
-  const n = before?.n ?? 0;
+  return row?.n ?? 0;
+}
+
+// 把所有 conversation_id 为 NULL 的 turn 归到指定会话。返回归档条数。
+async function adoptOrphanTurns(conversationId: string): Promise<number> {
+  const n = await countOrphanTurns();
   if (n > 0) {
     await db
       .update(turn)

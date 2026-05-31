@@ -56,6 +56,7 @@ interface SidebarProps {
   conversations: ConversationMeta[];
   learningAgents: LearningAgentMeta[];
   activeId: string;
+  newChatActive: boolean;
   view: MainView;
   onSelect: (id: string) => void;
   onNewChat: () => void;
@@ -72,6 +73,7 @@ export function Sidebar({
   conversations,
   learningAgents,
   activeId,
+  newChatActive,
   view,
   onSelect,
   onNewChat,
@@ -159,6 +161,7 @@ export function Sidebar({
           <button
             type="button"
             className="codex-sidebar-action"
+            data-active={newChatActive}
             onClick={onNewChat}
           >
             <SquarePenIcon className="size-4" />

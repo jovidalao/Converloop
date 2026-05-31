@@ -9,10 +9,10 @@ import { type MainView, Sidebar } from "./components/Sidebar";
 import { Button } from "./components/ui/button";
 import {
   type ConversationMeta,
+  clearActiveConversationId,
   createConversation,
   deleteConversation,
   ensureActiveConversation,
-  isConversationEmpty,
   listConversations,
   renameConversation,
   setActiveConversationId,
@@ -30,6 +30,8 @@ const SIDEBAR_MAX = 420;
 function App() {
   const [conversations, setConversations] = useState<ConversationMeta[]>([]);
   const [learningAgents, setLearningAgents] = useState<LearningAgentMeta[]>([]);
+  const [ready, setReady] = useState(false);
+  const [draftId, setDraftId] = useState(() => crypto.randomUUID());
   const [activeId, setActiveId] = useState<string | null>(null);
   const [view, setView] = useState<MainView>("chat");
   const [collapsed, setCollapsed] = useState(false);
@@ -64,13 +66,15 @@ function App() {
     [],
   );
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: draftId is only the initial blank chat id; later draft switches must not rerun startup selection.
   useEffect(() => {
     void (async () => {
       await ensureBuiltInLearningAgents();
       await refreshLearningAgents();
       const id = await ensureActiveConversation();
-      setActiveId(id);
+      setActiveId(id ?? draftId);
       await refresh();
+      setReady(true);
     })();
   }, [refresh, refreshLearningAgents]);
 
@@ -82,20 +86,19 @@ function App() {
     });
   }
 
-  async function newChat() {
-    // 已经在一个空的「新对话」上时,直接复用它,不再堆积看不出区别的重复空对话。
-    const active = conversations.find((c) => c.id === activeId);
-    if (
-      active &&
-      active.kind === "practice" &&
-      (await isConversationEmpty(active.id))
-    ) {
-      selectConversation(active.id);
-      return;
-    }
-    const id = await createConversation();
-    await refresh();
-    selectConversation(id);
+  function openDraftConversation() {
+    const id = crypto.randomUUID();
+    setDraftId(id);
+    withViewTransition(() => {
+      setActiveId(id);
+      setView("chat");
+    });
+  }
+
+  async function materializeDraftConversation(id: string) {
+    await createConversation(undefined, id);
+    setActiveConversationId(id);
+    setDraftId((current) => (current === id ? crypto.randomUUID() : current));
   }
 
   async function startLearningAgent(agentId: string) {
@@ -119,19 +122,25 @@ function App() {
     const rest = await listConversations();
     setConversations(rest);
     if (id === activeId) {
-      const nextId = rest[0]?.id ?? (await createConversation());
-      if (!rest[0]) await refresh();
-      selectConversation(nextId);
+      const nextId = rest[0]?.id;
+      if (nextId) {
+        selectConversation(nextId);
+      } else {
+        clearActiveConversationId();
+        openDraftConversation();
+      }
     }
   }
 
-  if (!activeId)
+  if (!ready || !activeId)
     return (
       <div className="flex h-full min-h-screen items-center justify-center text-muted-foreground">
         加载中…
       </div>
     );
 
+  const activeConversation = conversations.find((c) => c.id === activeId);
+  const draftActive = view === "chat" && activeId === draftId;
   const topbarTitle =
     view === "profile"
       ? "学习者档案"
@@ -141,8 +150,9 @@ function App() {
           ? "创建专项课"
           : view === "settings"
             ? "设置"
-            : (conversations.find((c) => c.id === activeId)?.title ?? "");
-  const activeConversation = conversations.find((c) => c.id === activeId);
+            : draftActive
+              ? "新对话"
+              : (activeConversation?.title ?? "新对话");
 
   return (
     <div
@@ -173,9 +183,10 @@ function App() {
         conversations={conversations}
         learningAgents={learningAgents}
         activeId={activeId}
+        newChatActive={draftActive}
         view={view}
         onSelect={selectConversation}
-        onNewChat={() => void newChat()}
+        onNewChat={openDraftConversation}
         onStartLearningAgent={(id) => void startLearningAgent(id)}
         onRefreshLearningAgents={refreshLearningAgents}
         onRename={(id, t) => void rename(id, t)}
@@ -195,7 +206,9 @@ function App() {
           <ChatView
             key={activeId}
             conversationId={activeId}
+            isDraft={draftActive}
             mode={activeConversation?.kind ?? "practice"}
+            onCreateDraftConversation={materializeDraftConversation}
             onActivity={() => void refresh()}
           />
         </div>

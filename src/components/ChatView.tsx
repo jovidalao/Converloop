@@ -34,9 +34,12 @@ import { Spinner } from "./ui/spinner";
 
 interface ChatViewProps {
   conversationId: string;
+  isDraft?: boolean;
   mode?: "practice" | "learning_agent";
   /** 本会话新一轮持久化后触发(标题可能变了、排序要刷新)。 */
   onActivity?: () => void;
+  /** 新对话草稿首轮成功持久化后,补建真实 conversation 行。 */
+  onCreateDraftConversation?: (id: string) => Promise<void>;
 }
 
 // 复制这条回复。复制后短暂显示对勾。
@@ -291,8 +294,10 @@ function UserTurn({
 
 export function ChatView({
   conversationId,
+  isDraft = false,
   mode = "practice",
   onActivity,
+  onCreateDraftConversation,
 }: ChatViewProps) {
   const [turns, setTurns] = useState<ChatTurn[]>([]);
   const [input, setInput] = useState("");
@@ -427,6 +432,7 @@ export function ChatView({
   async function send() {
     const text = input.trim();
     if (!text || replyBusy) return;
+    const draftAtSend = isDraft;
     stopSpeech();
     const isFirstMessage = turns.length === 0;
     const turnGen = ++turnGenRef.current;
@@ -478,9 +484,10 @@ export function ChatView({
         commitPartnerReply(turnId, result.reply);
         speaker?.finish(result.reply);
       }
+      if (draftAtSend) await onCreateDraftConversation?.(conversationId);
       // 轮次已持久化:更新会话排序,首条消息顺带自动命名,再刷新侧边栏。
       await touchConversation(conversationId);
-      if (isFirstMessage && !learningMode)
+      if ((isFirstMessage || draftAtSend) && !learningMode)
         await maybeAutoTitle(conversationId, text);
       onActivity?.();
     } catch (e) {
@@ -566,7 +573,7 @@ export function ChatView({
       )}
       <div className="shrink-0 px-4 pt-1.5 pb-4">
         <form
-          className="flex items-end gap-1.5 rounded-3xl border bg-card py-1.5 pr-1.5 pl-4 shadow transition-colors focus-within:border-ring"
+          className="flex items-end gap-1.5 rounded-lg border bg-card py-1.5 pr-1.5 pl-4 shadow transition-colors focus-within:border-ring"
           onSubmit={(e) => {
             e.preventDefault();
             void send();
@@ -598,7 +605,7 @@ export function ChatView({
           <Button
             type="submit"
             size="icon"
-            className="size-9 rounded-full transition-transform active:scale-90"
+            className="size-9 transition-transform active:scale-90"
             disabled={replyBusy || !input.trim()}
             title="发送"
             aria-label="发送"
