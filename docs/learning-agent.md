@@ -60,7 +60,7 @@ User message:
 ## 实现要点
 
 - DB:`learning_agent` 表保存内置和自定义 Agent。内置 Agent 缺失时 seed;启动时若某行仍等于历史发布版(`supersedes`,即用户没改过)则升级到最新种子,用户微调过的行保持不动。
-- 内置「今日复盘」「语法专项复习」的首条消息(kickoff)先输出一份结构化的详细报告(今日练习复盘 / 语法体检),再过渡到练习。
+- 内置「今日复盘」「语法专项复习」的首条消息(kickoff)先输出一份结构化的详细报告(今日练习复盘 / 逐条讲解最近的语法问题),再过渡到练习;语法课随后逐个击破。
 - DB:`conversation.kind="learning_agent"` + `conversation.learning_agent_id` 区分专项课会话。
 - Orchestrator:学习会话调用 `runLearningAgent`,不调用普通 Tutor Agent,因此不显示普通批改面板、不写 mastery 计数。
 - 首次打开空的专项课会话时,ChatView 自动调用 `startLearningSession`,让老师先开场。

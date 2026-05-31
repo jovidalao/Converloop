@@ -18,8 +18,14 @@ import {
   useState,
 } from "react";
 import type { ConversationMeta } from "../db/conversations";
-import type { LearningAgentMeta } from "../db/learning-agents";
+import {
+  deleteLearningAgent,
+  type LearningAgentDraft,
+  type LearningAgentMeta,
+  updateLearningAgent,
+} from "../db/learning-agents";
 import { useConfirm } from "./confirm";
+import { LearningAgentEditDialog } from "./LearningAgentEditDialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -54,6 +60,7 @@ interface SidebarProps {
   onSelect: (id: string) => void;
   onNewChat: () => void;
   onStartLearningAgent: (agentId: string) => void;
+  onRefreshLearningAgents: () => Promise<void>;
   onRename: (id: string, title: string) => void;
   onDelete: (id: string) => void;
   onOpenView: (view: MainView) => void;
@@ -69,6 +76,7 @@ export function Sidebar({
   onSelect,
   onNewChat,
   onStartLearningAgent,
+  onRefreshLearningAgents,
   onRename,
   onDelete,
   onOpenView,
@@ -80,6 +88,31 @@ export function Sidebar({
   const [draft, setDraft] = useState("");
   const [query, setQuery] = useState("");
   const [learningCollapsed, setLearningCollapsed] = useState(false);
+  const [editingAgentId, setEditingAgentId] = useState<string | null>(null);
+
+  const editingAgent = useMemo(
+    () => learningAgents.find((a) => a.id === editingAgentId) ?? null,
+    [learningAgents, editingAgentId],
+  );
+
+  async function saveAgent(id: string, patch: Partial<LearningAgentDraft>) {
+    await updateLearningAgent(id, patch);
+    await onRefreshLearningAgents();
+    setEditingAgentId(null);
+  }
+
+  async function removeAgent(agent: LearningAgentMeta) {
+    if (agent.builtIn) return;
+    if (
+      !(await confirm({
+        title: `删除专项课「${agent.name}」?`,
+        description: "已有会话不会被删除。",
+      }))
+    )
+      return;
+    await deleteLearningAgent(agent.id);
+    await onRefreshLearningAgents();
+  }
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -160,16 +193,50 @@ export function Sidebar({
               ? learningAgents.slice(0, 1)
               : learningAgents.slice(0, 5)
             ).map((agent) => (
-              <button
+              // biome-ignore lint/a11y/useSemanticElements: can't be a <button> — it nests the edit/delete action buttons; uses role+tabIndex+keyboard instead
+              <div
                 key={agent.id}
-                type="button"
-                className="codex-sidebar-row"
+                role="button"
+                tabIndex={0}
+                className="codex-sidebar-row group"
                 onClick={() => onStartLearningAgent(agent.id)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    onStartLearningAgent(agent.id);
+                  }
+                }}
                 title={agent.description}
               >
                 <GraduationCapIcon className="size-4 shrink-0" />
                 <span className="min-w-0 flex-1 truncate">{agent.name}</span>
-              </button>
+                <span className="codex-row-actions">
+                  <button
+                    type="button"
+                    title="编辑"
+                    aria-label="编辑"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditingAgentId(agent.id);
+                    }}
+                  >
+                    <PencilIcon className="size-3.5" />
+                  </button>
+                  {!agent.builtIn && (
+                    <button
+                      type="button"
+                      title="删除"
+                      aria-label="删除"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void removeAgent(agent);
+                      }}
+                    >
+                      <Trash2Icon className="size-3.5" />
+                    </button>
+                  )}
+                </span>
+              </div>
             ))}
             {!learningCollapsed && (
               <button
@@ -178,7 +245,7 @@ export function Sidebar({
                 onClick={() => onOpenView("learning")}
               >
                 <PlusIcon className="size-4" />
-                <span>创建 / 编辑专项课</span>
+                <span>创建专项课</span>
               </button>
             )}
           </div>
@@ -316,6 +383,14 @@ export function Sidebar({
         onPointerDown={startResize}
         title="拖动调整宽度"
       />
+
+      {editingAgent && (
+        <LearningAgentEditDialog
+          agent={editingAgent}
+          onSave={(patch) => void saveAgent(editingAgent.id, patch)}
+          onCancel={() => setEditingAgentId(null)}
+        />
+      )}
     </aside>
   );
 }

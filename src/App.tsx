@@ -12,6 +12,7 @@ import {
   createConversation,
   deleteConversation,
   ensureActiveConversation,
+  isConversationEmpty,
   listConversations,
   renameConversation,
   setActiveConversationId,
@@ -82,6 +83,16 @@ function App() {
   }
 
   async function newChat() {
+    // 已经在一个空的「新对话」上时,直接复用它,不再堆积看不出区别的重复空对话。
+    const active = conversations.find((c) => c.id === activeId);
+    if (
+      active &&
+      active.kind === "practice" &&
+      (await isConversationEmpty(active.id))
+    ) {
+      selectConversation(active.id);
+      return;
+    }
     const id = await createConversation();
     await refresh();
     selectConversation(id);
@@ -89,7 +100,7 @@ function App() {
 
   async function startLearningAgent(agentId: string) {
     const agent = learningAgents.find((a) => a.id === agentId);
-    const title = `专项课 · ${agent?.name ?? "定制化学习"}`;
+    const title = agent?.name ?? "定制化学习";
     const id = await createConversation(title, crypto.randomUUID(), {
       kind: "learning_agent",
       learningAgentId: agentId,
@@ -127,7 +138,7 @@ function App() {
       : view === "mastery"
         ? "学习数据"
         : view === "learning"
-          ? "定制化学习 Agent"
+          ? "创建专项课"
           : view === "settings"
             ? "设置"
             : (conversations.find((c) => c.id === activeId)?.title ?? "");
@@ -166,6 +177,7 @@ function App() {
         onSelect={selectConversation}
         onNewChat={() => void newChat()}
         onStartLearningAgent={(id) => void startLearningAgent(id)}
+        onRefreshLearningAgents={refreshLearningAgents}
         onRename={(id, t) => void rename(id, t)}
         onDelete={(id) => void remove(id)}
         onOpenView={(v) => withViewTransition(() => setView(v))}
@@ -190,11 +202,7 @@ function App() {
         {view === "profile" && <ProfileView />}
         {view === "mastery" && <MasteryView />}
         {view === "learning" && (
-          <LearningAgentsView
-            agents={learningAgents}
-            onRefresh={refreshLearningAgents}
-            onStart={(id) => void startLearningAgent(id)}
-          />
+          <LearningAgentsView onRefresh={refreshLearningAgents} />
         )}
         {view === "settings" && <SettingsView />}
       </main>

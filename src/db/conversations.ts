@@ -51,6 +51,15 @@ export async function createConversation(
   return id;
 }
 
+// 会话是否还没有任何 turn(空的「新对话」)。给新建按钮做去重判断用。
+export async function isConversationEmpty(id: string): Promise<boolean> {
+  const [row] = await db
+    .select({ n: count() })
+    .from(turn)
+    .where(eq(turn.conversationId, id));
+  return (row?.n ?? 0) === 0;
+}
+
 export async function renameConversation(
   id: string,
   title: string,

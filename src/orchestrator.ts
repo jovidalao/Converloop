@@ -4,6 +4,7 @@ import { explain } from "./agents/explain";
 import { runLearningAgent } from "./agents/learning";
 import { generateLearningAgentDraft } from "./agents/learning-agent-builder";
 import type { TutorAnalysis } from "./agents/schema";
+import { translate } from "./agents/translate";
 import { analyze } from "./agents/tutor";
 import { getProvider, loadConfig } from "./config";
 import { applyDataEditInstruction, type DataEditResult } from "./data-edit";
@@ -246,4 +247,27 @@ export async function bilingualReply(reply: string): Promise<string> {
     targetLanguage: config.targetLanguage,
     reply,
   });
+}
+
+// 划词翻译/解析:对话里选中一段文字,结合所在语境流式输出母语解析。
+// 不读档案、不持久化——便宜,需要时重新生成即可。
+export async function translateSelection(
+  selection: string,
+  context: string,
+  onDelta: (delta: string) => void,
+): Promise<string> {
+  const provider = await getProvider();
+  if (!provider) throw new MissingApiKeyError();
+
+  const config = loadConfig();
+  return translate(
+    provider,
+    {
+      nativeLanguage: config.nativeLanguage,
+      targetLanguage: config.targetLanguage,
+      selection,
+      context,
+    },
+    onDelta,
+  );
 }
