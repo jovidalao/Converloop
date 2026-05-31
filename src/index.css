@@ -103,6 +103,12 @@
   * {
     @apply border-border outline-ring/50;
   }
+  :root {
+    color-scheme: light;
+  }
+  .dark {
+    color-scheme: dark;
+  }
   html,
   body,
   #root {
@@ -133,10 +139,43 @@
 }
 
 /* Desktop chrome. Native macOS traffic lights stay native; the topbar reserves
-   their space and the app content starts below it. */
+   their space and the app content starts below it. Light uses :root shadcn
+   tokens for main content; dark overrides both chrome and semantic tokens. */
 .codex-shell {
   --codex-topbar-h: 46px;
   --codex-sidebar-width-current: var(--sidebar-width);
+  --codex-main-bg: var(--background);
+  --codex-topbar-bg: oklch(0.985 0 0);
+  --codex-sidebar-bg: oklch(0.975 0 0);
+  --codex-sidebar-fg: oklch(0.22 0 0);
+  --codex-sidebar-muted: oklch(0.52 0 0);
+  --codex-sidebar-hover: oklch(0 0 0 / 5%);
+  --codex-sidebar-active: oklch(0 0 0 / 8%);
+  --codex-sidebar-active-fg: oklch(0.12 0 0);
+  --codex-border: oklch(0 0 0 / 10%);
+  --codex-titlebar-fg: oklch(0.2 0 0);
+  --codex-chrome-fg: oklch(0.52 0 0);
+  --codex-chrome-hover-fg: oklch(0.2 0 0);
+  --codex-chrome-hover-bg: oklch(0 0 0 / 6%);
+  --codex-row-meta-fg: oklch(0.52 0 0 / 72%);
+  --codex-row-action-hover-bg: oklch(0 0 0 / 6%);
+  --codex-sidebar-edit-border: oklch(0 0 0 / 12%);
+  --codex-sidebar-edit-bg: oklch(1 0 0);
+  --codex-sidebar-footer-border: oklch(0 0 0 / 8%);
+  --codex-sidebar-resizer-hover: oklch(0 0 0 / 6%);
+
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--codex-sidebar-width-current) minmax(0, 1fr);
+  grid-template-rows: var(--codex-topbar-h) minmax(0, 1fr);
+  height: 100%;
+  min-height: 100vh;
+  overflow: hidden;
+  background: var(--codex-main-bg);
+  color: var(--foreground);
+  transition: grid-template-columns 0.22s cubic-bezier(0.2, 0, 0, 1);
+}
+.dark .codex-shell {
   --codex-main-bg: oklch(0.145 0 0);
   --codex-topbar-bg: oklch(0.15 0 0);
   --codex-sidebar-bg: var(--codex-main-bg);
@@ -144,7 +183,18 @@
   --codex-sidebar-muted: oklch(0.72 0 0);
   --codex-sidebar-hover: oklch(1 0 0 / 8%);
   --codex-sidebar-active: oklch(1 0 0 / 13%);
+  --codex-sidebar-active-fg: oklch(0.96 0 0);
   --codex-border: oklch(1 0 0 / 12%);
+  --codex-titlebar-fg: oklch(0.9 0 0);
+  --codex-chrome-fg: oklch(0.72 0 0);
+  --codex-chrome-hover-fg: oklch(0.9 0 0);
+  --codex-chrome-hover-bg: oklch(1 0 0 / 8%);
+  --codex-row-meta-fg: oklch(0.72 0 0 / 72%);
+  --codex-row-action-hover-bg: oklch(1 0 0 / 10%);
+  --codex-sidebar-edit-border: oklch(1 0 0 / 16%);
+  --codex-sidebar-edit-bg: oklch(0 0 0 / 18%);
+  --codex-sidebar-footer-border: oklch(1 0 0 / 10%);
+  --codex-sidebar-resizer-hover: oklch(1 0 0 / 10%);
 
   --background: var(--codex-main-bg);
   --foreground: oklch(0.92 0 0);
@@ -163,17 +213,6 @@
   --border: var(--codex-border);
   --input: oklch(1 0 0 / 14%);
   --ring: oklch(0.72 0 0);
-
-  position: relative;
-  display: grid;
-  grid-template-columns: var(--codex-sidebar-width-current) minmax(0, 1fr);
-  grid-template-rows: var(--codex-topbar-h) minmax(0, 1fr);
-  height: 100%;
-  min-height: 100vh;
-  overflow: hidden;
-  background: var(--codex-main-bg);
-  color: var(--foreground);
-  transition: grid-template-columns 0.22s cubic-bezier(0.2, 0, 0, 1);
 }
 .codex-shell[data-sidebar-collapsed="true"] {
   --codex-sidebar-width-current: 0px;
@@ -210,7 +249,7 @@
   align-items: center;
   justify-content: center;
   padding: 0 136px;
-  color: oklch(0.9 0 0);
+  color: var(--codex-titlebar-fg);
   font-size: 14px;
   font-weight: 650;
   pointer-events: none;
@@ -222,12 +261,12 @@
   width: 30px;
   height: 30px;
   border-radius: 8px;
-  color: oklch(0.72 0 0);
+  color: var(--codex-chrome-fg);
   background: transparent;
 }
 .codex-chrome-button:hover {
-  color: oklch(0.9 0 0);
-  background: oklch(1 0 0 / 8%);
+  color: var(--codex-chrome-hover-fg);
+  background: var(--codex-chrome-hover-bg);
 }
 .codex-chrome-button:disabled {
   opacity: 0.42;
@@ -300,7 +339,7 @@
 .codex-sidebar-row:hover,
 .codex-sidebar-row[data-active="true"] {
   background: var(--codex-sidebar-active);
-  color: oklch(0.96 0 0);
+  color: var(--codex-sidebar-active-fg);
 }
 .codex-sidebar-search {
   display: flex;
@@ -314,7 +353,7 @@
 .codex-sidebar-search:focus-within,
 .codex-sidebar-search:hover {
   background: var(--codex-sidebar-hover);
-  color: oklch(0.92 0 0);
+  color: var(--codex-sidebar-fg);
 }
 .codex-sidebar-search input {
   min-width: 0;
@@ -370,7 +409,7 @@
 }
 .codex-row-meta {
   flex: 0 0 auto;
-  color: oklch(0.72 0 0 / 72%);
+  color: var(--codex-row-meta-fg);
   font-size: 11px;
 }
 .codex-row-actions {
@@ -392,14 +431,14 @@
   color: var(--codex-sidebar-muted);
 }
 .codex-row-actions button:hover {
-  background: oklch(1 0 0 / 10%);
+  background: var(--codex-row-action-hover-bg);
   color: var(--codex-sidebar-fg);
 }
 .codex-sidebar-edit {
   margin: 1px 0;
-  border: 1px solid oklch(1 0 0 / 16%);
+  border: 1px solid var(--codex-sidebar-edit-border);
   border-radius: 9px;
-  background: oklch(0 0 0 / 18%);
+  background: var(--codex-sidebar-edit-bg);
   padding: 7px 10px;
   color: var(--codex-sidebar-fg);
   font-size: 14px;
@@ -407,7 +446,7 @@
 }
 .codex-sidebar-footer {
   flex: 0 0 auto;
-  border-top: 1px solid oklch(1 0 0 / 10%);
+  border-top: 1px solid var(--codex-sidebar-footer-border);
   padding: 8px 4px 0;
 }
 .codex-sidebar-resizer {
@@ -418,7 +457,7 @@
   cursor: col-resize;
 }
 .codex-sidebar-resizer:hover {
-  background: oklch(1 0 0 / 10%);
+  background: var(--codex-sidebar-resizer-hover);
 }
 
 /* Speaking indicator: three bars pulsing like a sound wave (inherits color). */
