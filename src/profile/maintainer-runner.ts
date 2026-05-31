@@ -1,5 +1,6 @@
 import { type MaintainerResult, runMaintainer } from "../agents/maintainer";
 import { getProvider, loadConfig } from "../config";
+import { getAppState, setAppState } from "../db/app-state";
 import { getMaintainerData } from "../db/mastery";
 import {
   formatHistorySince,
@@ -16,17 +17,23 @@ const EVERY_N_TURNS = 10;
 // 转写字符预算(粗略对应 ~1500 token;中英混排按 ~4 字符/token 留余量)。
 const TRANSCRIPT_CHAR_BUDGET = 6000;
 
-// 上次成功维护的时间戳(运行态,非用户配置)。下次只喂这之后的 turns。
+// 上次成功维护的时间戳(内部连续性标记,非用户配置)。下次只喂这之后的 turns。
 const WATERMARK_KEY = "lang-agent.lastMaintainedAt";
 
-function getLastMaintainedAt(): number {
-  const raw = localStorage.getItem(WATERMARK_KEY);
+function parseTimestamp(raw: string | null): number {
   const n = raw ? Number(raw) : 0;
   return Number.isFinite(n) ? n : 0;
 }
 
-function setLastMaintainedAt(ts: number): void {
-  localStorage.setItem(WATERMARK_KEY, String(ts));
+async function getLastMaintainedAt(): Promise<number> {
+  const dbValue = await getAppState(WATERMARK_KEY);
+  if (dbValue !== null) return parseTimestamp(dbValue);
+  return parseTimestamp(localStorage.getItem(WATERMARK_KEY));
+}
+
+async function setLastMaintainedAt(ts: number): Promise<void> {
+  await setAppState(WATERMARK_KEY, String(ts));
+  localStorage.removeItem(WATERMARK_KEY);
 }
 
 async function runJob(): Promise<MaintainerResult> {
@@ -40,7 +47,7 @@ async function runJob(): Promise<MaintainerResult> {
   const data = await getMaintainerData();
   const recentlyIntroduced = await getRecentlyIntroduced();
   const transcript = await formatHistorySince(
-    getLastMaintainedAt(),
+    await getLastMaintainedAt(),
     TRANSCRIPT_CHAR_BUDGET,
   );
 
@@ -54,7 +61,7 @@ async function runJob(): Promise<MaintainerResult> {
     transcript,
   });
   // 只在真正写入后推进水位;失败保留旧水位,下次连同这批 turn 一起重试。
-  if (result.written) setLastMaintainedAt(watermark);
+  if (result.written) await setLastMaintainedAt(watermark);
   return result;
 }
 

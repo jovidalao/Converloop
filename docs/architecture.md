@@ -64,7 +64,7 @@ AI 语言学习 agent —— 第一版范围、数据流、存储与现状。Age
 
 migration 定义在 **Rust 侧**(`src-tauri/src/lib.rs`,`tauri_plugin_sql::Builder::add_migrations`),`Database.load()` 时触发。Drizzle 只做类型安全查询,不接管 migration —— TS 侧 `src/db/schema.ts` **手动镜像** Rust 的建表,两边保持一致。
 
-当前 9 个 migration:
+当前 10 个 migration:
 
 | ver | 描述 | 表 / 变更 |
 |---|---|---|
@@ -77,6 +77,7 @@ migration 定义在 **Rust 侧**(`src-tauri/src/lib.rs`,`tauri_plugin_sql::Build
 | 7 | create_mastery_event | `mastery_event` |
 | 8 | create_mastery_event_key_index | `mastery_event(key, created_at)` |
 | 9 | create_mastery_event_turn_index | `mastery_event(turn_id)` |
+| 10 | create_app_state | `app_state` |
 
 ### `mastery_item`(掌握项,起点,别一上来搞知识追踪)
 
@@ -118,6 +119,11 @@ migration 定义在 **Rust 侧**(`src-tauri/src/lib.rs`,`tauri_plugin_sql::Build
 
 `mastery_item` 是当前可查询快照;`mastery_event` 是不可丢的证据日志。以后调整掌握公式、
 合并 key、做复习页或排查 LLM 误判时,可以从事件重算快照,不只依赖一个被覆盖的 example。
+
+### `app_state`(内部连续性标记)
+
+少量应用内部 marker 放这里,例如 Profile Maintainer 的 `lastMaintainedAt` 水位。它不是用户偏好,
+但必须随数据库备份/迁移,否则会重复维护或漏维护。
 
 `type` 是裸 `TEXT`(无 CHECK),新增掌握类型(如 `expression_gap`)只改 TS 侧两个 enum(`agents/schema.ts` Zod + `db/schema.ts` drizzle),不需要 Rust 迁移。记账公式见 [tutor-agent](./tutor-agent.md#代码侧记账分数归代码管)。
 
@@ -188,7 +194,7 @@ v1 核心链路已完成并可用:
 - ✅ 多会话侧边栏 · Markdown 回复 · 按需讲解 · 朗读(TTS)· 母语/混说表达缺口(见 expression-gap)
 - ✅ 理解信号(每条回复的讲解/双语请求数)· 代码定向选取的复习候选(`getReviewDueList`)· 证据驱动的难度校准(`lib/proficiency`,喂对话 agent)
 - ✅ `mastery_event` 事件日志:每条 error/correct/introduced/gap 都保留结构化证据,`introduced` 不再推动掌握毕业
-- ✅ 最小 UI:聊天 / 批改面板 / 档案查看编辑 / 设置(provider + key + TTS)
+- ✅ 最小 UI:聊天 / 批改面板 / 档案查看编辑 / 学习数据管理 / 设置(provider + key + TTS)
 
 **下一步(未实现):**
 

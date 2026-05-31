@@ -1,4 +1,5 @@
 import {
+  ListChecksIcon,
   PanelLeftIcon,
   SearchIcon,
   SettingsIcon,
@@ -9,7 +10,7 @@ import { type ReactNode, useMemo, useState } from "react";
 import type { ConversationMeta } from "../db/conversations";
 import { Button } from "./ui/button";
 
-export type MainView = "chat" | "profile" | "settings";
+export type MainView = "chat" | "profile" | "mastery" | "settings";
 
 interface SidebarProps {
   conversations: ConversationMeta[];
@@ -186,6 +187,13 @@ export function Sidebar({
           onClick={() => onOpenView("profile")}
           icon={<UserRoundIcon size={17} />}
           label="档案"
+          className="flex-1"
+        />
+        <NavLink
+          active={view === "mastery"}
+          onClick={() => onOpenView("mastery")}
+          icon={<ListChecksIcon size={17} />}
+          label="数据"
           className="flex-1"
         />
         <Button

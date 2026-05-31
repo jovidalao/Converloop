@@ -1,6 +1,7 @@
 import { PanelLeftIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { ChatView } from "./components/ChatView";
+import { MasteryView } from "./components/MasteryView";
 import { ProfileView } from "./components/ProfileView";
 import { SettingsView } from "./components/SettingsView";
 import { type MainView, Sidebar } from "./components/Sidebar";
@@ -72,9 +73,11 @@ function App() {
   const topbarTitle =
     view === "profile"
       ? "学习者档案"
-      : view === "settings"
-        ? "设置"
-        : (conversations.find((c) => c.id === activeId)?.title ?? "");
+      : view === "mastery"
+        ? "学习数据"
+        : view === "settings"
+          ? "设置"
+          : (conversations.find((c) => c.id === activeId)?.title ?? "");
 
   return (
     <div className="relative flex h-full min-h-screen">
@@ -126,6 +129,7 @@ function App() {
           />
         </div>
         {view === "profile" && <ProfileView />}
+        {view === "mastery" && <MasteryView />}
         {view === "settings" && <SettingsView />}
       </main>
     </div>

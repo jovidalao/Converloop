@@ -14,6 +14,7 @@ async function insertMasteryEvent(
   sig: Signal,
   now: number,
   turnId?: string,
+  source: "tutor" | "review" | "manual" = "tutor",
 ): Promise<void> {
   await db.insert(masteryEvent).values({
     id: crypto.randomUUID(),
@@ -23,7 +24,7 @@ async function insertMasteryEvent(
     label: sig.label,
     type: sig.type,
     kind: sig.kind,
-    source: "tutor",
+    source,
     evidence: sig.example ?? null,
     note: sig.note ?? null,
     payloadJson: payloadJson(sig.payload),
@@ -129,6 +130,60 @@ export async function getWeakList(limit = 15): Promise<WeakItem[]> {
 
 export async function getAllMastery(): Promise<MasteryItem[]> {
   return db.select().from(masteryItem).orderBy(desc(masteryItem.lastSeenAt));
+}
+
+export async function updateMasteryItem(
+  key: string,
+  patch: { label?: string; notes?: string | null; example?: string | null },
+): Promise<void> {
+  const updates: Partial<typeof masteryItem.$inferInsert> = {};
+  if (patch.label !== undefined) updates.label = patch.label.trim();
+  if (patch.notes !== undefined)
+    updates.notes = patch.notes?.trim() ? patch.notes.trim() : null;
+  if (patch.example !== undefined)
+    updates.example = patch.example?.trim() ? patch.example.trim() : null;
+
+  if (Object.keys(updates).length === 0) return;
+  await db.update(masteryItem).set(updates).where(eq(masteryItem.key, key));
+}
+
+export async function deleteMasteryItem(key: string): Promise<void> {
+  await db.delete(masteryItem).where(eq(masteryItem.key, key));
+}
+
+export async function markMasteryKnown(key: string): Promise<void> {
+  const [existing] = await db
+    .select()
+    .from(masteryItem)
+    .where(eq(masteryItem.key, key))
+    .limit(1);
+  if (!existing) return;
+
+  const now = Date.now();
+  const minSeen =
+    existing.errorCount === 0 ? 3 : Math.floor(existing.errorCount / 0.149) + 1;
+  await db
+    .update(masteryItem)
+    .set({
+      seenCount: Math.max(existing.seenCount, minSeen),
+      status: "known",
+      lastSeenAt: now,
+    })
+    .where(eq(masteryItem.key, key));
+
+  await insertMasteryEvent(
+    {
+      key: existing.key,
+      label: existing.label,
+      type: existing.type,
+      kind: "correct",
+      example: "Marked known by user",
+      payload: { manual_action: "mark_known" },
+    },
+    now,
+    undefined,
+    "manual",
+  );
 }
 
 // 复习候选(代码选,对话 agent 自然复用)。与薄弱表互补:薄弱表给「最近最常错」,

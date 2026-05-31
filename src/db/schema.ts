@@ -67,6 +67,15 @@ export const conversation = sqliteTable("conversation", {
 
 export type Conversation = typeof conversation.$inferSelect;
 
+// 应用内部连续性标记。不是用户偏好,需要随数据库备份/迁移。
+export const appState = sqliteTable("app_state", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+});
+
+export type AppState = typeof appState.$inferSelect;
+
 // 每轮持久化:输入 / 回复 / 导师分析(JSON,导师失败时为 null)。
 // conversation_id 由 migration v4 追加,旧数据为 NULL(启动时归档到默认会话)。
 // explain/bilingual_count(v5/v6):用户在这条回复上请求讲解/双语的次数 = 理解吃力信号。

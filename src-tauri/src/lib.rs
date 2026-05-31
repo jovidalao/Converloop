@@ -73,6 +73,14 @@ const CREATE_MASTERY_EVENT_KEY_INDEX: &str =
 const CREATE_MASTERY_EVENT_TURN_INDEX: &str =
     "CREATE INDEX IF NOT EXISTS mastery_event_turn_idx ON mastery_event (turn_id);";
 
+// 应用内部连续性标记。不是用户偏好,需要随数据库备份/迁移。
+const CREATE_APP_STATE: &str = "\
+CREATE TABLE IF NOT EXISTS app_state (
+    key        TEXT PRIMARY KEY NOT NULL,
+    value      TEXT NOT NULL,
+    updated_at INTEGER NOT NULL
+);";
+
 // 红灯距白卡片左/上相等: x ≈ 0.55rem + 0.15rem + (2rem−12px)/2 → 21pt(16px 根字号下)。
 // Y 让红绿灯垂直居中于顶栏(App.tsx 的 h-12 = 48px,标题/收展按钮居中在 24px)。
 // decorum 把按钮中心放在距窗顶 (button_h + y)/2 + 4 处;关闭按钮 button_h = 14,
@@ -174,6 +182,12 @@ pub fn run() {
             version: 9,
             description: "create_mastery_event_turn_index",
             sql: CREATE_MASTERY_EVENT_TURN_INDEX,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 10,
+            description: "create_app_state",
+            sql: CREATE_APP_STATE,
             kind: MigrationKind::Up,
         },
     ];
