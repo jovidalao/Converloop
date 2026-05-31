@@ -2,6 +2,8 @@ let currentAudio: HTMLAudioElement | null = null;
 let currentObjectUrl: string | null = null;
 // 当前正在播放的文本(用作每个朗读按钮的"是不是我在响"判定);空闲为 null。
 let currentKey: string | null = null;
+let currentPhase: "loading" | "playing" | null = null;
+let currentSnapshot: PlaybackSnapshot = { key: null, phase: null };
 // 当前段播放完毕的回调,用于在 stopSpeech 时让等待中的播放 promise 立即落定。
 let currentSettle: (() => void) | null = null;
 
@@ -12,6 +14,11 @@ let streamActive = false; // 会话仍开放:后续可能还有段进来。
 let draining = false; // 队列消费循环是否在跑。
 
 const listeners = new Set<() => void>();
+
+export interface PlaybackSnapshot {
+  key: string | null;
+  phase: "loading" | "playing" | null;
+}
 
 /** 订阅播放状态变化(含自动朗读)。返回取消订阅函数。 */
 export function subscribePlayback(listener: () => void): () => void {
@@ -24,7 +31,13 @@ export function getPlayingKey(): string | null {
   return currentKey;
 }
 
+/** 当前朗读状态。loading 表示音频仍在合成/等待首段,playing 表示已开始播放。 */
+export function getPlaybackSnapshot(): PlaybackSnapshot {
+  return currentSnapshot;
+}
+
 function emit() {
+  currentSnapshot = { key: currentKey, phase: currentPhase };
   for (const l of listeners) l();
 }
 
@@ -35,6 +48,16 @@ function cleanup() {
   }
   currentAudio = null;
   currentKey = null;
+  currentPhase = null;
+  currentSettle = null;
+}
+
+function cleanupAudioOnly() {
+  if (currentObjectUrl) {
+    URL.revokeObjectURL(currentObjectUrl);
+    currentObjectUrl = null;
+  }
+  currentAudio = null;
   currentSettle = null;
 }
 
@@ -67,6 +90,7 @@ function playBuffer(audioBytes: ArrayBuffer, token: number): Promise<void> {
     currentObjectUrl = URL.createObjectURL(blob);
     currentAudio = new Audio(currentObjectUrl);
     currentSettle = resolve;
+    currentPhase = "playing";
     emit();
 
     const audio = currentAudio;
@@ -86,14 +110,23 @@ function playBuffer(audioBytes: ArrayBuffer, token: number): Promise<void> {
 }
 
 /** 一次性播放整段音频(朗读按钮手动播放用)。 */
-export function playSpeech(
+export async function playSpeech(
   audioBytes: ArrayBuffer,
   key?: string,
 ): Promise<void> {
   stopSpeech();
   streamToken += 1;
   currentKey = key ?? null;
-  return playBuffer(audioBytes, streamToken);
+  currentPhase = currentKey ? "loading" : null;
+  const token = streamToken;
+  try {
+    await playBuffer(audioBytes, token);
+  } finally {
+    if (token === streamToken) {
+      cleanup();
+      emit();
+    }
+  }
 }
 
 /** 开启一个流式朗读会话,取消当前播放。返回会话 token。 */
@@ -102,6 +135,7 @@ export function beginSpeechStream(displayKey: string | null): number {
   streamToken += 1;
   streamActive = true;
   currentKey = displayKey;
+  currentPhase = displayKey ? "loading" : null;
   emit();
   return streamToken;
 }
@@ -110,6 +144,7 @@ export function beginSpeechStream(displayKey: string | null): number {
 export function setSpeechStreamKey(token: number, key: string): void {
   if (token !== streamToken) return;
   currentKey = key;
+  currentPhase = currentAudio ? "playing" : "loading";
   emit();
 }
 
@@ -137,6 +172,11 @@ async function drainQueue(token: number): Promise<void> {
     const buf = segmentQueue.shift()!;
     try {
       await playBuffer(buf, token);
+      if (token === streamToken && streamActive && segmentQueue.length === 0) {
+        cleanupAudioOnly();
+        currentPhase = currentKey ? "loading" : null;
+        emit();
+      }
     } catch (e) {
       console.warn("分段播放失败:", e);
       break;

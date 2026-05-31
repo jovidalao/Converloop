@@ -1,6 +1,7 @@
 import { PanelLeftIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { ChatView } from "./components/ChatView";
+import { LearningAgentsView } from "./components/LearningAgentsView";
 import { MasteryView } from "./components/MasteryView";
 import { ProfileView } from "./components/ProfileView";
 import { SettingsView } from "./components/SettingsView";
@@ -15,9 +16,15 @@ import {
   renameConversation,
   setActiveConversationId,
 } from "./db/conversations";
+import {
+  ensureBuiltInLearningAgents,
+  type LearningAgentMeta,
+  listLearningAgents,
+} from "./db/learning-agents";
 
 function App() {
   const [conversations, setConversations] = useState<ConversationMeta[]>([]);
+  const [learningAgents, setLearningAgents] = useState<LearningAgentMeta[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [view, setView] = useState<MainView>("chat");
   const [collapsed, setCollapsed] = useState(false);
@@ -27,13 +34,20 @@ function App() {
     [],
   );
 
+  const refreshLearningAgents = useCallback(
+    () => listLearningAgents().then(setLearningAgents),
+    [],
+  );
+
   useEffect(() => {
     void (async () => {
+      await ensureBuiltInLearningAgents();
+      await refreshLearningAgents();
       const id = await ensureActiveConversation();
       setActiveId(id);
       await refresh();
     })();
-  }, [refresh]);
+  }, [refresh, refreshLearningAgents]);
 
   function selectConversation(id: string) {
     setActiveId(id);
@@ -43,6 +57,17 @@ function App() {
 
   async function newChat() {
     const id = await createConversation();
+    await refresh();
+    selectConversation(id);
+  }
+
+  async function startLearningAgent(agentId: string) {
+    const agent = learningAgents.find((a) => a.id === agentId);
+    const title = `专项课 · ${agent?.name ?? "定制化学习"}`;
+    const id = await createConversation(title, crypto.randomUUID(), {
+      kind: "learning_agent",
+      learningAgentId: agentId,
+    });
     await refresh();
     selectConversation(id);
   }
@@ -75,19 +100,24 @@ function App() {
       ? "学习者档案"
       : view === "mastery"
         ? "学习数据"
-        : view === "settings"
-          ? "设置"
-          : (conversations.find((c) => c.id === activeId)?.title ?? "");
+        : view === "learning"
+          ? "定制化学习 Agent"
+          : view === "settings"
+            ? "设置"
+            : (conversations.find((c) => c.id === activeId)?.title ?? "");
+  const activeConversation = conversations.find((c) => c.id === activeId);
 
   return (
     <div className="relative flex h-full min-h-screen">
       {!collapsed && (
         <Sidebar
           conversations={conversations}
+          learningAgents={learningAgents}
           activeId={activeId}
           view={view}
           onSelect={selectConversation}
           onNewChat={() => void newChat()}
+          onStartLearningAgent={(id) => void startLearningAgent(id)}
           onRename={(id, t) => void rename(id, t)}
           onDelete={(id) => void remove(id)}
           onOpenView={setView}
@@ -125,11 +155,19 @@ function App() {
           <ChatView
             key={activeId}
             conversationId={activeId}
+            mode={activeConversation?.kind ?? "practice"}
             onActivity={() => void refresh()}
           />
         </div>
         {view === "profile" && <ProfileView />}
         {view === "mastery" && <MasteryView />}
+        {view === "learning" && (
+          <LearningAgentsView
+            agents={learningAgents}
+            onRefresh={refreshLearningAgents}
+            onStart={(id) => void startLearningAgent(id)}
+          />
+        )}
         {view === "settings" && <SettingsView />}
       </main>
     </div>

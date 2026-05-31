@@ -15,7 +15,7 @@
 **与本文设计稿的差异(有意收窄):**
 
 - 当前 `ExpressionGap` 字段为 `original / target_expression / explanation / key_items / usage_note`(去掉了 `intended_meaning`、`template`——`template` 等做复习页时再加)。
-- §5 **每日复习页 + `reviewGenerator` agent + `review_day` 迁移 = 未实现(下一步)**。下方 §5 保留为设计参考。
+- §5 的独立「每日复习页 + `review_day` 缓存」设计没有照原样实现;当前由 **专项课 / Learning Agent** 承接显式复习:内置「今日复盘」「语法专项复习」「表达缺口训练」,新开老师型学习会话。
 
 ## 0. 场景
 
@@ -220,8 +220,8 @@ const ReviewSet = z.object({ cards: z.array(ReviewCard) });
 | B | tutor prompt:加 EXPRESSION GAP 段(§7)+ prose 回退 | ✅ 已实现(字段按 §0 收窄) |
 | C | 记账:`SignalKind=gap`、`applySignal`、`deriveSignals`、`Signal.note/payload`、`upsertSignal` 写 notes + `mastery_event` | ✅ 已实现,单测覆盖 |
 | D | 纠正 UI:气泡角标 + 专属面板(§4) | ✅ 已实现 |
-| E | 复习页:`review` 视图 + 导航 + `review_day` 迁移 | ⏳ 未实现(路线图) |
-| F | `reviewGenerator` agent + Zod schema(§5、§8) | ⏳ 未实现(路线图) |
+| E | 显式复习入口 | ✅ 已由专项课 / Learning Agent 承接 |
+| F | 复习生成 agent | ✅ 已收敛为内置专项课 prompt,不单独做 `reviewGenerator` |
 | G | 复习记账闭环:「会了」→ correct 信号 | ⏳ 未实现(路线图) |
 | H | maintainer:MD 新增「想说但说不出的情景」区块 | ⏳ 未实现(路线图) |
 

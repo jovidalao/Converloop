@@ -2,7 +2,7 @@ import { Volume2Icon } from "lucide-react";
 import { useState, useSyncExternalStore } from "react";
 import { cn } from "@/lib/utils";
 import {
-  getPlayingKey,
+  getPlaybackSnapshot,
   playSpeech,
   stopSpeech,
   subscribePlayback,
@@ -40,26 +40,28 @@ export function SpeakButton({
   variant?: "bar" | "round";
 }) {
   // 播放状态来自全局播放器,所以自动朗读时本按钮也会亮起。
-  const playingKey = useSyncExternalStore(subscribePlayback, getPlayingKey);
-  const playing = playingKey === text;
-  const [loading, setLoading] = useState(false);
+  const playback = useSyncExternalStore(subscribePlayback, getPlaybackSnapshot);
+  const active = playback.key === text;
+  const playing = active && playback.phase === "playing";
+  const playbackLoading = active && playback.phase === "loading";
+  const [localLoading, setLocalLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function handleClick() {
-    if (playing) {
+    if (active) {
       stopSpeech();
       return;
     }
-    if (!text.trim() || loading) return;
+    if (!text.trim() || localLoading) return;
 
     setError(null);
-    setLoading(true);
+    setLocalLoading(true);
     try {
       const audio = await speakText(text);
-      setLoading(false);
+      setLocalLoading(false);
       await playSpeech(audio, text);
     } catch (e) {
-      setLoading(false);
+      setLocalLoading(false);
       if (e instanceof MissingTtsApiKeyError) {
         setError(e.message);
       } else {
@@ -78,11 +80,11 @@ export function SpeakButton({
           playing && SPEAK_PLAYING[variant],
         )}
         onClick={() => void handleClick()}
-        disabled={loading || !text.trim()}
-        aria-label={playing ? "停止朗读" : "朗读"}
-        title={playing ? "停止朗读" : "朗读"}
+        disabled={localLoading || !text.trim()}
+        aria-label={active ? "停止朗读" : "朗读"}
+        title={active ? "停止朗读" : "朗读"}
       >
-        {loading ? (
+        {localLoading || playbackLoading ? (
           <Spinner className="size-3" />
         ) : playing ? (
           <PlayingBars />

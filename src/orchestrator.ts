@@ -1,9 +1,14 @@
 import { bilingual } from "./agents/bilingual";
 import { converse } from "./agents/conversation";
 import { explain } from "./agents/explain";
+import { runLearningAgent } from "./agents/learning";
+import { generateLearningAgentDraft } from "./agents/learning-agent-builder";
 import type { TutorAnalysis } from "./agents/schema";
 import { analyze } from "./agents/tutor";
 import { getProvider, loadConfig } from "./config";
+import { applyDataEditInstruction, type DataEditResult } from "./data-edit";
+import { getConversation } from "./db/conversations";
+import { createLearningAgent, getLearningAgent } from "./db/learning-agents";
 import { getReviewDueList, getWeakList, recordAnalysis } from "./db/mastery";
 import { getProficiencySnapshot } from "./db/proficiency";
 import {
@@ -11,6 +16,7 @@ import {
   persistTurn,
   updateTurnAnalysis,
 } from "./db/turns";
+import { buildLearningDataContext } from "./learning-data";
 import { logError } from "./lib/log";
 import { maybeRunMaintainer } from "./profile/maintainer-runner";
 import { profileSliceForConversation, readProfile } from "./profile/profile";
@@ -37,6 +43,29 @@ export class MissingApiKeyError extends Error {
   }
 }
 
+export async function createCustomLearningAgentFromDescription(
+  description: string,
+): Promise<string> {
+  const provider = await getProvider();
+  if (!provider) throw new MissingApiKeyError();
+
+  const config = loadConfig();
+  const draft = await generateLearningAgentDraft(provider, description, {
+    nativeLanguage: config.nativeLanguage,
+    targetLanguage: config.targetLanguage,
+    level: config.level,
+  });
+  return createLearningAgent(draft);
+}
+
+export async function editLearningDataWithInstruction(
+  instruction: string,
+): Promise<DataEditResult> {
+  const provider = await getProvider();
+  if (!provider) throw new MissingApiKeyError();
+  return applyDataEditInstruction(provider, instruction, loadConfig());
+}
+
 // 端到端一轮:对话 ∥ 导师并行 → 对话流式秒回、批改稍后到 → 记账 + 持久化。
 // 导师崩了不影响对话(降级:analysis=null,本轮不更新 mastery)。
 export async function runTurn(
@@ -44,6 +73,11 @@ export async function runTurn(
   conversationId: string,
   cb: TurnCallbacks,
 ): Promise<TurnResult> {
+  const conversation = await getConversation(conversationId);
+  if (conversation?.kind === "learning_agent") {
+    return runLearningTurn(userInput, conversationId, cb, false);
+  }
+
   const provider = await getProvider();
   if (!provider) throw new MissingApiKeyError();
 
@@ -121,6 +155,57 @@ export async function runTurn(
       cb.onAnalysis(null, { error: `批改失败: ${msg}` });
     });
 
+  return { reply, analysis: null };
+}
+
+export async function startLearningSession(
+  conversationId: string,
+  cb: TurnCallbacks,
+): Promise<TurnResult> {
+  return runLearningTurn("", conversationId, cb, true);
+}
+
+async function runLearningTurn(
+  userInput: string,
+  conversationId: string,
+  cb: TurnCallbacks,
+  kickoff: boolean,
+): Promise<TurnResult> {
+  const provider = await getProvider();
+  if (!provider) throw new MissingApiKeyError();
+
+  const conversation = await getConversation(conversationId);
+  const agentId = conversation?.learningAgentId;
+  if (!agentId) throw new Error("这个专项课没有绑定学习 Agent");
+
+  const agent = await getLearningAgent(agentId);
+  if (!agent) throw new Error("找不到这个学习 Agent");
+
+  const config = loadConfig();
+  const [history, dataContext] = await Promise.all([
+    formatRecentHistory(conversationId),
+    buildLearningDataContext(agent, config),
+  ]);
+
+  const reply = await runLearningAgent(
+    provider,
+    {
+      nativeLanguage: config.nativeLanguage,
+      targetLanguage: config.targetLanguage,
+      level: config.level,
+      agentName: agent.name,
+      agentPrompt: agent.prompt,
+      dataContext,
+      history,
+      userInput,
+      kickoff,
+    },
+    cb.onReplyDelta,
+  );
+
+  await persistTurn(conversationId, userInput, reply, null);
+  cb.onReplyComplete?.(reply);
+  cb.onAnalysis(null);
   return { reply, analysis: null };
 }
 

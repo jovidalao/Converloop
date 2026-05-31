@@ -2,7 +2,14 @@ import { asc, desc, eq, ne, sql } from "drizzle-orm";
 import type { TutorAnalysis } from "../agents/schema";
 import type { WeakItem } from "../agents/tutor";
 import { db } from "./client";
-import { applySignal, deriveSignals, type Signal } from "./mastery-logic";
+import {
+  applySignal,
+  deriveSignals,
+  type MasteryStatus,
+  type MasteryType,
+  normalizeKey,
+  type Signal,
+} from "./mastery-logic";
 import { type MasteryItem, masteryEvent, masteryItem } from "./schema";
 
 function payloadJson(payload: unknown): string | null {
@@ -145,6 +152,92 @@ export async function updateMasteryItem(
 
   if (Object.keys(updates).length === 0) return;
   await db.update(masteryItem).set(updates).where(eq(masteryItem.key, key));
+}
+
+export async function createManualMasteryItem(input: {
+  key: string;
+  label: string;
+  type: MasteryType;
+  status?: MasteryStatus;
+  example?: string | null;
+  notes?: string | null;
+}): Promise<void> {
+  const now = Date.now();
+  const key = normalizeKey(input.key);
+  const status = input.status ?? "learning";
+  const [existing] = await db
+    .select({ key: masteryItem.key })
+    .from(masteryItem)
+    .where(eq(masteryItem.key, key))
+    .limit(1);
+
+  if (existing) {
+    await updateMasteryItem(key, {
+      label: input.label,
+      example: input.example,
+      notes: input.notes,
+    });
+    await setMasteryStatus(key, status);
+    return;
+  }
+
+  await db.insert(masteryItem).values({
+    id: crypto.randomUUID(),
+    type: input.type,
+    key,
+    label: input.label.trim(),
+    status,
+    seenCount: status === "known" ? 3 : status === "struggling" ? 1 : 0,
+    errorCount: status === "struggling" ? 1 : 0,
+    lastSeenAt: now,
+    example: input.example?.trim() || null,
+    notes: input.notes?.trim() || null,
+  });
+
+  await insertMasteryEvent(
+    {
+      key,
+      label: input.label.trim(),
+      type: input.type,
+      kind: status === "known" ? "correct" : "introduced",
+      example: "Created by natural-language data edit",
+      payload: { manual_action: "create_mastery_item" },
+    },
+    now,
+    undefined,
+    "manual",
+  );
+}
+
+export async function setMasteryStatus(
+  key: string,
+  status: MasteryStatus,
+): Promise<void> {
+  const [existing] = await db
+    .select()
+    .from(masteryItem)
+    .where(eq(masteryItem.key, key))
+    .limit(1);
+  if (!existing) return;
+
+  await db
+    .update(masteryItem)
+    .set({ status, lastSeenAt: Date.now() })
+    .where(eq(masteryItem.key, key));
+
+  await insertMasteryEvent(
+    {
+      key: existing.key,
+      label: existing.label,
+      type: existing.type,
+      kind: status === "known" ? "correct" : "introduced",
+      example: `Status set to ${status} by user`,
+      payload: { manual_action: "set_status", status },
+    },
+    Date.now(),
+    undefined,
+    "manual",
+  );
 }
 
 export async function deleteMasteryItem(key: string): Promise<void> {

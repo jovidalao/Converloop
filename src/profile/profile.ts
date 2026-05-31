@@ -42,10 +42,10 @@ export function defaultProfile(config: AppConfig): string {
 `;
 }
 
-// 读 MD;不存在则返回默认模板(不落盘,等维护 agent 或用户首次写入)。
+// 读 MD;不存在或被异常写空则返回默认模板(不落盘,等维护 agent 或用户首次写入)。
 export async function readProfile(config: AppConfig): Promise<string> {
   const raw = await readProfileRaw();
-  return raw ?? defaultProfile(config);
+  return raw?.trim() ? raw : defaultProfile(config);
 }
 
 // 对话 agent 的切片:整份档案,含 ## My notes —— 那是用户手写的记忆/指示,

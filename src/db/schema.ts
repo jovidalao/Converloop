@@ -63,9 +63,30 @@ export const conversation = sqliteTable("conversation", {
   title: text("title").notNull(),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
+  kind: text("kind", {
+    enum: ["practice", "learning_agent"],
+  })
+    .notNull()
+    .default("practice"),
+  learningAgentId: text("learning_agent_id"),
 });
 
 export type Conversation = typeof conversation.$inferSelect;
+
+// 定制化学习 Agent。内置 Agent 也存在这里,允许用户微调 prompt。
+export const learningAgent = sqliteTable("learning_agent", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description").notNull(),
+  prompt: text("prompt").notNull(),
+  dataScopeJson: text("data_scope_json").notNull(),
+  builtIn: integer("built_in").notNull().default(0),
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+});
+
+export type LearningAgent = typeof learningAgent.$inferSelect;
+export type NewLearningAgent = typeof learningAgent.$inferInsert;
 
 // 应用内部连续性标记。不是用户偏好,需要随数据库备份/迁移。
 export const appState = sqliteTable("app_state", {

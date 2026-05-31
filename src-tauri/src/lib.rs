@@ -81,6 +81,26 @@ CREATE TABLE IF NOT EXISTS app_state (
     updated_at INTEGER NOT NULL
 );";
 
+// 定制化学习 Agent。内置 Agent 也落库,这样用户可以微调 prompt;启动时 TS 侧只补缺,
+// 不覆盖用户已经改过的内置 prompt。
+const CREATE_LEARNING_AGENT: &str = "\
+CREATE TABLE IF NOT EXISTS learning_agent (
+    id              TEXT PRIMARY KEY NOT NULL,
+    name            TEXT NOT NULL,
+    description     TEXT NOT NULL,
+    prompt          TEXT NOT NULL,
+    data_scope_json TEXT NOT NULL,
+    built_in        INTEGER NOT NULL DEFAULT 0,
+    created_at      INTEGER NOT NULL,
+    updated_at      INTEGER NOT NULL
+);";
+
+const ADD_CONVERSATION_KIND: &str =
+    "ALTER TABLE conversation ADD COLUMN kind TEXT NOT NULL DEFAULT 'practice';";
+
+const ADD_CONVERSATION_LEARNING_AGENT_ID: &str =
+    "ALTER TABLE conversation ADD COLUMN learning_agent_id TEXT;";
+
 // 红灯距白卡片左/上相等: x ≈ 0.55rem + 0.15rem + (2rem−12px)/2 → 21pt(16px 根字号下)。
 // Y 让红绿灯垂直居中于顶栏(App.tsx 的 h-12 = 48px,标题/收展按钮居中在 24px)。
 // decorum 把按钮中心放在距窗顶 (button_h + y)/2 + 4 处;关闭按钮 button_h = 14,
@@ -188,6 +208,24 @@ pub fn run() {
             version: 10,
             description: "create_app_state",
             sql: CREATE_APP_STATE,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 11,
+            description: "create_learning_agent",
+            sql: CREATE_LEARNING_AGENT,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 12,
+            description: "add_conversation_kind",
+            sql: ADD_CONVERSATION_KIND,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 13,
+            description: "add_conversation_learning_agent_id",
+            sql: ADD_CONVERSATION_LEARNING_AGENT_ID,
             kind: MigrationKind::Up,
         },
     ];

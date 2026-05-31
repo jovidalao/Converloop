@@ -117,6 +117,19 @@ export async function getRecentTurns(limit = 6): Promise<Turn[]> {
   return rows.reverse(); // 时间正序,喂 prompt 更自然
 }
 
+export async function getTurnsSince(
+  sinceMs: number,
+  limit = 24,
+): Promise<Turn[]> {
+  const rows = await db
+    .select()
+    .from(turn)
+    .where(gt(turn.createdAt, sinceMs))
+    .orderBy(desc(turn.createdAt))
+    .limit(limit);
+  return rows.reverse();
+}
+
 // 某会话内的最近 turns。对话/导师 agent 的上下文按会话隔离,话题不串。
 export async function getRecentTurnsForConversation(
   conversationId: string,
@@ -146,7 +159,12 @@ export async function formatRecentHistory(
 ): Promise<string> {
   const turns = await getRecentTurnsForConversation(conversationId, limit);
   return turns
-    .map((t) => `User: ${userLineForHistory(t)}\nPartner: ${t.reply}`)
+    .map((t) => {
+      const user = userLineForHistory(t).trim();
+      return user
+        ? `User: ${user}\nPartner: ${t.reply}`
+        : `Partner: ${t.reply}`;
+    })
     .join("\n\n");
 }
 

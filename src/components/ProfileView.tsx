@@ -1,5 +1,5 @@
 import { PencilIcon, XIcon } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { loadConfig } from "../config";
 import { runMaintainerNow } from "../profile/maintainer-runner";
 import {
@@ -51,6 +51,10 @@ function isEditable(title: string): boolean {
 function displayBody(s: ProfileSection): string {
   if (s.title !== "My notes") return s.body;
   return s.body.replace(/<!--[\s\S]*?-->/g, "").trim();
+}
+
+function normalizeProfileMd(md: string): string {
+  return serializeProfile(ensureSections(parseProfile(md)));
 }
 
 // 只读卡片:完整显示内容,卡片高度随内容自适应,内部无滚动条。
@@ -224,36 +228,92 @@ export function ProfileView() {
   const [editingTitle, setEditingTitle] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [loaded, setLoaded] = useState(false);
 
-  function load(md: string) {
+  const load = useCallback((md: string) => {
     const p = ensureSections(parseProfile(md));
     setHeader(p.header);
     setSections(p.sections);
     setSavedMd(serializeProfile(p));
-  }
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: mount-once load; load reads no reactive state
-  useEffect(() => {
-    readProfile(loadConfig()).then(load);
+    setLoaded(true);
   }, []);
+
+  useEffect(() => {
+    let alive = true;
+    readProfile(loadConfig()).then((md) => {
+      if (alive) load(md);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [load]);
 
   // 当前编辑态序列化回规范 MD(标题永远齐全)。
   const currentMd = useMemo(
-    () => (raw ? rawText : serializeProfile({ header, sections })),
-    [raw, rawText, header, sections],
+    () =>
+      loaded ? (raw ? rawText : serializeProfile({ header, sections })) : "",
+    [loaded, raw, rawText, header, sections],
   );
-  const dirty = currentMd !== savedMd;
+  const dirty = loaded && currentMd !== savedMd;
 
-  // 失焦/卸载自动保存(仅 raw 模式)用最新值,避免闭包读到旧 state。
+  // 失焦/卸载自动保存、文件同步都用最新值,避免闭包读到旧 state。
   const currentMdRef = useRef("");
   currentMdRef.current = currentMd;
   const savedMdRef = useRef("");
   savedMdRef.current = savedMd;
+  const dirtyRef = useRef(false);
+  dirtyRef.current = dirty;
+  const loadedRef = useRef(false);
+  loadedRef.current = loaded;
+  const busyRef = useRef(false);
+  busyRef.current = busy;
+  const rawRef = useRef(false);
+  rawRef.current = raw;
+  const editingRef = useRef(false);
+  editingRef.current = editingTitle !== null;
+
+  useEffect(() => {
+    let alive = true;
+
+    async function syncFromDisk() {
+      if (!loadedRef.current) return;
+      if (dirtyRef.current || busyRef.current || editingRef.current) return;
+      try {
+        const md = await readProfile(loadConfig());
+        if (!alive) return;
+        const normalized = normalizeProfileMd(md);
+        if (normalized === savedMdRef.current) return;
+
+        if (rawRef.current) {
+          setRawText(normalized);
+          setSavedMd(normalized);
+        } else {
+          load(md);
+        }
+      } catch (e) {
+        console.warn("同步档案失败:", e);
+      }
+    }
+
+    const onFocus = () => void syncFromDisk();
+    const onVisibility = () => {
+      if (!document.hidden) void syncFromDisk();
+    };
+    const interval = window.setInterval(() => void syncFromDisk(), 2000);
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      alive = false;
+      window.clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [load]);
 
   // 卸载时(切走档案页)冲洗未保存编辑。
   useEffect(
     () => () => {
-      if (currentMdRef.current !== savedMdRef.current) {
+      if (loadedRef.current && currentMdRef.current !== savedMdRef.current) {
         void writeProfile(currentMdRef.current);
       }
     },
@@ -261,6 +321,7 @@ export function ProfileView() {
   );
 
   async function saveIfDirty() {
+    if (!loaded) return;
     if (currentMdRef.current === savedMdRef.current) return;
     await writeProfile(currentMdRef.current);
     setSavedMd(currentMdRef.current);
@@ -268,6 +329,7 @@ export function ProfileView() {
 
   // 编辑层保存:更新该段 → 立即落盘。
   async function saveSection(title: string, body: string) {
+    if (!loaded) return;
     const next = sections.map((s) => (s.title === title ? { ...s, body } : s));
     setSections(next);
     setEditingTitle(null);
@@ -278,6 +340,7 @@ export function ProfileView() {
   }
 
   function toggleRaw() {
+    if (!loaded) return;
     if (!raw) {
       setRawText(serializeProfile({ header, sections }));
       setRaw(true);
@@ -288,12 +351,14 @@ export function ProfileView() {
   }
 
   async function save() {
+    if (!loaded) return;
     await writeProfile(currentMd);
     setSavedMd(currentMd);
     setStatus("✓ 已保存。");
   }
 
   async function refresh() {
+    if (!loaded) return;
     setBusy(true);
     setStatus("AI 正在根据掌握数据 + 近期对话刷新档案…");
     try {
@@ -357,7 +422,9 @@ export function ProfileView() {
         </p>
       )}
 
-      {raw ? (
+      {!loaded ? (
+        <p className="mt-4 text-sm text-muted-foreground">加载档案…</p>
+      ) : raw ? (
         <Textarea
           aria-label="原始 Markdown"
           className="mt-3 min-h-96 max-w-2xl resize-none font-mono text-sm leading-normal"
@@ -393,7 +460,11 @@ export function ProfileView() {
             {dirty ? "保存" : "已保存"}
           </Button>
         )}
-        <Button variant="secondary" onClick={refresh} disabled={busy}>
+        <Button
+          variant="secondary"
+          onClick={refresh}
+          disabled={busy || !loaded}
+        >
           {busy ? "刷新中…" : "用 AI 刷新档案"}
         </Button>
         {canUndo && (
@@ -405,6 +476,7 @@ export function ProfileView() {
           variant="ghost"
           size="sm"
           onClick={toggleRaw}
+          disabled={!loaded}
           className="ml-auto"
         >
           {raw ? "返回结构化编辑" : "编辑原始 Markdown"}

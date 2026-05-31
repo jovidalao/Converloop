@@ -6,7 +6,7 @@ import {
   LanguagesIcon,
   SparklesIcon,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { TutorAnalysis } from "../agents/schema";
 import { useConfig } from "../config";
 import { maybeAutoTitle, touchConversation } from "../db/conversations";
@@ -16,7 +16,12 @@ import {
   incrementExplainCount,
   loadChatHistory,
 } from "../db/turns";
-import { bilingualReply, MissingApiKeyError, runTurn } from "../orchestrator";
+import {
+  bilingualReply,
+  MissingApiKeyError,
+  runTurn,
+  startLearningSession,
+} from "../orchestrator";
 import { appendMyNote } from "../profile/notes";
 import { loadTtsConfig } from "../tts/config";
 import { stopSpeech } from "../tts/playback";
@@ -30,6 +35,7 @@ import { Spinner } from "./ui/spinner";
 
 interface ChatViewProps {
   conversationId: string;
+  mode?: "practice" | "learning_agent";
   /** 本会话新一轮持久化后触发(标题可能变了、排序要刷新)。 */
   onActivity?: () => void;
 }
@@ -61,14 +67,18 @@ function CopyButton({ text }: { text: string }) {
 function PartnerReply({
   text,
   autoOpen = false,
+  learningMode = false,
   onFirstExplain,
   onFirstBilingual,
+  onLayoutChange,
 }: {
   text: string;
   autoOpen?: boolean;
+  learningMode?: boolean;
   /** 用户首次主动点开讲解/双语时各触发一次(理解信号记账;自动展开不算)。 */
   onFirstExplain?: () => void;
   onFirstBilingual?: () => void;
+  onLayoutChange?: () => void;
 }) {
   const [open, setOpen] = useState(false); // 当前是否显示双语对照
   const [loading, setLoading] = useState(false);
@@ -116,7 +126,24 @@ function PartnerReply({
     }
   }, [autoOpen]);
 
+  useEffect(() => {
+    if (open || loading || view || error) onLayoutChange?.();
+  }, [open, loading, view, error, onLayoutChange]);
+
   const showBilingual = open && (view || error);
+
+  if (learningMode) {
+    return (
+      <div className="flex max-w-none flex-col items-start gap-1.5 self-stretch">
+        <div className="self-stretch py-0.5 text-foreground">
+          <Markdown>{text}</Markdown>
+        </div>
+        <div className="-ml-1 flex items-center gap-0.5">
+          <CopyButton text={text} />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex max-w-none flex-col items-start gap-1.5 self-stretch">
@@ -198,12 +225,26 @@ function UserMessageActions({ turn }: { turn: ChatTurn }) {
 function UserTurn({
   turn,
   nativeLanguage,
+  learningMode,
 }: {
   turn: ChatTurn;
   nativeLanguage: string;
+  learningMode: boolean;
 }) {
   const idiomatic = idiomaticText(turn.analysis);
   const [naturalOpen, setNaturalOpen] = useState(true);
+  if (learningMode) {
+    return (
+      <div className="flex max-w-[min(88%,520px)] flex-col items-end gap-1.5 self-end">
+        <div className="whitespace-pre-wrap rounded-2xl rounded-br-sm border bg-secondary px-3.5 py-2.5 text-base leading-normal text-foreground shadow-sm">
+          {turn.userText}
+        </div>
+        <div className="-mr-1 flex items-center gap-0.5">
+          <CopyButton text={turn.userText} />
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="flex max-w-[min(88%,520px)] flex-col items-end gap-1.5 self-end">
       <div className="whitespace-pre-wrap rounded-2xl rounded-br-sm border bg-secondary px-3.5 py-2.5 text-base leading-normal text-foreground shadow-sm">
@@ -240,10 +281,15 @@ function UserTurn({
   );
 }
 
-export function ChatView({ conversationId, onActivity }: ChatViewProps) {
+export function ChatView({
+  conversationId,
+  mode = "practice",
+  onActivity,
+}: ChatViewProps) {
   const [turns, setTurns] = useState<ChatTurn[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState("");
+  const [layoutTick, setLayoutTick] = useState(0);
   const [replyBusy, setReplyBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -253,8 +299,10 @@ export function ChatView({ conversationId, onActivity }: ChatViewProps) {
   const stickToBottomRef = useRef(true);
   const turnGenRef = useRef(0);
   const replyCommittedRef = useRef(false);
+  const kickoffStartedRef = useRef(false);
   const liveTurnIdsRef = useRef<Set<string>>(new Set()); // 本会话内新发的轮次,自动双语只作用于它们
   const { nativeLanguage, autoBilingual } = useConfig();
+  const learningMode = mode === "learning_agent";
 
   // 输入框随内容增高,最多三行,超过后内部滚动。
   // biome-ignore lint/correctness/useExhaustiveDependencies: input is the intentional trigger; the effect reads inputRef after it changes, not input directly
@@ -272,19 +320,34 @@ export function ChatView({ conversationId, onActivity }: ChatViewProps) {
     stickToBottomRef.current = distanceFromBottom < 80;
   }
 
+  const requestLayoutScroll = useCallback(() => {
+    setLayoutTick((n) => n + 1);
+  }, []);
+
   function patchTurn(id: string, patch: Partial<ChatTurn>) {
     setTurns((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
   }
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: startLesson reads current conversation state; this effect intentionally runs only on conversation/mode switch
   useEffect(() => {
-    void loadChatHistory(conversationId).then(setTurns);
-  }, [conversationId]);
+    let cancelled = false;
+    void loadChatHistory(conversationId).then((loaded) => {
+      if (cancelled) return;
+      setTurns(loaded);
+      if (learningMode && loaded.length === 0 && !kickoffStartedRef.current) {
+        void startLesson();
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [conversationId, learningMode]);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: turns/streaming are intentional scroll triggers; the effect reads refs only
+  // biome-ignore lint/correctness/useExhaustiveDependencies: turns/streaming/layoutTick are intentional scroll triggers; the effect reads refs only
   useEffect(() => {
     if (!stickToBottomRef.current) return;
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [turns, streaming]);
+  }, [turns, streaming, layoutTick]);
 
   function commitPartnerReply(turnId: string, reply: string) {
     patchTurn(turnId, { partnerText: reply });
@@ -308,6 +371,68 @@ export function ChatView({ conversationId, onActivity }: ChatViewProps) {
     }
   }
 
+  async function startLesson() {
+    if (!learningMode || replyBusy || kickoffStartedRef.current) return;
+    stopSpeech();
+    kickoffStartedRef.current = true;
+    const turnGen = ++turnGenRef.current;
+    const turnId = crypto.randomUUID();
+    liveTurnIdsRef.current.add(turnId);
+    stickToBottomRef.current = true;
+    setError(null);
+    replyCommittedRef.current = false;
+    setTurns((prev) => [
+      ...prev,
+      {
+        id: turnId,
+        userText: "",
+        analysis: null,
+        analysisPending: false,
+      },
+    ]);
+    setReplyBusy(true);
+    setStreaming("");
+    let acc = "";
+    try {
+      const result = await startLearningSession(conversationId, {
+        onReplyDelta: (d) => {
+          acc += d;
+          setStreaming(acc);
+        },
+        onReplyComplete: (reply) => {
+          if (turnGenRef.current !== turnGen) return;
+          replyCommittedRef.current = true;
+          commitPartnerReply(turnId, reply);
+        },
+        onAnalysis: () => {
+          patchTurn(turnId, { analysisPending: false });
+        },
+      });
+      if (turnGenRef.current === turnGen && !replyCommittedRef.current) {
+        commitPartnerReply(turnId, result.reply);
+      }
+      await touchConversation(conversationId);
+      onActivity?.();
+    } catch (e) {
+      patchTurn(turnId, {
+        analysisPending: false,
+        analysisError: "专项课启动失败",
+      });
+      setError(
+        e instanceof MissingApiKeyError
+          ? e.message
+          : e instanceof Error
+            ? e.message
+            : String(e),
+      );
+    } finally {
+      if (turnGenRef.current === turnGen) {
+        setStreaming("");
+        setReplyBusy(false);
+      }
+    }
+  }
+
   async function send() {
     const text = input.trim();
     if (!text || replyBusy) return;
@@ -326,15 +451,16 @@ export function ChatView({ conversationId, onActivity }: ChatViewProps) {
         id: turnId,
         userText: text,
         analysis: null,
-        analysisPending: true,
+        analysisPending: !learningMode,
       },
     ]);
     setReplyBusy(true);
     setStreaming("");
     let acc = "";
-    // 边收流边分句朗读:第一句一就绪即出声,后续句子在后台合成、无缝续播。
+    // 自动朗读:先凑出不少于 10 个词的第一段,回复完成后把剩余文本合并成一次 TTS 请求。
     // 设置里关掉「自动朗读」时不创建朗读会话(小喇叭仍可手动朗读)。
-    const speaker = loadTtsConfig().autoSpeak ? createReplySpeaker() : null;
+    const speaker =
+      !learningMode && loadTtsConfig().autoSpeak ? createReplySpeaker() : null;
     try {
       const result = await runTurn(text, conversationId, {
         onReplyDelta: (d) => {
@@ -363,14 +489,15 @@ export function ChatView({ conversationId, onActivity }: ChatViewProps) {
       }
       // 轮次已持久化:更新会话排序,首条消息顺带自动命名,再刷新侧边栏。
       await touchConversation(conversationId);
-      if (isFirstMessage) await maybeAutoTitle(conversationId, text);
+      if (isFirstMessage && !learningMode)
+        await maybeAutoTitle(conversationId, text);
       onActivity?.();
     } catch (e) {
       stopSpeech(); // 出错则停掉已在播的分句,并让朗读会话失效。
       speaker?.abort();
       patchTurn(turnId, {
         analysisPending: false,
-        analysisError: "发送失败,本轮未批改",
+        analysisError: learningMode ? "发送失败" : "发送失败,本轮未批改",
       });
       setError(
         e instanceof MissingApiKeyError
@@ -398,18 +525,32 @@ export function ChatView({ conversationId, onActivity }: ChatViewProps) {
       >
         {turns.length === 0 && !streaming && (
           <div className="m-auto text-center text-sm leading-relaxed text-muted-foreground">
-            用目标语言说点什么,开始对话吧。
+            {learningMode
+              ? "正在准备专项课…"
+              : "用目标语言说点什么,开始对话吧。"}
           </div>
         )}
         {turns.map((turn) => (
           <div key={turn.id} className="flex flex-col gap-2">
-            <UserTurn turn={turn} nativeLanguage={nativeLanguage} />
+            {turn.userText.trim() && (
+              <UserTurn
+                turn={turn}
+                nativeLanguage={nativeLanguage}
+                learningMode={learningMode}
+              />
+            )}
             {turn.partnerText && (
               <PartnerReply
                 text={turn.partnerText}
-                autoOpen={autoBilingual && liveTurnIdsRef.current.has(turn.id)}
+                learningMode={learningMode}
+                autoOpen={
+                  !learningMode &&
+                  autoBilingual &&
+                  liveTurnIdsRef.current.has(turn.id)
+                }
                 onFirstExplain={() => void incrementExplainCount(turn.id)}
                 onFirstBilingual={() => void incrementBilingualCount(turn.id)}
+                onLayoutChange={requestLayoutScroll}
               />
             )}
           </div>
@@ -454,7 +595,11 @@ export function ChatView({ conversationId, onActivity }: ChatViewProps) {
               }
             }}
             rows={1}
-            placeholder="用目标语言输入一句话…"
+            placeholder={
+              learningMode
+                ? "问老师、回答练习，母语/目标语言都可以…"
+                : "用目标语言输入一句话…"
+            }
             disabled={replyBusy}
             className="max-h-[calc(1.4em*3+0.9rem)] min-w-0 flex-1 resize-none border-none bg-transparent py-2 text-base leading-snug outline-none placeholder:text-muted-foreground"
           />

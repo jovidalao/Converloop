@@ -10,6 +10,44 @@ const TERMINATOR = /[.!?。！？…]/;
 const FULLWIDTH_TERMINATOR = /[。！？…]/;
 const CLOSER = /[")'\]}）」』】》”’]/;
 
+export interface SentenceSplit {
+  first: string;
+  rest: string;
+}
+
+export function splitFirstSentence(text: string): SentenceSplit | null {
+  const full = text.trim();
+  if (!full) return null;
+
+  let i = 0;
+  while (i < full.length) {
+    if (!TERMINATOR.test(full[i])) {
+      i++;
+      continue;
+    }
+
+    let cjk = FULLWIDTH_TERMINATOR.test(full[i]);
+    let j = i + 1;
+    while (
+      j < full.length &&
+      (TERMINATOR.test(full[j]) || CLOSER.test(full[j]))
+    ) {
+      if (FULLWIDTH_TERMINATOR.test(full[j])) cjk = true;
+      j++;
+    }
+
+    const confirmed = j >= full.length || cjk || /\s/.test(full[j]);
+    if (confirmed) {
+      const first = full.slice(0, j).trim();
+      if (!first) return null;
+      return { first, rest: full.slice(j).trim() };
+    }
+    i = j;
+  }
+
+  return null;
+}
+
 export class SentenceSegmenter {
   private consumed = 0;
 

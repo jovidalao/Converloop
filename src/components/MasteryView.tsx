@@ -3,6 +3,7 @@ import {
   PencilIcon,
   SaveIcon,
   SearchIcon,
+  SendIcon,
   Trash2Icon,
   XIcon,
 } from "lucide-react";
@@ -14,6 +15,10 @@ import {
   updateMasteryItem,
 } from "../db/mastery";
 import type { MasteryItem } from "../db/schema";
+import {
+  editLearningDataWithInstruction,
+  MissingApiKeyError,
+} from "../orchestrator";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
@@ -231,6 +236,10 @@ export function MasteryView() {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
   const [type, setType] = useState("all");
+  const [editText, setEditText] = useState("");
+  const [editBusy, setEditBusy] = useState(false);
+  const [editResult, setEditResult] = useState<string | null>(null);
+  const [editError, setEditError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     setItems(await getAllMastery());
@@ -255,6 +264,35 @@ export function MasteryView() {
     () => Array.from(new Set(items.map((item) => item.type))).sort(),
     [items],
   );
+
+  async function applyNaturalEdit() {
+    const text = editText.trim();
+    if (!text || editBusy) return;
+    setEditBusy(true);
+    setEditResult(null);
+    setEditError(null);
+    try {
+      const result = await editLearningDataWithInstruction(text);
+      await refresh();
+      setEditText("");
+      const skipped = result.skipped.length
+        ? ` 跳过:${result.skipped.join("、")}`
+        : "";
+      setEditResult(
+        `${result.summary} 已执行 ${result.applied} 项。${skipped}`,
+      );
+    } catch (e) {
+      setEditError(
+        e instanceof MissingApiKeyError
+          ? e.message
+          : e instanceof Error
+            ? e.message
+            : String(e),
+      );
+    } finally {
+      setEditBusy(false);
+    }
+  }
 
   return (
     <div className="flex h-full max-w-5xl flex-col overflow-y-auto px-6 pt-14 pb-6">
@@ -308,6 +346,39 @@ export function MasteryView() {
         {filtered.length === 0 && (
           <div className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">
             暂无匹配的学习项
+          </div>
+        )}
+      </div>
+
+      <div className="mt-5 rounded-lg border bg-card p-3">
+        <div className="mb-2 text-sm font-semibold">用自然语言修改数据</div>
+        <Textarea
+          value={editText}
+          onChange={(e) => setEditText(e.target.value)}
+          placeholder="例如: 把 grammar:article_usage 标记为已掌握; 删除那个重复的 make/do 搭配; 新增一个表达缺口“委婉拒绝请求”。"
+          className="min-h-24 resize-none"
+        />
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <p className="m-0 text-xs leading-snug text-muted-foreground">
+            系统会先把请求转换成有限的数据操作,再由代码执行;不会直接修改计数。
+          </p>
+          <Button
+            type="button"
+            onClick={() => void applyNaturalEdit()}
+            disabled={editBusy || !editText.trim()}
+          >
+            <SendIcon size={15} />
+            {editBusy ? "处理中…" : "执行"}
+          </Button>
+        </div>
+        {editResult && (
+          <div className="mt-2 rounded-md bg-primary/10 px-3 py-2 text-sm text-primary">
+            {editResult}
+          </div>
+        )}
+        {editError && (
+          <div className="mt-2 rounded-md bg-destructive/15 px-3 py-2 text-sm text-destructive">
+            {editError}
           </div>
         )}
       </div>

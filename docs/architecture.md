@@ -23,6 +23,7 @@ AI 语言学习 agent —— 第一版范围、数据流、存储与现状。Age
 | **Conversation** | 每轮(热) | MD 叙述档案 + 对话 | 纯文本,流式 | [conversation-agent](./conversation-agent.md) |
 | **Tutor** | 每轮(热,与对话并行) | SQLite 薄弱表 + 输入 | 结构化 `TutorAnalysis` | [tutor-agent](./tutor-agent.md) |
 | **Profile Maintainer** | 偶尔(后台) | 现有 MD + SQLite 聚合 + 近期对话 | 更新后的 MD | [profile-maintainer-agent](./profile-maintainer-agent.md) |
+| **Learning / 专项课** | 用户从定制化学习入口开启 | 代码拼好的学习数据 scope + 专项 prompt | 老师型课程回复,流式 | [learning-agent](./learning-agent.md) |
 | **Explain**(按需) | 用户点「讲解」时 | 对话回复 + MD 档案切片 | 母语讲解,流式 | 见下方[按需讲解](#按需讲解-explain-agent) |
 
 热路径只有对话 ∥ 导师两个 agent;维护与讲解都不在热路径上(后台 / 按需)。代码侧的编排在 `src/orchestrator.ts`(`runTurn` = 对话 ∥ 导师 + 记账 + 持久化;`explainReply` = 按需讲解)。
@@ -64,7 +65,7 @@ AI 语言学习 agent —— 第一版范围、数据流、存储与现状。Age
 
 migration 定义在 **Rust 侧**(`src-tauri/src/lib.rs`,`tauri_plugin_sql::Builder::add_migrations`),`Database.load()` 时触发。Drizzle 只做类型安全查询,不接管 migration —— TS 侧 `src/db/schema.ts` **手动镜像** Rust 的建表,两边保持一致。
 
-当前 10 个 migration:
+当前 13 个 migration:
 
 | ver | 描述 | 表 / 变更 |
 |---|---|---|
@@ -78,6 +79,9 @@ migration 定义在 **Rust 侧**(`src-tauri/src/lib.rs`,`tauri_plugin_sql::Build
 | 8 | create_mastery_event_key_index | `mastery_event(key, created_at)` |
 | 9 | create_mastery_event_turn_index | `mastery_event(turn_id)` |
 | 10 | create_app_state | `app_state` |
+| 11 | create_learning_agent | `learning_agent` |
+| 12 | add_conversation_kind | `conversation.kind` |
+| 13 | add_conversation_learning_agent_id | `conversation.learning_agent_id` |
 
 ### `mastery_item`(掌握项,起点,别一上来搞知识追踪)
 
@@ -131,7 +135,24 @@ migration 定义在 **Rust 侧**(`src-tauri/src/lib.rs`,`tauri_plugin_sql::Build
 
 ### `conversation` / `turn`(多会话)
 
-`conversation`(侧边栏列表,ChatGPT 式:首条消息后标题改成截断的输入)+ `turn`(每轮 input/reply/analysis JSON,挂在 conversation 下)。代码在 `src/db/{conversations,turns}.ts`。
+`conversation`(侧边栏列表,ChatGPT 式:首条消息后标题改成截断的输入)+ `turn`(每轮 input/reply/analysis JSON,挂在 conversation 下)。`conversation.kind` 区分普通练习与 `learning_agent` 专项课会话;专项课用 `learning_agent_id` 找到对应老师 prompt。代码在 `src/db/{conversations,turns}.ts`。
+
+### `learning_agent`(定制化学习 Agent / 专项课)
+
+```ts
+{
+  id: string
+  name: string
+  description: string
+  prompt: string
+  data_scope_json: string // profile / weak_all / weak_grammar / expression_gaps / today_turns / due_review / proficiency
+  built_in: number        // 内置 Agent 也落库,允许用户微调 prompt
+  created_at: number
+  updated_at: number
+}
+```
+
+专项课不跑普通 Tutor Agent,因此不会把用户在课堂里的母语问题误记成表达缺口;老师直接在聊天中解释和反馈。详见 [learning-agent.md](./learning-agent.md)。
 
 ### 选 top-N 喂回 prompt
 
@@ -182,7 +203,9 @@ provider 解析全在 TS;**LLM HTTP 走 Rust**(`src-tauri/src/llm.rs` 的 `llm_r
 
 ## 复习去哪了
 
-砍掉抽认卡 SRS。复习靠对话 agent 在聊天里**被动复用**薄弱项/最近学到项(interleaving),比抽认卡更自然,且不需要排程 UI。复习候选不再只靠维护 agent 写进 prose:代码每轮用 `getReviewDueList`(非 known、最久未重温优先)定向选出一小撮喂给对话 agent(`DUE FOR REVIEW` 段),对话 agent 自然带出一两个——代码选取、LLM 复用。一个**显式按天复习页**作为可选叠加层,设计在 [expression-gap §5](./expression-gap.md#5-每日复习页新顶层视图),**尚未实现**。
+砍掉抽认卡 SRS。复习靠对话 agent 在聊天里**被动复用**薄弱项/最近学到项(interleaving),比抽认卡更自然,且不需要排程 UI。复习候选不再只靠维护 agent 写进 prose:代码每轮用 `getReviewDueList`(非 known、最久未重温优先)定向选出一小撮喂给对话 agent(`DUE FOR REVIEW` 段),对话 agent 自然带出一两个——代码选取、LLM 复用。
+
+显式复习现在由**专项课**承接:侧边栏顶部的定制化学习入口内置「今日复盘」「语法专项复习」「表达缺口训练」,它们新开学习会话,使用老师型 prompt 和有界数据上下文。旧设计里的独立 `review_day` 缓存页暂不做;先把复习产品形态收敛到专项课。
 
 ## 状态 / 路线图
 
@@ -194,11 +217,13 @@ v1 核心链路已完成并可用:
 - ✅ 多会话侧边栏 · Markdown 回复 · 按需讲解 · 朗读(TTS)· 母语/混说表达缺口(见 expression-gap)
 - ✅ 理解信号(每条回复的讲解/双语请求数)· 代码定向选取的复习候选(`getReviewDueList`)· 证据驱动的难度校准(`lib/proficiency`,喂对话 agent)
 - ✅ `mastery_event` 事件日志:每条 error/correct/introduced/gap 都保留结构化证据,`introduced` 不再推动掌握毕业
+- ✅ 定制化学习 Agent / 专项课:内置今日复盘、语法专项复习、表达缺口训练;支持自然语言创建和 prompt 微调;专项课会话独立于普通批改热路径
+- ✅ 学习数据页自然语言修改:LLM 只生成有限操作,代码执行 create/update/delete/状态修改,不让 LLM 直接碰计数
 - ✅ 最小 UI:聊天 / 批改面板 / 档案查看编辑 / 学习数据管理 / 设置(provider + key + TTS)
 
 **下一步(未实现):**
 
-- 每日复习页 + `reviewGenerator` agent + `review_day` 缓存表(设计见 [expression-gap §5](./expression-gap.md#5-每日复习页新顶层视图))。
+- 专项课的完成度闭环:课堂练习里用户确认「会了」后,回写 `correct` 复习信号。
 - 维护 agent 的「会话结束 / 空闲超时」触发(目前只有每 10 轮 + 手动)。
 - Anthropic 显式 `cache_control` 缓存断点。
 - ⏳ 人工验证:用真实句子盯 Tutor 的 `mastery_key` 跨句**稳定性**(prompt 改动记得 docs 与 `src/agents/*.ts` 两处同步)。

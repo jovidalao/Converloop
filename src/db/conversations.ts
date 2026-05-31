@@ -3,6 +3,7 @@ import { db } from "./client";
 import { type Conversation, conversation, turn } from "./schema";
 
 export type ConversationMeta = Conversation;
+export type ConversationKind = Conversation["kind"];
 
 // 新会话的占位标题;首条消息发出后由 ChatView 改成截断的输入内容(ChatGPT 式)。
 export const DEFAULT_CONVERSATION_TITLE = "新对话";
@@ -22,9 +23,21 @@ export async function listConversations(): Promise<ConversationMeta[]> {
   return db.select().from(conversation).orderBy(desc(conversation.updatedAt));
 }
 
+export async function getConversation(
+  id: string,
+): Promise<ConversationMeta | null> {
+  const [row] = await db
+    .select()
+    .from(conversation)
+    .where(eq(conversation.id, id))
+    .limit(1);
+  return row ?? null;
+}
+
 export async function createConversation(
   title = DEFAULT_CONVERSATION_TITLE,
   id = crypto.randomUUID(),
+  opts: { kind?: ConversationKind; learningAgentId?: string | null } = {},
 ): Promise<string> {
   const now = Date.now();
   await db.insert(conversation).values({
@@ -32,6 +45,8 @@ export async function createConversation(
     title: title.trim() || DEFAULT_CONVERSATION_TITLE,
     createdAt: now,
     updatedAt: now,
+    kind: opts.kind ?? "practice",
+    learningAgentId: opts.learningAgentId ?? null,
   });
   return id;
 }

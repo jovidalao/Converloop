@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SentenceSegmenter } from "./segment";
+import { SentenceSegmenter, splitFirstSentence } from "./segment";
 
 describe("SentenceSegmenter", () => {
   it("英文按标点+空白切句,尾巴留到 flush", () => {
@@ -43,5 +43,32 @@ describe("SentenceSegmenter", () => {
     const s = new SentenceSegmenter();
     expect(s.push("just a phrase")).toEqual([]);
     expect(s.flush("just a phrase")).toEqual(["just a phrase"]);
+  });
+});
+
+describe("splitFirstSentence", () => {
+  it("拆出首句和剩余全文", () => {
+    expect(splitFirstSentence("Hello there. How are you? I'm fine")).toEqual({
+      first: "Hello there.",
+      rest: "How are you? I'm fine",
+    });
+  });
+
+  it("CJK 句末无需空格", () => {
+    expect(splitFirstSentence("你好。今天天气不错！")).toEqual({
+      first: "你好。",
+      rest: "今天天气不错！",
+    });
+  });
+
+  it("终止符在末尾时也返回首句", () => {
+    expect(splitFirstSentence("Done.")).toEqual({
+      first: "Done.",
+      rest: "",
+    });
+  });
+
+  it("无终止符时返回 null", () => {
+    expect(splitFirstSentence("just a phrase")).toBeNull();
   });
 });
