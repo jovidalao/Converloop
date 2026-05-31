@@ -24,14 +24,11 @@
       "style": {
         "noNonNullAssertion": "off"
       },
-      "correctness": {
-        "useExhaustiveDependencies": "warn"
-      },
       "a11y": {
-        "noStaticElementInteractions": "warn",
-        "useKeyWithClickEvents": "warn",
-        "noLabelWithoutControl": "warn",
-        "noAutofocus": "warn"
+        "noLabelWithoutControl": {
+          "level": "error",
+          "options": { "inputComponents": ["Switch"] }
+        }
       }
     }
   }

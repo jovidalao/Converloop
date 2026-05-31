@@ -94,13 +94,13 @@ function PartnerReply({
   }
 
   // 设置里开了「自动开启双语阅读」时,新回复挂载即展开并生成一次。
+  // biome-ignore lint/correctness/useExhaustiveDependencies: run once when autoOpen flips, guarded by didAutoOpen ref; adding generate would re-fire every render
   useEffect(() => {
     if (autoOpen && !didAutoOpen.current) {
       didAutoOpen.current = true;
       setOpen(true);
       void generate();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoOpen]);
 
   const showBilingual = open && (view || error);
@@ -242,6 +242,7 @@ export function ChatView({ conversationId, onActivity }: ChatViewProps) {
   const { nativeLanguage, autoBilingual } = useConfig();
 
   // 输入框随内容增高,最多三行,超过后内部滚动。
+  // biome-ignore lint/correctness/useExhaustiveDependencies: input is the intentional trigger; the effect reads inputRef after it changes, not input directly
   useEffect(() => {
     const el = inputRef.current;
     if (!el) return;
@@ -264,6 +265,7 @@ export function ChatView({ conversationId, onActivity }: ChatViewProps) {
     void loadChatHistory(conversationId).then(setTurns);
   }, [conversationId]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: turns/streaming are intentional scroll triggers; the effect reads refs only
   useEffect(() => {
     if (!stickToBottomRef.current) return;
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });

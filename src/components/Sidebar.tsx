@@ -110,6 +110,7 @@ export function Sidebar({
                 key={c.id}
                 className="mx-0.5 my-px rounded-md border border-input bg-transparent px-2 py-1.5 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
                 value={draft}
+                // biome-ignore lint/a11y/noAutofocus: user-triggered inline rename — focus the field as it opens
                 autoFocus
                 onChange={(e) => setDraft(e.target.value)}
                 onBlur={commitEdit}
@@ -121,8 +122,11 @@ export function Sidebar({
             );
           }
           return (
+            // biome-ignore lint/a11y/useSemanticElements: can't be a <button> — it nests the rename/delete action buttons; uses role+tabIndex+keyboard instead
             <div
               key={c.id}
+              role="button"
+              tabIndex={0}
               className={`group flex cursor-pointer items-center gap-1.5 rounded-md px-2 py-1.5 text-sm ${
                 active
                   ? "bg-accent text-accent-foreground"
@@ -130,6 +134,12 @@ export function Sidebar({
               }`}
               onClick={() => onSelect(c.id)}
               onDoubleClick={() => startEdit(c)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onSelect(c.id);
+                }
+              }}
             >
               <span className="min-w-0 flex-1 truncate">{c.title}</span>
               <span className="hidden shrink-0 gap-0.5 group-hover:flex">

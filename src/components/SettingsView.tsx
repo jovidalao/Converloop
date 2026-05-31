@@ -44,7 +44,7 @@ function Field({
 }) {
   return (
     <div className={cn("mb-3.5 flex flex-col gap-1.5", className)}>
-      <label className="text-sm text-muted-foreground">{label}</label>
+      <span className="text-sm text-muted-foreground">{label}</span>
       {children}
     </div>
   );
