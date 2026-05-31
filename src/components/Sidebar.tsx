@@ -28,6 +28,23 @@ import {
 
 export type MainView = "chat" | "profile" | "mastery" | "learning" | "settings";
 
+// 相对时间:1 分钟内「刚刚」,然后分钟→小时→天→周→月→年逐级进位。
+function formatRelativeTime(ts: number): string {
+  const sec = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+  if (sec < 60) return "刚刚";
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min} 分钟前`;
+  const hour = Math.floor(min / 60);
+  if (hour < 24) return `${hour} 小时前`;
+  const day = Math.floor(hour / 24);
+  if (day < 7) return `${day} 天前`;
+  const week = Math.floor(day / 7);
+  if (day < 30) return `${week} 周前`;
+  const month = Math.floor(day / 30);
+  if (month < 12) return `${month} 个月前`;
+  return `${Math.floor(day / 365)} 年前`;
+}
+
 interface SidebarProps {
   conversations: ConversationMeta[];
   learningAgents: LearningAgentMeta[];
@@ -146,7 +163,7 @@ export function Sidebar({
         />
       </div>
 
-      <nav className="flex min-h-0 flex-1 flex-col gap-px overflow-x-hidden overflow-y-auto p-1.5">
+      <nav className="flex min-h-0 flex-1 flex-col gap-px overflow-x-hidden overflow-y-auto overscroll-contain p-1.5">
         <button
           type="button"
           className="flex w-full items-center gap-1 px-2 pt-1.5 pb-1 text-xs font-semibold tracking-wide text-muted-foreground hover:text-foreground"
@@ -234,11 +251,9 @@ export function Sidebar({
                 <BookOpenCheckIcon className="size-3.5 shrink-0 text-primary" />
               )}
               <span className="min-w-0 flex-1 truncate">{c.title}</span>
-              {c.kind === "learning_agent" && (
-                <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
-                  专项
-                </span>
-              )}
+              <span className="shrink-0 text-[11px] text-muted-foreground/70 group-hover:hidden">
+                {formatRelativeTime(c.updatedAt)}
+              </span>
               <span className="hidden shrink-0 gap-0.5 group-hover:flex">
                 <button
                   type="button"
@@ -303,6 +318,9 @@ export function Sidebar({
             <DropdownMenuItem onSelect={() => onOpenView("settings")}>
               <SettingsIcon size={16} />
               设置
+              <kbd className="ml-auto rounded border border-border/60 bg-muted px-1.5 py-0.5 font-sans text-[11px] text-muted-foreground/80">
+                ⌘,
+              </kbd>
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => onOpenView("mastery")}>
               <ListChecksIcon size={16} />

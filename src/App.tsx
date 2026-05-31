@@ -40,6 +40,18 @@ function App() {
     localStorage.setItem("sidebarWidth", String(sidebarWidth));
   }, [sidebarWidth]);
 
+  // ⌘, 打开设置(macOS 偏好设置惯例)
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.metaKey && e.key === ",") {
+        e.preventDefault();
+        setView("settings");
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
   const refresh = useCallback(
     () => listConversations().then(setConversations),
     [],
