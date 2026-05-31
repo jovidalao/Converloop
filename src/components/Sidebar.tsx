@@ -18,6 +18,7 @@ import {
 } from "react";
 import type { ConversationMeta } from "../db/conversations";
 import type { LearningAgentMeta } from "../db/learning-agents";
+import { useConfirm } from "./confirm";
 import { Button } from "./ui/button";
 import {
   DropdownMenu,
@@ -76,6 +77,7 @@ export function Sidebar({
   width,
   onResize,
 }: SidebarProps) {
+  const confirm = useConfirm();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [query, setQuery] = useState("");
@@ -272,9 +274,14 @@ export function Sidebar({
                   className="rounded px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-background hover:text-foreground"
                   title="删除"
                   aria-label="删除"
-                  onClick={(e) => {
+                  onClick={async (e) => {
                     e.stopPropagation();
-                    if (confirm(`删除对话「${c.title}」?此操作不可撤销。`)) {
+                    if (
+                      await confirm({
+                        title: `删除对话「${c.title}」?`,
+                        description: "此操作不可撤销。",
+                      })
+                    ) {
                       onDelete(c.id);
                     }
                   }}

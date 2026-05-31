@@ -19,6 +19,7 @@ import {
   editLearningDataWithInstruction,
   MissingApiKeyError,
 } from "../orchestrator";
+import { useConfirm } from "./confirm";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
@@ -81,6 +82,7 @@ function MasteryRow({
   item: MasteryItem;
   onRefresh: () => void;
 }) {
+  const confirm = useConfirm();
   const [editing, setEditing] = useState(false);
   const [label, setLabel] = useState(item.label);
   const [example, setExample] = useState(item.example ?? "");
@@ -98,7 +100,13 @@ function MasteryRow({
   }
 
   async function remove() {
-    if (!confirm(`删除学习项「${item.label}」?事件日志会保留。`)) return;
+    if (
+      !(await confirm({
+        title: `删除学习项「${item.label}」?`,
+        description: "事件日志会保留。",
+      }))
+    )
+      return;
     await deleteMasteryItem(item.key);
     onRefresh();
   }

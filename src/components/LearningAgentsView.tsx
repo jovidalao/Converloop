@@ -12,6 +12,7 @@ import {
   createCustomLearningAgentFromDescription,
   MissingApiKeyError,
 } from "../orchestrator";
+import { useConfirm } from "./confirm";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
@@ -31,6 +32,7 @@ export function LearningAgentsView({
   onRefresh,
   onStart,
 }: LearningAgentsViewProps) {
+  const confirm = useConfirm();
   const [selectedId, setSelectedId] = useState<string | null>(
     agents[0]?.id ?? null,
   );
@@ -111,7 +113,13 @@ export function LearningAgentsView({
 
   async function remove() {
     if (!selected || selected.builtIn) return;
-    if (!confirm(`删除专项课「${selected.name}」?已有会话不会被删除。`)) return;
+    if (
+      !(await confirm({
+        title: `删除专项课「${selected.name}」?`,
+        description: "已有会话不会被删除。",
+      }))
+    )
+      return;
     await deleteLearningAgent(selected.id);
     await onRefresh();
     setSelectedId(null);
