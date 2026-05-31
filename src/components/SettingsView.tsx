@@ -257,209 +257,222 @@ export function SettingsView() {
   }
 
   return (
-    <div className="h-full max-w-2xl overflow-y-auto px-6 pt-14 pb-6">
-      <h2 className="mb-4 mt-0 text-lg font-semibold tracking-tight">设置</h2>
+    <div className="h-full overflow-y-auto px-6 pt-14 pb-6">
+      {/* 宽窗口两列并排、窄窗口堆叠;items-start 避免短区块被拉高。 */}
+      <div className="grid max-w-5xl grid-cols-1 items-start gap-x-10 gap-y-8 lg:grid-cols-2">
+        <section>
+          <h2 className="mb-4 mt-0 text-lg font-semibold tracking-tight">
+            模型与语言
+          </h2>
 
-      <Field label="主题">
-        <ThemeToggle />
-      </Field>
+          <Field label="主题">
+            <ThemeToggle />
+          </Field>
 
-      <Field label="Provider">
-        <Select
-          value={cfg.providerType}
-          onValueChange={(v) => setProviderType(v as ProviderType)}
-        >
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {(Object.keys(PROVIDER_PRESETS) as ProviderType[]).map((t) => (
-              <SelectItem key={t} value={t}>
-                {PROVIDER_PRESETS[t].label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </Field>
+          <Field label="Provider">
+            <Select
+              value={cfg.providerType}
+              onValueChange={(v) => setProviderType(v as ProviderType)}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(Object.keys(PROVIDER_PRESETS) as ProviderType[]).map((t) => (
+                  <SelectItem key={t} value={t}>
+                    {PROVIDER_PRESETS[t].label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
 
-      <Field label={baseUrlLabels[cfg.providerType]}>
-        <Input
-          value={cfg.baseUrl}
-          onChange={(e) => update("baseUrl", e.target.value)}
-          placeholder={preset.baseUrl}
-        />
-      </Field>
-      <Field label="模型">
-        <Input
-          value={cfg.model}
-          onChange={(e) => update("model", e.target.value)}
-        />
-      </Field>
+          <Field label={baseUrlLabels[cfg.providerType]}>
+            <Input
+              value={cfg.baseUrl}
+              onChange={(e) => update("baseUrl", e.target.value)}
+              placeholder={preset.baseUrl}
+            />
+          </Field>
+          <Field label="模型">
+            <Input
+              value={cfg.model}
+              onChange={(e) => update("model", e.target.value)}
+            />
+          </Field>
 
-      <div className="mb-3.5 flex items-end gap-2">
-        <Field label="母语" className="mb-0 flex-1">
-          <Input
-            value={cfg.nativeLanguage}
-            onChange={(e) => update("nativeLanguage", e.target.value)}
-          />
-        </Field>
-        <Field label="目标语言" className="mb-0 flex-1">
-          <Input
-            value={cfg.targetLanguage}
-            onChange={(e) => update("targetLanguage", e.target.value)}
-          />
-        </Field>
-        <Field label="水平" className="mb-0 flex-1">
-          <Input
-            value={cfg.level}
-            onChange={(e) => update("level", e.target.value)}
-          />
-        </Field>
-      </div>
+          <div className="mb-3.5 flex flex-wrap items-end gap-2">
+            <Field label="母语" className="mb-0 min-w-28 flex-1">
+              <Input
+                value={cfg.nativeLanguage}
+                onChange={(e) => update("nativeLanguage", e.target.value)}
+              />
+            </Field>
+            <Field label="目标语言" className="mb-0 min-w-28 flex-1">
+              <Input
+                value={cfg.targetLanguage}
+                onChange={(e) => update("targetLanguage", e.target.value)}
+              />
+            </Field>
+            <Field label="水平" className="mb-0 min-w-28 flex-1">
+              <Input
+                value={cfg.level}
+                onChange={(e) => update("level", e.target.value)}
+              />
+            </Field>
+          </div>
 
-      <Field label={`API key ${hasKey ? "(已保存 · 留空不改)" : "(未设置)"}`}>
-        <div className="flex items-end gap-2">
-          <Input
-            type="password"
-            className="flex-1"
-            value={keyInput}
-            onChange={(e) => setKeyInput(e.target.value)}
-            placeholder={
-              hasKey ? "••••••••" : keyPlaceholders[cfg.providerType]
-            }
-          />
-          <Button onClick={saveKey} disabled={!keyInput.trim()}>
-            保存 key
-          </Button>
-          {hasKey && (
-            <Button variant="secondary" onClick={clearKey}>
-              清除
-            </Button>
-          )}
-        </div>
-      </Field>
+          <Field
+            label={`API key ${hasKey ? "(已保存 · 留空不改)" : "(未设置)"}`}
+          >
+            <div className="flex flex-wrap items-end gap-2">
+              <Input
+                type="password"
+                className="flex-1"
+                value={keyInput}
+                onChange={(e) => setKeyInput(e.target.value)}
+                placeholder={
+                  hasKey ? "••••••••" : keyPlaceholders[cfg.providerType]
+                }
+              />
+              <Button onClick={saveKey} disabled={!keyInput.trim()}>
+                保存 key
+              </Button>
+              {hasKey && (
+                <Button variant="secondary" onClick={clearKey}>
+                  清除
+                </Button>
+              )}
+            </div>
+          </Field>
 
-      <ToggleField
-        checked={cfg.autoBilingual}
-        onChange={(v) => update("autoBilingual", v)}
-      >
-        AI 回复自动开启双语阅读(逐句对照)
-      </ToggleField>
+          <ToggleField
+            checked={cfg.autoBilingual}
+            onChange={(v) => update("autoBilingual", v)}
+          >
+            AI 回复自动开启双语阅读(逐句对照)
+          </ToggleField>
 
-      <Button variant="secondary" onClick={testConnection} disabled={testing}>
-        {testing ? "测试中…" : "测试连接(流式 + 非流式)"}
-      </Button>
-
-      {status && (
-        <p className="mt-2 break-words text-sm text-primary">{status}</p>
-      )}
-
-      <div className="my-6 h-px bg-border" />
-
-      <h2 className="mb-2 mt-0 text-lg font-semibold tracking-tight">
-        朗读 (MiMo TTS)
-      </h2>
-      <p className="-mt-1 mb-4 text-sm leading-snug text-muted-foreground">
-        聊天中 AI 回复、改正和更地道句子旁的小喇叭会调用 MiMo
-        语音合成。相同句子会缓存音频,避免重复请求。
-        {ttsCacheCount !== null && ` 当前缓存 ${ttsCacheCount} 条。`}
-      </p>
-
-      <ToggleField
-        checked={ttsCfg.autoSpeak}
-        onChange={(v) => updateTts("autoSpeak", v)}
-      >
-        AI 回复自动朗读(关掉后仍可点小喇叭手动朗读)
-      </ToggleField>
-
-      <Field
-        label={`MiMo API key ${hasTtsKey ? "(已保存 · 留空不改)" : "(未设置)"}`}
-      >
-        <div className="flex items-end gap-2">
-          <Input
-            type="password"
-            className="flex-1"
-            value={ttsKeyInput}
-            onChange={(e) => setTtsKeyInput(e.target.value)}
-            placeholder={hasTtsKey ? "••••••••" : "MiMo API key…"}
-          />
           <Button
-            onClick={() => void saveTtsKey()}
-            disabled={!ttsKeyInput.trim()}
+            variant="secondary"
+            onClick={testConnection}
+            disabled={testing}
           >
-            保存 key
+            {testing ? "测试中…" : "测试连接(流式 + 非流式)"}
           </Button>
-          {hasTtsKey && (
-            <Button variant="secondary" onClick={() => void clearTtsKey()}>
-              清除
-            </Button>
+
+          {status && (
+            <p className="mt-2 break-words text-sm text-primary">{status}</p>
           )}
-        </div>
-      </Field>
+        </section>
 
-      <Field label="朗读风格 prompt (user 消息)">
-        <Textarea
-          className="min-h-18 resize-y leading-snug"
-          value={ttsCfg.stylePrompt}
-          onChange={(e) => updateTts("stylePrompt", e.target.value)}
-          rows={3}
-          placeholder="描述朗读的语气、语速、情感…"
-        />
-      </Field>
+        <section>
+          <h2 className="mb-2 mt-0 text-lg font-semibold tracking-tight">
+            朗读 (MiMo TTS)
+          </h2>
+          <p className="-mt-1 mb-4 text-sm leading-snug text-muted-foreground">
+            聊天中 AI 回复、改正和更地道句子旁的小喇叭会调用 MiMo
+            语音合成。相同句子会缓存音频,避免重复请求。
+            {ttsCacheCount !== null && ` 当前缓存 ${ttsCacheCount} 条。`}
+          </p>
 
-      <div className="mb-3.5 flex items-end gap-2">
-        <Field label="音色" className="mb-0 flex-1">
-          <Select
-            value={ttsCfg.voice}
-            onValueChange={(v) => updateTts("voice", v)}
+          <ToggleField
+            checked={ttsCfg.autoSpeak}
+            onChange={(v) => updateTts("autoSpeak", v)}
           >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {MIMO_VOICES.map((v) => (
-                <SelectItem key={v.id} value={v.id}>
-                  {v.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </Field>
-        <Field label="模型" className="mb-0 flex-1">
-          <Input
-            value={ttsCfg.model}
-            onChange={(e) => updateTts("model", e.target.value)}
-          />
-        </Field>
+            AI 回复自动朗读(关掉后仍可点小喇叭手动朗读)
+          </ToggleField>
+
+          <Field
+            label={`MiMo API key ${hasTtsKey ? "(已保存 · 留空不改)" : "(未设置)"}`}
+          >
+            <div className="flex flex-wrap items-end gap-2">
+              <Input
+                type="password"
+                className="flex-1"
+                value={ttsKeyInput}
+                onChange={(e) => setTtsKeyInput(e.target.value)}
+                placeholder={hasTtsKey ? "••••••••" : "MiMo API key…"}
+              />
+              <Button
+                onClick={() => void saveTtsKey()}
+                disabled={!ttsKeyInput.trim()}
+              >
+                保存 key
+              </Button>
+              {hasTtsKey && (
+                <Button variant="secondary" onClick={() => void clearTtsKey()}>
+                  清除
+                </Button>
+              )}
+            </div>
+          </Field>
+
+          <Field label="朗读风格 prompt (user 消息)">
+            <Textarea
+              className="min-h-18 resize-y leading-snug"
+              value={ttsCfg.stylePrompt}
+              onChange={(e) => updateTts("stylePrompt", e.target.value)}
+              rows={3}
+              placeholder="描述朗读的语气、语速、情感…"
+            />
+          </Field>
+
+          <div className="mb-3.5 flex flex-wrap items-end gap-2">
+            <Field label="音色" className="mb-0 min-w-28 flex-1">
+              <Select
+                value={ttsCfg.voice}
+                onValueChange={(v) => updateTts("voice", v)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {MIMO_VOICES.map((v) => (
+                    <SelectItem key={v.id} value={v.id}>
+                      {v.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field label="模型" className="mb-0 min-w-28 flex-1">
+              <Input
+                value={ttsCfg.model}
+                onChange={(e) => updateTts("model", e.target.value)}
+              />
+            </Field>
+          </div>
+
+          <Field label="Base URL">
+            <Input
+              value={ttsCfg.baseUrl}
+              onChange={(e) => updateTts("baseUrl", e.target.value)}
+            />
+          </Field>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="secondary"
+              onClick={() => void testTts()}
+              disabled={testingTts}
+            >
+              {testingTts ? "测试中…" : "测试朗读"}
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => void handleClearTtsCache()}
+              disabled={clearingTtsCache || ttsCacheCount === 0}
+            >
+              {clearingTtsCache ? "清空中…" : "清空朗读缓存"}
+            </Button>
+          </div>
+
+          {ttsStatus && (
+            <p className="mt-2 break-words text-sm text-primary">{ttsStatus}</p>
+          )}
+        </section>
       </div>
-
-      <Field label="Base URL">
-        <Input
-          value={ttsCfg.baseUrl}
-          onChange={(e) => updateTts("baseUrl", e.target.value)}
-        />
-      </Field>
-
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          variant="secondary"
-          onClick={() => void testTts()}
-          disabled={testingTts}
-        >
-          {testingTts ? "测试中…" : "测试朗读"}
-        </Button>
-        <Button
-          variant="secondary"
-          onClick={() => void handleClearTtsCache()}
-          disabled={clearingTtsCache || ttsCacheCount === 0}
-        >
-          {clearingTtsCache ? "清空中…" : "清空朗读缓存"}
-        </Button>
-      </div>
-
-      {ttsStatus && (
-        <p className="mt-2 break-words text-sm text-primary">{ttsStatus}</p>
-      )}
     </div>
   );
 }

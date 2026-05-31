@@ -180,19 +180,28 @@ export function Sidebar({
         )}
       </nav>
 
-      <div className="flex flex-col gap-px border-t p-1.5">
+      <div className="flex items-center gap-1 border-t p-1.5">
         <NavLink
           active={view === "profile"}
           onClick={() => onOpenView("profile")}
           icon={<UserRoundIcon size={17} />}
           label="档案"
+          className="flex-1"
         />
-        <NavLink
-          active={view === "settings"}
+        <Button
+          variant="ghost"
+          size="icon"
+          className={`size-8 ${
+            view === "settings"
+              ? "bg-accent text-accent-foreground"
+              : "text-muted-foreground"
+          }`}
           onClick={() => onOpenView("settings")}
-          icon={<SettingsIcon size={17} />}
-          label="设置"
-        />
+          title="设置"
+          aria-label="设置"
+        >
+          <SettingsIcon size={17} />
+        </Button>
       </div>
     </aside>
   );
@@ -203,11 +212,13 @@ function NavLink({
   onClick,
   icon,
   label,
+  className,
 }: {
   active: boolean;
   onClick: () => void;
   icon: ReactNode;
   label: string;
+  className?: string;
 }) {
   return (
     <button
@@ -216,7 +227,7 @@ function NavLink({
         active
           ? "bg-accent text-accent-foreground"
           : "text-muted-foreground hover:bg-accent/60"
-      }`}
+      } ${className ?? ""}`}
       onClick={onClick}
     >
       {icon}
