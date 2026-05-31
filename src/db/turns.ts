@@ -1,4 +1,4 @@
-import { count, desc, eq, gt } from "drizzle-orm";
+import { count, desc, eq, gt, sql } from "drizzle-orm";
 import type { TutorAnalysis } from "../agents/schema";
 import { db } from "./client";
 import { type Turn, turn } from "./schema";
@@ -172,6 +172,22 @@ export async function formatHistorySince(
     used += line.length;
   }
   return lines.reverse().join("\n\n"); // 时间正序,喂 prompt 更自然
+}
+
+// 理解信号:用户在某条回复上点「讲解」/「双语阅读」时 +1(仅用户主动触发,
+// 自动展开的双语不算)。原子自增,best-effort——计错一次不影响主链路。
+export async function incrementExplainCount(id: string): Promise<void> {
+  await db
+    .update(turn)
+    .set({ explainCount: sql`${turn.explainCount} + 1` })
+    .where(eq(turn.id, id));
+}
+
+export async function incrementBilingualCount(id: string): Promise<void> {
+  await db
+    .update(turn)
+    .set({ bilingualCount: sql`${turn.bilingualCount} + 1` })
+    .where(eq(turn.id, id));
 }
 
 export async function getTurnCount(): Promise<number> {

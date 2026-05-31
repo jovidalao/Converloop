@@ -40,6 +40,7 @@ export type Conversation = typeof conversation.$inferSelect;
 
 // 每轮持久化:输入 / 回复 / 导师分析(JSON,导师失败时为 null)。
 // conversation_id 由 migration v4 追加,旧数据为 NULL(启动时归档到默认会话)。
+// explain/bilingual_count(v5/v6):用户在这条回复上请求讲解/双语的次数 = 理解吃力信号。
 export const turn = sqliteTable("turn", {
   id: text("id").primaryKey(),
   createdAt: integer("created_at").notNull(),
@@ -47,6 +48,8 @@ export const turn = sqliteTable("turn", {
   reply: text("reply").notNull(),
   analysisJson: text("analysis_json"),
   conversationId: text("conversation_id"),
+  explainCount: integer("explain_count").notNull().default(0),
+  bilingualCount: integer("bilingual_count").notNull().default(0),
 });
 
 export type Turn = typeof turn.$inferSelect;

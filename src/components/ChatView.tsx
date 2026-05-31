@@ -10,7 +10,12 @@ import { useEffect, useRef, useState } from "react";
 import type { TutorAnalysis } from "../agents/schema";
 import { useConfig } from "../config";
 import { maybeAutoTitle, touchConversation } from "../db/conversations";
-import { type ChatTurn, loadChatHistory } from "../db/turns";
+import {
+  type ChatTurn,
+  incrementBilingualCount,
+  incrementExplainCount,
+  loadChatHistory,
+} from "../db/turns";
 import { bilingualReply, MissingApiKeyError, runTurn } from "../orchestrator";
 import { appendMyNote } from "../profile/notes";
 import { loadTtsConfig } from "../tts/config";
@@ -56,9 +61,14 @@ function CopyButton({ text }: { text: string }) {
 function PartnerReply({
   text,
   autoOpen = false,
+  onFirstExplain,
+  onFirstBilingual,
 }: {
   text: string;
   autoOpen?: boolean;
+  /** 用户首次主动点开讲解/双语时各触发一次(理解信号记账;自动展开不算)。 */
+  onFirstExplain?: () => void;
+  onFirstBilingual?: () => void;
 }) {
   const [open, setOpen] = useState(false); // 当前是否显示双语对照
   const [loading, setLoading] = useState(false);
@@ -89,6 +99,7 @@ function PartnerReply({
     if (loading) return;
     if (!view && !error) {
       setOpen(true);
+      onFirstBilingual?.(); // 用户主动请求双语对照 → 理解吃力信号
       void generate();
       return;
     }
@@ -129,6 +140,7 @@ function PartnerReply({
       </div>
       <ReplyExplanation
         text={text}
+        onFirstOpen={onFirstExplain}
         actions={
           <>
             <CopyButton text={text} />
@@ -396,6 +408,8 @@ export function ChatView({ conversationId, onActivity }: ChatViewProps) {
               <PartnerReply
                 text={turn.partnerText}
                 autoOpen={autoBilingual && liveTurnIdsRef.current.has(turn.id)}
+                onFirstExplain={() => void incrementExplainCount(turn.id)}
+                onFirstBilingual={() => void incrementBilingualCount(turn.id)}
               />
             )}
           </div>

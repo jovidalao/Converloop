@@ -12,10 +12,13 @@ export function ReplyExplanation({
   text,
   actions,
   trailingActions,
+  onFirstOpen,
 }: {
   text: string;
   actions?: ReactNode;
   trailingActions?: ReactNode;
+  /** 用户首次点开讲解时触发一次(理解信号记账,见 db/turns)。 */
+  onFirstOpen?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -49,6 +52,7 @@ export function ReplyExplanation({
     if (loading) return;
     if (!explanation && !error) {
       setOpen(true);
+      onFirstOpen?.(); // 用户主动请求讲解 → 理解吃力信号
       void generate();
       return;
     }

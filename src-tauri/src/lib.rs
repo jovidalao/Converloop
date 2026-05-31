@@ -43,6 +43,14 @@ CREATE TABLE IF NOT EXISTS conversation (
 const ADD_TURN_CONVERSATION_ID: &str =
     "ALTER TABLE turn ADD COLUMN conversation_id TEXT;";
 
+// 理解信号:用户在某条回复上点「讲解」/「双语阅读」的次数。高频 = 这条输入超出当前
+// 水平(代码记账、LLM 不碰)。SQLite 每条 ALTER 只能加一列,故拆成两个 migration。
+const ADD_TURN_EXPLAIN_COUNT: &str =
+    "ALTER TABLE turn ADD COLUMN explain_count INTEGER NOT NULL DEFAULT 0;";
+
+const ADD_TURN_BILINGUAL_COUNT: &str =
+    "ALTER TABLE turn ADD COLUMN bilingual_count INTEGER NOT NULL DEFAULT 0;";
+
 // 红灯距白卡片左/上相等: x ≈ 0.55rem + 0.15rem + (2rem−12px)/2 → 21pt(16px 根字号下)。
 // Y 让红绿灯垂直居中于顶栏(App.tsx 的 h-12 = 48px,标题/收展按钮居中在 24px)。
 // decorum 把按钮中心放在距窗顶 (button_h + y)/2 + 4 处;关闭按钮 button_h = 14,
@@ -114,6 +122,18 @@ pub fn run() {
             version: 4,
             description: "add_turn_conversation_id",
             sql: ADD_TURN_CONVERSATION_ID,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 5,
+            description: "add_turn_explain_count",
+            sql: ADD_TURN_EXPLAIN_COUNT,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 6,
+            description: "add_turn_bilingual_count",
+            sql: ADD_TURN_BILINGUAL_COUNT,
             kind: MigrationKind::Up,
         },
     ];
