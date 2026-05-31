@@ -63,7 +63,7 @@ export function Sidebar({
           数值与 src-tauri/src/lib.rs 的 TRAFFIC_LIGHTS_X 对应,改一处要同步。 */}
       <div
         data-tauri-drag-region
-        className="flex items-center gap-0.5 pt-0.5 pr-2 pb-1 pl-[calc(0.15rem_+_(2rem_-_12px)/2_+_52px_+_0.35rem)]"
+        className="flex items-center gap-0.5 pr-2 pb-1 pl-[calc(0.15rem_+_(2rem_-_12px)/2_+_52px_+_0.35rem)]"
       >
         <Button
           variant="ghost"

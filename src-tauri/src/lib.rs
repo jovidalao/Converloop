@@ -44,11 +44,13 @@ const ADD_TURN_CONVERSATION_ID: &str =
     "ALTER TABLE turn ADD COLUMN conversation_id TEXT;";
 
 // 红灯距白卡片左/上相等: x ≈ 0.55rem + 0.15rem + (2rem−12px)/2 → 21pt(16px 根字号下)。
-// y 保持与 .icon-btn 垂直中心同排。
+// Y 让红绿灯垂直居中于顶栏(App.tsx 的 h-12 = 48px,标题/收展按钮居中在 24px)。
+// decorum 把按钮中心放在距窗顶 (button_h + y)/2 + 4 处;关闭按钮 button_h = 14,
+// 解 (14 + y)/2 + 4 = 24 → y = 26。
 #[cfg(target_os = "macos")]
 const TRAFFIC_LIGHTS_X: f32 = 21.0;
 #[cfg(target_os = "macos")]
-const TRAFFIC_LIGHTS_Y: f32 = 33.0;
+const TRAFFIC_LIGHTS_Y: f32 = 26.0;
 
 #[cfg(target_os = "macos")]
 fn apply_traffic_lights_inset(win: &tauri::WebviewWindow) {
