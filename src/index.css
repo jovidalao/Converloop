@@ -139,7 +139,7 @@
   --codex-sidebar-width-current: var(--sidebar-width);
   --codex-main-bg: oklch(0.145 0 0);
   --codex-topbar-bg: oklch(0.15 0 0);
-  --codex-sidebar-bg: oklch(0.34 0 0);
+  --codex-sidebar-bg: var(--codex-main-bg);
   --codex-sidebar-fg: oklch(0.88 0 0);
   --codex-sidebar-muted: oklch(0.72 0 0);
   --codex-sidebar-hover: oklch(1 0 0 / 8%);

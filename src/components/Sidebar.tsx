@@ -182,15 +182,6 @@ export function Sidebar({
     <aside className="codex-sidebar">
       <div className="codex-sidebar-content">
         <div className="codex-sidebar-actions">
-          <button
-            type="button"
-            className="codex-sidebar-action"
-            data-active={newChatActive}
-            onClick={onNewChat}
-          >
-            <SquarePenIcon className="size-4" />
-            <span>新对话</span>
-          </button>
           <div className="codex-sidebar-search">
             <SearchIcon className="size-4" />
             <input
@@ -200,6 +191,15 @@ export function Sidebar({
               spellCheck={false}
             />
           </div>
+          <button
+            type="button"
+            className="codex-sidebar-action"
+            data-active={newChatActive}
+            onClick={onNewChat}
+          >
+            <SquarePenIcon className="size-4" />
+            <span>新对话</span>
+          </button>
         </div>
 
         <nav className="codex-sidebar-scroll">

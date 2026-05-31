@@ -15,6 +15,12 @@ import { SettingsView } from "./components/SettingsView";
 import { type MainView, Sidebar } from "./components/Sidebar";
 import { Button } from "./components/ui/button";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "./components/ui/tooltip";
+import {
   type ConversationMeta,
   clearActiveConversationId,
   createConversation,
@@ -52,17 +58,29 @@ function App() {
     localStorage.setItem("sidebarWidth", String(sidebarWidth));
   }, [sidebarWidth]);
 
-  // ⌘, 打开设置(macOS 偏好设置惯例)
+  const toggleSidebar = useCallback(() => {
+    setCollapsed((c) => !c);
+  }, []);
+
+  // ⌘, 设置 · ⌘B 侧栏(macOS 惯例)
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
+      const inField =
+        e.target instanceof HTMLElement &&
+        !!e.target.closest("input, textarea, select, [contenteditable]");
       if (e.metaKey && e.key === ",") {
         e.preventDefault();
         withViewTransition(() => setView("settings"));
+        return;
+      }
+      if (e.metaKey && e.key.toLowerCase() === "b" && !inField) {
+        e.preventDefault();
+        toggleSidebar();
       }
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  }, [toggleSidebar]);
 
   const refresh = useCallback(
     () => listConversations().then(setConversations),
@@ -188,17 +206,28 @@ function App() {
         onMouseDown={startTopbarDrag}
       >
         <div className="codex-topbar-left">
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="codex-chrome-button"
-            onClick={() => setCollapsed((c) => !c)}
-            title={collapsed ? "展开侧栏" : "收起侧栏"}
-            aria-label={collapsed ? "展开侧栏" : "收起侧栏"}
-          >
-            {collapsed ? <PanelRightIcon /> : <PanelLeftIcon />}
-          </Button>
+          <TooltipProvider delayDuration={300}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="codex-chrome-button"
+                  onClick={toggleSidebar}
+                  aria-label={collapsed ? "展开侧栏" : "收起侧栏"}
+                >
+                  {collapsed ? <PanelRightIcon /> : <PanelLeftIcon />}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" align="start" className="flex items-center gap-2">
+                <span>{collapsed ? "展开侧栏" : "收起侧栏"}</span>
+                <kbd className="rounded border border-border/60 bg-muted px-1.5 py-0.5 font-sans text-[11px] text-muted-foreground/80">
+                  ⌘B
+                </kbd>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </div>
         <div className="codex-titlebar">
           <span className="truncate">{topbarTitle}</span>
