@@ -77,6 +77,13 @@ describe("sanityCheck", () => {
     expect(r.reason).toContain("My notes");
   });
 
+  it("档案过长 → 拒绝(agent 未控制 bullet 数)", () => {
+    const bloated = withSections(MY_NOTES, `${"- 某个薄弱项\n".repeat(1500)}`);
+    const r = sanityCheck(oldMd, bloated);
+    expect(r.ok).toBe(false);
+    expect(r.reason).toContain("过长");
+  });
+
   it("长度坍缩 → 拒绝(段落全、My notes 原样,但内容被吃掉)", () => {
     const collapsed = `## About me
 ## Working on

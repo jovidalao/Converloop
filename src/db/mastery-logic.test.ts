@@ -1,6 +1,24 @@
 import { describe, expect, it } from "vitest";
 import type { TutorAnalysis } from "../agents/schema";
-import { applySignal, deriveSignals } from "./mastery-logic";
+import { applySignal, deriveSignals, normalizeKey } from "./mastery-logic";
+
+describe("normalizeKey", () => {
+  it("大小写 / 空格漂移收敛到同一个 key", () => {
+    expect(normalizeKey("Grammar:Article_Usage")).toBe("grammar:article_usage");
+    expect(normalizeKey("  grammar:article usage  ")).toBe(
+      "grammar:article_usage",
+    );
+    expect(normalizeKey("collocation:make  vs  do")).toBe(
+      "collocation:make_vs_do",
+    );
+  });
+
+  it("冒号两侧不留下划线", () => {
+    expect(normalizeKey("gap: decline request politely")).toBe(
+      "gap:decline_request_politely",
+    );
+  });
+});
 
 describe("applySignal", () => {
   it("seen_count < 3 一律 learning", () => {
@@ -81,6 +99,53 @@ describe("deriveSignals", () => {
       key: "grammar:article_usage",
       kind: "error",
       example: "a apple",
+    });
+    expect(sigs[1]).toMatchObject({ key: "vocab:apple", kind: "introduced" });
+  });
+
+  it("同一 key 既在 issues 又在 mastery_updates → error 优先,不重复计", () => {
+    const dup: TutorAnalysis = {
+      is_correct: false,
+      corrected: "...",
+      natural: "...",
+      issues: [
+        {
+          category: "grammar",
+          span_original: "a apple",
+          span_corrected: "an apple",
+          explanation: "...",
+          severity: "minor",
+          mastery_key: "grammar:article_usage",
+          mastery_label: "冠词",
+          mastery_type: "grammar",
+        },
+      ],
+      mastery_updates: [
+        {
+          key: "grammar:article_usage", // 同 key 又报 correct —— 应被丢弃
+          label: "冠词",
+          type: "grammar",
+          signal: "correct",
+        },
+        {
+          key: "vocab:apple",
+          label: "apple",
+          type: "vocab",
+          signal: "introduced",
+        },
+        {
+          key: "vocab:apple", // 重复 update —— 应去重
+          label: "apple",
+          type: "vocab",
+          signal: "introduced",
+        },
+      ],
+    };
+    const sigs = deriveSignals(dup);
+    expect(sigs).toHaveLength(2);
+    expect(sigs[0]).toMatchObject({
+      key: "grammar:article_usage",
+      kind: "error",
     });
     expect(sigs[1]).toMatchObject({ key: "vocab:apple", kind: "introduced" });
   });

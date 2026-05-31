@@ -1,4 +1,4 @@
-import { count, desc, eq } from "drizzle-orm";
+import { count, desc, eq, gt } from "drizzle-orm";
 import type { TutorAnalysis } from "../agents/schema";
 import { db } from "./client";
 import { type Turn, turn } from "./schema";
@@ -149,12 +149,29 @@ export async function formatRecentHistory(
     .join("\n\n");
 }
 
-// 跨会话的全局转写。维护 agent 用,刻意不按会话隔离(档案是全局的)。
-export async function formatRecentHistoryGlobal(limit = 6): Promise<string> {
-  const turns = await getRecentTurns(limit);
-  return turns
-    .map((t) => `User: ${t.userInput}\nPartner: ${t.reply}`)
-    .join("\n\n");
+// 维护 agent 的增量转写:只取上次维护之后(createdAt > sinceMs)的 turns,避免
+// 每次都重嚼老内容(反复重写 About me、缓慢漂移)。跨会话不隔离(档案是全局的)。
+// 再按字符预算从最近往回截断,粗略对应 token 预算,防止长 turn 撑爆上下文。
+export async function formatHistorySince(
+  sinceMs: number,
+  charBudget: number,
+  maxTurns = 100,
+): Promise<string> {
+  const rows = await db
+    .select()
+    .from(turn)
+    .where(gt(turn.createdAt, sinceMs))
+    .orderBy(desc(turn.createdAt))
+    .limit(maxTurns);
+  const lines: string[] = [];
+  let used = 0;
+  for (const t of rows) {
+    const line = `User: ${t.userInput}\nPartner: ${t.reply}`;
+    if (used + line.length > charBudget && lines.length > 0) break;
+    lines.push(line);
+    used += line.length;
+  }
+  return lines.reverse().join("\n\n"); // 时间正序,喂 prompt 更自然
 }
 
 export async function getTurnCount(): Promise<number> {

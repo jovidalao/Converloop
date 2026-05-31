@@ -1,3 +1,4 @@
+import { recordTutorOutcome } from "../lib/tutor-stats";
 import type { ChatMessage, ModelProvider } from "../providers/types";
 import {
   formatZodError,
@@ -81,6 +82,10 @@ BOOKKEEPING (mastery_updates)
 - Do NOT list the user's errors here (they come from issues) and do NOT list
   expression_gap key_items here (handled separately). Only:
   - "correct": user correctly used something from their weak list / notable.
+    This INCLUDES "gap:" items: if the user now produces, in ${ctx.targetLanguage}
+    and unaided, an expression matching a "gap:" key in the weak list, emit a
+    "correct" update with that exact key and type "expression_gap". That is the
+    only way an expression gap graduates out of "struggling".
   - "introduced": a new word/structure YOU introduced in feedback.
 
 Never output counts, scores, or confidence — only discrete observations.
@@ -222,7 +227,10 @@ export async function analyze(
   try {
     const raw = await requestStructuredTutorRaw(provider, messages);
     const structured = parseTutorRaw(raw);
-    if (structured.analysis) return structured;
+    if (structured.analysis) {
+      recordTutorOutcome("structured");
+      return structured;
+    }
 
     console.warn(
       "导师结构化解析失败,启用纯文本第二套:",
@@ -234,9 +242,11 @@ export async function analyze(
     const proseRaw = await requestProseFeedback(provider, ctx);
     const proseFeedback = stripModelFences(proseRaw);
     if (proseFeedback.trim()) {
+      recordTutorOutcome("prose"); // 展示了批改,但本轮不入 mastery 账
       return { analysis: null, proseFeedback };
     }
 
+    recordTutorOutcome("failed");
     return {
       analysis: null,
       error: "批改未能生成内容,请重试或检查模型设置。",
@@ -244,6 +254,7 @@ export async function analyze(
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error("导师请求失败:", e);
+    recordTutorOutcome("failed");
     return { analysis: null, error: `API 请求失败: ${msg}` };
   }
 }

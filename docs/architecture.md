@@ -92,6 +92,8 @@ migration 定义在 **Rust 侧**(`src-tauri/src/lib.rs`,`tauri_plugin_sql::Build
 
 `type` 是裸 `TEXT`(无 CHECK),新增掌握类型(如 `expression_gap`)只改 TS 侧两个 enum(`agents/schema.ts` Zod + `db/schema.ts` drizzle),不需要 Rust 迁移。记账公式见 [tutor-agent](./tutor-agent.md#代码侧记账分数归代码管)。
 
+`key` 写入前由代码统一规整(`normalizeKey`,`db/mastery-logic.ts`:小写 / 空格→下划线 / 去冒号旁下划线),作为「同类错同一个 key」的兜底——LLM 偶尔的大小写/空格漂移不会再分叉成两条记录。
+
 ### `conversation` / `turn`(多会话)
 
 `conversation`(侧边栏列表,ChatGPT 式:首条消息后标题改成截断的输入)+ `turn`(每轮 input/reply/analysis JSON,挂在 conversation 下)。代码在 `src/db/{conversations,turns}.ts`。
@@ -104,7 +106,8 @@ migration 定义在 **Rust 侧**(`src-tauri/src/lib.rs`,`tauri_plugin_sql::Build
 SELECT key, label, type, status
 FROM mastery_item
 WHERE status != 'known'
-ORDER BY (error_count * 1.0 / MAX(seen_count, 1)) DESC, last_seen_at DESC
+-- 分母 +2 收缩:压低样本极少的项,免得「1/1=100%」噪音盖过反复出错的老问题。
+ORDER BY (error_count * 1.0 / (seen_count + 2)) DESC, last_seen_at DESC
 LIMIT 15;
 ```
 

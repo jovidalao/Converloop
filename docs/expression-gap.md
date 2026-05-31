@@ -111,6 +111,8 @@ export type SignalKind = "error" | "correct" | "introduced" | "gap";
 
 `applySignal` 里 `gap` 与 `error` 一样计入 `errorCount`(用户没能产出 = 负面证据,推向 struggling),但语义上由 `type="expression_gap"` 区分,供复习页和对话 agent 知道"这是要让他*产出*的,不是'他老错'"。
 
+**毕业路径:** `gap:` 键只会被记 `gap`(=error),`errorCount==seenCount` 恒为 1 → 永远 struggling。要让它毕业,tutor 在用户后来**主动、用目标语**说出该表达时,对同一个 `gap:` 键发一个 `correct` 信号(`type="expression_gap"`),`seenCount++` 而 `errorCount` 不变,错误率下降 → 走向 known。见 tutor prompt 的 BOOKKEEPING 段。
+
 ```ts
 const errorCount = prev.errorCount + (kind === "error" || kind === "gap" ? 1 : 0);
 ```
@@ -264,6 +266,10 @@ BOOKKEEPING (mastery_updates)
 - Do NOT list errors here (they come from issues) and do NOT list expression_gap
   key_items here (handled separately). Only:
   - "correct": user correctly used something notable (esp. from the weak list).
+    This INCLUDES "gap:" items: if the user now produces, in {target_language}
+    and unaided, an expression matching a "gap:" key in the weak list, emit a
+    "correct" update with that exact key and type "expression_gap" — the only
+    way an expression gap graduates out of "struggling".
   - "introduced": a new word/structure YOU introduced in feedback.
 
 Never output counts, scores, or confidence — only discrete observations.

@@ -31,6 +31,11 @@ export interface SanityResult {
   reason?: string;
 }
 
+// 档案每轮整份进对话 prompt。维护 agent 若无视「每段 ≤6 bullet」把它撑大,会直接
+// 推高热路径的延迟和成本。设一个总长上限兜底:正常 7 段档案远低于此,触顶 = agent
+// 跑飞,丢弃本次结果、保留旧档案。
+const MAX_PROFILE_CHARS = 8000;
+
 export function sanityCheck(oldMd: string, newMd: string): SanityResult {
   for (const header of REQUIRED_SECTIONS) {
     if (!newMd.includes(header)) {
@@ -42,6 +47,12 @@ export function sanityCheck(oldMd: string, newMd: string): SanityResult {
   }
   if (oldMd.length > 0 && newMd.length < oldMd.length * 0.3) {
     return { ok: false, reason: "长度异常坍缩(疑似内容被吃掉)" };
+  }
+  if (newMd.length > MAX_PROFILE_CHARS) {
+    return {
+      ok: false,
+      reason: `档案过长(${newMd.length} 字符,上限 ${MAX_PROFILE_CHARS}),疑似 agent 未控制 bullet 数`,
+    };
   }
   return { ok: true };
 }

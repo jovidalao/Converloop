@@ -28,7 +28,11 @@ async function upsertSignal(sig: Signal, now: number): Promise<void> {
         status: next.status,
         lastSeenAt: now,
         example: sig.example ?? existing.example,
-        notes: sig.note ?? existing.notes,
+        // notes 是用户可编辑字段(尤其表达缺口的地道说法)。一旦有内容就别用新信号
+        // 覆盖,否则会清掉用户的手改;只在为空时填充。
+        notes: existing.notes?.trim()
+          ? existing.notes
+          : (sig.note ?? existing.notes),
       })
       .where(eq(masteryItem.key, sig.key));
   } else {
@@ -49,11 +53,23 @@ async function upsertSignal(sig: Signal, now: number): Promise<void> {
 }
 
 // 一轮记账:派生信号 → 逐个 upsert。同一 key 第二次是 update,不新增。
-export async function recordAnalysis(analysis: TutorAnalysis): Promise<void> {
+async function recordAnalysisInner(analysis: TutorAnalysis): Promise<void> {
   const now = Date.now();
   for (const sig of deriveSignals(analysis)) {
     await upsertSignal(sig, now);
   }
+}
+
+// 串行化:批改在后台 fire-and-forget 跑(见 orchestrator),多轮可并发;
+// 而 upsert 是「读计数 → 改 → 写」,并发会丢增量(后写覆盖先写)。代码是计数的
+// 地面真相,必须确定性 —— 把所有记账串到一条 promise 链上,逐轮顺序执行。
+let recordQueue: Promise<unknown> = Promise.resolve();
+
+export function recordAnalysis(analysis: TutorAnalysis): Promise<void> {
+  const next = recordQueue.then(() => recordAnalysisInner(analysis));
+  // 链本身不能因某轮抛错而断(否则后续记账永远卡住);调用方仍拿到真实结果。
+  recordQueue = next.catch(() => {});
+  return next;
 }
 
 // 导师 agent 的薄弱表:优先 struggling、错得多、最近见过。见 architecture.md#选-top-n。
@@ -68,7 +84,9 @@ export async function getWeakList(limit = 15): Promise<WeakItem[]> {
     .from(masteryItem)
     .where(ne(masteryItem.status, "known"))
     .orderBy(
-      sql`(${masteryItem.errorCount} * 1.0 / MAX(${masteryItem.seenCount}, 1)) DESC`,
+      // 分母 +2 收缩:把样本极少的项往下压,免得「错 1/1 = 100%」的噪音盖过
+      // 真正反复出错的 6/9 老问题(6/11≈0.55 > 1/3≈0.33)。
+      sql`(${masteryItem.errorCount} * 1.0 / (${masteryItem.seenCount} + 2)) DESC`,
       desc(masteryItem.lastSeenAt),
     )
     .limit(limit);
@@ -107,7 +125,9 @@ export async function getMaintainerData(): Promise<MaintainerData> {
     .from(masteryItem)
     .where(ne(masteryItem.status, "known"))
     .orderBy(
-      sql`(${masteryItem.errorCount} * 1.0 / MAX(${masteryItem.seenCount}, 1)) DESC`,
+      // 分母 +2 收缩:把样本极少的项往下压,免得「错 1/1 = 100%」的噪音盖过
+      // 真正反复出错的 6/9 老问题(6/11≈0.55 > 1/3≈0.33)。
+      sql`(${masteryItem.errorCount} * 1.0 / (${masteryItem.seenCount} + 2)) DESC`,
       desc(masteryItem.lastSeenAt),
     )
     .limit(15);

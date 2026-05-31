@@ -27,6 +27,19 @@ export interface MasteryCounters {
   lastSeenAt: number;
 }
 
+// mastery_key 是掌握系统的地基:同一类错跨句必须同一个 key。LLM 偶尔会大小写/空格
+// 漂移(grammar:Article usage ↔ grammar:article_usage),不规整会悄悄分叉成两条记录、
+// 稀释计数。写入前在代码侧统一收口(deriveSignals 是所有信号的必经之路)。
+export function normalizeKey(key: string): string {
+  return key
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/_*:_*/g, ":") // 冒号(type 前缀分隔)两侧不留下划线
+    .replace(/^_|_$/g, "");
+}
+
 // 见 docs/tutor-agent.md#代码侧记账。公式以后可调,关键是它在代码里、可测。
 export function applySignal(
   prev: Pick<MasteryCounters, "seenCount" | "errorCount">,
@@ -54,43 +67,59 @@ export function applySignal(
 // 错误信号只从 issues 派生,绝不让 LLM 在 mastery_updates 里重复上报。
 export function deriveSignals(analysis: TutorAnalysis): Signal[] {
   const signals: Signal[] = [];
+  // 同一轮里某个 key 一旦被负面证据(error/gap)或更早的信号占用,后续 correct/
+  // introduced 不得再为它计一次:否则同一条消息既报错又报对,会把 seenCount 多加、
+  // 把错误率冲淡。issues 之间不去重(重复出错 = 真实的重复证据)。
+  const claimed = new Set<string>();
   for (const issue of analysis.issues) {
+    const key = normalizeKey(issue.mastery_key);
     signals.push({
-      key: issue.mastery_key,
+      key,
       label: issue.mastery_label,
       type: issue.mastery_type,
       kind: "error",
       example: issue.span_original,
     });
+    claimed.add(key);
   }
   for (const update of analysis.mastery_updates) {
+    const key = normalizeKey(update.key);
+    if (claimed.has(key)) continue; // error 优先;重复 update 也去重
     signals.push({
-      key: update.key,
+      key,
       label: update.label,
       type: update.type,
       kind: update.signal,
       example: update.evidence,
     });
+    claimed.add(key);
   }
   // 表达缺口:情景本身记一个 gap 信号(存原句 + 地道说法),关键词走 introduced。
   const gap = analysis.expression_gap;
   if (gap) {
-    signals.push({
-      key: gap.mastery_key,
-      label: gap.mastery_label,
-      type: "expression_gap",
-      kind: "gap",
-      example: gap.original, // 最重要:用户说不出的原句
-      note: gap.target_expression,
-    });
-    for (const item of gap.key_items) {
+    const gapKey = normalizeKey(gap.mastery_key);
+    if (!claimed.has(gapKey)) {
       signals.push({
-        key: item.mastery_key,
+        key: gapKey,
+        label: gap.mastery_label,
+        type: "expression_gap",
+        kind: "gap",
+        example: gap.original, // 最重要:用户说不出的原句
+        note: gap.target_expression,
+      });
+      claimed.add(gapKey);
+    }
+    for (const item of gap.key_items) {
+      const key = normalizeKey(item.mastery_key);
+      if (claimed.has(key)) continue;
+      signals.push({
+        key,
         label: item.mastery_label,
         type: item.mastery_type,
         kind: "introduced",
         example: item.text,
       });
+      claimed.add(key);
     }
   }
   return signals;
