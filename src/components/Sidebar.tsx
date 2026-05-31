@@ -197,7 +197,9 @@ export function Sidebar({
             data-active={newChatActive}
             onClick={onNewChat}
           >
-            <SquarePenIcon className="size-4" />
+            <span className="codex-sidebar-leading-icon">
+              <SquarePenIcon className="size-4" />
+            </span>
             <span>新对话</span>
           </button>
         </div>
@@ -208,12 +210,15 @@ export function Sidebar({
             className="codex-section-heading"
             onClick={() => setLearningCollapsed((v) => !v)}
           >
+            <span className="codex-sidebar-leading-icon">
+              <GraduationCapIcon className="size-5 shrink-0" />
+            </span>
+            <span className="min-w-0 flex-1 truncate">定制化学习</span>
             {learningCollapsed ? (
-              <ChevronRightIcon className="size-3.5" />
+              <ChevronRightIcon className="size-3.5 shrink-0" />
             ) : (
-              <ChevronDownIcon className="size-3.5" />
+              <ChevronDownIcon className="size-3.5 shrink-0" />
             )}
-            <span>定制化学习</span>
           </button>
           <div className="codex-sidebar-list">
             {(learningCollapsed
@@ -235,7 +240,7 @@ export function Sidebar({
                 }}
                 title={agent.description}
               >
-                <GraduationCapIcon className="size-4 shrink-0" />
+                <BookOpenCheckIcon className="size-3.5 shrink-0" />
                 <span className="min-w-0 flex-1 truncate">{agent.name}</span>
                 <span className="codex-row-actions">
                   <button

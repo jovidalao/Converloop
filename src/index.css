@@ -334,6 +334,12 @@
   padding: 0 10px;
   font-size: 14px;
 }
+.codex-sidebar-leading-icon {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  width: 1rem;
+}
 .codex-sidebar-action:hover,
 .codex-sidebar-action[data-active="true"],
 .codex-sidebar-row:hover,
