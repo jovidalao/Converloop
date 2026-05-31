@@ -101,14 +101,13 @@ const ADD_CONVERSATION_KIND: &str =
 const ADD_CONVERSATION_LEARNING_AGENT_ID: &str =
     "ALTER TABLE conversation ADD COLUMN learning_agent_id TEXT;";
 
-// 红灯距白卡片左/上相等: x ≈ 0.55rem + 0.15rem + (2rem−12px)/2 → 21pt(16px 根字号下)。
-// Y 让红绿灯垂直居中于顶栏(App.tsx 的 h-12 = 48px,标题/收展按钮居中在 24px)。
+// 红绿灯沿用 macOS 原生按钮,位置参照 Codex 顶栏:左侧 21pt,垂直居中于 46pt chrome。
 // decorum 把按钮中心放在距窗顶 (button_h + y)/2 + 4 处;关闭按钮 button_h = 14,
-// 解 (14 + y)/2 + 4 = 24 → y = 26。
+// 解 (14 + y)/2 + 4 = 23 → y = 24。
 #[cfg(target_os = "macos")]
 const TRAFFIC_LIGHTS_X: f32 = 21.0;
 #[cfg(target_os = "macos")]
-const TRAFFIC_LIGHTS_Y: f32 = 26.0;
+const TRAFFIC_LIGHTS_Y: f32 = 24.0;
 
 #[cfg(target_os = "macos")]
 fn apply_traffic_lights_inset(win: &tauri::WebviewWindow) {

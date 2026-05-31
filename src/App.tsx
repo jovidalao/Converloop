@@ -1,5 +1,5 @@
-import { PanelLeftIcon } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { PanelLeftIcon, PanelRightIcon } from "lucide-react";
+import { type CSSProperties, useCallback, useEffect, useState } from "react";
 import { ChatView } from "./components/ChatView";
 import { LearningAgentsView } from "./components/LearningAgentsView";
 import { MasteryView } from "./components/MasteryView";
@@ -134,54 +134,48 @@ function App() {
   const activeConversation = conversations.find((c) => c.id === activeId);
 
   return (
-    <div className="relative flex h-full min-h-screen">
-      {!collapsed && (
-        <Sidebar
-          conversations={conversations}
-          learningAgents={learningAgents}
-          activeId={activeId}
-          view={view}
-          onSelect={selectConversation}
-          onNewChat={() => void newChat()}
-          onStartLearningAgent={(id) => void startLearningAgent(id)}
-          onRename={(id, t) => void rename(id, t)}
-          onDelete={(id) => void remove(id)}
-          onOpenView={(v) => withViewTransition(() => setView(v))}
-          onToggleCollapse={() =>
-            withViewTransition(() => setCollapsed(true), "vt-collapsing")
-          }
-          width={sidebarWidth}
-          onResize={(w) =>
-            setSidebarWidth(Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, w)))
-          }
-        />
-      )}
-      <main className="vt-main relative flex min-h-0 flex-1 flex-col overflow-hidden">
-        {/* 贯穿整宽的顶栏:既是窗口拖拽区,又做自顶向下的滚动渐变模糊 */}
-        <div
-          data-tauri-drag-region
-          className={`absolute inset-x-0 top-0 z-10 flex h-12 items-center gap-1.5 bg-background/60 backdrop-blur-lg backdrop-saturate-150 [mask-image:linear-gradient(to_bottom,#000_52%,transparent)] [-webkit-mask-image:linear-gradient(to_bottom,#000_52%,transparent)] ${
-            collapsed ? "pl-20" : "px-5"
-          }`}
-        >
-          {collapsed && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-8 text-muted-foreground"
-              onClick={() =>
-                withViewTransition(() => setCollapsed(false), "vt-collapsing")
-              }
-              title="展开侧栏"
-              aria-label="展开侧栏"
-            >
-              <PanelLeftIcon />
-            </Button>
-          )}
-          <span className="pointer-events-none truncate text-sm font-semibold tracking-tight">
-            {topbarTitle}
-          </span>
+    <div
+      className="codex-shell"
+      data-sidebar-collapsed={collapsed}
+      style={{ "--sidebar-width": `${sidebarWidth}px` } as CSSProperties}
+    >
+      <header className="codex-topbar" data-tauri-drag-region>
+        <div className="codex-topbar-left">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="codex-chrome-button"
+            onClick={() => setCollapsed((c) => !c)}
+            title={collapsed ? "展开侧栏" : "收起侧栏"}
+            aria-label={collapsed ? "展开侧栏" : "收起侧栏"}
+          >
+            {collapsed ? <PanelRightIcon /> : <PanelLeftIcon />}
+          </Button>
         </div>
+        <div className="codex-titlebar">
+          <span className="truncate">{topbarTitle}</span>
+        </div>
+      </header>
+
+      <Sidebar
+        conversations={conversations}
+        learningAgents={learningAgents}
+        activeId={activeId}
+        view={view}
+        onSelect={selectConversation}
+        onNewChat={() => void newChat()}
+        onStartLearningAgent={(id) => void startLearningAgent(id)}
+        onRename={(id, t) => void rename(id, t)}
+        onDelete={(id) => void remove(id)}
+        onOpenView={(v) => withViewTransition(() => setView(v))}
+        width={sidebarWidth}
+        onResize={(w) =>
+          setSidebarWidth(Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, w)))
+        }
+      />
+
+      <main className="vt-main codex-main relative flex min-h-0 flex-col overflow-hidden">
         <div
           className="flex min-h-0 flex-1 flex-col data-[hidden=true]:hidden"
           data-hidden={view !== "chat"}

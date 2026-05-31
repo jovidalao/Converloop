@@ -128,6 +128,289 @@
   -webkit-app-region: no-drag;
 }
 
+/* Codex-like desktop chrome. Native macOS traffic lights stay native; this shell only
+   clears space for them and moves the app layout around that area. */
+.codex-shell {
+  --codex-topbar-h: 46px;
+  --codex-sidebar-width-current: var(--sidebar-width);
+  --codex-main-bg: oklch(0.145 0 0);
+  --codex-topbar-bg: oklch(0.15 0 0);
+  --codex-sidebar-bg: oklch(0.34 0 0);
+  --codex-sidebar-fg: oklch(0.88 0 0);
+  --codex-sidebar-muted: oklch(0.72 0 0);
+  --codex-sidebar-hover: oklch(1 0 0 / 8%);
+  --codex-sidebar-active: oklch(1 0 0 / 13%);
+  --codex-border: oklch(1 0 0 / 12%);
+
+  --background: var(--codex-main-bg);
+  --foreground: oklch(0.92 0 0);
+  --card: oklch(0.19 0 0);
+  --card-foreground: oklch(0.92 0 0);
+  --popover: oklch(0.22 0 0);
+  --popover-foreground: oklch(0.92 0 0);
+  --primary: oklch(0.9 0 0);
+  --primary-foreground: oklch(0.18 0 0);
+  --secondary: oklch(0.24 0 0);
+  --secondary-foreground: oklch(0.9 0 0);
+  --muted: oklch(0.23 0 0);
+  --muted-foreground: oklch(0.67 0 0);
+  --accent: oklch(0.28 0 0);
+  --accent-foreground: oklch(0.95 0 0);
+  --border: var(--codex-border);
+  --input: oklch(1 0 0 / 14%);
+  --ring: oklch(0.72 0 0);
+
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--codex-sidebar-width-current) minmax(0, 1fr);
+  height: 100%;
+  min-height: 100vh;
+  overflow: hidden;
+  background: var(--codex-main-bg);
+  color: var(--foreground);
+  transition: grid-template-columns 0.22s cubic-bezier(0.2, 0, 0, 1);
+}
+.codex-shell[data-sidebar-collapsed="true"] {
+  --codex-sidebar-width-current: 0px;
+}
+.codex-topbar {
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 40;
+  height: var(--codex-topbar-h);
+  border-bottom: 1px solid var(--codex-border);
+  background: linear-gradient(
+    to right,
+    var(--codex-sidebar-bg) 0 var(--codex-sidebar-width-current),
+    var(--codex-topbar-bg) var(--codex-sidebar-width-current) 100%
+  );
+}
+.codex-topbar-left,
+.codex-titlebar {
+  position: absolute;
+  display: flex;
+  align-items: center;
+}
+.codex-topbar-left {
+  top: 8px;
+  left: 92px;
+  gap: 0;
+}
+.codex-titlebar {
+  top: 0;
+  right: 16px;
+  left: calc(var(--codex-sidebar-width-current) + 20px);
+  height: var(--codex-topbar-h);
+  min-width: 0;
+  color: oklch(0.9 0 0);
+  font-size: 14px;
+  font-weight: 650;
+  transition: left 0.22s cubic-bezier(0.2, 0, 0, 1);
+}
+.codex-shell[data-sidebar-collapsed="true"] .codex-titlebar {
+  left: 132px;
+}
+.codex-chrome-button {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  color: oklch(0.72 0 0);
+  background: transparent;
+}
+.codex-chrome-button:hover {
+  color: oklch(0.9 0 0);
+  background: oklch(1 0 0 / 8%);
+}
+.codex-chrome-button:disabled {
+  opacity: 0.42;
+}
+.codex-sidebar {
+  grid-column: 1;
+  grid-row: 1;
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  border-right: 1px solid var(--codex-border);
+  background: var(--codex-sidebar-bg);
+  color: var(--codex-sidebar-fg);
+}
+.codex-sidebar-content {
+  display: flex;
+  width: var(--sidebar-width);
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  padding: calc(var(--codex-topbar-h) + 10px) 8px 8px;
+  transition:
+    opacity 0.18s ease,
+    transform 0.22s cubic-bezier(0.2, 0, 0, 1);
+}
+.codex-shell[data-sidebar-collapsed="true"] .codex-sidebar {
+  border-right-color: transparent;
+  pointer-events: none;
+}
+.codex-shell[data-sidebar-collapsed="true"] .codex-sidebar-content {
+  opacity: 0;
+  transform: translateX(-18px);
+}
+.codex-main {
+  grid-column: 2;
+  grid-row: 1;
+  min-width: 0;
+  background: var(--codex-main-bg);
+}
+.codex-sidebar-actions {
+  display: grid;
+  flex: 0 0 auto;
+  gap: 3px;
+  padding: 0 4px 12px;
+}
+.codex-sidebar-action,
+.codex-sidebar-row,
+.codex-section-heading {
+  display: flex;
+  min-width: 0;
+  width: 100%;
+  align-items: center;
+  gap: 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--codex-sidebar-fg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.codex-sidebar-action {
+  height: 34px;
+  padding: 0 10px;
+  font-size: 14px;
+}
+.codex-sidebar-action:hover,
+.codex-sidebar-action[data-active="true"],
+.codex-sidebar-row:hover,
+.codex-sidebar-row[data-active="true"] {
+  background: var(--codex-sidebar-active);
+  color: oklch(0.96 0 0);
+}
+.codex-sidebar-search {
+  display: flex;
+  height: 34px;
+  align-items: center;
+  gap: 10px;
+  border-radius: 9px;
+  padding: 0 10px;
+  color: var(--codex-sidebar-muted);
+}
+.codex-sidebar-search:focus-within,
+.codex-sidebar-search:hover {
+  background: var(--codex-sidebar-hover);
+  color: oklch(0.92 0 0);
+}
+.codex-sidebar-search input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  background: transparent;
+  color: var(--codex-sidebar-fg);
+  font-size: 14px;
+  outline: none;
+}
+.codex-sidebar-search input::placeholder {
+  color: var(--codex-sidebar-muted);
+}
+.codex-sidebar-scroll {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 4px 10px;
+}
+.codex-sidebar-list {
+  display: grid;
+  gap: 2px;
+  padding-bottom: 12px;
+}
+.codex-section-heading,
+.codex-section-label {
+  height: 28px;
+  padding: 0 10px;
+  color: var(--codex-sidebar-muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+.codex-section-label {
+  display: flex;
+  align-items: center;
+  margin-top: 4px;
+}
+.codex-sidebar-row {
+  min-height: 32px;
+  padding: 6px 10px;
+  color: var(--codex-sidebar-muted);
+  font-size: 14px;
+  line-height: 1.2;
+}
+.codex-sidebar-row[data-active="true"] {
+  color: var(--codex-sidebar-fg);
+  font-weight: 600;
+}
+.codex-row-meta {
+  flex: 0 0 auto;
+  color: oklch(0.72 0 0 / 72%);
+  font-size: 11px;
+}
+.codex-row-actions {
+  display: none;
+  flex: 0 0 auto;
+  gap: 2px;
+}
+.codex-sidebar-row:hover .codex-row-actions {
+  display: flex;
+}
+.codex-row-actions button {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--codex-sidebar-muted);
+}
+.codex-row-actions button:hover {
+  background: oklch(1 0 0 / 10%);
+  color: var(--codex-sidebar-fg);
+}
+.codex-sidebar-edit {
+  margin: 1px 0;
+  border: 1px solid oklch(1 0 0 / 16%);
+  border-radius: 9px;
+  background: oklch(0 0 0 / 18%);
+  padding: 7px 10px;
+  color: var(--codex-sidebar-fg);
+  font-size: 14px;
+  outline: none;
+}
+.codex-sidebar-footer {
+  flex: 0 0 auto;
+  border-top: 1px solid oklch(1 0 0 / 10%);
+  padding: 8px 4px 0;
+}
+.codex-sidebar-resizer {
+  position: absolute;
+  inset: var(--codex-topbar-h) 0 0 auto;
+  width: 5px;
+  cursor: col-resize;
+}
+.codex-sidebar-resizer:hover {
+  background: oklch(1 0 0 / 10%);
+}
+
 /* Speaking indicator: three bars pulsing like a sound wave (inherits color). */
 .speak-bars {
   display: inline-flex;
@@ -176,33 +459,9 @@
   animation: message-in 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-/* 视图过渡:切页 / 侧栏收展(App.tsx withViewTransition 包裹状态更新)。
-   主区命名后切页自动交叉淡入、收展时自动做尺寸/位置插值。 */
+/* 视图过渡:只用于主区切页;侧栏收展使用 grid column transition,避免快照抖动。 */
 .vt-main {
   view-transition-name: app-main;
-}
-/* 侧栏只在收/展时(<html>.vt-collapsing)才作为具名过渡元素参与并做滑动;选对话、
-   切页等其它过渡下不命名 → 浏览器不捕捉它 → 高亮/时间变化不会触发滑动「抖一下」。 */
-:root.vt-collapsing .vt-sidebar {
-  view-transition-name: app-sidebar;
-}
-:root.vt-collapsing::view-transition-old(app-sidebar) {
-  animation: sidebar-out 0.26s ease both;
-}
-:root.vt-collapsing::view-transition-new(app-sidebar) {
-  animation: sidebar-in 0.26s ease both;
-}
-@keyframes sidebar-in {
-  from {
-    transform: translateX(-14px);
-    opacity: 0;
-  }
-}
-@keyframes sidebar-out {
-  to {
-    transform: translateX(-14px);
-    opacity: 0;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
