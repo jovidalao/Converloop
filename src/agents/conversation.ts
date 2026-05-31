@@ -1,3 +1,4 @@
+import type { ReviewItem } from "../db/mastery";
 import type { ChatMessage, ModelProvider } from "../providers/types";
 
 export interface ConversationContext {
@@ -5,8 +6,18 @@ export interface ConversationContext {
   targetLanguage: string;
   level: string;
   profileSlice: string; // MD 档案切片(Task 7 前用占位)
+  reviewItems: ReviewItem[]; // 代码选的复习候选,自然复用(见 db/mastery getReviewDueList)
   history: string;
   userInput: string;
+}
+
+function formatReviewItems(items: ReviewItem[]): string {
+  if (items.length === 0) return "(nothing due)";
+  return items
+    .map((r) =>
+      r.example ? `- ${r.label} — e.g. "${r.example}"` : `- ${r.label}`,
+    )
+    .join("\n");
 }
 
 // 见 docs/conversation-agent.md#system-prompt
@@ -26,9 +37,12 @@ RULES
   know about them: reference them naturally when relevant so it feels like you
   remember the person, but never interrogate or recite them back as a list.
 - The profile also lists what they're working on, what they're comfortable with,
-  what they avoid, their interests, and recently learned items. Where it fits
-  naturally, reuse "working on" / "recently introduced" items so the user meets
-  them again. This is how review happens — keep it subtle, never forced.
+  what they avoid, their interests, and recently learned items — use them to gauge
+  what is easy or hard for this person.
+- Below the profile is a short DUE-FOR-REVIEW list the app selected: things the
+  learner met before but hasn't practiced lately. Where it fits naturally, weave
+  in ONE (at most two) so they meet it again — this is how review happens. Keep it
+  subtle, never announce it, and skip it entirely if nothing fits the moment.
 - If the profile ends with "My notes", those are notes the user wrote themselves:
   reminders, standing requests, or facts they want you to keep in mind. Treat them
   as the user's own instructions — honor them and weave the facts in naturally,
@@ -41,7 +55,10 @@ RULES
   unless the topic calls for it.
 
 === LEARNER PROFILE ===
-${ctx.profileSlice || "(no profile yet)"}`;
+${ctx.profileSlice || "(no profile yet)"}
+
+=== DUE FOR REVIEW (weave in at most one, only if it fits) ===
+${formatReviewItems(ctx.reviewItems)}`;
 }
 
 function userPrompt(ctx: ConversationContext): string {

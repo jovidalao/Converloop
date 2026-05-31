@@ -6,7 +6,7 @@
 
 - 用**目标语言**自然地回应用户的**意图/内容**(不是纠错——纠错是导师 agent 的事)。
 - 按用户水平校准难度:略微拉伸,别压垮。
-- 在自然的地方**复用**用户档案里的薄弱项/最近学到的表达,实现被动复习。
+- 在自然的地方**复用**代码选出的「复习候选」(久未重温的非 known 项),实现被动复习。
 
 ## 输出:纯文本,流式
 
@@ -26,11 +26,14 @@
    ## Recently introduced → 优先复用
    ## My notes          → 用户手写的记忆/指示,当作用户自己的 standing 指令尊重
    (不需要原始计数;切片只剥掉占位 HTML 注释)
-2. 最近几轮对话
-3. 用户本轮输入
+2. 复习候选清单(`DUE FOR REVIEW`):代码从 SQLite 选出的少量「学过/练过但最久没重温」
+   的非 known 项(`getReviewDueList`,最久未碰优先),让被动复习从「指望维护 agent 写进
+   prose」变成代码可控的定向选取。只给 label(+ 真实例句),不给计数。
+3. 最近几轮对话
+4. 用户本轮输入
 ```
 
-对照:导师 agent 吃的是 SQLite 精确薄弱表(见 [tutor-agent](./tutor-agent.md))。**对话 agent 读 MD,导师 agent 读 SQLite。**
+对照:导师 agent 吃的是 SQLite 精确薄弱表(见 [tutor-agent](./tutor-agent.md))。**对话 agent 主读 MD**;复习候选是一份**代码已选好、只含 label 的小清单**——仍是「代码记账/选取,LLM 只产出」,不破坏分工。
 
 ## System Prompt
 
@@ -50,9 +53,12 @@ RULES
   know about them: reference them naturally when relevant so it feels like you
   remember the person, but never interrogate or recite them back as a list.
 - The profile also lists what they're working on, what they're comfortable with,
-  what they avoid, their interests, and recently learned items. Where it fits
-  naturally, reuse "working on" / "recently introduced" items so the user meets
-  them again. This is how review happens — keep it subtle, never forced.
+  what they avoid, their interests, and recently learned items — use them to gauge
+  what is easy or hard for this person.
+- Below the profile is a short DUE-FOR-REVIEW list the app selected: things the
+  learner met before but hasn't practiced lately. Where it fits naturally, weave
+  in ONE (at most two) so they meet it again — this is how review happens. Keep it
+  subtle, never announce it, and skip it entirely if nothing fits the moment.
 - If the profile ends with "My notes", those are notes the user wrote themselves:
   reminders, standing requests, or facts they want you to keep in mind. Treat them
   as the user's own instructions — honor them and weave the facts in naturally,
@@ -66,6 +72,9 @@ RULES
 
 === LEARNER PROFILE ===
 {md_profile_slice}
+
+=== DUE FOR REVIEW (weave in at most one, only if it fits) ===
+{review_items}
 ```
 
 User message:

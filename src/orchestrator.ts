@@ -4,7 +4,7 @@ import { explain } from "./agents/explain";
 import type { TutorAnalysis } from "./agents/schema";
 import { analyze } from "./agents/tutor";
 import { getProvider, loadConfig } from "./config";
-import { getWeakList, recordAnalysis } from "./db/mastery";
+import { getReviewDueList, getWeakList, recordAnalysis } from "./db/mastery";
 import {
   formatRecentHistory,
   persistTurn,
@@ -57,11 +57,13 @@ export async function runTurn(
   const history = await formatRecentHistory(conversationId);
   const weakList = await getWeakList();
   const profileSlice = profileSliceForConversation(await readProfile(config));
+  // 复习候选(代码定向选取,对话 agent 自然复用)。掌握表是全局的,不按会话隔离。
+  const reviewItems = await getReviewDueList();
 
   // 并行发出:对话流式,导师结构化。互不阻塞。
   const replyPromise = converse(
     provider,
-    { ...langs, profileSlice, history, userInput },
+    { ...langs, profileSlice, reviewItems, history, userInput },
     cb.onReplyDelta,
   );
   const analysisPromise = analyze(provider, {

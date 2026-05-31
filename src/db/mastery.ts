@@ -1,4 +1,4 @@
-import { desc, eq, ne, sql } from "drizzle-orm";
+import { asc, desc, eq, ne, sql } from "drizzle-orm";
 import type { TutorAnalysis } from "../agents/schema";
 import type { WeakItem } from "../agents/tutor";
 import { db } from "./client";
@@ -95,6 +95,28 @@ export async function getWeakList(limit = 15): Promise<WeakItem[]> {
 
 export async function getAllMastery(): Promise<MasteryItem[]> {
   return db.select().from(masteryItem).orderBy(desc(masteryItem.lastSeenAt));
+}
+
+// 复习候选(代码选,对话 agent 自然复用)。与薄弱表互补:薄弱表给「最近最常错」,
+// 这里给「学过 / 练过但最久没重温」的非 known 项——最适合在闲聊里 interleave 一两个。
+// 这把「复习靠被动复用」从「指望维护 agent 写进 prose」变成代码可控的定向选取(L1)。
+export interface ReviewItem {
+  label: string;
+  type: string;
+  example: string | null;
+}
+
+export async function getReviewDueList(limit = 5): Promise<ReviewItem[]> {
+  return db
+    .select({
+      label: masteryItem.label,
+      type: masteryItem.type,
+      example: masteryItem.example,
+    })
+    .from(masteryItem)
+    .where(ne(masteryItem.status, "known"))
+    .orderBy(asc(masteryItem.lastSeenAt)) // 最久没碰的优先
+    .limit(limit);
 }
 
 // 维护 agent 的聚合输入(代码查好再喂,别让 LLM 自己算)。见 profile-maintainer-agent.md#输入。

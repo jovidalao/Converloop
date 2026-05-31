@@ -147,7 +147,7 @@ provider 解析全在 TS;**LLM HTTP 走 Rust**(`src-tauri/src/llm.rs` 的 `llm_r
 
 ## 复习去哪了
 
-砍掉抽认卡 SRS。复习靠对话 agent 在聊天里**被动复用**薄弱项/最近学到项(interleaving),比抽认卡更自然,且不需要排程 UI。一个**显式按天复习页**作为可选叠加层,设计在 [expression-gap §5](./expression-gap.md#5-每日复习页新顶层视图),**尚未实现**。
+砍掉抽认卡 SRS。复习靠对话 agent 在聊天里**被动复用**薄弱项/最近学到项(interleaving),比抽认卡更自然,且不需要排程 UI。复习候选不再只靠维护 agent 写进 prose:代码每轮用 `getReviewDueList`(非 known、最久未重温优先)定向选出一小撮喂给对话 agent(`DUE FOR REVIEW` 段),对话 agent 自然带出一两个——代码选取、LLM 复用。一个**显式按天复习页**作为可选叠加层,设计在 [expression-gap §5](./expression-gap.md#5-每日复习页新顶层视图),**尚未实现**。
 
 ## 状态 / 路线图
 
