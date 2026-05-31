@@ -177,17 +177,19 @@
 }
 
 /* 视图过渡:切页 / 侧栏收展(App.tsx withViewTransition 包裹状态更新)。
-   主区命名后切页自动交叉淡入、收展时自动做尺寸/位置插值;侧栏单独命名做滑动。 */
+   主区命名后切页自动交叉淡入、收展时自动做尺寸/位置插值。 */
 .vt-main {
   view-transition-name: app-main;
 }
-.vt-sidebar {
+/* 侧栏只在收/展时(<html>.vt-collapsing)才作为具名过渡元素参与并做滑动;选对话、
+   切页等其它过渡下不命名 → 浏览器不捕捉它 → 高亮/时间变化不会触发滑动「抖一下」。 */
+:root.vt-collapsing .vt-sidebar {
   view-transition-name: app-sidebar;
 }
-::view-transition-old(app-sidebar) {
+:root.vt-collapsing::view-transition-old(app-sidebar) {
   animation: sidebar-out 0.26s ease both;
 }
-::view-transition-new(app-sidebar) {
+:root.vt-collapsing::view-transition-new(app-sidebar) {
   animation: sidebar-in 0.26s ease both;
 }
 @keyframes sidebar-in {

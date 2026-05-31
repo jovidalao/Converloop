@@ -7,10 +7,13 @@ import { flushSync } from "react-dom";
  *
  * 关键:必须在 startViewTransition 的回调里用 flushSync 同步刷新 DOM——React 默认
  * 异步批处理,不 flush 的话浏览器捕捉到的「新状态」还是旧的,过渡就没效果。
+ *
+ * marker:可选,在过渡期间挂到 <html> 上的类名,让 CSS 按场景精确开启某些具名元素的
+ * 过渡(如侧栏滑动只在收/展时,不在选对话时)。过渡结束后自动移除。
  */
-export function withViewTransition(update: () => void): void {
+export function withViewTransition(update: () => void, marker?: string): void {
   const doc = document as Document & {
-    startViewTransition?: (cb: () => void) => unknown;
+    startViewTransition?: (cb: () => void) => { finished?: Promise<unknown> };
   };
   if (
     !doc.startViewTransition ||
@@ -19,7 +22,13 @@ export function withViewTransition(update: () => void): void {
     update();
     return;
   }
-  doc.startViewTransition(() => {
+  if (marker) document.documentElement.classList.add(marker);
+  const transition = doc.startViewTransition(() => {
     flushSync(update);
   });
+  if (marker) {
+    const cleanup = () => document.documentElement.classList.remove(marker);
+    if (transition.finished) void transition.finished.finally(cleanup);
+    else cleanup();
+  }
 }

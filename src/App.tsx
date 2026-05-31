@@ -147,7 +147,9 @@ function App() {
           onRename={(id, t) => void rename(id, t)}
           onDelete={(id) => void remove(id)}
           onOpenView={(v) => withViewTransition(() => setView(v))}
-          onToggleCollapse={() => withViewTransition(() => setCollapsed(true))}
+          onToggleCollapse={() =>
+            withViewTransition(() => setCollapsed(true), "vt-collapsing")
+          }
           width={sidebarWidth}
           onResize={(w) =>
             setSidebarWidth(Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, w)))
@@ -167,7 +169,9 @@ function App() {
               variant="ghost"
               size="icon"
               className="size-8 text-muted-foreground"
-              onClick={() => withViewTransition(() => setCollapsed(false))}
+              onClick={() =>
+                withViewTransition(() => setCollapsed(false), "vt-collapsing")
+              }
               title="展开侧栏"
               aria-label="展开侧栏"
             >
