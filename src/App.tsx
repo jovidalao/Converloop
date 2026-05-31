@@ -22,12 +22,23 @@ import {
   listLearningAgents,
 } from "./db/learning-agents";
 
+const SIDEBAR_MIN = 200;
+const SIDEBAR_MAX = 420;
+
 function App() {
   const [conversations, setConversations] = useState<ConversationMeta[]>([]);
   const [learningAgents, setLearningAgents] = useState<LearningAgentMeta[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [view, setView] = useState<MainView>("chat");
   const [collapsed, setCollapsed] = useState(false);
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    const saved = Number(localStorage.getItem("sidebarWidth"));
+    return saved >= SIDEBAR_MIN && saved <= SIDEBAR_MAX ? saved : 248;
+  });
+
+  useEffect(() => {
+    localStorage.setItem("sidebarWidth", String(sidebarWidth));
+  }, [sidebarWidth]);
 
   const refresh = useCallback(
     () => listConversations().then(setConversations),
@@ -122,6 +133,10 @@ function App() {
           onDelete={(id) => void remove(id)}
           onOpenView={setView}
           onToggleCollapse={() => setCollapsed(true)}
+          width={sidebarWidth}
+          onResize={(w) =>
+            setSidebarWidth(Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, w)))
+          }
         />
       )}
       <main className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
