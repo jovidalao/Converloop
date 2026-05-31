@@ -21,6 +21,7 @@ import {
   type LearningAgentMeta,
   listLearningAgents,
 } from "./db/learning-agents";
+import { withViewTransition } from "./lib/view-transition";
 
 const SIDEBAR_MIN = 200;
 const SIDEBAR_MAX = 420;
@@ -45,7 +46,7 @@ function App() {
     function onKeyDown(e: KeyboardEvent) {
       if (e.metaKey && e.key === ",") {
         e.preventDefault();
-        setView("settings");
+        withViewTransition(() => setView("settings"));
       }
     }
     window.addEventListener("keydown", onKeyDown);
@@ -73,9 +74,11 @@ function App() {
   }, [refresh, refreshLearningAgents]);
 
   function selectConversation(id: string) {
-    setActiveId(id);
-    setActiveConversationId(id);
-    setView("chat");
+    setActiveConversationId(id); // 持久化,不进过渡
+    withViewTransition(() => {
+      setActiveId(id);
+      setView("chat");
+    });
   }
 
   async function newChat() {
@@ -143,15 +146,15 @@ function App() {
           onStartLearningAgent={(id) => void startLearningAgent(id)}
           onRename={(id, t) => void rename(id, t)}
           onDelete={(id) => void remove(id)}
-          onOpenView={setView}
-          onToggleCollapse={() => setCollapsed(true)}
+          onOpenView={(v) => withViewTransition(() => setView(v))}
+          onToggleCollapse={() => withViewTransition(() => setCollapsed(true))}
           width={sidebarWidth}
           onResize={(w) =>
             setSidebarWidth(Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, w)))
           }
         />
       )}
-      <main className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+      <main className="vt-main relative flex min-h-0 flex-1 flex-col overflow-hidden">
         {/* 贯穿整宽的顶栏:既是窗口拖拽区,又做自顶向下的滚动渐变模糊 */}
         <div
           data-tauri-drag-region
@@ -164,7 +167,7 @@ function App() {
               variant="ghost"
               size="icon"
               className="size-8 text-muted-foreground"
-              onClick={() => setCollapsed(false)}
+              onClick={() => withViewTransition(() => setCollapsed(false))}
               title="展开侧栏"
               aria-label="展开侧栏"
             >

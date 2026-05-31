@@ -121,7 +121,7 @@ export function Sidebar({
 
   return (
     <aside
-      className="relative m-2 flex shrink-0 flex-col overflow-hidden rounded-2xl border bg-card shadow-sm"
+      className="vt-sidebar relative m-2 flex shrink-0 flex-col overflow-hidden rounded-2xl border bg-card shadow-sm"
       style={{ width }}
     >
       {/* 左内边距须清开原生交通灯:traffic-inset + 灯组宽 52px + 间距。

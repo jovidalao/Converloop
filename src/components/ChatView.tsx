@@ -531,7 +531,12 @@ export function ChatView({
           </div>
         )}
         {turns.map((turn) => (
-          <div key={turn.id} className="flex flex-col gap-2">
+          <div
+            key={turn.id}
+            className={`flex flex-col gap-2${
+              liveTurnIdsRef.current.has(turn.id) ? " animate-message-in" : ""
+            }`}
+          >
             {turn.userText.trim() && (
               <UserTurn
                 turn={turn}
@@ -618,7 +623,7 @@ export function ChatView({
           <Button
             type="submit"
             size="icon"
-            className="size-9 rounded-full"
+            className="size-9 rounded-full transition-transform active:scale-90"
             disabled={replyBusy || !input.trim()}
             title="发送"
             aria-label="发送"

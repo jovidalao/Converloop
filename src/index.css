@@ -158,3 +158,58 @@
     transform: scaleY(1);
   }
 }
+
+/* ============================================================
+   动画(Layer 2)。零依赖:CSS 关键帧 + 原生 View Transitions。
+   全部在「减弱动态效果」下降级为无动画。
+   ============================================================ */
+
+/* 新消息入场:上移淡入。只作用于本会话新发的轮次(ChatView 按 liveTurnIds 加类),
+   历史加载不动。 */
+@keyframes message-in {
+  from {
+    transform: translateY(10px);
+    opacity: 0;
+  }
+}
+.animate-message-in {
+  animation: message-in 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* 视图过渡:切页 / 侧栏收展(App.tsx withViewTransition 包裹状态更新)。
+   主区命名后切页自动交叉淡入、收展时自动做尺寸/位置插值;侧栏单独命名做滑动。 */
+.vt-main {
+  view-transition-name: app-main;
+}
+.vt-sidebar {
+  view-transition-name: app-sidebar;
+}
+::view-transition-old(app-sidebar) {
+  animation: sidebar-out 0.26s ease both;
+}
+::view-transition-new(app-sidebar) {
+  animation: sidebar-in 0.26s ease both;
+}
+@keyframes sidebar-in {
+  from {
+    transform: translateX(-14px);
+    opacity: 0;
+  }
+}
+@keyframes sidebar-out {
+  to {
+    transform: translateX(-14px);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-message-in {
+    animation: none;
+  }
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}
