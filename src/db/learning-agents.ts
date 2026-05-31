@@ -37,11 +37,18 @@ export const DATA_SCOPE_LABELS: Record<LearningDataScope, string> = {
 
 export const LEARNING_DATA_SCOPES = [...LEARNING_DATA_SCOPE_VALUES];
 
-const BUILT_INS: (LearningAgentDraft & { id: string })[] = [
+interface BuiltInAgent extends LearningAgentDraft {
+  id: string;
+  // 这个内置课替换掉的、历史上发布过的版本。启动时若用户的行仍等于其中之一
+  // (没改过),就升级到最新种子;若都不匹配(用户微调过),保持不动。
+  supersedes?: LearningAgentDraft[];
+}
+
+const BUILT_INS: BuiltInAgent[] = [
   {
     id: "builtin:daily_review",
     name: "今日复盘",
-    description: "总结今天练过的内容,抓出最值得马上复习的 3 个点。",
+    description: "先给一份今日练习报告,再带你复习最该补的几个点。",
     dataScopes: [
       "profile",
       "today_turns",
@@ -49,7 +56,28 @@ const BUILT_INS: (LearningAgentDraft & { id: string })[] = [
       "due_review",
       "proficiency",
     ],
-    prompt: `Start by summarizing what the learner practiced today or in the recent session history. Then choose the 3 most useful review points.
+    prompt: `On the FIRST message of the session, open with a detailed review report of what the learner practiced today. Use the data tagged as today; if there is none, fall back to the recent session history. Write it as clear Markdown the learner can scan:
+
+1. **今日概览** — how many exchanges, the main topics/situations practiced. Summarize in the learner's native language.
+2. **做得好的地方** — 1-3 concrete strengths, each with a short target-language example pulled from today.
+3. **需要注意的问题** — group today's corrections and weak items into a short list or table: the pattern, what the learner wrote, the natural version, and a one-line explanation in the native language.
+4. **最该复习的 3 个点** — pick the 3 highest-value items, each with a one-line why.
+
+Keep the report accurate to the data shown; do not invent practice that is not there. If there is no practice today, say so plainly and instead report on the most relevant due-for-review and weak items.
+
+AFTER the report, transition into practice: take the first of the Top 3 points, give 1-2 target-language examples, and ask the learner to produce one short sentence. From then on keep it focused and conversational — give feedback directly in the chat.`,
+    supersedes: [
+      {
+        name: "今日复盘",
+        description: "总结今天练过的内容,抓出最值得马上复习的 3 个点。",
+        dataScopes: [
+          "profile",
+          "today_turns",
+          "weak_all",
+          "due_review",
+          "proficiency",
+        ],
+        prompt: `Start by summarizing what the learner practiced today or in the recent session history. Then choose the 3 most useful review points.
 
 For each point:
 - Explain the pattern in the learner's native language when explanation helps.
@@ -57,17 +85,34 @@ For each point:
 - Ask the learner to produce one short answer or sentence.
 
 Keep the lesson focused. Do not turn this into a long report; make it actionable and conversational.`,
+      },
+    ],
   },
   {
     id: "builtin:grammar_review",
     name: "语法专项复习",
-    description: "按错误模式归纳最近错过的语法,给解释、例句和即时练习。",
+    description: "先给一份语法体检报告,再针对最该练的点做专项练习。",
     dataScopes: ["profile", "weak_grammar", "due_review", "proficiency"],
-    prompt: `Focus on grammar and recurring error patterns. Group related mistakes instead of listing every item.
+    prompt: `On the FIRST message of the session, open with a detailed grammar diagnostic report based on the learner's grammar and recurring error patterns. Group related mistakes instead of listing every item. Write it as clear Markdown:
+
+1. **语法体检** — 2-4 grammar patterns most worth reviewing now, ordered by impact. For each: name the pattern, show 1-2 examples of how the learner currently gets it wrong vs. the natural form, and a one-line explanation in the native language of the underlying rule.
+2. **优先级** — say which one pattern to drill first this session and why (how frequent, how basic, or how overdue for review).
+
+Keep the report grounded in the data shown; do not invent mistakes. If there is little grammar data, report on what little exists and pick one useful pattern matched to the learner's level/profile.
+
+AFTER the report, run a small drill on the top-priority pattern: ask for 2-3 short target-language sentences that force the learner to use it. Give feedback directly in the chat rather than using the normal correction panel.`,
+    supersedes: [
+      {
+        name: "语法专项复习",
+        description: "按错误模式归纳最近错过的语法,给解释、例句和即时练习。",
+        dataScopes: ["profile", "weak_grammar", "due_review", "proficiency"],
+        prompt: `Focus on grammar and recurring error patterns. Group related mistakes instead of listing every item.
 
 Begin with a short diagnosis: what grammar pattern is most worth reviewing now and why. Explain it like a teacher, using the learner's native language where that saves time, then show natural target-language examples.
 
 After the explanation, run a small drill: ask for 2-3 short target-language sentences that force the learner to use the target pattern. Give feedback in the conversation rather than using the normal correction panel.`,
+      },
+    ],
   },
   {
     id: "builtin:expression_gap_review",
@@ -107,25 +152,67 @@ function hydrate(row: LearningAgent): LearningAgentMeta {
   return { ...row, dataScopes: parseScopes(row.dataScopeJson) };
 }
 
+// 一个内置课「发布版本」的指纹:name/description/prompt/scope 全等才算同一版。
+// 用它判断用户有没有改过这行——改过就不覆盖,没改过(等于某个历史版)就升级。
+function seedSignature(draft: LearningAgentDraft): string {
+  return JSON.stringify([
+    draft.name,
+    draft.description,
+    draft.prompt,
+    serializeScopes(draft.dataScopes),
+  ]);
+}
+
+function rowSignature(row: LearningAgent): string {
+  return JSON.stringify([
+    row.name,
+    row.description,
+    row.prompt,
+    row.dataScopeJson,
+  ]);
+}
+
 export async function ensureBuiltInLearningAgents(): Promise<void> {
   const now = Date.now();
   for (const item of BUILT_INS) {
     const [existing] = await db
-      .select({ id: learningAgent.id })
+      .select()
       .from(learningAgent)
       .where(eq(learningAgent.id, item.id))
       .limit(1);
-    if (existing) continue;
-    await db.insert(learningAgent).values({
-      id: item.id,
-      name: item.name,
-      description: item.description,
-      prompt: item.prompt,
-      dataScopeJson: serializeScopes(item.dataScopes),
-      builtIn: 1,
-      createdAt: now,
-      updatedAt: now,
-    });
+
+    if (!existing) {
+      await db.insert(learningAgent).values({
+        id: item.id,
+        name: item.name,
+        description: item.description,
+        prompt: item.prompt,
+        dataScopeJson: serializeScopes(item.dataScopes),
+        builtIn: 1,
+        createdAt: now,
+        updatedAt: now,
+      });
+      continue;
+    }
+
+    const current = seedSignature(item);
+    const row = rowSignature(existing);
+    if (row === current) continue; // 已是最新
+
+    const retired = (item.supersedes ?? []).map(seedSignature);
+    if (!retired.includes(row)) continue; // 用户微调过,保持不动
+
+    // 还停留在某个旧发布版,没被改过 → 升级到最新种子。
+    await db
+      .update(learningAgent)
+      .set({
+        name: item.name,
+        description: item.description,
+        prompt: item.prompt,
+        dataScopeJson: serializeScopes(item.dataScopes),
+        updatedAt: now,
+      })
+      .where(eq(learningAgent.id, item.id));
   }
 }
 
