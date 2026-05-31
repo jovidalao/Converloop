@@ -1,13 +1,9 @@
-import { eq, ne, sql, desc } from "drizzle-orm";
-import { db } from "./client";
-import { masteryItem, type MasteryItem } from "./schema";
-import {
-  applySignal,
-  deriveSignals,
-  type Signal,
-} from "./mastery-logic";
+import { desc, eq, ne, sql } from "drizzle-orm";
 import type { TutorAnalysis } from "../agents/schema";
 import type { WeakItem } from "../agents/tutor";
+import { db } from "./client";
+import { applySignal, deriveSignals, type Signal } from "./mastery-logic";
+import { type MasteryItem, masteryItem } from "./schema";
 
 // 按 mastery_key upsert,并跑 applySignal。计数/状态全归代码。
 async function upsertSignal(sig: Signal, now: number): Promise<void> {

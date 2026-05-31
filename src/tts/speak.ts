@@ -1,17 +1,13 @@
+import { buildTtsCacheKey, getCachedSpeech, setCachedSpeech } from "./cache";
 import {
   getMimoTtsApiKey,
   loadTtsConfig,
   MissingTtsApiKeyError,
 } from "./config";
-import {
-  buildTtsCacheKey,
-  getCachedSpeech,
-  setCachedSpeech,
-} from "./cache";
 import { synthesizeMimo } from "./mimo";
 
-export { MissingTtsApiKeyError };
 export { clearTtsCache, getTtsCacheCount } from "./cache";
+export { MissingTtsApiKeyError };
 
 const inflight = new Map<string, Promise<ArrayBuffer>>();
 

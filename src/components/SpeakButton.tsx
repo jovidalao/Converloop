@@ -1,4 +1,6 @@
+import { Volume2Icon } from "lucide-react";
 import { useState, useSyncExternalStore } from "react";
+import { cn } from "@/lib/utils";
 import {
   getPlayingKey,
   playSpeech,
@@ -7,8 +9,6 @@ import {
 } from "../tts/playback";
 import { MissingTtsApiKeyError, speakText } from "../tts/speak";
 import { Spinner } from "./ui/spinner";
-import { cn } from "@/lib/utils";
-import { IconVolume } from "./icons";
 
 // 正在播放时的动态条形(像声波),清晰地告诉用户"在响"。
 function PlayingBars() {
@@ -87,12 +87,12 @@ export function SpeakButton({
         ) : playing ? (
           <PlayingBars />
         ) : (
-          <IconVolume size={variant === "round" ? 15 : 18} />
+          <Volume2Icon size={variant === "round" ? 15 : 18} />
         )}
       </button>
       {error && (
         <span
-          className="pointer-events-none absolute right-0 top-[calc(100%+4px)] z-[2] w-max max-w-[220px] rounded bg-destructive/15 px-1.5 py-1 text-[0.68rem] leading-tight text-destructive"
+          className="pointer-events-none absolute right-0 top-[calc(100%+4px)] z-[2] w-max max-w-56 rounded bg-destructive/15 px-1.5 py-1 text-xs leading-tight text-destructive"
           role="alert"
         >
           {error}

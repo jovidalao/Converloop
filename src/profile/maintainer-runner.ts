@@ -1,3 +1,4 @@
+import { type MaintainerResult, runMaintainer } from "../agents/maintainer";
 import { getProvider, loadConfig } from "../config";
 import { getMaintainerData } from "../db/mastery";
 import {
@@ -6,7 +7,6 @@ import {
   getTurnCount,
 } from "../db/turns";
 import { readProfile } from "./profile";
-import { runMaintainer, type MaintainerResult } from "../agents/maintainer";
 
 // 单飞:同一时间只允许一个维护任务。新触发在跑则直接跳过(下次再合并)。
 let running = false;

@@ -76,7 +76,10 @@ export type TutorAnalysis = z.infer<typeof TutorAnalysis>;
 
 // 喂给 provider 结构化输出的 JSON schema。inline refs、去掉 $schema,
 // 让 OpenAI 兼容端点能直接吃。
-export function tutorJsonSchema(): { name: string; schema: Record<string, unknown> } {
+export function tutorJsonSchema(): {
+  name: string;
+  schema: Record<string, unknown>;
+} {
   const schema = zodToJsonSchema(TutorAnalysis, {
     target: "jsonSchema7",
     $refStrategy: "none",

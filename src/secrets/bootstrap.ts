@@ -1,5 +1,5 @@
-import { getSecret, setSecret } from "../keychain";
 import { apiKeyAccount, type ProviderType } from "../config";
+import { getSecret, setSecret } from "../keychain";
 
 const PROVIDER_TYPES: ProviderType[] = ["openai", "gemini", "anthropic"];
 

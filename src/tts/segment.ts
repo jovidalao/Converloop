@@ -25,7 +25,10 @@ export class SentenceSegmenter {
       // 吞掉连续终止符与其后的收尾符。
       let cjk = FULLWIDTH_TERMINATOR.test(full[i]);
       let j = i + 1;
-      while (j < full.length && (TERMINATOR.test(full[j]) || CLOSER.test(full[j]))) {
+      while (
+        j < full.length &&
+        (TERMINATOR.test(full[j]) || CLOSER.test(full[j]))
+      ) {
         if (FULLWIDTH_TERMINATOR.test(full[j])) cjk = true;
         j++;
       }

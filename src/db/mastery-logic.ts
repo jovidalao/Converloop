@@ -35,7 +35,8 @@ export function applySignal(
 ): MasteryCounters {
   const seenCount = prev.seenCount + 1;
   // gap 与 error 一样算负面证据:用户没能产出 → 推向 struggling。
-  const errorCount = prev.errorCount + (kind === "error" || kind === "gap" ? 1 : 0);
+  const errorCount =
+    prev.errorCount + (kind === "error" || kind === "gap" ? 1 : 0);
   const errRate = errorCount / seenCount;
   const status: MasteryStatus =
     seenCount < 3

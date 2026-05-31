@@ -1,7 +1,7 @@
-import { desc, count, eq } from "drizzle-orm";
-import { db } from "./client";
-import { turn, type Turn } from "./schema";
+import { count, desc, eq } from "drizzle-orm";
 import type { TutorAnalysis } from "../agents/schema";
+import { db } from "./client";
+import { type Turn, turn } from "./schema";
 
 export async function persistTurn(
   conversationId: string,
@@ -50,7 +50,10 @@ export function serializeTurnFeedback(
 ): string | null {
   if (analysis) return JSON.stringify(analysis);
   if (prose?.trim()) {
-    return JSON.stringify({ [PROSE_FEEDBACK_MARKER]: true, body: prose.trim() });
+    return JSON.stringify({
+      [PROSE_FEEDBACK_MARKER]: true,
+      body: prose.trim(),
+    });
   }
   return null;
 }
@@ -149,7 +152,9 @@ export async function formatRecentHistory(
 // 跨会话的全局转写。维护 agent 用,刻意不按会话隔离(档案是全局的)。
 export async function formatRecentHistoryGlobal(limit = 6): Promise<string> {
   const turns = await getRecentTurns(limit);
-  return turns.map((t) => `User: ${t.userInput}\nPartner: ${t.reply}`).join("\n\n");
+  return turns
+    .map((t) => `User: ${t.userInput}\nPartner: ${t.reply}`)
+    .join("\n\n");
 }
 
 export async function getTurnCount(): Promise<number> {

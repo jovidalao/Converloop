@@ -1,4 +1,3 @@
-import { MissingTtsApiKeyError, speakText } from "./speak";
 import {
   beginSpeechStream,
   endSpeechStream,
@@ -6,6 +5,7 @@ import {
   setSpeechStreamKey,
 } from "./playback";
 import { SentenceSegmenter } from "./segment";
+import { MissingTtsApiKeyError, speakText } from "./speak";
 
 export interface ReplySpeaker {
   /** 每次回复增量更新时喂入到目前为止的完整文本。 */

@@ -1,11 +1,11 @@
 import type { ChatMessage, ModelProvider } from "../providers/types";
-import { TutorAnalysis, tutorJsonSchema } from "./schema";
 import {
   formatZodError,
   isLikelyTutorJsonPayload,
   normalizeTutorPayload,
   parseLLMJson,
 } from "./parse-llm-json";
+import { TutorAnalysis, tutorJsonSchema } from "./schema";
 
 // SQLite 薄弱表喂给导师的行(由 mastery 查询提供)。
 export interface WeakItem {
@@ -167,6 +167,7 @@ async function requestStructuredTutorRaw(
     messages,
     temperature: 0,
     maxTokens: TUTOR_MAX_OUTPUT_TOKENS,
+    meta: { label: "tutor" },
   } as const;
 
   try {

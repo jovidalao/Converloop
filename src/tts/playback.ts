@@ -86,7 +86,10 @@ function playBuffer(audioBytes: ArrayBuffer, token: number): Promise<void> {
 }
 
 /** 一次性播放整段音频(朗读按钮手动播放用)。 */
-export function playSpeech(audioBytes: ArrayBuffer, key?: string): Promise<void> {
+export function playSpeech(
+  audioBytes: ArrayBuffer,
+  key?: string,
+): Promise<void> {
   stopSpeech();
   streamToken += 1;
   currentKey = key ?? null;

@@ -58,5 +58,8 @@ export async function converse(
     { role: "system", content: systemPrompt(ctx) },
     { role: "user", content: userPrompt(ctx) },
   ];
-  return provider.stream({ messages, temperature: 0.7 }, onDelta);
+  return provider.stream(
+    { messages, temperature: 0.7, meta: { label: "conversation" } },
+    onDelta,
+  );
 }

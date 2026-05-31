@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import { TutorAnalysis, tutorJsonSchema } from "./schema";
 
 // 模拟 LLM 对一个真实错句的结构化输出:
@@ -30,7 +30,12 @@ const sampleAnalysis = {
     },
   ],
   mastery_updates: [
-    { key: "grammar:past_tense", label: "一般过去时", type: "grammar", signal: "introduced" },
+    {
+      key: "grammar:past_tense",
+      label: "一般过去时",
+      type: "grammar",
+      signal: "introduced",
+    },
   ],
 };
 

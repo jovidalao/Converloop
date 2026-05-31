@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import { tutorJsonSchema } from "../agents/schema";
 import {
   buildGeminiRequestBody,
+  type GeminiConfig,
   geminiGenerateUrl,
   geminiStreamUrl,
-  type GeminiConfig,
 } from "./gemini";
 
 const cfg: GeminiConfig = {
@@ -28,7 +28,9 @@ describe("gemini REST alignment", () => {
 
   it("single-turn body matches official minimal shape", () => {
     const body = buildGeminiRequestBody({
-      messages: [{ role: "user", content: "Explain how AI works in a few words" }],
+      messages: [
+        { role: "user", content: "Explain how AI works in a few words" },
+      ],
     });
     expect(body).toEqual({
       contents: [
@@ -61,7 +63,9 @@ describe("gemini REST alignment", () => {
         { role: "user", content: "Hi" },
       ],
     });
-    expect(body.systemInstruction).toEqual({ parts: [{ text: "You are helpful." }] });
+    expect(body.systemInstruction).toEqual({
+      parts: [{ text: "You are helpful." }],
+    });
     expect(body.contents).toEqual([{ parts: [{ text: "Hi" }] }]);
   });
 
@@ -92,6 +96,8 @@ describe("gemini REST alignment", () => {
       messages: [{ role: "user", content: "Hi" }],
       jsonObject: true,
     });
-    expect(body.generationConfig).toEqual({ responseMimeType: "application/json" });
+    expect(body.generationConfig).toEqual({
+      responseMimeType: "application/json",
+    });
   });
 });

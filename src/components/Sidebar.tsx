@@ -1,13 +1,13 @@
-import { useMemo, useState, type ReactNode } from "react";
+import {
+  PanelLeftIcon,
+  SearchIcon,
+  SettingsIcon,
+  SquarePenIcon,
+  UserRoundIcon,
+} from "lucide-react";
+import { type ReactNode, useMemo, useState } from "react";
 import type { ConversationMeta } from "../db/conversations";
 import { Button } from "./ui/button";
-import {
-  IconSidebar,
-  IconCompose,
-  IconSearch,
-  IconProfile,
-  IconSettings,
-} from "./icons";
 
 export type MainView = "chat" | "profile" | "settings";
 
@@ -58,12 +58,12 @@ export function Sidebar({
   }
 
   return (
-    <aside className="m-[0.55rem] flex w-[248px] shrink-0 flex-col overflow-hidden rounded-2xl border bg-card shadow-sm">
+    <aside className="m-2 flex w-62 shrink-0 flex-col overflow-hidden rounded-2xl border bg-card shadow-sm">
       {/* 左内边距须清开原生交通灯:traffic-inset + 灯组宽 52px + 间距。
           数值与 src-tauri/src/lib.rs 的 TRAFFIC_LIGHTS_X 对应,改一处要同步。 */}
       <div
         data-tauri-drag-region
-        className="flex items-center gap-0.5 pt-[0.15rem] pr-2 pb-[0.3rem] pl-[calc(0.15rem_+_(2rem_-_12px)/2_+_52px_+_0.35rem)]"
+        className="flex items-center gap-0.5 pt-0.5 pr-2 pb-1 pl-[calc(0.15rem_+_(2rem_-_12px)/2_+_52px_+_0.35rem)]"
       >
         <Button
           variant="ghost"
@@ -73,7 +73,7 @@ export function Sidebar({
           title="收起侧栏"
           aria-label="收起侧栏"
         >
-          <IconSidebar />
+          <PanelLeftIcon />
         </Button>
         <Button
           variant="ghost"
@@ -83,12 +83,12 @@ export function Sidebar({
           title="新对话"
           aria-label="新对话"
         >
-          <IconCompose />
+          <SquarePenIcon />
         </Button>
       </div>
 
-      <div className="mx-[0.55rem] mt-1 mb-2 flex items-center gap-2 rounded-md bg-muted px-2.5 py-1.5 text-muted-foreground">
-        <IconSearch size={15} />
+      <div className="mx-2 mt-1 mb-2 flex items-center gap-2 rounded-md bg-muted px-2.5 py-1.5 text-muted-foreground">
+        <SearchIcon size={15} />
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -99,7 +99,7 @@ export function Sidebar({
       </div>
 
       <nav className="flex min-h-0 flex-1 flex-col gap-px overflow-y-auto p-1.5">
-        <div className="px-2 pt-1.5 pb-1 text-[0.7rem] font-semibold tracking-wide text-muted-foreground">
+        <div className="px-2 pt-1.5 pb-1 text-xs font-semibold tracking-wide text-muted-foreground">
           最近
         </div>
         {filtered.map((c) => {
@@ -134,6 +134,7 @@ export function Sidebar({
               <span className="min-w-0 flex-1 truncate">{c.title}</span>
               <span className="hidden shrink-0 gap-0.5 group-hover:flex">
                 <button
+                  type="button"
                   className="rounded px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-background hover:text-foreground"
                   title="重命名"
                   aria-label="重命名"
@@ -145,6 +146,7 @@ export function Sidebar({
                   ✎
                 </button>
                 <button
+                  type="button"
                   className="rounded px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-background hover:text-foreground"
                   title="删除"
                   aria-label="删除"
@@ -172,13 +174,13 @@ export function Sidebar({
         <NavLink
           active={view === "profile"}
           onClick={() => onOpenView("profile")}
-          icon={<IconProfile size={17} />}
+          icon={<UserRoundIcon size={17} />}
           label="档案"
         />
         <NavLink
           active={view === "settings"}
           onClick={() => onOpenView("settings")}
-          icon={<IconSettings size={17} />}
+          icon={<SettingsIcon size={17} />}
           label="设置"
         />
       </div>
@@ -199,6 +201,7 @@ function NavLink({
 }) {
   return (
     <button
+      type="button"
       className={`flex items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-sm ${
         active
           ? "bg-accent text-accent-foreground"

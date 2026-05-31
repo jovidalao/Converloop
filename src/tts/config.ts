@@ -45,7 +45,10 @@ export function loadTtsConfig(): TtsConfig {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return { ...DEFAULT_TTS_CONFIG };
-    return { ...DEFAULT_TTS_CONFIG, ...(JSON.parse(raw) as Partial<TtsConfig>) };
+    return {
+      ...DEFAULT_TTS_CONFIG,
+      ...(JSON.parse(raw) as Partial<TtsConfig>),
+    };
   } catch {
     return { ...DEFAULT_TTS_CONFIG };
   }

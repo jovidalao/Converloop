@@ -1,6 +1,6 @@
-import { desc, eq, isNull, count } from "drizzle-orm";
+import { count, desc, eq, isNull } from "drizzle-orm";
 import { db } from "./client";
-import { conversation, turn, type Conversation } from "./schema";
+import { type Conversation, conversation, turn } from "./schema";
 
 export type ConversationMeta = Conversation;
 
@@ -19,10 +19,7 @@ export function setActiveConversationId(id: string): void {
 
 // 最近活动在前(updated_at 倒序),给侧边栏列表用。
 export async function listConversations(): Promise<ConversationMeta[]> {
-  return db
-    .select()
-    .from(conversation)
-    .orderBy(desc(conversation.updatedAt));
+  return db.select().from(conversation).orderBy(desc(conversation.updatedAt));
 }
 
 export async function createConversation(
@@ -39,7 +36,10 @@ export async function createConversation(
   return id;
 }
 
-export async function renameConversation(id: string, title: string): Promise<void> {
+export async function renameConversation(
+  id: string,
+  title: string,
+): Promise<void> {
   await db
     .update(conversation)
     .set({ title: title.trim() || DEFAULT_CONVERSATION_TITLE })
@@ -113,7 +113,10 @@ async function firstOrphanAdoptedUserInput(
 }
 
 // 首条消息后自动命名:仅当标题仍是占位符时才改(用户手动改过的不动)。
-export async function maybeAutoTitle(id: string, userInput: string): Promise<void> {
+export async function maybeAutoTitle(
+  id: string,
+  userInput: string,
+): Promise<void> {
   const [row] = await db
     .select({ title: conversation.title })
     .from(conversation)
@@ -128,5 +131,5 @@ export async function maybeAutoTitle(id: string, userInput: string): Promise<voi
 export function titleFromInput(text: string, max = 30): string {
   const clean = text.replace(/\s+/g, " ").trim();
   if (!clean) return DEFAULT_CONVERSATION_TITLE;
-  return clean.length > max ? clean.slice(0, max) + "…" : clean;
+  return clean.length > max ? `${clean.slice(0, max)}…` : clean;
 }

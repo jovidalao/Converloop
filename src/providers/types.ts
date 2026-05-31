@@ -20,9 +20,14 @@ export interface GenerateOptions {
   jsonSchema?: JsonSchemaSpec;
   /** 简单 JSON 模式(response_format: json_object),兼容不支持 json_schema 的端点。 */
   jsonObject?: boolean;
+  /** 非功能元数据(给插件用,如日志区分是哪个 agent 在调)。provider 本身忽略它。 */
+  meta?: { label?: string };
 }
 
 export interface ModelProvider {
   generate(opts: GenerateOptions): Promise<string>;
-  stream(opts: GenerateOptions, onDelta: (delta: string) => void): Promise<string>;
+  stream(
+    opts: GenerateOptions,
+    onDelta: (delta: string) => void,
+  ): Promise<string>;
 }

@@ -1,10 +1,9 @@
-import { useState, type ReactNode } from "react";
+import { BookOpenIcon } from "lucide-react";
+import { type ReactNode, useState } from "react";
 import { explainReply, MissingApiKeyError } from "../orchestrator";
 import { Markdown } from "./Markdown";
+import { Button } from "./ui/button";
 import { Spinner } from "./ui/spinner";
-import { actionBtn, actionBtnActive } from "@/lib/ui";
-import { cn } from "@/lib/utils";
-import { IconBookOpen } from "./icons";
 
 // "讲解"按钮:点一下,按用户掌握情况流式讲解这条回复。
 // 状态留在组件内(临时,不持久化)——再点收起/展开,已生成的复用。
@@ -60,29 +59,34 @@ export function ReplyExplanation({
 
   return (
     <div className="flex w-full flex-col gap-1.5">
-      <div className="-ml-[0.3rem] flex items-center gap-0.5">
+      <div className="-ml-1 flex items-center gap-0.5">
         {actions}
-        <button
+        <Button
           type="button"
-          className={cn(actionBtn, expanded && actionBtnActive)}
+          variant="action"
+          size="action"
+          data-active={!!expanded}
           onClick={handleClick}
           disabled={loading}
           aria-expanded={!!expanded}
           title="根据你的掌握情况讲解这条回复"
         >
-          {loading ? <Spinner /> : <IconBookOpen size={16} />}
+          {loading ? <Spinner /> : <BookOpenIcon size={16} />}
           <span>讲解</span>
-        </button>
+        </Button>
         {trailingActions}
       </div>
       {open && (explanation || error) && (
         <div className="w-full animate-in rounded-lg border bg-card p-3 shadow-sm fade-in-0 slide-in-from-bottom-1 duration-300">
           {error ? (
-            <span className="text-sm leading-snug text-destructive" role="alert">
+            <span
+              className="text-sm leading-snug text-destructive"
+              role="alert"
+            >
               {error}
             </span>
           ) : (
-            <div className="text-[0.82rem] leading-normal text-foreground">
+            <div className="text-sm leading-normal text-foreground">
               <Markdown>{explanation}</Markdown>
             </div>
           )}

@@ -21,7 +21,7 @@ export function extractJsonText(raw: string): string {
 /** 粗判是否像导师 JSON(用于决定是否触发 json_object 回退)。 */
 export function isLikelyTutorJsonPayload(raw: string): boolean {
   const text = extractJsonText(raw);
-  if (!text || !text.trimStart().startsWith("{")) return false;
+  if (!text?.trimStart().startsWith("{")) return false;
   try {
     JSON.parse(text);
     return true;
@@ -44,7 +44,9 @@ function proseInsteadOfJsonHint(raw: string): string | null {
   return null;
 }
 
-export function parseLLMJson(raw: string): { ok: true; value: unknown } | { ok: false; error: string } {
+export function parseLLMJson(
+  raw: string,
+): { ok: true; value: unknown } | { ok: false; error: string } {
   const text = extractJsonText(raw);
   if (!text) {
     return { ok: false, error: "模型返回空内容" };
@@ -99,7 +101,8 @@ export function normalizeTutorPayload(json: unknown): unknown {
 
   const issues = Array.isArray(o.issues)
     ? o.issues.map((item) => {
-        if (!item || typeof item !== "object" || Array.isArray(item)) return item;
+        if (!item || typeof item !== "object" || Array.isArray(item))
+          return item;
         const i = item as Record<string, unknown>;
         return {
           ...i,
@@ -112,7 +115,8 @@ export function normalizeTutorPayload(json: unknown): unknown {
 
   const mastery_updates = Array.isArray(o.mastery_updates)
     ? o.mastery_updates.map((item) => {
-        if (!item || typeof item !== "object" || Array.isArray(item)) return item;
+        if (!item || typeof item !== "object" || Array.isArray(item))
+          return item;
         const u = item as Record<string, unknown>;
         return {
           ...u,
@@ -124,13 +128,21 @@ export function normalizeTutorPayload(json: unknown): unknown {
 
   // expression_gap 可选:存在时把 key_items 的 mastery_type 规整到合法值。
   let expression_gap = o.expression_gap;
-  if (expression_gap && typeof expression_gap === "object" && !Array.isArray(expression_gap)) {
+  if (
+    expression_gap &&
+    typeof expression_gap === "object" &&
+    !Array.isArray(expression_gap)
+  ) {
     const g = expression_gap as Record<string, unknown>;
     const key_items = Array.isArray(g.key_items)
       ? g.key_items.map((item) => {
-          if (!item || typeof item !== "object" || Array.isArray(item)) return item;
+          if (!item || typeof item !== "object" || Array.isArray(item))
+            return item;
           const k = item as Record<string, unknown>;
-          return { ...k, mastery_type: pickEnum(k.mastery_type, MASTERY_TYPES) };
+          return {
+            ...k,
+            mastery_type: pickEnum(k.mastery_type, MASTERY_TYPES),
+          };
         })
       : [];
     expression_gap = { ...g, key_items };
@@ -138,16 +150,23 @@ export function normalizeTutorPayload(json: unknown): unknown {
 
   return {
     ...o,
-    is_correct: typeof o.is_correct === "string" ? o.is_correct === "true" : o.is_correct,
-    corrected: typeof o.corrected === "string" ? o.corrected : o.corrected ?? "",
-    natural: typeof o.natural === "string" ? o.natural : o.natural ?? "",
+    is_correct:
+      typeof o.is_correct === "string" ? o.is_correct === "true" : o.is_correct,
+    corrected:
+      typeof o.corrected === "string" ? o.corrected : (o.corrected ?? ""),
+    natural: typeof o.natural === "string" ? o.natural : (o.natural ?? ""),
     issues,
     mastery_updates,
     expression_gap,
   };
 }
 
-export function formatZodError(error: { flatten: () => { fieldErrors: Record<string, string[]>; formErrors: string[] } }): string {
+export function formatZodError(error: {
+  flatten: () => {
+    fieldErrors: Record<string, string[]>;
+    formErrors: string[];
+  };
+}): string {
   const flat = error.flatten();
   const parts: string[] = [];
   if (flat.formErrors.length) parts.push(...flat.formErrors);

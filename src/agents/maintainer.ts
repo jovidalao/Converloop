@@ -1,7 +1,7 @@
-import type { ChatMessage, ModelProvider } from "../providers/types";
-import { applyPreservedMyNotes, sanityCheck } from "../profile/sanity";
-import { writeProfile } from "../profile/profile";
 import type { MaintainerData } from "../db/mastery";
+import { writeProfile } from "../profile/profile";
+import { applyPreservedMyNotes, sanityCheck } from "../profile/sanity";
+import type { ChatMessage, ModelProvider } from "../providers/types";
 
 export interface MaintainerInput {
   nativeLanguage: string;
@@ -127,14 +127,20 @@ export async function runMaintainer(
   ];
   let newMd: string;
   try {
-    newMd = stripFences(await provider.generate({ messages, temperature: 0.3 }));
+    newMd = stripFences(
+      await provider.generate({ messages, temperature: 0.3 }),
+    );
   } catch (e) {
-    return { written: false, reason: `LLM 调用失败:${e instanceof Error ? e.message : String(e)}` };
+    return {
+      written: false,
+      reason: `LLM 调用失败:${e instanceof Error ? e.message : String(e)}`,
+    };
   }
 
   newMd = applyPreservedMyNotes(input.currentMd, newMd);
   const sane = sanityCheck(input.currentMd, newMd);
-  if (!sane.ok) return { written: false, reason: sane.reason ?? "sanity check 未通过" };
+  if (!sane.ok)
+    return { written: false, reason: sane.reason ?? "sanity check 未通过" };
 
   await writeProfile(newMd);
   return { written: true, reason: "updated", profile: newMd };

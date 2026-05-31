@@ -1,4 +1,4 @@
-import { invoke, Channel } from "@tauri-apps/api/core";
+import { Channel, invoke } from "@tauri-apps/api/core";
 import type { GenerateOptions, ModelProvider } from "./types";
 
 // OpenAI 兼容适配器:覆盖 OpenAI / OpenRouter / LM Studio 等。
@@ -11,7 +11,11 @@ export interface OpenAIConfig {
 
 type Body = Record<string, unknown>;
 
-function buildBody(cfg: OpenAIConfig, opts: GenerateOptions, stream: boolean): Body {
+function buildBody(
+  cfg: OpenAIConfig,
+  opts: GenerateOptions,
+  stream: boolean,
+): Body {
   const body: Body = { model: cfg.model, messages: opts.messages, stream };
   if (opts.temperature !== undefined) body.temperature = opts.temperature;
   if (opts.maxTokens !== undefined) body.max_tokens = opts.maxTokens;
@@ -52,9 +56,12 @@ export function extractOpenAIMessageContent(json: unknown): string {
   if (msg?.refusal) throw new Error(msg.refusal);
 
   if (msg?.parsed !== undefined && msg.parsed !== null) {
-    return typeof msg.parsed === "string" ? msg.parsed : JSON.stringify(msg.parsed);
+    return typeof msg.parsed === "string"
+      ? msg.parsed
+      : JSON.stringify(msg.parsed);
   }
-  if (typeof msg?.content === "string" && msg.content.length > 0) return msg.content;
+  if (typeof msg?.content === "string" && msg.content.length > 0)
+    return msg.content;
   if (typeof choice.text === "string") return choice.text;
   return msg?.content ?? "";
 }

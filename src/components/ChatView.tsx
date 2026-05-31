@@ -1,26 +1,25 @@
-import { useEffect, useRef, useState } from "react";
-import { runTurn, bilingualReply, MissingApiKeyError } from "../orchestrator";
-import { loadChatHistory, type ChatTurn } from "../db/turns";
-import type { TutorAnalysis } from "../agents/schema";
-import { loadConfig } from "../config";
-import { maybeAutoTitle, touchConversation } from "../db/conversations";
-import { InlineCorrection, UserSentence } from "./InlineCorrection";
-import { SpeakButton } from "./SpeakButton";
-import { ReplyExplanation } from "./ReplyExplanation";
-import { Markdown } from "./Markdown";
-import { Spinner } from "./ui/spinner";
-import { actionBtn, actionBtnActive } from "@/lib/ui";
-import { cn } from "@/lib/utils";
 import {
-  IconCopy,
-  IconCheck,
-  IconSend,
-  IconSparkles,
-  IconLanguages,
-} from "./icons";
+  ArrowUpIcon,
+  CheckIcon,
+  CopyIcon,
+  LanguagesIcon,
+  SparklesIcon,
+} from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import type { TutorAnalysis } from "../agents/schema";
+import { useConfig } from "../config";
+import { maybeAutoTitle, touchConversation } from "../db/conversations";
+import { type ChatTurn, loadChatHistory } from "../db/turns";
+import { bilingualReply, MissingApiKeyError, runTurn } from "../orchestrator";
+import { loadTtsConfig } from "../tts/config";
 import { stopSpeech } from "../tts/playback";
 import { createReplySpeaker } from "../tts/stream";
-import { loadTtsConfig } from "../tts/config";
+import { InlineCorrection, UserSentence } from "./InlineCorrection";
+import { Markdown } from "./Markdown";
+import { ReplyExplanation } from "./ReplyExplanation";
+import { SpeakButton } from "./SpeakButton";
+import { Button } from "./ui/button";
+import { Spinner } from "./ui/spinner";
 
 interface ChatViewProps {
   conversationId: string;
@@ -32,9 +31,10 @@ interface ChatViewProps {
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
   return (
-    <button
+    <Button
       type="button"
-      className={actionBtn}
+      variant="action"
+      size="action"
       title="复制"
       onClick={() => {
         void navigator.clipboard.writeText(text).then(() => {
@@ -43,15 +43,21 @@ function CopyButton({ text }: { text: string }) {
         });
       }}
     >
-      {copied ? <IconCheck size={16} /> : <IconCopy size={16} />}
-    </button>
+      {copied ? <CheckIcon size={16} /> : <CopyIcon size={16} />}
+    </Button>
   );
 }
 
 // 一条 AI 回复:气泡(原文 / 双语对照可切换)+ 操作行(复制 / 朗读 / 讲解 / 双语阅读)。
 // 双语对照按需 AI 生成、替换显示原文,再点恢复;状态留在组件内,不持久化。
 // 关键:朗读始终读原文(目标语言版),SpeakButton 永远拿原始 text。
-function PartnerReply({ text, autoOpen = false }: { text: string; autoOpen?: boolean }) {
+function PartnerReply({
+  text,
+  autoOpen = false,
+}: {
+  text: string;
+  autoOpen?: boolean;
+}) {
   const [open, setOpen] = useState(false); // 当前是否显示双语对照
   const [loading, setLoading] = useState(false);
   const [view, setView] = useState<string | null>(null); // 双语 Markdown
@@ -101,7 +107,7 @@ function PartnerReply({ text, autoOpen = false }: { text: string; autoOpen?: boo
 
   return (
     <div className="flex max-w-none flex-col items-start gap-1.5 self-stretch">
-      <div className="self-stretch py-[0.1rem] text-foreground">
+      <div className="self-stretch py-0.5 text-foreground">
         {showBilingual && error ? (
           <span className="text-sm leading-snug text-destructive" role="alert">
             {error}
@@ -128,17 +134,19 @@ function PartnerReply({ text, autoOpen = false }: { text: string; autoOpen?: boo
           </>
         }
         trailingActions={
-          <button
+          <Button
             type="button"
-            className={cn(actionBtn, showBilingual && actionBtnActive)}
+            variant="action"
+            size="action"
+            data-active={!!showBilingual}
             onClick={toggle}
             disabled={loading}
             aria-pressed={!!showBilingual}
             title="目标语言/母语逐句对照"
           >
-            {loading ? <Spinner /> : <IconLanguages size={16} />}
+            {loading ? <Spinner /> : <LanguagesIcon size={16} />}
             <span>双语阅读</span>
-          </button>
+          </Button>
         }
       />
     </div>
@@ -184,16 +192,19 @@ function UserTurn({
   const [naturalOpen, setNaturalOpen] = useState(true);
   return (
     <div className="flex max-w-[min(88%,520px)] flex-col items-end gap-1.5 self-end">
-      <div className="whitespace-pre-wrap rounded-2xl rounded-br-[5px] border bg-secondary px-3.5 py-2.5 text-[0.95rem] leading-normal text-foreground shadow-sm">
+      <div className="whitespace-pre-wrap rounded-2xl rounded-br-sm border bg-secondary px-3.5 py-2.5 text-base leading-normal text-foreground shadow-sm">
         <UserSentence
           text={turn.userText}
           analysis={turn.analysis}
           nativeLanguage={nativeLanguage}
         />
         {idiomatic && naturalOpen && (
-          <div className="mt-[0.55rem] flex items-start gap-1.5 border-t pt-[0.55rem] text-[0.85rem] leading-normal text-muted-foreground">
-            <span className="mt-[0.12rem] inline-flex shrink-0 text-primary" aria-hidden>
-              <IconSparkles size={14} />
+          <div className="mt-2 flex items-start gap-1.5 border-t pt-2 text-sm leading-normal text-muted-foreground">
+            <span
+              className="mt-0.5 inline-flex shrink-0 text-primary"
+              aria-hidden
+            >
+              <SparklesIcon size={14} />
             </span>
             <span className="min-w-0 flex-1">{idiomatic}</span>
           </div>
@@ -228,8 +239,7 @@ export function ChatView({ conversationId, onActivity }: ChatViewProps) {
   const turnGenRef = useRef(0);
   const replyCommittedRef = useRef(false);
   const liveTurnIdsRef = useRef<Set<string>>(new Set()); // 本会话内新发的轮次,自动双语只作用于它们
-  const [nativeLanguage] = useState(() => loadConfig().nativeLanguage);
-  const [autoBilingual] = useState(() => loadConfig().autoBilingual);
+  const { nativeLanguage, autoBilingual } = useConfig();
 
   // 输入框随内容增高,最多三行,超过后内部滚动。
   useEffect(() => {
@@ -247,9 +257,7 @@ export function ChatView({ conversationId, onActivity }: ChatViewProps) {
   }
 
   function patchTurn(id: string, patch: Partial<ChatTurn>) {
-    setTurns((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, ...patch } : t)),
-    );
+    setTurns((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
   }
 
   useEffect(() => {
@@ -351,7 +359,7 @@ export function ChatView({ conversationId, onActivity }: ChatViewProps) {
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col">
       <div
-        className="flex min-h-0 flex-1 flex-col gap-[1.1rem] overflow-y-auto overscroll-contain px-4 pt-[3.4rem] pb-3"
+        className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain px-4 pt-14 pb-3"
         ref={messagesRef}
         onScroll={syncStickToBottom}
       >
@@ -361,7 +369,7 @@ export function ChatView({ conversationId, onActivity }: ChatViewProps) {
           </div>
         )}
         {turns.map((turn) => (
-          <div key={turn.id} className="flex flex-col gap-[0.55rem]">
+          <div key={turn.id} className="flex flex-col gap-2">
             <UserTurn turn={turn} nativeLanguage={nativeLanguage} />
             {turn.partnerText && (
               <PartnerReply
@@ -372,7 +380,7 @@ export function ChatView({ conversationId, onActivity }: ChatViewProps) {
           </div>
         ))}
         {streaming && (
-          <div className="self-stretch py-[0.1rem] text-foreground opacity-70">
+          <div className="self-stretch py-0.5 text-foreground opacity-70">
             <Markdown>{streaming}</Markdown>
           </div>
         )}
@@ -383,9 +391,9 @@ export function ChatView({ conversationId, onActivity }: ChatViewProps) {
           {error}
         </div>
       )}
-      <div className="shrink-0 px-4 pt-[0.4rem] pb-[1.1rem]">
+      <div className="shrink-0 px-4 pt-1.5 pb-4">
         <form
-          className="flex items-end gap-1.5 rounded-[26px] border bg-card py-[0.35rem] pr-[0.4rem] pl-4 shadow transition-colors focus-within:border-ring"
+          className="flex items-end gap-1.5 rounded-3xl border bg-card py-1.5 pr-1.5 pl-4 shadow transition-colors focus-within:border-ring"
           onSubmit={(e) => {
             e.preventDefault();
             void send();
@@ -396,7 +404,11 @@ export function ChatView({ conversationId, onActivity }: ChatViewProps) {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+              if (
+                e.key === "Enter" &&
+                !e.shiftKey &&
+                !e.nativeEvent.isComposing
+              ) {
                 e.preventDefault();
                 void send();
               }
@@ -404,17 +416,22 @@ export function ChatView({ conversationId, onActivity }: ChatViewProps) {
             rows={1}
             placeholder="用目标语言输入一句话…"
             disabled={replyBusy}
-            className="max-h-[calc(1.4em*3+0.9rem)] min-w-0 flex-1 resize-none border-none bg-transparent py-[0.45rem] text-[0.95rem] leading-snug outline-none placeholder:text-muted-foreground"
+            className="max-h-[calc(1.4em*3+0.9rem)] min-w-0 flex-1 resize-none border-none bg-transparent py-2 text-base leading-snug outline-none placeholder:text-muted-foreground"
           />
-          <button
+          <Button
             type="submit"
-            className="inline-flex size-[2.1rem] shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-opacity disabled:opacity-40"
+            size="icon"
+            className="size-9 rounded-full"
             disabled={replyBusy || !input.trim()}
             title="发送"
             aria-label="发送"
           >
-            {replyBusy ? <Spinner className="size-3.5" /> : <IconSend size={18} />}
-          </button>
+            {replyBusy ? (
+              <Spinner className="size-3.5" />
+            ) : (
+              <ArrowUpIcon className="size-4.5" />
+            )}
+          </Button>
         </form>
       </div>
     </div>

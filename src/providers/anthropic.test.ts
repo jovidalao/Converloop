@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { tutorJsonSchema } from "../agents/schema";
 import {
+  type AnthropicConfig,
   anthropicMessagesUrl,
   buildAnthropicRequestBody,
   extractAnthropicContent,
   toAnthropicMessages,
-  type AnthropicConfig,
 } from "./anthropic";
 
 const cfg: AnthropicConfig = {
@@ -16,7 +16,9 @@ const cfg: AnthropicConfig = {
 
 describe("anthropic REST alignment", () => {
   it("messages URL matches official path", () => {
-    expect(anthropicMessagesUrl(cfg)).toBe("https://api.anthropic.com/v1/messages");
+    expect(anthropicMessagesUrl(cfg)).toBe(
+      "https://api.anthropic.com/v1/messages",
+    );
   });
 
   it("system messages become cached system blocks", () => {
@@ -79,7 +81,13 @@ describe("anthropic REST alignment", () => {
         {
           type: "tool_use",
           name: "TutorAnalysis",
-          input: { is_correct: true, corrected: "x", natural: "x", issues: [], mastery_updates: [] },
+          input: {
+            is_correct: true,
+            corrected: "x",
+            natural: "x",
+            issues: [],
+            mastery_updates: [],
+          },
         },
       ],
     });
@@ -89,7 +97,10 @@ describe("anthropic REST alignment", () => {
   it("extractAnthropicContent joins text blocks", () => {
     expect(
       extractAnthropicContent({
-        content: [{ type: "text", text: "Hello" }, { type: "text", text: " world" }],
+        content: [
+          { type: "text", text: "Hello" },
+          { type: "text", text: " world" },
+        ],
       }),
     ).toBe("Hello world");
   });

@@ -1,17 +1,18 @@
-import { getProvider, loadConfig } from "./config";
+import { bilingual } from "./agents/bilingual";
 import { converse } from "./agents/conversation";
 import { explain } from "./agents/explain";
-import { bilingual } from "./agents/bilingual";
-import { analyze } from "./agents/tutor";
 import type { TutorAnalysis } from "./agents/schema";
+import { analyze } from "./agents/tutor";
+import { getProvider, loadConfig } from "./config";
 import { getWeakList, recordAnalysis } from "./db/mastery";
 import {
   formatRecentHistory,
   persistTurn,
   updateTurnAnalysis,
 } from "./db/turns";
-import { readProfile, profileSliceForConversation } from "./profile/profile";
+import { logError } from "./lib/log";
 import { maybeRunMaintainer } from "./profile/maintainer-runner";
+import { profileSliceForConversation, readProfile } from "./profile/profile";
 
 export interface TurnCallbacks {
   onReplyDelta: (delta: string) => void;
@@ -85,14 +86,14 @@ export async function runTurn(
           void maybeRunMaintainer();
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e);
-          console.error("批改记账失败:", e);
+          logError("turn", "批改记账失败", e);
           cb.onAnalysis(analysis, { error: `批改已显示但保存失败: ${msg}` });
         }
       } else if (proseFeedback) {
         try {
           await updateTurnAnalysis(turnId, null, proseFeedback);
         } catch (e) {
-          console.error("纯文本批改保存失败:", e);
+          logError("turn", "纯文本批改保存失败", e);
         }
         cb.onAnalysis(null, { proseFeedback });
       } else if (error) {
@@ -101,7 +102,7 @@ export async function runTurn(
     })
     .catch((e) => {
       const msg = e instanceof Error ? e.message : String(e);
-      console.error("批改失败:", e);
+      logError("turn", "批改失败", e);
       cb.onAnalysis(null, { error: `批改失败: ${msg}` });
     });
 

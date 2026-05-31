@@ -21,7 +21,10 @@ describe("buildTtsCacheKey", () => {
   it("文本或音色变化则 key 不同", async () => {
     const base = await buildTtsCacheKey("Hello", cfg);
     const otherText = await buildTtsCacheKey("Hi", cfg);
-    const otherVoice = await buildTtsCacheKey("Hello", { ...cfg, voice: "Milo" });
+    const otherVoice = await buildTtsCacheKey("Hello", {
+      ...cfg,
+      voice: "Milo",
+    });
     expect(otherText).not.toBe(base);
     expect(otherVoice).not.toBe(base);
   });

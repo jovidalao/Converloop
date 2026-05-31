@@ -1,17 +1,17 @@
+import { PanelLeftIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { ChatView } from "./components/ChatView";
 import { ProfileView } from "./components/ProfileView";
 import { SettingsView } from "./components/SettingsView";
-import { Sidebar, type MainView } from "./components/Sidebar";
-import { IconSidebar } from "./components/icons";
+import { type MainView, Sidebar } from "./components/Sidebar";
 import { Button } from "./components/ui/button";
 import {
   type ConversationMeta,
-  listConversations,
   createConversation,
-  renameConversation,
   deleteConversation,
   ensureActiveConversation,
+  listConversations,
+  renameConversation,
   setActiveConversationId,
 } from "./db/conversations";
 
@@ -21,7 +21,10 @@ function App() {
   const [view, setView] = useState<MainView>("chat");
   const [collapsed, setCollapsed] = useState(false);
 
-  const refresh = useCallback(() => listConversations().then(setConversations), []);
+  const refresh = useCallback(
+    () => listConversations().then(setConversations),
+    [],
+  );
 
   useEffect(() => {
     void (async () => {
@@ -105,7 +108,7 @@ function App() {
               title="展开侧栏"
               aria-label="展开侧栏"
             >
-              <IconSidebar />
+              <PanelLeftIcon />
             </Button>
           )}
           <span className="pointer-events-none truncate text-sm font-semibold tracking-tight">

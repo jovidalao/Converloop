@@ -2,8 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { AppConfig } from "../config";
 
 // Rust 侧原子读写。
-export const readProfileRaw = () =>
-  invoke<string | null>("read_profile");
+export const readProfileRaw = () => invoke<string | null>("read_profile");
 
 export const writeProfile = (content: string) =>
   invoke<void>("write_profile", { content });

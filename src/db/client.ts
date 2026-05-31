@@ -21,12 +21,20 @@ function getSqlite(): Promise<Database> {
 //   - get            → { rows: any[] }(单行值数组)
 // tauri-plugin-sql 的 select 返回的是对象数组({列名: 值}),
 // 列名顺序即 SELECT 顺序,故 Object.values 还原成 Drizzle 要的值数组。
+// SQLite 是单写者。后台批改记账(orchestrator 的 void analysisPromise)可能与
+// 下一轮的 persistTurn 写并发,概率性触发 SQLITE_BUSY。把所有写串成一条 promise
+// 链,逐个 execute,读不受影响(仍并发)。失败不断链:catch 仅用于排队,真正的
+// 结果由 next 抛回调用方。
+let writeChain: Promise<unknown> = Promise.resolve();
+
 export const db = drizzle(
   async (sql, params, method) => {
     const sqlite = await getSqlite();
 
     if (method === "run") {
-      await sqlite.execute(sql, params);
+      const next = writeChain.then(() => sqlite.execute(sql, params));
+      writeChain = next.catch(() => {});
+      await next;
       return { rows: [] };
     }
 

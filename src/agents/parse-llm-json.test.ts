@@ -1,9 +1,9 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   extractJsonText,
   isLikelyTutorJsonPayload,
-  parseLLMJson,
   normalizeTutorPayload,
+  parseLLMJson,
 } from "./parse-llm-json";
 import { TutorAnalysis } from "./schema";
 
@@ -48,7 +48,8 @@ describe("parseLLMJson", () => {
   });
 
   it("推理文本给出可读提示", () => {
-    const bad = "-> Type: `collocation`, Label: `介词搭配` (Signal: `introduced`)";
+    const bad =
+      "-> Type: `collocation`, Label: `介词搭配` (Signal: `introduced`)";
     const result = parseLLMJson(bad);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toContain("推理过程");

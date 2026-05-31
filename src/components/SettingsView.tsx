@@ -1,27 +1,27 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { type ReactNode, useEffect, useState } from "react";
+import { cn } from "@/lib/utils";
 import {
-  loadConfig,
-  saveConfig,
-  getProvider,
-  apiKeyAccount,
-  PROVIDER_PRESETS,
   type AppConfig,
+  apiKeyAccount,
+  getProvider,
+  loadConfig,
+  PROVIDER_PRESETS,
   type ProviderType,
+  saveConfig,
 } from "../config";
-import { getSecret, setSecret, deleteSecret } from "../keychain";
+import { deleteSecret, getSecret, setSecret } from "../keychain";
 import {
   loadTtsConfig,
-  saveTtsConfig,
   MIMO_TTS_KEY_ACCOUNT,
   MIMO_VOICES,
+  saveTtsConfig,
   type TtsConfig,
 } from "../tts/config";
 import { synthesizeMimo } from "../tts/mimo";
 import { clearTtsCache, getTtsCacheCount } from "../tts/speak";
+import { type Theme, useTheme } from "./theme-provider";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
-import { Textarea } from "./ui/textarea";
-import { Switch } from "./ui/switch";
 import {
   Select,
   SelectContent,
@@ -29,8 +29,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "./ui/select";
-import { useTheme, type Theme } from "./theme-provider";
-import { cn } from "@/lib/utils";
+import { Switch } from "./ui/switch";
+import { Textarea } from "./ui/textarea";
 
 // 表单字段:标签 + 控件。row 里用 flex-1 让字段等宽分布。
 function Field({
@@ -43,8 +43,8 @@ function Field({
   className?: string;
 }) {
   return (
-    <div className={cn("mb-[0.9rem] flex flex-col gap-1.5", className)}>
-      <label className="text-[0.8rem] text-muted-foreground">{label}</label>
+    <div className={cn("mb-3.5 flex flex-col gap-1.5", className)}>
+      <label className="text-sm text-muted-foreground">{label}</label>
       {children}
     </div>
   );
@@ -60,7 +60,7 @@ function ToggleField({
   children: ReactNode;
 }) {
   return (
-    <label className="mb-[0.9rem] flex cursor-pointer items-center gap-2.5 text-[0.88rem]">
+    <label className="mb-3.5 flex cursor-pointer items-center gap-2.5 text-sm">
       <Switch checked={checked} onCheckedChange={onChange} />
       <span>{children}</span>
     </label>
@@ -202,7 +202,7 @@ export function SettingsView() {
       });
       setTtsStatus(`✓ TTS 正常 — 收到 ${audio.byteLength} 字节音频`);
     } catch (e) {
-      setTtsStatus("✗ 失败:" + (e instanceof Error ? e.message : String(e)));
+      setTtsStatus(`✗ 失败:${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setTestingTts(false);
     }
@@ -216,7 +216,9 @@ export function SettingsView() {
       setTtsCacheCount(0);
       setTtsStatus(`✓ 已清空朗读缓存(${removed} 条)`);
     } catch (e) {
-      setTtsStatus("✗ 清空缓存失败:" + (e instanceof Error ? e.message : String(e)));
+      setTtsStatus(
+        `✗ 清空缓存失败:${e instanceof Error ? e.message : String(e)}`,
+      );
     } finally {
       setClearingTtsCache(false);
     }
@@ -233,7 +235,9 @@ export function SettingsView() {
         return;
       }
       const gen = await provider.generate({
-        messages: [{ role: "user", content: "Reply with the single word: pong" }],
+        messages: [
+          { role: "user", content: "Reply with the single word: pong" },
+        ],
       });
       let streamed = "";
       await provider.stream(
@@ -242,16 +246,18 @@ export function SettingsView() {
           streamed += d;
         },
       );
-      setStatus(`✓ 连接正常 — 非流式: "${gen.trim().slice(0, 40)}" | 流式收到 ${streamed.length} 字符`);
+      setStatus(
+        `✓ 连接正常 — 非流式: "${gen.trim().slice(0, 40)}" | 流式收到 ${streamed.length} 字符`,
+      );
     } catch (e) {
-      setStatus("✗ 失败:" + (e instanceof Error ? e.message : String(e)));
+      setStatus(`✗ 失败:${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setTesting(false);
     }
   }
 
   return (
-    <div className="h-full max-w-[660px] overflow-y-auto px-6 pt-[3.4rem] pb-6">
+    <div className="h-full max-w-2xl overflow-y-auto px-6 pt-14 pb-6">
       <h2 className="mb-4 mt-0 text-lg font-semibold tracking-tight">设置</h2>
 
       <Field label="主题">
@@ -284,10 +290,13 @@ export function SettingsView() {
         />
       </Field>
       <Field label="模型">
-        <Input value={cfg.model} onChange={(e) => update("model", e.target.value)} />
+        <Input
+          value={cfg.model}
+          onChange={(e) => update("model", e.target.value)}
+        />
       </Field>
 
-      <div className="mb-[0.9rem] flex items-end gap-2">
+      <div className="mb-3.5 flex items-end gap-2">
         <Field label="母语" className="mb-0 flex-1">
           <Input
             value={cfg.nativeLanguage}
@@ -301,7 +310,10 @@ export function SettingsView() {
           />
         </Field>
         <Field label="水平" className="mb-0 flex-1">
-          <Input value={cfg.level} onChange={(e) => update("level", e.target.value)} />
+          <Input
+            value={cfg.level}
+            onChange={(e) => update("level", e.target.value)}
+          />
         </Field>
       </div>
 
@@ -312,7 +324,9 @@ export function SettingsView() {
             className="flex-1"
             value={keyInput}
             onChange={(e) => setKeyInput(e.target.value)}
-            placeholder={hasKey ? "••••••••" : keyPlaceholders[cfg.providerType]}
+            placeholder={
+              hasKey ? "••••••••" : keyPlaceholders[cfg.providerType]
+            }
           />
           <Button onClick={saveKey} disabled={!keyInput.trim()}>
             保存 key
@@ -337,7 +351,7 @@ export function SettingsView() {
       </Button>
 
       {status && (
-        <p className="mt-2 break-words text-[0.82rem] text-primary">{status}</p>
+        <p className="mt-2 break-words text-sm text-primary">{status}</p>
       )}
 
       <div className="my-6 h-px bg-border" />
@@ -345,8 +359,9 @@ export function SettingsView() {
       <h2 className="mb-2 mt-0 text-lg font-semibold tracking-tight">
         朗读 (MiMo TTS)
       </h2>
-      <p className="-mt-1 mb-4 text-[0.82rem] leading-snug text-muted-foreground">
-        聊天中 AI 回复、改正和更地道句子旁的小喇叭会调用 MiMo 语音合成。相同句子会缓存音频,避免重复请求。
+      <p className="-mt-1 mb-4 text-sm leading-snug text-muted-foreground">
+        聊天中 AI 回复、改正和更地道句子旁的小喇叭会调用 MiMo
+        语音合成。相同句子会缓存音频,避免重复请求。
         {ttsCacheCount !== null && ` 当前缓存 ${ttsCacheCount} 条。`}
       </p>
 
@@ -357,7 +372,9 @@ export function SettingsView() {
         AI 回复自动朗读(关掉后仍可点小喇叭手动朗读)
       </ToggleField>
 
-      <Field label={`MiMo API key ${hasTtsKey ? "(已保存 · 留空不改)" : "(未设置)"}`}>
+      <Field
+        label={`MiMo API key ${hasTtsKey ? "(已保存 · 留空不改)" : "(未设置)"}`}
+      >
         <div className="flex items-end gap-2">
           <Input
             type="password"
@@ -366,7 +383,10 @@ export function SettingsView() {
             onChange={(e) => setTtsKeyInput(e.target.value)}
             placeholder={hasTtsKey ? "••••••••" : "MiMo API key…"}
           />
-          <Button onClick={() => void saveTtsKey()} disabled={!ttsKeyInput.trim()}>
+          <Button
+            onClick={() => void saveTtsKey()}
+            disabled={!ttsKeyInput.trim()}
+          >
             保存 key
           </Button>
           {hasTtsKey && (
@@ -379,7 +399,7 @@ export function SettingsView() {
 
       <Field label="朗读风格 prompt (user 消息)">
         <Textarea
-          className="min-h-[4.5rem] resize-y leading-snug"
+          className="min-h-18 resize-y leading-snug"
           value={ttsCfg.stylePrompt}
           onChange={(e) => updateTts("stylePrompt", e.target.value)}
           rows={3}
@@ -387,7 +407,7 @@ export function SettingsView() {
         />
       </Field>
 
-      <div className="mb-[0.9rem] flex items-end gap-2">
+      <div className="mb-3.5 flex items-end gap-2">
         <Field label="音色" className="mb-0 flex-1">
           <Select
             value={ttsCfg.voice}
@@ -438,7 +458,7 @@ export function SettingsView() {
       </div>
 
       {ttsStatus && (
-        <p className="mt-2 break-words text-[0.82rem] text-primary">{ttsStatus}</p>
+        <p className="mt-2 break-words text-sm text-primary">{ttsStatus}</p>
       )}
     </div>
   );

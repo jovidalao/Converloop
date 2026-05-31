@@ -1,4 +1,4 @@
-import { invoke, Channel } from "@tauri-apps/api/core";
+import { Channel, invoke } from "@tauri-apps/api/core";
 import type { ChatMessage, GenerateOptions, ModelProvider } from "./types";
 
 // 原生 Anthropic Messages API。结构化输出走 tool_use + input_schema。
@@ -116,7 +116,8 @@ export function extractAnthropicContent(json: unknown): string {
   const blocks = res.content ?? [];
   const texts: string[] = [];
   for (const block of blocks) {
-    if (block.type === "thinking" || block.type === "redacted_thinking") continue;
+    if (block.type === "thinking" || block.type === "redacted_thinking")
+      continue;
     if (block.type === "text") texts.push(block.text);
     if (block.type === "tool_use") {
       return JSON.stringify(block.input);

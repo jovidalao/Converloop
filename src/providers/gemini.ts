@@ -1,4 +1,4 @@
-import { invoke, Channel } from "@tauri-apps/api/core";
+import { Channel, invoke } from "@tauri-apps/api/core";
 import type { ChatMessage, GenerateOptions, ModelProvider } from "./types";
 
 // 原生 Gemini 适配器(generateContent / streamGenerateContent)。
@@ -88,15 +88,18 @@ export function buildGeminiRequestBody(opts: GenerateOptions): Body {
   if (systemInstruction) body.systemInstruction = systemInstruction;
 
   const generationConfig: Body = {};
-  if (opts.temperature !== undefined) generationConfig.temperature = opts.temperature;
-  if (opts.maxTokens !== undefined) generationConfig.maxOutputTokens = opts.maxTokens;
+  if (opts.temperature !== undefined)
+    generationConfig.temperature = opts.temperature;
+  if (opts.maxTokens !== undefined)
+    generationConfig.maxOutputTokens = opts.maxTokens;
   if (opts.jsonSchema) {
     generationConfig.responseMimeType = "application/json";
     generationConfig.responseSchema = toGeminiSchema(opts.jsonSchema.schema);
   } else if (opts.jsonObject) {
     generationConfig.responseMimeType = "application/json";
   }
-  if (Object.keys(generationConfig).length > 0) body.generationConfig = generationConfig;
+  if (Object.keys(generationConfig).length > 0)
+    body.generationConfig = generationConfig;
   return body;
 }
 
@@ -133,7 +136,10 @@ function extractText(json: unknown): string {
 }
 
 // 解析已按 \n 切好的 SSE 行,累加 candidates[].content.parts[].text。
-function consumeSseLines(lines: string[], onDelta: (delta: string) => void): string {
+function consumeSseLines(
+  lines: string[],
+  onDelta: (delta: string) => void,
+): string {
   let acc = "";
   for (const line of lines) {
     const t = line.trim();

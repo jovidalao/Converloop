@@ -45,7 +45,9 @@ export async function buildTtsCacheKey(
     .join("");
 }
 
-export async function getCachedSpeech(key: string): Promise<ArrayBuffer | null> {
+export async function getCachedSpeech(
+  key: string,
+): Promise<ArrayBuffer | null> {
   try {
     const db = await openDb();
     const tx = db.transaction(STORE_NAME, "readonly");

@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { sanityCheck, extractMyNotes, applyPreservedMyNotes } from "./sanity";
+import { describe, expect, it } from "vitest";
+import { applyPreservedMyNotes, extractMyNotes, sanityCheck } from "./sanity";
 
 const oldMd = `# Learner Profile · Chinese → English · B1 · updated 2026-05-29
 
@@ -63,7 +63,8 @@ describe("sanityCheck", () => {
   });
 
   it("缺段落 → 拒绝", () => {
-    const broken = "# Learner Profile\n## Working on\n- x\n## My notes\n我自己记的:多练时态。\n";
+    const broken =
+      "# Learner Profile\n## Working on\n- x\n## My notes\n我自己记的:多练时态。\n";
     const r = sanityCheck(oldMd, broken);
     expect(r.ok).toBe(false);
     expect(r.reason).toContain("缺少必需段落");
