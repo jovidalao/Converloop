@@ -31,7 +31,7 @@ AI 语言学习 agent —— 第一版范围、数据流、存储与现状。Age
 
 | 层 | 存什么 | 谁维护 | 为什么 |
 |---|---|---|---|
-| **SQLite**(地面真相) | 每个掌握项的 error_count / seen_count / last_seen / status | **代码**(每轮从信号派生) | 确定性、可排序查询、可画进度。LLM 不碰计数。 |
+| **SQLite**(地面真相) | 掌握项快照 + 每条观察事件(error/correct/introduced/gap) | **代码**(每轮从信号派生) | 确定性、可排序查询、可重算、可画进度。LLM 不碰计数。 |
 | **MD 档案**(叙述层) | 定性人设:在练什么、已掌握、回避、兴趣、最近学到、个人事实 | **维护 agent**(偶尔) | 人类可读可编、直接喂对话 agent。捕捉列存表达不了的定性状态。 |
 
 **为什么不二选一:** 只用 MD → 丢掉可信计数、可排序、进度可视化(prose 是氛围不是数据,LLM 重写还会漂移)。只用 SQLite → 对话 agent 拿不到"这个人是谁"的定性人设。所以两层并存,各管一摊。
@@ -46,8 +46,8 @@ AI 语言学习 agent —— 第一版范围、数据流、存储与现状。Age
     → 对话流式秒回给用户;批改稍后补到批改面板
     → 代码记账(deriveSignals → applySignal,见 tutor-agent):
         issues[]          → "error" 信号 → 写 SQLite
-        expression_gap    → "gap" 信号(+ key_items 走 introduced)→ 写 SQLite
-        mastery_updates[] → "correct" / "introduced" 信号 → 写 SQLite
+        expression_gap    → "gap" 信号(+ key_items 走 introduced)→ 写 mastery_event + mastery_item 快照
+        mastery_updates[] → "correct" / "introduced" 信号 → 写 mastery_event + mastery_item 快照
     → 持久化本轮(turn:input / reply / analysis JSON,挂在当前 conversation 下)
     → 每 10 轮触发一次后台 Profile Maintainer(单飞)
 
@@ -64,7 +64,7 @@ AI 语言学习 agent —— 第一版范围、数据流、存储与现状。Age
 
 migration 定义在 **Rust 侧**(`src-tauri/src/lib.rs`,`tauri_plugin_sql::Builder::add_migrations`),`Database.load()` 时触发。Drizzle 只做类型安全查询,不接管 migration —— TS 侧 `src/db/schema.ts` **手动镜像** Rust 的建表,两边保持一致。
 
-当前 4 个 migration:
+当前 9 个 migration:
 
 | ver | 描述 | 表 / 变更 |
 |---|---|---|
@@ -72,6 +72,11 @@ migration 定义在 **Rust 侧**(`src-tauri/src/lib.rs`,`tauri_plugin_sql::Build
 | 2 | create_turn | `turn` |
 | 3 | create_conversation | `conversation` |
 | 4 | add_turn_conversation_id | `turn.conversation_id` |
+| 5 | add_turn_explain_count | `turn.explain_count` |
+| 6 | add_turn_bilingual_count | `turn.bilingual_count` |
+| 7 | create_mastery_event | `mastery_event` |
+| 8 | create_mastery_event_key_index | `mastery_event(key, created_at)` |
+| 9 | create_mastery_event_turn_index | `mastery_event(turn_id)` |
 
 ### `mastery_item`(掌握项,起点,别一上来搞知识追踪)
 
@@ -82,13 +87,37 @@ migration 定义在 **Rust 侧**(`src-tauri/src/lib.rs`,`tauri_plugin_sql::Build
   key: string              // 稳定 upsert 键,= Issue.mastery_key,如 "grammar:article_usage"
   label: string            // "冠词 a/an/the 的用法"
   status: 'struggling' | 'learning' | 'known'
-  seen_count: number
+  seen_count: number       // 用户产出观察次数(error/correct/gap);introduced 不增加
   error_count: number
   last_seen_at: number
-  example?: string         // 用户真实出错句 / gap 的地道说法,最有价值
-  notes?: string           // 用户可编辑 / gap 的场景说明
+  example?: string         // 用户真实出错句 / gap 的原始母语/混说输入
+  notes?: string           // 用户可编辑 / gap 的目标语表达
 }
 ```
+
+`introduced` 是曝光证据(老师/批改新引入),不是用户已经会用的证据:它会创建/保留学习项、
+更新 `last_seen_at`,但不增加 `seen_count/error_count`,因此不会把条目推到 `known`。
+
+### `mastery_event`(观察事件,可追溯证据)
+
+```ts
+{
+  id: string
+  created_at: number
+  turn_id?: string           // 对应 turn;未来复习/手动事件可为空或另设 source
+  key: string
+  label: string
+  type: MasteryType
+  kind: 'error' | 'correct' | 'introduced' | 'gap'
+  source: 'tutor' | 'review' | 'manual'
+  evidence?: string          // 用户原句片段 / key item / gap 原句
+  note?: string              // gap 的目标语表达等短文本
+  payload_json?: string      // 原始结构化证据,用于审计 / 以后重算 mastery_item
+}
+```
+
+`mastery_item` 是当前可查询快照;`mastery_event` 是不可丢的证据日志。以后调整掌握公式、
+合并 key、做复习页或排查 LLM 误判时,可以从事件重算快照,不只依赖一个被覆盖的 example。
 
 `type` 是裸 `TEXT`(无 CHECK),新增掌握类型(如 `expression_gap`)只改 TS 侧两个 enum(`agents/schema.ts` Zod + `db/schema.ts` drizzle),不需要 Rust 迁移。记账公式见 [tutor-agent](./tutor-agent.md#代码侧记账分数归代码管)。
 
@@ -158,6 +187,7 @@ v1 核心链路已完成并可用:
 - ✅ MD 档案读写 + 维护 agent(含 sanity check)· `## About me` 个人记忆
 - ✅ 多会话侧边栏 · Markdown 回复 · 按需讲解 · 朗读(TTS)· 母语/混说表达缺口(见 expression-gap)
 - ✅ 理解信号(每条回复的讲解/双语请求数)· 代码定向选取的复习候选(`getReviewDueList`)· 证据驱动的难度校准(`lib/proficiency`,喂对话 agent)
+- ✅ `mastery_event` 事件日志:每条 error/correct/introduced/gap 都保留结构化证据,`introduced` 不再推动掌握毕业
 - ✅ 最小 UI:聊天 / 批改面板 / 档案查看编辑 / 设置(provider + key + TTS)
 
 **下一步(未实现):**

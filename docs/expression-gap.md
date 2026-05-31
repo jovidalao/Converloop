@@ -7,7 +7,7 @@
 **已实现(底层记录 + 对话延续 + 讲解 UI):**
 
 - schema:`ExpressionGap` + `MasteryType="expression_gap"`(`src/agents/schema.ts`)。
-- 记账:`SignalKind="gap"`、`deriveSignals` 记情景(存**原句**)+ key_items 走 introduced(`src/db/mastery-logic.ts`、`mastery.ts`,写 `notes`)。
+- 记账:`SignalKind="gap"`、`deriveSignals` 记情景(存**原句**)+ key_items 走 introduced(`src/db/mastery-logic.ts`、`mastery.ts`,写 `mastery_item` 快照 + `mastery_event` 证据日志)。
 - tutor prompt:母语/混说 → 不语法纠正,改为**讲解构句思路 + 句式**(`src/agents/tutor.ts`)。
 - 对话延续:母语轮的历史用导师转换的地道目标语,后续对话在目标语里连贯(`src/db/turns.ts` `userLineForHistory`)。
 - 纠正 UI:气泡「母语」角标 + 讲解面板(地道表达 / 讲解 / 关键词句式 / 场景),取代红绿 diff(`InlineCorrection.tsx`)。
@@ -122,12 +122,16 @@ const errorCount = prev.errorCount + (kind === "error" || kind === "gap" ? 1 : 0
 `expression_gap` 非空时:
 
 1. **意图本身** → 一个 `expression_gap` 项:
-   `{ key: gap.mastery_key, label: gap.mastery_label, type: "expression_gap", kind: "gap", example: gap.target_expression, note: template + usage_note }`
-2. **每个 key_item** → `introduced` 信号(**完全复用**现有 vocab/collocation/grammar 机制,无新逻辑)。
+   `{ key: gap.mastery_key, label: gap.mastery_label, type: "expression_gap", kind: "gap", example: gap.original, note: gap.target_expression }`
+2. **每个 key_item** → `introduced` 信号(**曝光证据**,不增加 `seen_count`,不会推动 known)。
 
 ### Signal / 存储扩展
 
-`Signal` 增加可选 `note`,`upsertSignal` 写入 `mastery_item.notes`(列已存在)。这样 `target_expression` 进 `example`、`template`+`usage_note` 进 `notes`,复习页可直接取用。
+`Signal` 增加可选 `note` / `payload`,`upsertSignal` 写入 `mastery_item.notes`(列已存在),同时把原始结构化证据写进 `mastery_event.payload_json`。当前落库约定:
+
+- `mastery_item.example` = 用户原始母语/混说输入;
+- `mastery_item.notes` = 目标语地道表达(`target_expression`),后续复习页可优先取用;
+- `mastery_event.payload_json` = 完整 `expression_gap` 或 `key_item`,用于以后补模板、重算或调试。
 
 ---
 
@@ -214,7 +218,7 @@ const ReviewSet = z.object({ cards: z.array(ReviewCard) });
 |---|------|------|
 | A | schema:`ExpressionGap` + `MasteryType=expression_gap` | ✅ 已实现 |
 | B | tutor prompt:加 EXPRESSION GAP 段(§7)+ prose 回退 | ✅ 已实现(字段按 §0 收窄) |
-| C | 记账:`SignalKind=gap`、`applySignal`、`deriveSignals`、`Signal.note`、`upsertSignal` 写 notes | ✅ 已实现,单测覆盖 |
+| C | 记账:`SignalKind=gap`、`applySignal`、`deriveSignals`、`Signal.note/payload`、`upsertSignal` 写 notes + `mastery_event` | ✅ 已实现,单测覆盖 |
 | D | 纠正 UI:气泡角标 + 专属面板(§4) | ✅ 已实现 |
 | E | 复习页:`review` 视图 + 导航 + `review_day` 迁移 | ⏳ 未实现(路线图) |
 | F | `reviewGenerator` agent + Zod schema(§5、§8) | ⏳ 未实现(路线图) |

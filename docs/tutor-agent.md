@@ -64,8 +64,8 @@ const MasteryUpdate = z.object({
   label: z.string(),
   type: MasteryType,
   signal: z.enum([
-    "correct",      // 用户这轮正确用出某个点(尤其之前薄弱的)
-    "introduced",   // 这轮 agent 在批改/建议里新引入的点
+    "correct",      // 用户这轮正确用出某个点(尤其之前薄弱的):产出证据
+    "introduced",   // 批改/建议里新引入的点:曝光证据,不推动 known
   ]),
   evidence: z.string().optional(), // 用户真实句子,最有价值
 });
@@ -134,8 +134,13 @@ LLM 给信号,代码算状态:
 ```ts
 // 每轮:issues → error 信号;mastery_updates → correct / introduced 信号
 function applySignal(item, signal) {
+  if (signal === "introduced") {
+    item.last_seen_at = Date.now(); // 曝光过,但不是用户会用了
+    return;
+  }
+
   item.seen_count++;
-  if (signal === "error") item.error_count++;
+  if (signal === "error" || signal === "gap") item.error_count++;
   item.last_seen_at = Date.now();
 
   const errRate = item.error_count / item.seen_count;
@@ -145,6 +150,9 @@ function applySignal(item, signal) {
     errRate < 0.15      ? "known"      : "learning";
 }
 ```
+
+实现上还会把每条信号写入 `mastery_event`:聚合快照(`mastery_item`)用于查询排序,
+事件日志用于审计、合并 key、以后调整公式后重算。
 
 公式以后再调,关键是它在代码里,可测可改,不依赖模型。
 

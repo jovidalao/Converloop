@@ -18,6 +18,7 @@ export interface Signal {
   kind: SignalKind;
   example?: string;
   note?: string; // 额外存到 mastery_item.notes(如表达缺口的地道说法)
+  payload?: unknown; // 原始结构化证据,写入 mastery_event 供审计 / 重算
 }
 
 export interface MasteryCounters {
@@ -40,25 +41,39 @@ export function normalizeKey(key: string): string {
     .replace(/^_|_$/g, "");
 }
 
+function statusFromCounts(
+  seenCount: number,
+  errorCount: number,
+): MasteryStatus {
+  if (seenCount < 3) return "learning";
+  const errRate = errorCount / seenCount;
+  if (errRate > 0.4) return "struggling";
+  if (errRate < 0.15) return "known";
+  return "learning";
+}
+
 // 见 docs/tutor-agent.md#代码侧记账。公式以后可调,关键是它在代码里、可测。
 export function applySignal(
   prev: Pick<MasteryCounters, "seenCount" | "errorCount">,
   kind: SignalKind,
   now: number = Date.now(),
 ): MasteryCounters {
+  // introduced = 老师/批改新引入,只是曝光证据,不是用户产出证据。
+  // 它更新 lastSeenAt、保留学习项,但不推动 struggling→known。
+  if (kind === "introduced") {
+    return {
+      seenCount: prev.seenCount,
+      errorCount: prev.errorCount,
+      status: statusFromCounts(prev.seenCount, prev.errorCount),
+      lastSeenAt: now,
+    };
+  }
+
   const seenCount = prev.seenCount + 1;
   // gap 与 error 一样算负面证据:用户没能产出 → 推向 struggling。
   const errorCount =
     prev.errorCount + (kind === "error" || kind === "gap" ? 1 : 0);
-  const errRate = errorCount / seenCount;
-  const status: MasteryStatus =
-    seenCount < 3
-      ? "learning"
-      : errRate > 0.4
-        ? "struggling"
-        : errRate < 0.15
-          ? "known"
-          : "learning";
+  const status = statusFromCounts(seenCount, errorCount);
   return { seenCount, errorCount, status, lastSeenAt: now };
 }
 
@@ -79,6 +94,7 @@ export function deriveSignals(analysis: TutorAnalysis): Signal[] {
       type: issue.mastery_type,
       kind: "error",
       example: issue.span_original,
+      payload: { issue },
     });
     claimed.add(key);
   }
@@ -91,6 +107,7 @@ export function deriveSignals(analysis: TutorAnalysis): Signal[] {
       type: update.type,
       kind: update.signal,
       example: update.evidence,
+      payload: { mastery_update: update },
     });
     claimed.add(key);
   }
@@ -106,6 +123,7 @@ export function deriveSignals(analysis: TutorAnalysis): Signal[] {
         kind: "gap",
         example: gap.original, // 最重要:用户说不出的原句
         note: gap.target_expression,
+        payload: { expression_gap: gap },
       });
       claimed.add(gapKey);
     }
@@ -118,6 +136,7 @@ export function deriveSignals(analysis: TutorAnalysis): Signal[] {
         type: item.mastery_type,
         kind: "introduced",
         example: item.text,
+        payload: { key_item: item, expression_gap_key: gapKey },
       });
       claimed.add(key);
     }

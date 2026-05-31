@@ -1,6 +1,7 @@
 import { count, desc, eq, gt, sql } from "drizzle-orm";
 import type { TutorAnalysis } from "../agents/schema";
 import { db } from "./client";
+import { normalizeKey } from "./mastery-logic";
 import { type Turn, turn } from "./schema";
 
 export async function persistTurn(
@@ -205,7 +206,10 @@ export async function getRecentlyIntroduced(
     const { analysis: a } = parseTurnFeedback(t.analysisJson);
     if (!a) continue;
     for (const u of a.mastery_updates) {
-      if (u.signal === "introduced") seen.set(u.key, u.label);
+      if (u.signal === "introduced") seen.set(normalizeKey(u.key), u.label);
+    }
+    for (const item of a.expression_gap?.key_items ?? []) {
+      seen.set(normalizeKey(item.mastery_key), item.mastery_label);
     }
   }
   return [...seen].map(([key, label]) => ({ key, label }));

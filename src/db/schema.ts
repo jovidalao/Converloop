@@ -28,6 +28,35 @@ export const masteryItem = sqliteTable("mastery_item", {
 export type MasteryItem = typeof masteryItem.$inferSelect;
 export type NewMasteryItem = typeof masteryItem.$inferInsert;
 
+// 每条导师观察信号的事件日志。mastery_item 是可查询快照;event 是可追溯证据。
+export const masteryEvent = sqliteTable("mastery_event", {
+  id: text("id").primaryKey(),
+  createdAt: integer("created_at").notNull(),
+  turnId: text("turn_id"),
+  key: text("key").notNull(),
+  label: text("label").notNull(),
+  type: text("type", {
+    enum: [
+      "vocab",
+      "grammar",
+      "collocation",
+      "error_pattern",
+      "expression_gap",
+    ],
+  }).notNull(),
+  kind: text("kind", {
+    enum: ["error", "correct", "introduced", "gap"],
+  }).notNull(),
+  source: text("source", {
+    enum: ["tutor", "review", "manual"],
+  }).notNull(),
+  evidence: text("evidence"),
+  note: text("note"),
+  payloadJson: text("payload_json"),
+});
+
+export type MasteryEvent = typeof masteryEvent.$inferSelect;
+
 // 会话(左侧对话列表)。镜像 src-tauri migration v3(create_conversation)。
 export const conversation = sqliteTable("conversation", {
   id: text("id").primaryKey(),

@@ -49,13 +49,20 @@ describe("applySignal", () => {
     expect(r).toMatchObject({ seenCount: 3, errorCount: 0, status: "known" });
   });
 
-  it("correct/introduced 不增 error_count", () => {
+  it("correct 不增 error_count", () => {
     expect(
       applySignal({ seenCount: 5, errorCount: 2 }, "correct").errorCount,
     ).toBe(2);
-    expect(
-      applySignal({ seenCount: 5, errorCount: 2 }, "introduced").errorCount,
-    ).toBe(2);
+  });
+
+  it("introduced 只算曝光,不增加 seen_count/error_count,也不推动 known", () => {
+    const r = applySignal({ seenCount: 2, errorCount: 0 }, "introduced", 1);
+    expect(r).toMatchObject({
+      seenCount: 2,
+      errorCount: 0,
+      status: "learning",
+      lastSeenAt: 1,
+    });
   });
 
   it("gap 与 error 一样增 error_count", () => {
@@ -99,8 +106,19 @@ describe("deriveSignals", () => {
       key: "grammar:article_usage",
       kind: "error",
       example: "a apple",
+      payload: {
+        issue: expect.objectContaining({
+          mastery_key: "grammar:article_usage",
+        }),
+      },
     });
-    expect(sigs[1]).toMatchObject({ key: "vocab:apple", kind: "introduced" });
+    expect(sigs[1]).toMatchObject({
+      key: "vocab:apple",
+      kind: "introduced",
+      payload: {
+        mastery_update: expect.objectContaining({ key: "vocab:apple" }),
+      },
+    });
   });
 
   it("同一 key 既在 issues 又在 mastery_updates → error 优先,不重复计", () => {
@@ -183,10 +201,21 @@ describe("deriveSignals", () => {
       kind: "gap",
       example: "我想委婉地拒绝这个请求",
       note: "I'd rather not take this on right now, but I could help later.",
+      payload: {
+        expression_gap: expect.objectContaining({
+          mastery_key: "gap:decline_request_politely",
+        }),
+      },
     });
     expect(sigs[1]).toMatchObject({
       key: "collocation:would_rather_not",
       kind: "introduced",
+      payload: {
+        key_item: expect.objectContaining({
+          mastery_key: "collocation:would_rather_not",
+        }),
+        expression_gap_key: "gap:decline_request_politely",
+      },
     });
   });
 });

@@ -3,7 +3,32 @@ import type { TutorAnalysis } from "../agents/schema";
 import type { WeakItem } from "../agents/tutor";
 import { db } from "./client";
 import { applySignal, deriveSignals, type Signal } from "./mastery-logic";
-import { type MasteryItem, masteryItem } from "./schema";
+import { type MasteryItem, masteryEvent, masteryItem } from "./schema";
+
+function payloadJson(payload: unknown): string | null {
+  if (payload == null) return null;
+  return JSON.stringify(payload);
+}
+
+async function insertMasteryEvent(
+  sig: Signal,
+  now: number,
+  turnId?: string,
+): Promise<void> {
+  await db.insert(masteryEvent).values({
+    id: crypto.randomUUID(),
+    createdAt: now,
+    turnId: turnId ?? null,
+    key: sig.key,
+    label: sig.label,
+    type: sig.type,
+    kind: sig.kind,
+    source: "tutor",
+    evidence: sig.example ?? null,
+    note: sig.note ?? null,
+    payloadJson: payloadJson(sig.payload),
+  });
+}
 
 // 按 mastery_key upsert,并跑 applySignal。计数/状态全归代码。
 async function upsertSignal(sig: Signal, now: number): Promise<void> {
@@ -52,11 +77,15 @@ async function upsertSignal(sig: Signal, now: number): Promise<void> {
   }
 }
 
-// 一轮记账:派生信号 → 逐个 upsert。同一 key 第二次是 update,不新增。
-async function recordAnalysisInner(analysis: TutorAnalysis): Promise<void> {
+// 一轮记账:派生信号 → 逐个 upsert + 事件落库。同一 key 第二次是 update,不新增。
+async function recordAnalysisInner(
+  analysis: TutorAnalysis,
+  turnId?: string,
+): Promise<void> {
   const now = Date.now();
   for (const sig of deriveSignals(analysis)) {
     await upsertSignal(sig, now);
+    await insertMasteryEvent(sig, now, turnId);
   }
 }
 
@@ -65,8 +94,11 @@ async function recordAnalysisInner(analysis: TutorAnalysis): Promise<void> {
 // 地面真相,必须确定性 —— 把所有记账串到一条 promise 链上,逐轮顺序执行。
 let recordQueue: Promise<unknown> = Promise.resolve();
 
-export function recordAnalysis(analysis: TutorAnalysis): Promise<void> {
-  const next = recordQueue.then(() => recordAnalysisInner(analysis));
+export function recordAnalysis(
+  analysis: TutorAnalysis,
+  turnId?: string,
+): Promise<void> {
+  const next = recordQueue.then(() => recordAnalysisInner(analysis, turnId));
   // 链本身不能因某轮抛错而断(否则后续记账永远卡住);调用方仍拿到真实结果。
   recordQueue = next.catch(() => {});
   return next;
@@ -80,6 +112,8 @@ export async function getWeakList(limit = 15): Promise<WeakItem[]> {
       label: masteryItem.label,
       type: masteryItem.type,
       status: masteryItem.status,
+      example: masteryItem.example,
+      notes: masteryItem.notes,
     })
     .from(masteryItem)
     .where(ne(masteryItem.status, "known"))
@@ -104,6 +138,7 @@ export interface ReviewItem {
   label: string;
   type: string;
   example: string | null;
+  notes: string | null;
 }
 
 export async function getReviewDueList(limit = 5): Promise<ReviewItem[]> {
@@ -112,6 +147,7 @@ export async function getReviewDueList(limit = 5): Promise<ReviewItem[]> {
       label: masteryItem.label,
       type: masteryItem.type,
       example: masteryItem.example,
+      notes: masteryItem.notes,
     })
     .from(masteryItem)
     .where(ne(masteryItem.status, "known"))
@@ -129,6 +165,8 @@ export interface MaintainerData {
     seenCount: number;
     status: string;
     lastSeenAt: number;
+    example: string | null;
+    notes: string | null;
   }[];
   recentlyKnown: { label: string; key: string }[];
 }
@@ -143,6 +181,8 @@ export async function getMaintainerData(): Promise<MaintainerData> {
       seenCount: masteryItem.seenCount,
       status: masteryItem.status,
       lastSeenAt: masteryItem.lastSeenAt,
+      example: masteryItem.example,
+      notes: masteryItem.notes,
     })
     .from(masteryItem)
     .where(ne(masteryItem.status, "known"))

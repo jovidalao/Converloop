@@ -77,10 +77,17 @@ function ago(ms: number): string {
 function userPrompt(input: MaintainerInput): string {
   const weakRows =
     input.data.weak
-      .map(
-        (w) =>
-          `- [${w.type}] ${w.label} (${w.key}) — ${w.errorCount}/${w.seenCount} errors, status=${w.status}, last seen ${ago(w.lastSeenAt)}`,
-      )
+      .map((w) => {
+        const details = [
+          w.example
+            ? `example="${w.example.replace(/\s+/g, " ").trim()}"`
+            : null,
+          w.notes ? `note="${w.notes.replace(/\s+/g, " ").trim()}"` : null,
+        ].filter(Boolean);
+        return `- [${w.type}] ${w.label} (${w.key}) — ${w.errorCount}/${w.seenCount} errors, status=${w.status}, last seen ${ago(w.lastSeenAt)}${
+          details.length ? `; ${details.join("; ")}` : ""
+        }`;
+      })
       .join("\n") || "(none)";
   const knownRows =
     input.data.recentlyKnown.map((k) => `- ${k.label} (${k.key})`).join("\n") ||

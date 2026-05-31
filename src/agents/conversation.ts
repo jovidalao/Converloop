@@ -15,9 +15,13 @@ export interface ConversationContext {
 function formatReviewItems(items: ReviewItem[]): string {
   if (items.length === 0) return "(nothing due)";
   return items
-    .map((r) =>
-      r.example ? `- ${r.label} — e.g. "${r.example}"` : `- ${r.label}`,
-    )
+    .map((r) => {
+      const example =
+        r.type === "expression_gap" && r.notes ? r.notes : r.example;
+      return example
+        ? `- ${r.label} — e.g. "${example.replace(/\s+/g, " ").trim()}"`
+        : `- ${r.label}`;
+    })
     .join("\n");
 }
 

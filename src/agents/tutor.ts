@@ -14,6 +14,8 @@ export interface WeakItem {
   key: string;
   type: string;
   status: string;
+  example?: string | null;
+  notes?: string | null;
 }
 
 export interface TutorContext {
@@ -32,10 +34,22 @@ export interface AnalyzeResult {
   error?: string;
 }
 
+function oneLine(s: string): string {
+  return s.replace(/\s+/g, " ").trim();
+}
+
 function formatWeakList(items: WeakItem[]): string {
   if (items.length === 0) return "(none yet)";
   return items
-    .map((w) => `- [${w.type}] ${w.label} (${w.key}) — status=${w.status}`)
+    .map((w) => {
+      const details = [
+        w.example ? `example="${oneLine(w.example)}"` : null,
+        w.notes ? `note="${oneLine(w.notes)}"` : null,
+      ].filter(Boolean);
+      return `- [${w.type}] ${w.label} (${w.key}) — status=${w.status}${
+        details.length ? `; ${details.join("; ")}` : ""
+      }`;
+    })
     .join("\n");
 }
 

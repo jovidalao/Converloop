@@ -96,7 +96,7 @@ export async function runTurn(
       if (analysis) {
         cb.onAnalysis(analysis);
         try {
-          await recordAnalysis(analysis);
+          await recordAnalysis(analysis, turnId);
           await updateTurnAnalysis(turnId, analysis);
           void maybeRunMaintainer();
         } catch (e) {

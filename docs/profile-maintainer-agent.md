@@ -38,9 +38,9 @@
 ```
 1. 现有 learner-profile.md 全文          // 要更新,不是从零重写
 2. SQLite 聚合(代码查好再喂,别让它自己算):
-   - 薄弱 top 15:label / mastery_key / type / error_count / seen_count / status / last_seen
+   - 薄弱 top 15:label / mastery_key / type / error_count / seen_count / status / last_seen / example / notes
    - 最近升到 known 的项(可移入"已掌握")
-   - 最近 introduced 的项(放"最近学到")
+   - 最近 introduced 的项(含 expression_gap 的 key_items,放"最近学到")
 3. 近期对话片段:上次维护之后的 transcript(截断到约 1500 token)
 4. config:native / target / level
 ```
@@ -100,7 +100,7 @@ User message 模板:
 
 === MASTERY DATA (source of truth for strengths/weaknesses) ===
 Struggling / learning (top 15):
-{rows: "- [grammar] article usage (grammar:article_usage) — 6/9 errors, status=struggling, last seen 2d ago"}
+{rows: "- [grammar] article usage (grammar:article_usage) — 6/9 errors, status=struggling, last seen 2d ago; example=\"a apple\""}
 Recently reached "known":
 {rows}
 Recently introduced:

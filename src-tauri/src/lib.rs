@@ -51,6 +51,28 @@ const ADD_TURN_EXPLAIN_COUNT: &str =
 const ADD_TURN_BILINGUAL_COUNT: &str =
     "ALTER TABLE turn ADD COLUMN bilingual_count INTEGER NOT NULL DEFAULT 0;";
 
+// 每条导师观察信号的事件日志。mastery_item 是可查询快照;event 是可追溯证据。
+const CREATE_MASTERY_EVENT: &str = "\
+CREATE TABLE IF NOT EXISTS mastery_event (
+    id           TEXT PRIMARY KEY NOT NULL,
+    created_at   INTEGER NOT NULL,
+    turn_id      TEXT,
+    key          TEXT NOT NULL,
+    label        TEXT NOT NULL,
+    type         TEXT NOT NULL,
+    kind         TEXT NOT NULL,
+    source       TEXT NOT NULL,
+    evidence     TEXT,
+    note         TEXT,
+    payload_json TEXT
+);";
+
+const CREATE_MASTERY_EVENT_KEY_INDEX: &str =
+    "CREATE INDEX IF NOT EXISTS mastery_event_key_created_idx ON mastery_event (key, created_at);";
+
+const CREATE_MASTERY_EVENT_TURN_INDEX: &str =
+    "CREATE INDEX IF NOT EXISTS mastery_event_turn_idx ON mastery_event (turn_id);";
+
 // 红灯距白卡片左/上相等: x ≈ 0.55rem + 0.15rem + (2rem−12px)/2 → 21pt(16px 根字号下)。
 // Y 让红绿灯垂直居中于顶栏(App.tsx 的 h-12 = 48px,标题/收展按钮居中在 24px)。
 // decorum 把按钮中心放在距窗顶 (button_h + y)/2 + 4 处;关闭按钮 button_h = 14,
@@ -134,6 +156,24 @@ pub fn run() {
             version: 6,
             description: "add_turn_bilingual_count",
             sql: ADD_TURN_BILINGUAL_COUNT,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 7,
+            description: "create_mastery_event",
+            sql: CREATE_MASTERY_EVENT,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 8,
+            description: "create_mastery_event_key_index",
+            sql: CREATE_MASTERY_EVENT_KEY_INDEX,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 9,
+            description: "create_mastery_event_turn_index",
+            sql: CREATE_MASTERY_EVENT_TURN_INDEX,
             kind: MigrationKind::Up,
         },
     ];
