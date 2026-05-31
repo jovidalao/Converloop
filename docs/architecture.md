@@ -157,6 +157,7 @@ v1 核心链路已完成并可用:
 - ✅ 导师链路(结构化 `TutorAnalysis` + 代码记账)· 对话链路(流式)· orchestrator 端到端
 - ✅ MD 档案读写 + 维护 agent(含 sanity check)· `## About me` 个人记忆
 - ✅ 多会话侧边栏 · Markdown 回复 · 按需讲解 · 朗读(TTS)· 母语/混说表达缺口(见 expression-gap)
+- ✅ 理解信号(每条回复的讲解/双语请求数)· 代码定向选取的复习候选(`getReviewDueList`)· 证据驱动的难度校准(`lib/proficiency`,喂对话 agent)
 - ✅ 最小 UI:聊天 / 批改面板 / 档案查看编辑 / 设置(provider + key + TTS)
 
 **下一步(未实现):**

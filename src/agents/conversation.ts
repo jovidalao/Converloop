@@ -7,6 +7,7 @@ export interface ConversationContext {
   level: string;
   profileSlice: string; // MD 档案切片(Task 7 前用占位)
   reviewItems: ReviewItem[]; // 代码选的复习候选,自然复用(见 db/mastery getReviewDueList)
+  calibrationHint: string; // 证据驱动的难度校准(见 lib/proficiency;证据不足时为空)
   history: string;
   userInput: string;
 }
@@ -22,13 +23,17 @@ function formatReviewItems(items: ReviewItem[]): string {
 
 // 见 docs/conversation-agent.md#system-prompt
 function systemPrompt(ctx: ConversationContext): string {
+  // 证据足够时,把动态读数作为额外一行校准提示;不足则只用静态 level。
+  const calibrationLine = ctx.calibrationHint
+    ? `\n- Current read on this learner from recent activity: ${ctx.calibrationHint} Let this fine-tune your difficulty and reply length.`
+    : "";
   return `You are a warm, natural conversation partner for a ${ctx.nativeLanguage} speaker
 learning ${ctx.targetLanguage} at roughly ${ctx.level} level. Your only job here is to
 keep the conversation flowing — another agent handles correction and feedback.
 
 RULES
 - Respond IN ${ctx.targetLanguage}, calibrated to ${ctx.level}: slightly stretch the user,
-  never overwhelm them.
+  never overwhelm them.${calibrationLine}
 - Respond to what the user MEANS. Do NOT correct their mistakes and do NOT echo
   their wording if it might be wrong — rephrase into natural, idiomatic language
   so they absorb the correct form implicitly.

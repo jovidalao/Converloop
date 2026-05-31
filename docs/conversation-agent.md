@@ -29,8 +29,11 @@
 2. 复习候选清单(`DUE FOR REVIEW`):代码从 SQLite 选出的少量「学过/练过但最久没重温」
    的非 known 项(`getReviewDueList`,最久未碰优先),让被动复习从「指望维护 agent 写进
    prose」变成代码可控的定向选取。只给 label(+ 真实例句),不给计数。
-3. 最近几轮对话
-4. 用户本轮输入
+3. 难度校准提示(可选一行):代码从近期表现派生的水平读数(`lib/proficiency` +
+   `db/proficiency`:产出长度/准确度、母语回退率、讲解/双语请求率),证据不足时省略。
+   静态 `level` 是用户自填的基线,这行让难度随真实表现微调。
+4. 最近几轮对话
+5. 用户本轮输入
 ```
 
 对照:导师 agent 吃的是 SQLite 精确薄弱表(见 [tutor-agent](./tutor-agent.md))。**对话 agent 主读 MD**;复习候选是一份**代码已选好、只含 label 的小清单**——仍是「代码记账/选取,LLM 只产出」,不破坏分工。
@@ -45,6 +48,8 @@ keep the conversation flowing — another agent handles correction and feedback.
 RULES
 - Respond IN {target_language}, calibrated to {level}: slightly stretch the user,
   never overwhelm them.
+- (only when evidence is sufficient) Current read on this learner from recent
+  activity: {calibration_hint} Let this fine-tune your difficulty and reply length.
 - Respond to what the user MEANS. Do NOT correct their mistakes and do NOT echo
   their wording if it might be wrong — rephrase into natural, idiomatic language
   so they absorb the correct form implicitly.

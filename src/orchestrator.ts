@@ -5,6 +5,7 @@ import type { TutorAnalysis } from "./agents/schema";
 import { analyze } from "./agents/tutor";
 import { getProvider, loadConfig } from "./config";
 import { getReviewDueList, getWeakList, recordAnalysis } from "./db/mastery";
+import { getProficiencySnapshot } from "./db/proficiency";
 import {
   formatRecentHistory,
   persistTurn,
@@ -53,17 +54,29 @@ export async function runTurn(
     level: config.level,
   };
 
-  // 共享上下文(两个 agent 都读),先查好再喂。按当前会话隔离,话题不串。
-  const history = await formatRecentHistory(conversationId);
-  const weakList = await getWeakList();
-  const profileSlice = profileSliceForConversation(await readProfile(config));
-  // 复习候选(代码定向选取,对话 agent 自然复用)。掌握表是全局的,不按会话隔离。
-  const reviewItems = await getReviewDueList();
+  // 共享上下文(两个 agent 都读),先查好再喂。彼此独立,并行取以免叠加延迟、拖慢首 token。
+  // history 按当前会话隔离(话题不串);weakList / reviewItems / proficiency 走全局掌握表。
+  const [history, weakList, profileMd, reviewItems, proficiency] =
+    await Promise.all([
+      formatRecentHistory(conversationId),
+      getWeakList(),
+      readProfile(config),
+      getReviewDueList(),
+      getProficiencySnapshot(),
+    ]);
+  const profileSlice = profileSliceForConversation(profileMd);
 
   // 并行发出:对话流式,导师结构化。互不阻塞。
   const replyPromise = converse(
     provider,
-    { ...langs, profileSlice, reviewItems, history, userInput },
+    {
+      ...langs,
+      profileSlice,
+      reviewItems,
+      calibrationHint: proficiency.calibrationHint,
+      history,
+      userInput,
+    },
     cb.onReplyDelta,
   );
   const analysisPromise = analyze(provider, {
