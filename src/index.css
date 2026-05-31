@@ -269,6 +269,7 @@
 }
 .codex-sidebar-actions {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   flex: 0 0 auto;
   gap: 3px;
   padding: 0 4px 12px;
