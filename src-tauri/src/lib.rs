@@ -143,6 +143,8 @@ pub fn run() {
             llm::llm_stream,
             profile::read_profile,
             profile::write_profile,
+            profile::snapshot_profile,
+            profile::restore_profile,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

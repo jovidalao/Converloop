@@ -1,5 +1,6 @@
 import {
   ArrowUpIcon,
+  BookmarkPlusIcon,
   CheckIcon,
   CopyIcon,
   LanguagesIcon,
@@ -11,6 +12,7 @@ import { useConfig } from "../config";
 import { maybeAutoTitle, touchConversation } from "../db/conversations";
 import { type ChatTurn, loadChatHistory } from "../db/turns";
 import { bilingualReply, MissingApiKeyError, runTurn } from "../orchestrator";
+import { appendMyNote } from "../profile/notes";
 import { loadTtsConfig } from "../tts/config";
 import { stopSpeech } from "../tts/playback";
 import { createReplySpeaker } from "../tts/stream";
@@ -232,6 +234,7 @@ export function ChatView({ conversationId, onActivity }: ChatViewProps) {
   const [streaming, setStreaming] = useState("");
   const [replyBusy, setReplyBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const messagesRef = useRef<HTMLDivElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -275,6 +278,22 @@ export function ChatView({ conversationId, onActivity }: ChatViewProps) {
     patchTurn(turnId, { partnerText: reply });
     setStreaming("");
     setReplyBusy(false);
+  }
+
+  // 把当前输入记进档案的「我的笔记」(用户主笔、AI 不改、对话 agent 会读到)。
+  // 纯代码写 MD,不发起对话轮,不调用 LLM。
+  async function remember() {
+    const text = input.trim();
+    if (!text || replyBusy) return;
+    try {
+      await appendMyNote(text);
+      setInput("");
+      setError(null);
+      setNotice("已记住 —— 写入档案「我的笔记」,之后对话会记得。");
+      setTimeout(() => setNotice(null), 2500);
+    } catch (e) {
+      setError(`记住失败:${e instanceof Error ? e.message : String(e)}`);
+    }
   }
 
   async function send() {
@@ -393,6 +412,11 @@ export function ChatView({ conversationId, onActivity }: ChatViewProps) {
           {error}
         </div>
       )}
+      {notice && (
+        <div className="mx-4 rounded-md bg-primary/10 px-3 py-2 text-sm text-primary">
+          {notice}
+        </div>
+      )}
       <div className="shrink-0 px-4 pt-1.5 pb-4">
         <form
           className="flex items-end gap-1.5 rounded-3xl border bg-card py-1.5 pr-1.5 pl-4 shadow transition-colors focus-within:border-ring"
@@ -420,6 +444,18 @@ export function ChatView({ conversationId, onActivity }: ChatViewProps) {
             disabled={replyBusy}
             className="max-h-[calc(1.4em*3+0.9rem)] min-w-0 flex-1 resize-none border-none bg-transparent py-2 text-base leading-snug outline-none placeholder:text-muted-foreground"
           />
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-9 rounded-full text-muted-foreground"
+            disabled={replyBusy || !input.trim()}
+            onClick={() => void remember()}
+            title="记住这句(写入档案「我的笔记」,AI 不会改,对话会记得)"
+            aria-label="记住这句"
+          >
+            <BookmarkPlusIcon className="size-4.5" />
+          </Button>
           <Button
             type="submit"
             size="icon"

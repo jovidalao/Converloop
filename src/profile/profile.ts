@@ -7,6 +7,10 @@ export const readProfileRaw = () => invoke<string | null>("read_profile");
 export const writeProfile = (content: string) =>
   invoke<void>("write_profile", { content });
 
+// AI 刷新前快照当前档案;restore 撤销到快照(返回恢复后的内容,无备份返回 null)。
+export const snapshotProfile = () => invoke<void>("snapshot_profile");
+export const restoreProfile = () => invoke<string | null>("restore_profile");
+
 function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
@@ -44,8 +48,12 @@ export async function readProfile(config: AppConfig): Promise<string> {
   return raw ?? defaultProfile(config);
 }
 
-// 对话 agent 的切片:去掉 ## My notes(它只读定性人设,不需要用户私人笔记)。
+// 对话 agent 的切片:整份档案,含 ## My notes —— 那是用户手写的记忆/指示,
+// 对话要尊重(用户唯一能完全掌控、AI 逐字保留的一块)。只剥掉占位 HTML 注释,
+// 避免把模板噪声塞进每轮 prompt。
 export function profileSliceForConversation(md: string): string {
-  const idx = md.indexOf("## My notes");
-  return (idx === -1 ? md : md.slice(0, idx)).trim();
+  return md
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
