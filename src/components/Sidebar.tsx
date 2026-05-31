@@ -67,6 +67,8 @@ interface SidebarProps {
   onOpenView: (view: MainView) => void;
   width: number;
   onResize: (width: number) => void;
+  onResizeStart?: () => void;
+  onResizeEnd?: () => void;
 }
 
 export function Sidebar({
@@ -84,6 +86,8 @@ export function Sidebar({
   onOpenView,
   width,
   onResize,
+  onResizeStart,
+  onResizeEnd,
 }: SidebarProps) {
   const confirm = useConfirm();
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -139,19 +143,39 @@ export function Sidebar({
     e.preventDefault();
     const startX = e.clientX;
     const startWidth = width;
-    function onMove(ev: PointerEvent) {
-      onResize(startWidth + ev.clientX - startX);
+    let frame = 0;
+    let nextWidth = startWidth;
+
+    function flushResize() {
+      frame = 0;
+      onResize(nextWidth);
     }
-    function onUp() {
+
+    function onMove(ev: PointerEvent) {
+      nextWidth = startWidth + ev.clientX - startX;
+      if (!frame) frame = requestAnimationFrame(flushResize);
+    }
+
+    function finishResize() {
+      if (frame) {
+        cancelAnimationFrame(frame);
+        frame = 0;
+        onResize(nextWidth);
+      }
       window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointerup", finishResize);
+      window.removeEventListener("pointercancel", finishResize);
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
+      onResizeEnd?.();
     }
+
+    onResizeStart?.();
     document.body.style.cursor = "col-resize";
     document.body.style.userSelect = "none";
     window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointerup", finishResize);
+    window.addEventListener("pointercancel", finishResize);
   }
 
   return (

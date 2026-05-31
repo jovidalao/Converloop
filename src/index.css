@@ -123,13 +123,17 @@
   -webkit-app-region: drag;
 }
 [data-tauri-drag-region] button,
-[data-tauri-drag-region] input {
+[data-tauri-drag-region] input,
+[data-tauri-drag-region] textarea,
+[data-tauri-drag-region] select,
+[data-tauri-drag-region] a,
+[data-tauri-drag-region] [data-no-window-drag] {
   app-region: no-drag;
   -webkit-app-region: no-drag;
 }
 
-/* Codex-like desktop chrome. Native macOS traffic lights stay native; this shell only
-   clears space for them and moves the app layout around that area. */
+/* Desktop chrome. Native macOS traffic lights stay native; the topbar reserves
+   their space and the app content starts below it. */
 .codex-shell {
   --codex-topbar-h: 46px;
   --codex-sidebar-width-current: var(--sidebar-width);
@@ -163,6 +167,7 @@
   position: relative;
   display: grid;
   grid-template-columns: var(--codex-sidebar-width-current) minmax(0, 1fr);
+  grid-template-rows: var(--codex-topbar-h) minmax(0, 1fr);
   height: 100%;
   min-height: 100vh;
   overflow: hidden;
@@ -173,42 +178,45 @@
 .codex-shell[data-sidebar-collapsed="true"] {
   --codex-sidebar-width-current: 0px;
 }
+.codex-shell[data-sidebar-resizing="true"] {
+  transition: none;
+}
 .codex-topbar {
-  position: absolute;
-  inset: 0 0 auto;
+  grid-column: 1 / -1;
+  grid-row: 1;
+  position: relative;
   z-index: 40;
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr) 132px;
+  align-items: center;
   height: var(--codex-topbar-h);
   border-bottom: 1px solid var(--codex-border);
-  background: linear-gradient(
-    to right,
-    var(--codex-sidebar-bg) 0 var(--codex-sidebar-width-current),
-    var(--codex-topbar-bg) var(--codex-sidebar-width-current) 100%
-  );
+  background: var(--codex-topbar-bg);
 }
-.codex-topbar-left,
-.codex-titlebar {
+.codex-topbar-left {
   position: absolute;
   display: flex;
   align-items: center;
-}
-.codex-topbar-left {
   top: 8px;
   left: 92px;
+  z-index: 1;
   gap: 0;
 }
 .codex-titlebar {
-  top: 0;
-  right: 16px;
-  left: calc(var(--codex-sidebar-width-current) + 20px);
+  grid-column: 1 / -1;
+  display: flex;
   height: var(--codex-topbar-h);
   min-width: 0;
+  align-items: center;
+  justify-content: center;
+  padding: 0 136px;
   color: oklch(0.9 0 0);
   font-size: 14px;
   font-weight: 650;
-  transition: left 0.22s cubic-bezier(0.2, 0, 0, 1);
+  pointer-events: none;
 }
-.codex-shell[data-sidebar-collapsed="true"] .codex-titlebar {
-  left: 132px;
+.codex-titlebar span {
+  max-width: min(560px, 100%);
 }
 .codex-chrome-button {
   width: 30px;
@@ -226,7 +234,7 @@
 }
 .codex-sidebar {
   grid-column: 1;
-  grid-row: 1;
+  grid-row: 2;
   position: relative;
   min-width: 0;
   overflow: hidden;
@@ -240,7 +248,7 @@
   height: 100%;
   min-height: 0;
   flex-direction: column;
-  padding: calc(var(--codex-topbar-h) + 10px) 8px 8px;
+  padding: 10px 8px 8px;
   transition:
     opacity 0.18s ease,
     transform 0.22s cubic-bezier(0.2, 0, 0, 1);
@@ -255,7 +263,7 @@
 }
 .codex-main {
   grid-column: 2;
-  grid-row: 1;
+  grid-row: 2;
   min-width: 0;
   background: var(--codex-main-bg);
 }
@@ -403,7 +411,8 @@
 }
 .codex-sidebar-resizer {
   position: absolute;
-  inset: var(--codex-topbar-h) 0 0 auto;
+  inset: 0 0 0 auto;
+  z-index: 2;
   width: 5px;
   cursor: col-resize;
 }

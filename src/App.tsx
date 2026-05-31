@@ -1,5 +1,12 @@
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { PanelLeftIcon, PanelRightIcon } from "lucide-react";
-import { type CSSProperties, useCallback, useEffect, useState } from "react";
+import {
+  type CSSProperties,
+  type MouseEvent,
+  useCallback,
+  useEffect,
+  useState,
+} from "react";
 import { ChatView } from "./components/ChatView";
 import { LearningAgentsView } from "./components/LearningAgentsView";
 import { MasteryView } from "./components/MasteryView";
@@ -35,6 +42,7 @@ function App() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [view, setView] = useState<MainView>("chat");
   const [collapsed, setCollapsed] = useState(false);
+  const [resizingSidebar, setResizingSidebar] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     const saved = Number(localStorage.getItem("sidebarWidth"));
     return saved >= SIDEBAR_MIN && saved <= SIDEBAR_MAX ? saved : 248;
@@ -132,6 +140,18 @@ function App() {
     }
   }
 
+  function startTopbarDrag(e: MouseEvent<HTMLElement>) {
+    if (e.button !== 0) return;
+    const target = e.target;
+    if (
+      target instanceof HTMLElement &&
+      target.closest("button,input,textarea,select,a,[data-no-window-drag]")
+    )
+      return;
+    if (!("__TAURI_INTERNALS__" in window)) return;
+    void getCurrentWindow().startDragging();
+  }
+
   if (!ready || !activeId)
     return (
       <div className="flex h-full min-h-screen items-center justify-center text-muted-foreground">
@@ -158,9 +178,15 @@ function App() {
     <div
       className="codex-shell"
       data-sidebar-collapsed={collapsed}
+      data-sidebar-resizing={resizingSidebar}
       style={{ "--sidebar-width": `${sidebarWidth}px` } as CSSProperties}
     >
-      <header className="codex-topbar" data-tauri-drag-region>
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: custom Tauri chrome drag region */}
+      <header
+        className="codex-topbar"
+        data-tauri-drag-region
+        onMouseDown={startTopbarDrag}
+      >
         <div className="codex-topbar-left">
           <Button
             type="button"
@@ -196,6 +222,8 @@ function App() {
         onResize={(w) =>
           setSidebarWidth(Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, w)))
         }
+        onResizeStart={() => setResizingSidebar(true)}
+        onResizeEnd={() => setResizingSidebar(false)}
       />
 
       <main className="vt-main codex-main relative flex min-h-0 flex-col overflow-hidden">
