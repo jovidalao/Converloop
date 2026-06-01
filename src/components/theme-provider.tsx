@@ -1,3 +1,4 @@
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   createContext,
   type ReactNode,
@@ -25,6 +26,12 @@ function systemPrefersDark() {
 function applyTheme(theme: Theme) {
   const dark = theme === "dark" || (theme === "system" && systemPrefersDark());
   document.documentElement.classList.toggle("dark", dark);
+  // Sync the native macOS window appearance so the traffic-light buttons
+  // (notably their unfocused gray) match the in-app theme instead of trailing
+  // the system appearance.
+  void getCurrentWindow()
+    .setTheme(dark ? "dark" : "light")
+    .catch(() => {});
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
