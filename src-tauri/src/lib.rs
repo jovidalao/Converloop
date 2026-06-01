@@ -101,6 +101,15 @@ const ADD_CONVERSATION_KIND: &str =
 const ADD_CONVERSATION_LEARNING_AGENT_ID: &str =
     "ALTER TABLE conversation ADD COLUMN learning_agent_id TEXT;";
 
+// 滚动摘要(自动压缩):summary 是该会话「老内容」的目标语摘要,summary_through_id 是
+// 已折叠进摘要的最后一个 turn.id(水位)。代码维护,LLM 只产出摘要文本。NULL = 尚未压缩,
+// 退化为纯原文回放。SQLite 每条 ALTER 只能加一列,故拆成两个 migration。
+const ADD_CONVERSATION_SUMMARY: &str =
+    "ALTER TABLE conversation ADD COLUMN summary TEXT;";
+
+const ADD_CONVERSATION_SUMMARY_THROUGH_ID: &str =
+    "ALTER TABLE conversation ADD COLUMN summary_through_id TEXT;";
+
 // 红绿灯沿用 macOS 原生按钮,位置参照 Codex 顶栏:左侧 21pt,垂直居中于 46pt chrome。
 // decorum 把按钮中心放在距窗顶 (button_h + y)/2 + 4 处;关闭按钮 button_h = 14,
 // 解 (14 + y)/2 + 4 = 23 → y = 24。
@@ -225,6 +234,18 @@ pub fn run() {
             version: 13,
             description: "add_conversation_learning_agent_id",
             sql: ADD_CONVERSATION_LEARNING_AGENT_ID,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 14,
+            description: "add_conversation_summary",
+            sql: ADD_CONVERSATION_SUMMARY,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 15,
+            description: "add_conversation_summary_through_id",
+            sql: ADD_CONVERSATION_SUMMARY_THROUGH_ID,
             kind: MigrationKind::Up,
         },
     ];

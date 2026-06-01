@@ -73,6 +73,33 @@ export async function touchConversation(id: string): Promise<void> {
     .where(eq(conversation.id, id));
 }
 
+// 滚动摘要读写(自动压缩用)。summary 是会话老内容的目标语摘要,throughId 是已折叠进
+// 摘要的最后一个 turn.id(水位)。代码维护,LLM 只产出摘要文本。
+export async function getSummary(
+  id: string,
+): Promise<{ summary: string | null; throughId: string | null }> {
+  const [row] = await db
+    .select({
+      summary: conversation.summary,
+      throughId: conversation.summaryThroughId,
+    })
+    .from(conversation)
+    .where(eq(conversation.id, id))
+    .limit(1);
+  return { summary: row?.summary ?? null, throughId: row?.throughId ?? null };
+}
+
+export async function setSummary(
+  id: string,
+  summary: string,
+  throughId: string,
+): Promise<void> {
+  await db
+    .update(conversation)
+    .set({ summary, summaryThroughId: throughId })
+    .where(eq(conversation.id, id));
+}
+
 // 删除会话连同它的所有 turn。掌握/档案是全局的,不在此处理。
 export async function deleteConversation(id: string): Promise<void> {
   await db.delete(turn).where(eq(turn.conversationId, id));

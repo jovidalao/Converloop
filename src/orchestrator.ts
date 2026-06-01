@@ -8,12 +8,13 @@ import { translate } from "./agents/translate";
 import { analyze } from "./agents/tutor";
 import { getProvider, loadConfig } from "./config";
 import { applyDataEditInstruction, type DataEditResult } from "./data-edit";
-import { getConversation } from "./db/conversations";
+import { getConversation, getSummary } from "./db/conversations";
 import { createLearningAgent, getLearningAgent } from "./db/learning-agents";
 import { getReviewDueList, getWeakList, recordAnalysis } from "./db/mastery";
 import { getProficiencySnapshot } from "./db/proficiency";
 import {
-  formatRecentHistory,
+  formatTurns,
+  getTurnsAfterId,
   persistTurn,
   updateTurnAnalysis,
 } from "./db/turns";
@@ -21,6 +22,7 @@ import { buildLearningDataContext } from "./learning-data";
 import { logError } from "./lib/log";
 import { maybeRunMaintainer } from "./profile/maintainer-runner";
 import { profileSliceForConversation, readProfile } from "./profile/profile";
+import { maybeCompressConversation } from "./profile/summary-runner";
 
 export interface TurnCallbacks {
   onReplyDelta: (delta: string) => void;
@@ -90,15 +92,19 @@ export async function runTurn(
   };
 
   // 共享上下文(两个 agent 都读),先查好再喂。彼此独立,并行取以免叠加延迟、拖慢首 token。
-  // history 按当前会话隔离(话题不串);weakList / reviewItems / proficiency 走全局掌握表。
-  const [history, weakList, profileMd, reviewItems, proficiency] =
+  // 历史按当前会话隔离(话题不串);weakList / reviewItems / proficiency 走全局掌握表。
+  // 自动压缩:对话上下文 = 滚动摘要(较早内容)+ 水位之后的全部原文。摘要为 NULL 时退化为纯原文。
+  const [summaryData, weakList, profileMd, reviewItems, proficiency] =
     await Promise.all([
-      formatRecentHistory(conversationId),
+      getSummary(conversationId),
       getWeakList(),
       readProfile(config),
       getReviewDueList(),
       getProficiencySnapshot(),
     ]);
+  const history = formatTurns(
+    await getTurnsAfterId(conversationId, summaryData.throughId),
+  );
   const profileSlice = profileSliceForConversation(profileMd);
 
   // 并行发出:对话流式,导师结构化。互不阻塞。
@@ -109,6 +115,7 @@ export async function runTurn(
       profileSlice,
       reviewItems,
       calibrationHint: proficiency.calibrationHint,
+      summary: summaryData.summary ?? "",
       history,
       userInput,
     },
@@ -124,6 +131,9 @@ export async function runTurn(
   const reply = await replyPromise;
   const turnId = await persistTurn(conversationId, userInput, reply, null);
   cb.onReplyComplete?.(reply);
+
+  // 自动压缩:逼近上下文上限时,后台把最老的原文折叠进滚动摘要。不阻塞下一轮输入。
+  void maybeCompressConversation(conversationId);
 
   // 批改、记账、补全 analysis_json 在后台跑,不阻塞下一轮输入。
   void analysisPromise
@@ -183,10 +193,14 @@ async function runLearningTurn(
   if (!agent) throw new Error("找不到这个学习 Agent");
 
   const config = loadConfig();
-  const [history, dataContext] = await Promise.all([
-    formatRecentHistory(conversationId),
+  // 自动压缩:课程上下文 = 滚动摘要(较早内容)+ 水位之后的全部原文。摘要为 NULL 时退化为纯原文。
+  const [summaryData, dataContext] = await Promise.all([
+    getSummary(conversationId),
     buildLearningDataContext(agent, config),
   ]);
+  const history = formatTurns(
+    await getTurnsAfterId(conversationId, summaryData.throughId),
+  );
 
   const reply = await runLearningAgent(
     provider,
@@ -197,6 +211,7 @@ async function runLearningTurn(
       agentName: agent.name,
       agentPrompt: agent.prompt,
       dataContext,
+      summary: summaryData.summary ?? "",
       history,
       userInput,
       kickoff,
@@ -206,6 +221,8 @@ async function runLearningTurn(
 
   await persistTurn(conversationId, userInput, reply, null);
   cb.onReplyComplete?.(reply);
+  // 自动压缩:逼近上下文上限时,后台把最老的原文折叠进滚动摘要。不阻塞下一轮输入。
+  void maybeCompressConversation(conversationId);
   cb.onAnalysis(null);
   return { reply, analysis: null };
 }

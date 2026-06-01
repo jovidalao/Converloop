@@ -32,7 +32,8 @@
 3. 难度校准提示(可选一行):代码从近期表现派生的水平读数(`lib/proficiency` +
    `db/proficiency`:产出长度/准确度、母语回退率、讲解/双语请求率),证据不足时省略。
    静态 `level` 是用户自填的基线,这行让难度随真实表现微调。
-4. 最近几轮对话
+4. 会话上下文(自动压缩,见下文「滚动摘要」):`STORY SO FAR` 摘要(较早内容)+
+   水位之后的全部原文轮次
 5. 用户本轮输入
 ```
 
@@ -92,8 +93,31 @@ User message:
 {user_input}
 ```
 
+## 滚动摘要(自动压缩)
+
+长对话里,早期内容会被原文窗口挤出去 → agent「忘记前面」。解决:**阈值驱动的自动压缩**(实现见 `src/agents/summarize.ts` + `src/profile/summary-runner.ts`)。
+
+- **怎么喂**:`history` = 一份 `STORY SO FAR` 摘要(会话较早内容的目标语 recap)+ 水位 `summary_through_id` 之后的**全部原文轮次**。不到阈值时摘要为空,退化为纯原文。
+- **何时压缩**:每轮持久化后,后台估算「下一轮整段 prompt」的 token(`lib/tokens` 字符启发式);≥ 上下文上限的 **70%**(`getContextLimit`:查表 + 用户可在设置覆盖)时触发,把最老的、未入摘要的原文轮次逐批折叠进摘要,直到估算回落到 ~50%,且**至少保留若干轮原文**(近处永不丢)。
+- **谁记账**:代码维护 `summary` / `summary_through_id` 两列与水位推进;LLM(summarize agent)只产出摘要文本。合并式增量(不从头重写),目标语,受字符预算约束。
+- **隔离**:摘要按会话(`conversation` 表两列)。与全局 MD 档案、掌握表互不影响。
+
+> 摘要 system prompt 在 `src/agents/summarize.ts`;改一处记得同步另一处(docs 契约 ↔ 实现)。
+
+## 对话上下文(摘要段,放在 user 消息里,不进 system,保持可缓存前缀稳定)
+
+```text
+=== STORY SO FAR (earlier in this conversation) ===
+{summary}   ← 仅当存在摘要时出现;空则整段省略
+=== RECENT CONVERSATION ===
+{verbatim turns after watermark}
+=== USER ===
+{user_input}
+```
+
 ## 实现要点
 
 - **流式**:边收边推到 UI,不等导师 agent。
 - **并行**:和导师 agent 同时发出,共享可缓存前缀(system 稳定段在前,profile 在后;见 [architecture](./architecture.md))。
 - **降级**:导师 agent 崩了不影响这里——对话照常进行,只是批改面板暂时不可用。
+- **压缩在后台**:`maybeCompressConversation` 单飞、不阻塞热路径、不抛;首 token 不受影响。

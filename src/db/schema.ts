@@ -69,6 +69,10 @@ export const conversation = sqliteTable("conversation", {
     .notNull()
     .default("practice"),
   learningAgentId: text("learning_agent_id"),
+  // 滚动摘要(自动压缩):summary 是该会话老内容的目标语摘要;summaryThroughId 是已折叠
+  // 进摘要的最后一个 turn.id(水位)。NULL = 尚未压缩,退化为纯原文回放。
+  summary: text("summary"),
+  summaryThroughId: text("summary_through_id"),
 });
 
 export type Conversation = typeof conversation.$inferSelect;

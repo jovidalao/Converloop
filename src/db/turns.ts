@@ -1,4 +1,4 @@
-import { count, desc, eq, gt, sql } from "drizzle-orm";
+import { and, count, desc, eq, gt, gte, sql } from "drizzle-orm";
 import type { TutorAnalysis } from "../agents/schema";
 import { db } from "./client";
 import { normalizeKey } from "./mastery-logic";
@@ -152,12 +152,8 @@ function userLineForHistory(t: Turn): string {
   return target || t.userInput;
 }
 
-// 把某会话最近几轮格式化成对话 / 导师 agent 都能用的历史文本。
-export async function formatRecentHistory(
-  conversationId: string,
-  limit = 6,
-): Promise<string> {
-  const turns = await getRecentTurnsForConversation(conversationId, limit);
+// 把一组 turns 格式化成对话 / 导师 agent 都能用的历史文本(时间正序传入)。
+export function formatTurns(turns: Turn[]): string {
   return turns
     .map((t) => {
       const user = userLineForHistory(t).trim();
@@ -166,6 +162,42 @@ export async function formatRecentHistory(
         : `Partner: ${t.reply}`;
     })
     .join("\n\n");
+}
+
+// 取某会话「水位之后」的全部原文轮次(时间正序)。afterId = summary_through_id:
+// 已折叠进摘要的最后一个 turn。null = 尚未压缩,返回全部。自动压缩的对话 agent 用
+// 「摘要 + 这些原文」组装上下文(见 orchestrator / summary-runner)。
+export async function getTurnsAfterId(
+  conversationId: string,
+  afterId: string | null,
+): Promise<Turn[]> {
+  const all = () =>
+    db
+      .select()
+      .from(turn)
+      .where(eq(turn.conversationId, conversationId))
+      .orderBy(turn.createdAt);
+  if (!afterId) return all();
+
+  const [mark] = await db
+    .select({ createdAt: turn.createdAt })
+    .from(turn)
+    .where(eq(turn.id, afterId))
+    .limit(1);
+  if (!mark) return all(); // 水位指向的 turn 已不存在 → 退化为全部,安全。
+
+  // 用 createdAt >= 水位再按 id 剔除水位本身:既不漏(同毫秒并列也保留),也不重复水位轮。
+  const rows = await db
+    .select()
+    .from(turn)
+    .where(
+      and(
+        eq(turn.conversationId, conversationId),
+        gte(turn.createdAt, mark.createdAt),
+      ),
+    )
+    .orderBy(turn.createdAt);
+  return rows.filter((t) => t.id !== afterId);
 }
 
 // 维护 agent 的增量转写:只取上次维护之后(createdAt > sinceMs)的 turns,避免

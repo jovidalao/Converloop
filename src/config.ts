@@ -19,9 +19,37 @@ const AppConfigSchema = z.object({
   level: z.string(),
   /** 新 AI 回复自动展开双语对照。 */
   autoBilingual: z.boolean(),
+  /** 手动覆盖模型上下文窗口(token)。留空则按 model 名查表猜测(见 getContextLimit)。 */
+  contextTokens: z.number().int().positive().optional(),
 });
 
 export type AppConfig = z.infer<typeof AppConfigSchema>;
+
+// 已知模型的上下文窗口(token),按 model 名前缀匹配。BYOK 下 model 是自由串,命中不了
+// 就回退 DEFAULT_CONTEXT_TOKENS;用户也可在设置里用 contextTokens 手动覆盖。
+const DEFAULT_CONTEXT_TOKENS = 128_000;
+const CONTEXT_WINDOW_TABLE: { prefix: string; tokens: number }[] = [
+  // 长前缀在前,确保 gpt-4o-mini 不被 gpt-4 之类短前缀抢先。
+  { prefix: "claude", tokens: 200_000 },
+  { prefix: "gemini-1.5", tokens: 1_000_000 },
+  { prefix: "gemini-2", tokens: 1_000_000 },
+  { prefix: "gemini", tokens: 1_000_000 },
+  { prefix: "gpt-4o", tokens: 128_000 },
+  { prefix: "gpt-4.1", tokens: 1_000_000 },
+  { prefix: "gpt-4-turbo", tokens: 128_000 },
+  { prefix: "gpt-4", tokens: 8_192 },
+  { prefix: "gpt-3.5", tokens: 16_385 },
+  { prefix: "o1", tokens: 200_000 },
+  { prefix: "o3", tokens: 200_000 },
+];
+
+// 当前模型的上下文上限(token)。优先用户手填的 contextTokens,否则查表猜测,再回退默认。
+export function getContextLimit(config: AppConfig): number {
+  if (config.contextTokens) return config.contextTokens;
+  const model = config.model.toLowerCase().trim();
+  const hit = CONTEXT_WINDOW_TABLE.find((e) => model.startsWith(e.prefix));
+  return hit?.tokens ?? DEFAULT_CONTEXT_TOKENS;
+}
 
 // 每个 provider 的 key 单独存,切换不丢另一个。
 export function apiKeyAccount(type: ProviderType): string {

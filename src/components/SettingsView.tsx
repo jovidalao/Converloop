@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 import {
   type AppConfig,
   apiKeyAccount,
+  getContextLimit,
   getProvider,
   loadConfig,
   PROVIDER_PRESETS,
@@ -298,6 +299,20 @@ export function SettingsView() {
             <Input
               value={cfg.model}
               onChange={(e) => update("model", e.target.value)}
+            />
+          </Field>
+          <Field label="上下文窗口 (token · 留空自动按模型推断)">
+            <Input
+              type="number"
+              value={cfg.contextTokens ?? ""}
+              onChange={(e) => {
+                const n = Number(e.target.value);
+                update(
+                  "contextTokens",
+                  e.target.value.trim() && n > 0 ? n : undefined,
+                );
+              }}
+              placeholder={`自动:${getContextLimit({ ...cfg, contextTokens: undefined }).toLocaleString()}`}
             />
           </Field>
 

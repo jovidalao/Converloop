@@ -7,6 +7,7 @@ export interface LearningAgentContext {
   agentName: string;
   agentPrompt: string;
   dataContext: string;
+  summary: string; // 滚动摘要:较早课程对话的 recap(自动压缩产出;无则为空)
   history: string;
   userInput: string;
   kickoff: boolean;
@@ -36,7 +37,14 @@ function userPrompt(ctx: LearningAgentContext): string {
   const latest = ctx.kickoff
     ? "Start this customized lesson now. Proactively summarize the relevant learner data and begin the first exercise."
     : ctx.userInput;
-  return `=== RECENT LESSON CONVERSATION ===
+  // STORY SO FAR = 较早课程对话的摘要(自动压缩产出),让长课程不丢前文;无摘要则整段省略。
+  const storyBlock = ctx.summary
+    ? `=== STORY SO FAR (earlier in this lesson) ===
+${ctx.summary}
+
+`
+    : "";
+  return `${storyBlock}=== RECENT LESSON CONVERSATION ===
 ${ctx.history || "(none)"}
 
 === LATEST LEARNER MESSAGE ===

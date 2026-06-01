@@ -8,6 +8,7 @@ export interface ConversationContext {
   profileSlice: string; // MD 档案切片(Task 7 前用占位)
   reviewItems: ReviewItem[]; // 代码选的复习候选,自然复用(见 db/mastery getReviewDueList)
   calibrationHint: string; // 证据驱动的难度校准(见 lib/proficiency;证据不足时为空)
+  summary: string; // 滚动摘要:较早内容的目标语 recap(自动压缩产出;无则为空)
   history: string;
   userInput: string;
 }
@@ -71,7 +72,14 @@ ${formatReviewItems(ctx.reviewItems)}`;
 }
 
 function userPrompt(ctx: ConversationContext): string {
-  return `=== RECENT CONVERSATION ===
+  // STORY SO FAR = 较早对话的摘要(自动压缩产出),让长对话不丢前文;无摘要则整段省略。
+  const storyBlock = ctx.summary
+    ? `=== STORY SO FAR (earlier in this conversation) ===
+${ctx.summary}
+
+`
+    : "";
+  return `${storyBlock}=== RECENT CONVERSATION ===
 ${ctx.history || "(none)"}
 
 === USER ===
