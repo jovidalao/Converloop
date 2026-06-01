@@ -342,6 +342,7 @@
 }
 .codex-sidebar-action:hover,
 .codex-sidebar-action[data-active="true"],
+.codex-section-heading:hover,
 .codex-sidebar-row:hover,
 .codex-sidebar-row[data-active="true"] {
   background: var(--codex-sidebar-active);
@@ -384,12 +385,21 @@
   overscroll-behavior: contain;
   padding: 0 4px 10px;
 }
+.codex-sidebar-learning {
+  flex: 0 0 auto;
+  padding: 0 4px;
+}
 .codex-sidebar-list {
   display: grid;
   gap: 2px;
   padding-bottom: 12px;
 }
-.codex-section-heading,
+.codex-section-heading {
+  height: 34px;
+  padding: 0 10px;
+  color: var(--codex-sidebar-fg);
+  font-size: 14px;
+}
 .codex-section-label {
   height: 28px;
   padding: 0 10px;
