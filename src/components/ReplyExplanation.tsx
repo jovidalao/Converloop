@@ -1,5 +1,5 @@
 import { BookOpenIcon } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { explainReply, MissingApiKeyError } from "../orchestrator";
 import { Markdown } from "./Markdown";
 import { Button } from "./ui/button";
@@ -24,6 +24,16 @@ export function ReplyExplanation({
   const [loading, setLoading] = useState(false);
   const [explanation, setExplanation] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const prevTextRef = useRef(text);
+
+  // 回复被「重新生成」替换后,旧讲解不再对应,收起重置。
+  useEffect(() => {
+    if (prevTextRef.current === text) return;
+    prevTextRef.current = text;
+    setOpen(false);
+    setExplanation("");
+    setError(null);
+  }, [text]);
 
   async function generate() {
     setLoading(true);

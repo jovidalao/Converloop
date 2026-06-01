@@ -17,6 +17,7 @@ import {
   getTurnsAfterId,
   persistTurn,
   updateTurnAnalysis,
+  updateTurnReply,
 } from "./db/turns";
 import { buildLearningDataContext } from "./learning-data";
 import { logError } from "./lib/log";
@@ -244,6 +245,59 @@ async function runLearningTurn(
   void maybeCompressConversation(conversationId, nonHistoryTokens);
   cb.onAnalysis(null);
   return { reply, analysis: null };
+}
+
+// 重新生成最新一条对话回复:用同样的用户输入和「该轮之前」的历史重跑对话 agent,
+// 流式产出新回复并覆盖持久化的 reply。批改不变(只换 AI 那句,不动用户那句的分析)。
+// 仅用于普通对话(practice);专项课不暴露此操作。
+export async function regenerateReply(
+  conversationId: string,
+  turnId: string,
+  cb: {
+    onReplyDelta: (delta: string) => void;
+    onReplyComplete?: (reply: string) => void;
+  },
+): Promise<string> {
+  const provider = await getProvider();
+  if (!provider) throw new MissingApiKeyError();
+
+  const config = loadConfig();
+  // 上下文构成与 runTurn 的对话侧一致:摘要 + 水位后原文,叠加 profile / 复习 / 校准。
+  const [summaryData, profileMd, reviewItems, proficiency] = await Promise.all([
+    getSummary(conversationId),
+    readProfile(config),
+    getReviewDueList(),
+    getProficiencySnapshot(),
+  ]);
+  const verbatimTurns = await getTurnsAfterId(
+    conversationId,
+    summaryData.throughId,
+  );
+  const idx = verbatimTurns.findIndex((t) => t.id === turnId);
+  if (idx < 0) throw new Error("找不到要重新生成的回复");
+  const target = verbatimTurns[idx];
+  // 历史只取「该轮之前」的原文:把被重生成的这轮及其之后排除,避免把旧回复喂回去。
+  const history = formatTurns(verbatimTurns.slice(0, idx));
+
+  const reply = await converse(
+    provider,
+    {
+      nativeLanguage: config.nativeLanguage,
+      targetLanguage: config.targetLanguage,
+      level: config.level,
+      profileSlice: profileSliceForConversation(profileMd),
+      reviewItems,
+      calibrationHint: proficiency.calibrationHint,
+      summary: summaryData.summary ?? "",
+      history,
+      userInput: target.userInput,
+    },
+    cb.onReplyDelta,
+  );
+
+  await updateTurnReply(turnId, reply);
+  cb.onReplyComplete?.(reply);
+  return reply;
 }
 
 // 按需讲解某条对话回复:读 MD 档案(和对话 agent 同源),流式输出母语讲解。

@@ -3,6 +3,7 @@ import {
   CheckIcon,
   CopyIcon,
   LanguagesIcon,
+  RefreshCwIcon,
   SparklesIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -18,6 +19,7 @@ import {
 import {
   bilingualReply,
   MissingApiKeyError,
+  regenerateReply,
   runTurn,
   startLearningSession,
 } from "../orchestrator";
@@ -73,6 +75,8 @@ function PartnerReply({
   onFirstExplain,
   onFirstBilingual,
   onLayoutChange,
+  onRegenerate,
+  regenerating = false,
 }: {
   text: string;
   autoOpen?: boolean;
@@ -81,12 +85,25 @@ function PartnerReply({
   onFirstExplain?: () => void;
   onFirstBilingual?: () => void;
   onLayoutChange?: () => void;
+  /** 提供时显示「重新生成回复」按钮(仅挂在最新一条回复上)。 */
+  onRegenerate?: () => void;
+  regenerating?: boolean;
 }) {
   const [open, setOpen] = useState(false); // 当前是否显示双语对照
   const [loading, setLoading] = useState(false);
   const [view, setView] = useState<string | null>(null); // 双语 Markdown
   const [error, setError] = useState<string | null>(null);
   const didAutoOpen = useRef(false);
+  const prevTextRef = useRef(text);
+
+  // 回复被「重新生成」替换后,旧的双语对照不再对应,收起重置(首次挂载不动,避免和 autoOpen 打架)。
+  useEffect(() => {
+    if (prevTextRef.current === text) return;
+    prevTextRef.current = text;
+    setOpen(false);
+    setView(null);
+    setError(null);
+  }, [text]);
 
   async function generate() {
     setLoading(true);
@@ -180,6 +197,18 @@ function PartnerReply({
           <>
             <CopyButton text={text} />
             <SpeakButton text={text} />
+            {onRegenerate && (
+              <Button
+                type="button"
+                variant="action"
+                size="action"
+                title="重新生成回复"
+                onClick={onRegenerate}
+                disabled={regenerating}
+              >
+                {regenerating ? <Spinner /> : <RefreshCwIcon size={16} />}
+              </Button>
+            )}
           </>
         }
         trailingActions={
@@ -304,6 +333,7 @@ export function ChatView({
   const [streaming, setStreaming] = useState("");
   const [layoutTick, setLayoutTick] = useState(0);
   const [replyBusy, setReplyBusy] = useState(false);
+  const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const messagesRef = useRef<HTMLDivElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
@@ -513,6 +543,53 @@ export function ChatView({
     }
   }
 
+  // 重新生成最新一条回复:就地流式覆盖该轮气泡,失败则恢复原文。批改不变。
+  async function regenerate(turnId: string) {
+    if (replyBusy) return;
+    stopSpeech();
+    const turnGen = ++turnGenRef.current;
+    const original = turns.find((t) => t.id === turnId)?.partnerText ?? "";
+    stickToBottomRef.current = true;
+    setError(null);
+    setReplyBusy(true);
+    setRegeneratingId(turnId);
+    let acc = "";
+    try {
+      await regenerateReply(conversationId, turnId, {
+        onReplyDelta: (d) => {
+          if (turnGenRef.current !== turnGen) return;
+          acc += d;
+          patchTurn(turnId, { partnerText: acc });
+        },
+        onReplyComplete: (reply) => {
+          if (turnGenRef.current !== turnGen) return;
+          patchTurn(turnId, { partnerText: reply });
+        },
+      });
+      await touchConversation(conversationId);
+      onActivity?.();
+    } catch (e) {
+      if (turnGenRef.current === turnGen)
+        patchTurn(turnId, { partnerText: original });
+      setError(
+        e instanceof MissingApiKeyError
+          ? e.message
+          : e instanceof Error
+            ? e.message
+            : String(e),
+      );
+    } finally {
+      if (turnGenRef.current === turnGen) {
+        setReplyBusy(false);
+        setRegeneratingId(null);
+      }
+    }
+  }
+
+  // 最新一条带回复的轮次——「重新生成」只挂在它上面。
+  let lastReplyTurnId: string | undefined;
+  for (const t of turns) if (t.partnerText) lastReplyTurnId = t.id;
+
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col">
       <div
@@ -553,6 +630,12 @@ export function ChatView({
                 onFirstExplain={() => void incrementExplainCount(turn.id)}
                 onFirstBilingual={() => void incrementBilingualCount(turn.id)}
                 onLayoutChange={requestLayoutScroll}
+                onRegenerate={
+                  !learningMode && turn.id === lastReplyTurnId
+                    ? () => void regenerate(turn.id)
+                    : undefined
+                }
+                regenerating={regeneratingId === turn.id}
               />
             )}
           </div>

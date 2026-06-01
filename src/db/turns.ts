@@ -22,6 +22,14 @@ export async function persistTurn(
   return id;
 }
 
+// 覆盖某轮的对话回复(「重新生成」用)。批改不动——只换 AI 那句。
+export async function updateTurnReply(
+  id: string,
+  reply: string,
+): Promise<void> {
+  await db.update(turn).set({ reply }).where(eq(turn.id, id));
+}
+
 export async function updateTurnAnalysis(
   id: string,
   analysis: TutorAnalysis | null,
