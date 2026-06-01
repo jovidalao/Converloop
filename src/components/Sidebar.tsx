@@ -193,25 +193,30 @@ export function Sidebar({
           </div>
           <button
             type="button"
-            className="codex-sidebar-action"
+            className="codex-sidebar-action group"
             data-active={newChatActive}
             onClick={onNewChat}
+            title="新对话 ⌘N"
+            aria-keyshortcuts="Meta+N"
           >
             <span className="codex-sidebar-leading-icon">
               <SquarePenIcon className="size-4" />
             </span>
             <span>新对话</span>
+            <kbd className="ml-auto rounded border border-border/60 bg-muted px-1.5 py-0.5 font-sans text-[11px] text-muted-foreground/80 opacity-0 transition-opacity group-hover:opacity-100">
+              ⌘N
+            </kbd>
           </button>
         </div>
 
-        <nav className="codex-sidebar-scroll">
+        <div className="codex-sidebar-learning">
           <button
             type="button"
             className="codex-section-heading"
             onClick={() => setLearningCollapsed((v) => !v)}
           >
             <span className="codex-sidebar-leading-icon">
-              <GraduationCapIcon className="size-5 shrink-0" />
+              <GraduationCapIcon className="size-4 shrink-0" />
             </span>
             <span className="min-w-0 flex-1 truncate">定制化学习</span>
             {learningCollapsed ? (
@@ -240,7 +245,9 @@ export function Sidebar({
                 }}
                 title={agent.description}
               >
-                <BookOpenCheckIcon className="size-3.5 shrink-0" />
+                <span className="codex-sidebar-leading-icon">
+                  <BookOpenCheckIcon className="size-4 shrink-0" />
+                </span>
                 <span className="min-w-0 flex-1 truncate">{agent.name}</span>
                 <span className="codex-row-actions">
                   <button
@@ -281,7 +288,9 @@ export function Sidebar({
               </button>
             )}
           </div>
+        </div>
 
+        <nav className="codex-sidebar-scroll">
           <div className="codex-section-label">最近</div>
           {filtered.map((c) => {
             const active = view === "chat" && c.id === activeId;

@@ -62,7 +62,16 @@ function App() {
     setCollapsed((c) => !c);
   }, []);
 
-  // ⌘, 设置 · ⌘B 侧栏(macOS 惯例)
+  const openDraftConversation = useCallback(() => {
+    const id = crypto.randomUUID();
+    setDraftId(id);
+    withViewTransition(() => {
+      setActiveId(id);
+      setView("chat");
+    });
+  }, []);
+
+  // ⌘, 设置 · ⌘B 侧栏 · ⌘N 新对话(macOS 惯例)
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       const inField =
@@ -73,6 +82,11 @@ function App() {
         withViewTransition(() => setView("settings"));
         return;
       }
+      if (e.metaKey && e.key.toLowerCase() === "n") {
+        e.preventDefault();
+        openDraftConversation();
+        return;
+      }
       if (e.metaKey && e.key.toLowerCase() === "b" && !inField) {
         e.preventDefault();
         toggleSidebar();
@@ -80,7 +94,7 @@ function App() {
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [toggleSidebar]);
+  }, [toggleSidebar, openDraftConversation]);
 
   const refresh = useCallback(
     () => listConversations().then(setConversations),
@@ -106,15 +120,6 @@ function App() {
 
   function selectConversation(id: string) {
     setActiveConversationId(id); // 持久化,不进过渡
-    withViewTransition(() => {
-      setActiveId(id);
-      setView("chat");
-    });
-  }
-
-  function openDraftConversation() {
-    const id = crypto.randomUUID();
-    setDraftId(id);
     withViewTransition(() => {
       setActiveId(id);
       setView("chat");
