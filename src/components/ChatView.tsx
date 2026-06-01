@@ -454,7 +454,7 @@ export function ChatView({
     setReplyBusy(true);
     setStreaming("");
     let acc = "";
-    // 自动朗读:先凑出不少于 10 个词的第一段,回复完成后把剩余文本合并成一次 TTS 请求。
+    // 自动朗读:回复完成后把整条回复作为一次 TTS 请求合成并播放。
     // 设置里关掉「自动朗读」时不创建朗读会话(小喇叭仍可手动朗读)。
     const speaker =
       !learningMode && loadTtsConfig().autoSpeak ? createReplySpeaker() : null;
@@ -463,7 +463,6 @@ export function ChatView({
         onReplyDelta: (d) => {
           acc += d;
           setStreaming(acc);
-          speaker?.push(acc);
         },
         onReplyComplete: (reply) => {
           if (turnGenRef.current !== turnGen) return;
@@ -491,7 +490,7 @@ export function ChatView({
         await maybeAutoTitle(conversationId, text);
       onActivity?.();
     } catch (e) {
-      stopSpeech(); // 出错则停掉已在播的分句,并让朗读会话失效。
+      stopSpeech(); // 出错则停掉正在播放的朗读。
       speaker?.abort();
       patchTurn(turnId, {
         analysisPending: false,

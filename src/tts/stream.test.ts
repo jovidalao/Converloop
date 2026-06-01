@@ -1,18 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  beginSpeechStream: vi.fn(() => 1),
-  endSpeechStream: vi.fn(),
-  enqueueSpeech: vi.fn(),
-  setSpeechStreamKey: vi.fn(),
+  playSpeech: vi.fn(async () => {}),
   speakText: vi.fn(async () => new ArrayBuffer(1)),
 }));
 
 vi.mock("./playback", () => ({
-  beginSpeechStream: mocks.beginSpeechStream,
-  endSpeechStream: mocks.endSpeechStream,
-  enqueueSpeech: mocks.enqueueSpeech,
-  setSpeechStreamKey: mocks.setSpeechStreamKey,
+  playSpeech: mocks.playSpeech,
 }));
 
 vi.mock("./speak", () => ({
@@ -27,71 +21,35 @@ describe("createReplySpeaker", () => {
     vi.clearAllMocks();
   });
 
-  it("第一句少于 10 个词时,并入下一句作为第一段", async () => {
+  it("整条回复一次性合成并播放", async () => {
     const speaker = createReplySpeaker();
+    const reply = "Hi. This is the whole reply. It plays as one piece.";
 
-    speaker.push("Hi. This ");
+    speaker.finish(reply);
+
+    await vi.waitFor(() => {
+      expect(mocks.speakText).toHaveBeenCalledTimes(1);
+    });
+    expect(mocks.speakText).toHaveBeenCalledWith(reply);
+    await vi.waitFor(() => {
+      expect(mocks.playSpeech).toHaveBeenCalledWith(expect.anything(), reply);
+    });
+  });
+
+  it("空回复不合成", () => {
+    const speaker = createReplySpeaker();
+    speaker.finish("   ");
     expect(mocks.speakText).not.toHaveBeenCalled();
-
-    speaker.push(
-      "Hi. This second sentence has enough words for the first chunk. Rest ",
-    );
-    await vi.waitFor(() => {
-      expect(mocks.speakText).toHaveBeenCalledWith(
-        "Hi. This second sentence has enough words for the first chunk.",
-      );
-    });
-
-    speaker.finish(
-      "Hi. This second sentence has enough words for the first chunk. Rest stays together.",
-    );
-    await vi.waitFor(() => {
-      expect(mocks.speakText).toHaveBeenCalledTimes(2);
-    });
-    expect(mocks.speakText).toHaveBeenNthCalledWith(2, "Rest stays together.");
   });
 
-  it("第一句已达 10 个词时,先合成第一句", async () => {
+  it("中止后不再播放", async () => {
     const speaker = createReplySpeaker();
-
-    speaker.push(
-      "This first sentence already has more than ten simple words here. Rest ",
-    );
-
-    await vi.waitFor(() => {
-      expect(mocks.speakText).toHaveBeenCalledWith(
-        "This first sentence already has more than ten simple words here.",
-      );
-    });
-
-    speaker.finish(
-      "This first sentence already has more than ten simple words here. Rest later.",
-    );
-    await vi.waitFor(() => {
-      expect(mocks.speakText).toHaveBeenCalledTimes(2);
-    });
-    expect(mocks.speakText).toHaveBeenNthCalledWith(2, "Rest later.");
-  });
-
-  it("回复结束前没凑够 10 个词时,把整段作为第一段", async () => {
-    const speaker = createReplySpeaker();
-
-    speaker.finish("Hello there. How are you?");
+    speaker.finish("Some reply text.");
+    speaker.abort();
 
     await vi.waitFor(() => {
       expect(mocks.speakText).toHaveBeenCalledTimes(1);
     });
-    expect(mocks.speakText).toHaveBeenCalledWith("Hello there. How are you?");
-  });
-
-  it("没有句末标点的短回复只合成一次", async () => {
-    const speaker = createReplySpeaker();
-
-    speaker.finish("just a phrase");
-
-    await vi.waitFor(() => {
-      expect(mocks.speakText).toHaveBeenCalledTimes(1);
-    });
-    expect(mocks.speakText).toHaveBeenCalledWith("just a phrase");
+    expect(mocks.playSpeech).not.toHaveBeenCalled();
   });
 });

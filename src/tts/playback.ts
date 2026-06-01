@@ -4,14 +4,10 @@ let currentObjectUrl: string | null = null;
 let currentKey: string | null = null;
 let currentPhase: "loading" | "playing" | null = null;
 let currentSnapshot: PlaybackSnapshot = { key: null, phase: null };
-// 当前段播放完毕的回调,用于在 stopSpeech 时让等待中的播放 promise 立即落定。
+// 当前播放完毕的回调,用于在 stopSpeech 时让等待中的播放 promise 立即落定。
 let currentSettle: (() => void) | null = null;
-
-// 流式分句播放:把陆续合成出来的音频段按序无缝连播。
-const segmentQueue: ArrayBuffer[] = [];
-let streamToken = 0; // 每次 stop / 新会话自增,使过期的段与合成结果失效。
-let streamActive = false; // 会话仍开放:后续可能还有段进来。
-let draining = false; // 队列消费循环是否在跑。
+// 每次 stop / 新播放自增,使在途的播放失效。
+let playToken = 0;
 
 const listeners = new Set<() => void>();
 
@@ -26,12 +22,7 @@ export function subscribePlayback(listener: () => void): () => void {
   return () => listeners.delete(listener);
 }
 
-/** 正在播放的文本,没有则 null。给 useSyncExternalStore 当快照。 */
-export function getPlayingKey(): string | null {
-  return currentKey;
-}
-
-/** 当前朗读状态。loading 表示音频仍在合成/等待首段,playing 表示已开始播放。 */
+/** 当前朗读状态。loading 表示音频仍在合成/等待,playing 表示已开始播放。 */
 export function getPlaybackSnapshot(): PlaybackSnapshot {
   return currentSnapshot;
 }
@@ -52,19 +43,8 @@ function cleanup() {
   currentSettle = null;
 }
 
-function cleanupAudioOnly() {
-  if (currentObjectUrl) {
-    URL.revokeObjectURL(currentObjectUrl);
-    currentObjectUrl = null;
-  }
-  currentAudio = null;
-  currentSettle = null;
-}
-
 export function stopSpeech(): void {
-  streamToken += 1; // 让进行中的会话与在途合成结果失效。
-  streamActive = false;
-  segmentQueue.length = 0;
+  playToken += 1; // 让在途的播放失效。
   if (currentSettle) {
     const settle = currentSettle;
     currentSettle = null;
@@ -78,10 +58,10 @@ export function stopSpeech(): void {
   emit();
 }
 
-// 播放单个音频段,在播放结束(或被 stop 打断)时落定。currentKey 由调用方维护。
+// 播放整段音频,在播放结束(或被 stop 打断)时落定。
 function playBuffer(audioBytes: ArrayBuffer, token: number): Promise<void> {
   return new Promise((resolve, reject) => {
-    if (token !== streamToken) {
+    if (token !== playToken) {
       resolve();
       return;
     }
@@ -109,82 +89,22 @@ function playBuffer(audioBytes: ArrayBuffer, token: number): Promise<void> {
   });
 }
 
-/** 一次性播放整段音频(朗读按钮手动播放用)。 */
+/** 一次性播放整段音频(朗读按钮手动播放、自动朗读共用)。 */
 export async function playSpeech(
   audioBytes: ArrayBuffer,
   key?: string,
 ): Promise<void> {
   stopSpeech();
-  streamToken += 1;
+  playToken += 1;
   currentKey = key ?? null;
   currentPhase = currentKey ? "loading" : null;
-  const token = streamToken;
+  const token = playToken;
   try {
     await playBuffer(audioBytes, token);
   } finally {
-    if (token === streamToken) {
+    if (token === playToken) {
       cleanup();
       emit();
     }
-  }
-}
-
-/** 开启一个流式朗读会话,取消当前播放。返回会话 token。 */
-export function beginSpeechStream(displayKey: string | null): number {
-  stopSpeech();
-  streamToken += 1;
-  streamActive = true;
-  currentKey = displayKey;
-  currentPhase = displayKey ? "loading" : null;
-  emit();
-  return streamToken;
-}
-
-/** 更新会话的显示 key(例如整段回复文本确定后,让对应朗读按钮亮起)。 */
-export function setSpeechStreamKey(token: number, key: string): void {
-  if (token !== streamToken) return;
-  currentKey = key;
-  currentPhase = currentAudio ? "playing" : "loading";
-  emit();
-}
-
-/** 向会话追加一段已合成的音频;过期会话忽略。 */
-export function enqueueSpeech(token: number, audioBytes: ArrayBuffer): void {
-  if (token !== streamToken || !streamActive) return;
-  segmentQueue.push(audioBytes);
-  void drainQueue(token);
-}
-
-/** 标记会话不会再有新段进来;队列放完后自动收尾。 */
-export function endSpeechStream(token: number): void {
-  if (token !== streamToken) return;
-  streamActive = false;
-  if (!draining && segmentQueue.length === 0) {
-    cleanup();
-    emit();
-  }
-}
-
-async function drainQueue(token: number): Promise<void> {
-  if (draining) return;
-  draining = true;
-  while (token === streamToken && segmentQueue.length > 0) {
-    const buf = segmentQueue.shift()!;
-    try {
-      await playBuffer(buf, token);
-      if (token === streamToken && streamActive && segmentQueue.length === 0) {
-        cleanupAudioOnly();
-        currentPhase = currentKey ? "loading" : null;
-        emit();
-      }
-    } catch (e) {
-      console.warn("分段播放失败:", e);
-      break;
-    }
-  }
-  draining = false;
-  if (token === streamToken && !streamActive && segmentQueue.length === 0) {
-    cleanup();
-    emit();
   }
 }
