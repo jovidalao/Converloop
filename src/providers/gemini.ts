@@ -58,6 +58,28 @@ const TYPE_MAP: Record<string, string> = {
 function toGeminiSchema(node: unknown): unknown {
   if (node === null || typeof node !== "object") return node;
   const s = node as Record<string, unknown>;
+
+  // zod nullable() becomes anyOf:[schema,{type:"null"}]. Gemini responseSchema
+  // wants the actual schema plus nullable:true; dropping anyOf leaves an empty
+  // property and weakens structured output for fields like expression_gap.
+  if (Array.isArray(s.anyOf)) {
+    const nonNull = s.anyOf.filter(
+      (item) =>
+        !(
+          item &&
+          typeof item === "object" &&
+          !Array.isArray(item) &&
+          (item as Record<string, unknown>).type === "null"
+        ),
+    );
+    if (nonNull.length === 1 && nonNull.length !== s.anyOf.length) {
+      const mapped = toGeminiSchema(nonNull[0]);
+      return mapped && typeof mapped === "object" && !Array.isArray(mapped)
+        ? { ...(mapped as Record<string, unknown>), nullable: true }
+        : mapped;
+    }
+  }
+
   const out: Record<string, unknown> = {};
 
   if (typeof s.type === "string") {

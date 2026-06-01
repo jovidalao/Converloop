@@ -42,6 +42,7 @@ const MasteryType = z.enum([
   "grammar",
   "collocation",
   "error_pattern",
+  "expression_gap", // 母语/混说表达缺口;只用于 gap 情景本身
 ]);
 
 // 单个错误点。mastery_key 是 upsert 进 SQLite 的稳定键,
@@ -76,7 +77,7 @@ export const TutorAnalysis = z.object({
   natural: z.string(),                 // 更地道的说法(可能 = corrected)
   issues: z.array(Issue),              // is_correct 为 true 时为空
   mastery_updates: z.array(MasteryUpdate),
-  expression_gap: ExpressionGap.nullable().optional(), // 母语/混说输入时填充,见下
+  expression_gap: ExpressionGap.nullable(), // 无表达缺口时必须为 null
 });
 
 export type TutorAnalysis = z.infer<typeof TutorAnalysis>;
@@ -112,6 +113,9 @@ BOOKKEEPING (mastery_updates)
 - Add an "introduced" signal for any new word/structure you introduced.
 
 Return ONLY the structured object defined by the schema.
+Always include all top-level keys:
+is_correct, corrected, natural, issues, mastery_updates, expression_gap.
+Use [] for empty arrays and expression_gap:null when there is no gap.
 
 === KNOWN WEAK POINTS (reuse these mastery_key values) ===
 {weak_list}
@@ -160,5 +164,6 @@ function applySignal(item, signal) {
 
 - **OpenAI 兼容**:`response_format: { type: "json_schema", json_schema }`
 - **Anthropic**:把 schema 作为单个 tool 的 input_schema,强制调用
-- 两者都用 `zod-to-json-schema` 从上面的 Zod 生成,一份 schema 两处用
-- **降级**:`TutorAnalysis.safeParse()` 失败就退回"只保留对话、本轮不更新 mastery",别让整轮崩掉
+- **Gemini**:`responseSchema`,代码把 Zod 的 nullable anyOf 转成 Gemini 的 `nullable:true`
+- 三者都用 `zod-to-json-schema` 从上面的 Zod 生成,一份 schema 多处用
+- **修复回退**:`TutorAnalysis.safeParse()` 失败后先让模型做一次 JSON repair / re-analyze;仍失败才退回纯文本批改(显示给用户,但本轮不更新 mastery),别让整轮崩掉

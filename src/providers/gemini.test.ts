@@ -81,6 +81,11 @@ describe("gemini REST alignment", () => {
     expect(root.type).toBe("OBJECT");
     expect(root).not.toHaveProperty("additionalProperties");
     expect(root).not.toHaveProperty("$schema");
+    const props = root.properties as Record<string, unknown>;
+    expect(props.expression_gap).toMatchObject({
+      type: "OBJECT",
+      nullable: true,
+    });
   });
 
   it("temperature only adds generationConfig when set", () => {

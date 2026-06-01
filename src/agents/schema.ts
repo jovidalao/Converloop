@@ -19,6 +19,7 @@ export const MasteryType = z.enum([
   "error_pattern",
   "expression_gap", // 一个"想表达但说不出"的情景/意图(母语/混说输入)
 ]);
+const GapKeyItemType = z.enum(["vocab", "grammar", "collocation"]);
 
 export const Issue = z.object({
   category: IssueCategory,
@@ -48,7 +49,7 @@ export const GapKeyItem = z.object({
   gloss: z.string(), // 母语释义
   mastery_key: z.string(),
   mastery_label: z.string(),
-  mastery_type: MasteryType, // vocab | collocation | grammar
+  mastery_type: GapKeyItemType, // vocab | collocation | grammar
 });
 export type GapKeyItem = z.infer<typeof GapKeyItem>;
 
@@ -69,8 +70,8 @@ export const TutorAnalysis = z.object({
   natural: z.string(),
   issues: z.array(Issue),
   mastery_updates: z.array(MasteryUpdate),
-  // 纯目标语输入时省略/为 null;母语或混说时填充(混说时可与 issues 共存)。
-  expression_gap: ExpressionGap.nullable().optional(),
+  // 纯目标语输入时必须为 null;母语或混说时填充(混说时可与 issues 共存)。
+  expression_gap: ExpressionGap.nullable(),
 });
 export type TutorAnalysis = z.infer<typeof TutorAnalysis>;
 

@@ -104,7 +104,13 @@ BOOKKEEPING (mastery_updates)
   - "introduced": a new word/structure YOU introduced in feedback.
 
 Never output counts, scores, or confidence — only discrete observations.
-Return ONLY the structured object defined by the schema.
+
+OUTPUT CONTRACT
+- Return exactly ONE JSON object. No markdown fences, no prose, no reasoning.
+- Always include these top-level keys: is_correct, corrected, natural, issues,
+  mastery_updates, expression_gap.
+- Use [] for empty arrays. Use expression_gap:null when there is no expression gap.
+- Do not include keys outside the schema.
 
 === KNOWN WEAK POINTS (reuse these mastery_key values) ===
 ${formatWeakList(ctx.weakList)}`;
@@ -169,13 +175,15 @@ function fallbackMessages(
   messages: ChatMessage[],
   schema: ReturnType<typeof tutorJsonSchema>,
 ): ChatMessage[] {
-  return [
-    ...messages,
-    {
-      role: "system",
-      content: `Respond with ONE JSON object only (no markdown, no reasoning). It MUST match this schema:\n${JSON.stringify(schema.schema)}`,
-    },
-  ];
+  const reminder = `Respond with ONE JSON object only (no markdown, no reasoning). It MUST match this schema:\n${JSON.stringify(schema.schema)}`;
+  const firstSystem = messages.findIndex((m) => m.role === "system");
+  if (firstSystem === -1)
+    return [{ role: "system", content: reminder }, ...messages];
+  return messages.map((m, index) =>
+    index === firstSystem
+      ? { ...m, content: `${m.content}\n\n${reminder}` }
+      : m,
+  );
 }
 
 async function requestStructuredTutorRaw(
@@ -206,6 +214,53 @@ async function requestStructuredTutorRaw(
     temperature: 0,
     maxTokens: TUTOR_MAX_OUTPUT_TOKENS,
     jsonObject: true,
+  });
+}
+
+async function requestRepairedTutorRaw(
+  provider: ModelProvider,
+  ctx: TutorContext,
+  badOutput: string,
+  parseError: string,
+): Promise<string> {
+  const schema = tutorJsonSchema();
+  const messages: ChatMessage[] = [
+    {
+      role: "system",
+      content: `You repair a failed TutorAnalysis response for a language-learning app.
+
+Return exactly ONE valid JSON object only. No markdown, no prose, no reasoning.
+It MUST match this schema:
+${JSON.stringify(schema.schema)}
+
+If the previous output is unusable, re-analyze the source message directly.
+For normal ${ctx.targetLanguage} input, set expression_gap:null.
+Use [] for empty issues and mastery_updates.`,
+    },
+    {
+      role: "user",
+      content: `=== PARSE ERROR ===
+${parseError}
+
+=== PREVIOUS INVALID OUTPUT ===
+${badOutput.slice(0, 6000)}
+
+=== KNOWN WEAK POINTS ===
+${formatWeakList(ctx.weakList)}
+
+=== RECENT CONVERSATION ===
+${ctx.history || "(none)"}
+
+=== USER MESSAGE TO ANALYZE ===
+${ctx.userInput}`,
+    },
+  ];
+  return provider.generate({
+    messages,
+    temperature: 0,
+    maxTokens: TUTOR_MAX_OUTPUT_TOKENS,
+    jsonObject: true,
+    meta: { label: "tutor_repair" },
   });
 }
 
@@ -253,6 +308,28 @@ export async function analyze(
       "原始:",
       raw.slice(0, 400),
     );
+
+    try {
+      const repairedRaw = await requestRepairedTutorRaw(
+        provider,
+        ctx,
+        raw,
+        structured.error ?? "unknown parse error",
+      );
+      const repaired = parseTutorRaw(repairedRaw);
+      if (repaired.analysis) {
+        recordTutorOutcome("structured");
+        return repaired;
+      }
+      console.warn(
+        "导师 JSON 修复仍失败,启用纯文本第二套:",
+        repaired.error,
+        "原始:",
+        repairedRaw.slice(0, 400),
+      );
+    } catch (e) {
+      console.warn("导师 JSON 修复请求失败,启用纯文本第二套:", e);
+    }
 
     const proseRaw = await requestProseFeedback(provider, ctx);
     const proseFeedback = stripModelFences(proseRaw);

@@ -69,7 +69,7 @@ export const TutorAnalysis = z.object({
   natural: z.string(),
   issues: z.array(Issue),
   mastery_updates: z.array(MasteryUpdate),
-  expression_gap: ExpressionGap.nullable(),  // ← 新增;纯目标语输入时为 null
+  expression_gap: ExpressionGap.nullable(),  // ← 纯目标语输入时必须为 null
 });
 ```
 
@@ -229,7 +229,7 @@ const ReviewSet = z.object({ cards: z.array(ReviewCard) });
 
 ## 7. tutor system prompt(参考)
 
-> 下面是带 EXPRESSION GAP 段的完整 prompt 设计稿。**已落地版**在 `src/agents/tutor.ts`,按 §0 收窄了字段(去掉 `intended_meaning` / `template`,留到复习页再加)。两者改动需同步。
+> 下面是带 EXPRESSION GAP 段的完整 prompt 设计稿。**已落地版**在 `src/agents/tutor.ts`,按 §0 收窄了字段(去掉 `intended_meaning` / `template`,留到复习页再加),并要求始终输出 `expression_gap:null` 或对象。两者改动需同步。
 
 ```text
 You are a precise language tutor analyzing a single message from a

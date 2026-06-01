@@ -97,6 +97,7 @@ describe("deriveSignals", () => {
         signal: "introduced",
       },
     ],
+    expression_gap: null,
   };
 
   it("issues → error 信号,mastery_updates → 其声明的信号", () => {
@@ -158,6 +159,7 @@ describe("deriveSignals", () => {
           signal: "introduced",
         },
       ],
+      expression_gap: null,
     };
     const sigs = deriveSignals(dup);
     expect(sigs).toHaveLength(2);

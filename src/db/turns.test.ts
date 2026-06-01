@@ -18,6 +18,7 @@ describe("turn feedback serialization", () => {
         natural: "ok",
         issues: [],
         mastery_updates: [],
+        expression_gap: null,
       },
       "ignored",
     );

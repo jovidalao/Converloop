@@ -37,6 +37,7 @@ const sampleAnalysis = {
       signal: "introduced",
     },
   ],
+  expression_gap: null,
 };
 
 describe("TutorAnalysis schema", () => {
@@ -77,5 +78,6 @@ describe("tutorJsonSchema", () => {
     expect((schema as any).type).toBe("object");
     expect((schema as any).properties).toHaveProperty("issues");
     expect((schema as any).properties).toHaveProperty("mastery_updates");
+    expect((schema as any).required).toContain("expression_gap");
   });
 });

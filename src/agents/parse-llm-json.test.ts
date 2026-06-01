@@ -40,6 +40,36 @@ describe("normalizeTutorPayload", () => {
     const parsed = TutorAnalysis.safeParse(normalized);
     expect(parsed.success).toBe(true);
   });
+
+  it("兼容常见 wrapper、camelCase 和别名字段", () => {
+    const normalized = normalizeTutorPayload({
+      analysis: {
+        isCorrect: "no",
+        correctedSentence: "I went home.",
+        naturalSentence: "I went home.",
+        errors: [
+          {
+            category: "Grammar",
+            spanOriginal: "go",
+            spanCorrected: "went",
+            reason: "过去时间要用过去式。",
+            severity: "Moderate",
+            masteryKey: "grammar:past_tense",
+            masteryLabel: "一般过去时",
+            masteryType: "Grammar",
+          },
+        ],
+        masteryUpdates: [],
+        expressionGap: null,
+      },
+    });
+    const parsed = TutorAnalysis.safeParse(normalized);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.is_correct).toBe(false);
+      expect(parsed.data.issues[0].span_original).toBe("go");
+    }
+  });
 });
 
 describe("parseLLMJson", () => {
@@ -53,6 +83,12 @@ describe("parseLLMJson", () => {
     const result = parseLLMJson(bad);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toContain("推理过程");
+  });
+
+  it("容忍对象和数组结尾的多余逗号", () => {
+    const result = parseLLMJson('{"a":[1,2,],"b":true,}');
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toEqual({ a: [1, 2], b: true });
   });
 });
 
