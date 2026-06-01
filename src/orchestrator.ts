@@ -3,6 +3,7 @@ import { converse } from "./agents/conversation";
 import { explain } from "./agents/explain";
 import { runLearningAgent } from "./agents/learning";
 import { generateLearningAgentDraft } from "./agents/learning-agent-builder";
+import { classifyProfilePreferenceInstruction } from "./agents/profile-preferences";
 import type { TutorAnalysis } from "./agents/schema";
 import { translate } from "./agents/translate";
 import { analyze } from "./agents/tutor";
@@ -23,6 +24,12 @@ import { buildLearningDataContext } from "./learning-data";
 import { logError } from "./lib/log";
 import { estimateTokens } from "./lib/tokens";
 import { maybeRunMaintainer } from "./profile/maintainer-runner";
+import {
+  appendClassifiedPreferences,
+  correctionPreferenceFlags,
+  formatExperiencePreferences,
+  preferencesFromProfile,
+} from "./profile/preferences";
 import { profileSliceForConversation, readProfile } from "./profile/profile";
 import { maybeCompressConversation } from "./profile/summary-runner";
 
@@ -74,6 +81,20 @@ export async function editLearningDataWithInstruction(
   return applyDataEditInstruction(provider, instruction, loadConfig());
 }
 
+export async function applyProfilePreferenceInstruction(
+  instruction: string,
+  currentProfileMd: string,
+): Promise<string> {
+  const provider = await getProvider();
+  if (!provider) throw new MissingApiKeyError();
+  const items = await classifyProfilePreferenceInstruction(
+    provider,
+    instruction,
+    preferencesFromProfile(currentProfileMd),
+  );
+  return appendClassifiedPreferences(currentProfileMd, items);
+}
+
 // 端到端一轮:对话 ∥ 导师并行 → 对话流式秒回、批改稍后到 → 记账 + 持久化。
 // 导师崩了不影响对话(降级:analysis=null,本轮不更新 mastery)。
 export async function runTurn(
@@ -115,12 +136,19 @@ export async function runTurn(
   // 导师拿直近几轮即可,别把水位后的全部原文喂进结构化分析(省 token、缩短输入)。
   const tutorHistory = formatTurns(verbatimTurns.slice(-TUTOR_HISTORY_TURNS));
   const profileSlice = profileSliceForConversation(profileMd);
+  const conversationPreferences = formatExperiencePreferences(
+    profileMd,
+    "conversation",
+  );
+  const tutorPreferences = formatExperiencePreferences(profileMd, "tutor");
+  const tutorFlags = correctionPreferenceFlags(profileMd);
 
   // 并行发出:对话流式,导师结构化。互不阻塞。
   const replyPromise = converse(
     provider,
     {
       ...langs,
+      experiencePreferences: conversationPreferences,
       profileSlice,
       reviewItems,
       calibrationHint: proficiency.calibrationHint,
@@ -132,6 +160,9 @@ export async function runTurn(
   );
   const analysisPromise = analyze(provider, {
     ...langs,
+    experiencePreferences: tutorPreferences,
+    ignoreCapitalizationIssues: tutorFlags.ignoreCapitalizationIssues,
+    ignorePunctuationIssues: tutorFlags.ignorePunctuationIssues,
     weakList,
     history: tutorHistory,
     userInput,
@@ -211,10 +242,15 @@ async function runLearningTurn(
 
   const config = loadConfig();
   // 自动压缩:课程上下文 = 滚动摘要(较早内容)+ 水位之后的全部原文。摘要为 NULL 时退化为纯原文。
-  const [summaryData, dataContext] = await Promise.all([
+  const [summaryData, dataContext, profileMd] = await Promise.all([
     getSummary(conversationId),
     buildLearningDataContext(agent, config),
+    readProfile(config),
   ]);
+  const experiencePreferences = formatExperiencePreferences(
+    profileMd,
+    "learning",
+  );
   const history = formatTurns(
     await getTurnsAfterId(conversationId, summaryData.throughId),
   );
@@ -225,6 +261,7 @@ async function runLearningTurn(
       nativeLanguage: config.nativeLanguage,
       targetLanguage: config.targetLanguage,
       level: config.level,
+      experiencePreferences,
       agentName: agent.name,
       agentPrompt: agent.prompt,
       dataContext,
@@ -278,6 +315,10 @@ export async function regenerateReply(
   const target = verbatimTurns[idx];
   // 历史只取「该轮之前」的原文:把被重生成的这轮及其之后排除,避免把旧回复喂回去。
   const history = formatTurns(verbatimTurns.slice(0, idx));
+  const experiencePreferences = formatExperiencePreferences(
+    profileMd,
+    "conversation",
+  );
 
   const reply = await converse(
     provider,
@@ -285,6 +326,7 @@ export async function regenerateReply(
       nativeLanguage: config.nativeLanguage,
       targetLanguage: config.targetLanguage,
       level: config.level,
+      experiencePreferences,
       profileSlice: profileSliceForConversation(profileMd),
       reviewItems,
       calibrationHint: proficiency.calibrationHint,
@@ -310,7 +352,12 @@ export async function explainReply(
   if (!provider) throw new MissingApiKeyError();
 
   const config = loadConfig();
-  const profileSlice = profileSliceForConversation(await readProfile(config));
+  const profileMd = await readProfile(config);
+  const experiencePreferences = formatExperiencePreferences(
+    profileMd,
+    "reading",
+  );
+  const profileSlice = profileSliceForConversation(profileMd);
 
   return explain(
     provider,
@@ -318,6 +365,7 @@ export async function explainReply(
       nativeLanguage: config.nativeLanguage,
       targetLanguage: config.targetLanguage,
       level: config.level,
+      experiencePreferences,
       profileSlice,
       reply,
     },
@@ -332,9 +380,14 @@ export async function bilingualReply(reply: string): Promise<string> {
   if (!provider) throw new MissingApiKeyError();
 
   const config = loadConfig();
+  const experiencePreferences = formatExperiencePreferences(
+    await readProfile(config),
+    "reading",
+  );
   return bilingual(provider, {
     nativeLanguage: config.nativeLanguage,
     targetLanguage: config.targetLanguage,
+    experiencePreferences,
     reply,
   });
 }
@@ -350,11 +403,16 @@ export async function translateSelection(
   if (!provider) throw new MissingApiKeyError();
 
   const config = loadConfig();
+  const experiencePreferences = formatExperiencePreferences(
+    await readProfile(config),
+    "reading",
+  );
   return translate(
     provider,
     {
       nativeLanguage: config.nativeLanguage,
       targetLanguage: config.targetLanguage,
+      experiencePreferences,
       selection,
       context,
     },

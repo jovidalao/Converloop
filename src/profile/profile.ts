@@ -22,6 +22,17 @@ export function defaultProfile(config: AppConfig): string {
 ## About me
 -
 
+## AI preferences
+### Global
+
+### Conversation
+
+### Correction
+
+### Lessons
+
+### Reading help
+
 ## Working on
 -
 
@@ -53,6 +64,7 @@ export async function readProfile(config: AppConfig): Promise<string> {
 // 避免把模板噪声塞进每轮 prompt。
 export function profileSliceForConversation(md: string): string {
   return md
+    .replace(/^##\s+AI preferences\s*$[\s\S]*?(?=^##\s+)/m, "")
     .replace(/<!--[\s\S]*?-->/g, "")
     .replace(/\n{3,}/g, "\n\n")
     .trim();

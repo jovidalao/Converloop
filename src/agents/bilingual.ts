@@ -3,6 +3,7 @@ import type { ChatMessage, ModelProvider } from "../providers/types";
 export interface BilingualContext {
   nativeLanguage: string;
   targetLanguage: string;
+  experiencePreferences: string;
   reply: string; // 要做双语对照的对话回复
 }
 
@@ -22,10 +23,15 @@ Original sentence one. *母语翻译一* Original sentence two. *母语翻译二
 RULES
 - Keep the ${ctx.targetLanguage} text EXACTLY as written — verbatim, do not edit or rephrase.
 - Translate naturally into ${ctx.nativeLanguage}, faithful to meaning and tone.
+- Follow the learner experience preferences below for translation style and
+  reading support, unless they conflict with preserving the original text.
 - Wrap ONLY the translations in *single asterisks*. Never wrap the original text.
 - Do NOT use single-asterisk emphasis for anything other than the translations.
 - Preserve the original paragraph breaks and any list/structure.
-- No preamble, no numbering, no commentary, no code fences — just the interlinear message.`;
+- No preamble, no numbering, no commentary, no code fences — just the interlinear message.
+
+=== LEARNER EXPERIENCE PREFERENCES ===
+${ctx.experiencePreferences || "(none)"}`;
 }
 
 function userPrompt(ctx: BilingualContext): string {

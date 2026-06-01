@@ -1,10 +1,28 @@
 import { describe, expect, it } from "vitest";
-import { applyPreservedMyNotes, extractMyNotes, sanityCheck } from "./sanity";
+import {
+  applyPreservedMyNotes,
+  extractMyNotes,
+  extractSectionBlock,
+  sanityCheck,
+} from "./sanity";
 
 const oldMd = `# Learner Profile · Chinese → English · B1 · updated 2026-05-29
 
 ## About me
 - 前端工程师,最近换了新工作;在读在职研究生
+
+## AI preferences
+### Global
+- 用澳大利亚英语。
+
+### Conversation
+
+### Correction
+- 忽略语音输入导致的纯标点问题。
+
+### Lessons
+
+### Reading help
 
 ## Working on
 - 冠词 a/an/the —— 抽象名词前尤其不稳
@@ -36,6 +54,19 @@ function withSections(myNotes: string, working = "- 冠词 a/an/the"): string {
 
 ## About me
 - 前端工程师
+
+## AI preferences
+### Global
+- 用澳大利亚英语。
+
+### Conversation
+
+### Correction
+- 忽略语音输入导致的纯标点问题。
+
+### Lessons
+
+### Reading help
 
 ## Working on
 ${working}
@@ -77,6 +108,16 @@ describe("sanityCheck", () => {
     expect(r.reason).toContain("My notes");
   });
 
+  it("改了 AI preferences → 拒绝", () => {
+    const tampered = withSections(MY_NOTES).replace(
+      "用澳大利亚英语",
+      "用美式英语",
+    );
+    const r = sanityCheck(oldMd, tampered);
+    expect(r.ok).toBe(false);
+    expect(r.reason).toContain("AI preferences");
+  });
+
   it("档案过长 → 拒绝(agent 未控制 bullet 数)", () => {
     const bloated = withSections(MY_NOTES, `${"- 某个薄弱项\n".repeat(1500)}`);
     const r = sanityCheck(oldMd, bloated);
@@ -86,14 +127,18 @@ describe("sanityCheck", () => {
 
   it("长度坍缩 → 拒绝(段落全、My notes 原样,但内容被吃掉)", () => {
     const collapsed = `## About me
-## Working on
+${extractSectionBlock(oldMd, "AI preferences")}## Working on
 ## Comfortable with
 ## Avoids / rarely attempts
 ## Interests
 ## Recently introduced
 ## My notes
 ${MY_NOTES}`;
-    const r = sanityCheck(oldMd, collapsed);
+    const longOld = oldMd.replace(
+      "- 做饭、徒步、前端开发、骑行、摄影、播客",
+      `${"- 一个很长的旧兴趣记录\n".repeat(80)}`,
+    );
+    const r = sanityCheck(longOld, collapsed);
     expect(r.ok).toBe(false);
     expect(r.reason).toContain("坍缩");
   });

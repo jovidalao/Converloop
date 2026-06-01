@@ -52,7 +52,7 @@ function trimBlank(lines: string[]): string {
   return lines.join("\n").replace(/^\n+/, "").replace(/\s+$/, "");
 }
 
-// 保证 7 个规范段都在、且按规范顺序;缺的补空段,未知段保留在末尾。
+// 保证规范段都在、且按规范顺序;缺的补空段,未知段保留在末尾。
 export function ensureSections(p: ParsedProfile): ParsedProfile {
   const byTitle = new Map(p.sections.map((s) => [s.title, s]));
   const ordered: ProfileSection[] = SECTION_TITLES.map(

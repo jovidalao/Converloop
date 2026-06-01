@@ -6,7 +6,7 @@ import {
   normalizeTutorPayload,
   parseLLMJson,
 } from "./parse-llm-json";
-import { TutorAnalysis, tutorJsonSchema } from "./schema";
+import { type Issue, TutorAnalysis, tutorJsonSchema } from "./schema";
 
 // SQLite 薄弱表喂给导师的行(由 mastery 查询提供)。
 export interface WeakItem {
@@ -22,6 +22,9 @@ export interface TutorContext {
   nativeLanguage: string;
   targetLanguage: string;
   level: string;
+  experiencePreferences: string; // 用户在设置页显式配置的体验偏好
+  ignoreCapitalizationIssues: boolean;
+  ignorePunctuationIssues: boolean;
   weakList: WeakItem[];
   history: string; // 最近几轮对话,纯文本
   userInput: string;
@@ -68,6 +71,10 @@ A) ERRORS — the user DID produce ${ctx.targetLanguage} but got it wrong.
 - Correct only real errors. Do NOT rewrite acceptable stylistic choices. If
   something is grammatical but unnatural, use severity="minor",
   category="naturalness" — don't treat it as an error.
+- Apply the learner experience preferences below. If they say to ignore
+  capitalization or punctuation, do NOT create issues or mastery_updates for
+  differences that are only capitalization/punctuation. You may normalize those
+  details in "corrected" or "natural" when another real issue is present.
 - For each error give the smallest wrong span, its fix, and a short explanation
   IN ${ctx.nativeLanguage}.
 - Use a consistent lowercase snake_case mastery_key per recurring problem type
@@ -112,6 +119,9 @@ OUTPUT CONTRACT
 - Use [] for empty arrays. Use expression_gap:null when there is no expression gap.
 - Do not include keys outside the schema.
 
+=== LEARNER EXPERIENCE PREFERENCES ===
+${ctx.experiencePreferences || "(none)"}
+
 === KNOWN WEAK POINTS (reuse these mastery_key values) ===
 ${formatWeakList(ctx.weakList)}`;
 }
@@ -144,6 +154,8 @@ Reply in ${ctx.nativeLanguage} using EXACTLY this plain-text template (no JSON, 
 
 Rules:
 - Only flag real errors; stylistic preference → 轻微 + 自然度.
+- Apply these learner experience preferences:
+${ctx.experiencePreferences || "(none)"}
 - Do not invent JSON or schema fields.
 - Output only the filled template, nothing else.
 
@@ -151,7 +163,61 @@ Rules:
 ${formatWeakList(ctx.weakList)}`;
 }
 
-function parseTutorRaw(raw: string): AnalyzeResult {
+function normalizeIgnoredText(
+  text: string,
+  ctx: Pick<
+    TutorContext,
+    "ignoreCapitalizationIssues" | "ignorePunctuationIssues"
+  >,
+): string {
+  let normalized = text.normalize("NFKC");
+  if (ctx.ignorePunctuationIssues) {
+    normalized = normalized.replace(/[^\p{L}\p{N}\s]/gu, "");
+  }
+  if (ctx.ignoreCapitalizationIssues) {
+    normalized = normalized.toLocaleLowerCase();
+  }
+  return normalized.replace(/\s+/g, " ").trim();
+}
+
+function shouldIgnoreIssue(
+  issue: Issue,
+  ctx: Pick<
+    TutorContext,
+    "ignoreCapitalizationIssues" | "ignorePunctuationIssues"
+  >,
+): boolean {
+  if (ctx.ignorePunctuationIssues && issue.category === "punctuation") {
+    return true;
+  }
+  if (!ctx.ignoreCapitalizationIssues && !ctx.ignorePunctuationIssues) {
+    return false;
+  }
+  return (
+    normalizeIgnoredText(issue.span_original, ctx) ===
+    normalizeIgnoredText(issue.span_corrected, ctx)
+  );
+}
+
+function applyCorrectionPreferences(
+  analysis: TutorAnalysis,
+  ctx: Pick<
+    TutorContext,
+    "ignoreCapitalizationIssues" | "ignorePunctuationIssues"
+  >,
+): TutorAnalysis {
+  const issues = analysis.issues.filter(
+    (issue) => !shouldIgnoreIssue(issue, ctx),
+  );
+  if (issues.length === analysis.issues.length) return analysis;
+  return {
+    ...analysis,
+    is_correct: issues.length === 0 ? true : analysis.is_correct,
+    issues,
+  };
+}
+
+function parseTutorRaw(raw: string, ctx: TutorContext): AnalyzeResult {
   const parsedJson = parseLLMJson(raw);
   if (!parsedJson.ok) {
     return { analysis: null, error: parsedJson.error };
@@ -160,7 +226,7 @@ function parseTutorRaw(raw: string): AnalyzeResult {
   const normalized = normalizeTutorPayload(parsedJson.value);
   const validated = TutorAnalysis.safeParse(normalized);
   if (validated.success) {
-    return { analysis: validated.data };
+    return { analysis: applyCorrectionPreferences(validated.data, ctx) };
   }
 
   return {
@@ -248,6 +314,9 @@ ${badOutput.slice(0, 6000)}
 === KNOWN WEAK POINTS ===
 ${formatWeakList(ctx.weakList)}
 
+=== LEARNER EXPERIENCE PREFERENCES ===
+${ctx.experiencePreferences || "(none)"}
+
 === RECENT CONVERSATION ===
 ${ctx.history || "(none)"}
 
@@ -296,7 +365,7 @@ export async function analyze(
   ];
   try {
     const raw = await requestStructuredTutorRaw(provider, messages);
-    const structured = parseTutorRaw(raw);
+    const structured = parseTutorRaw(raw, ctx);
     if (structured.analysis) {
       recordTutorOutcome("structured");
       return structured;
@@ -316,7 +385,7 @@ export async function analyze(
         raw,
         structured.error ?? "unknown parse error",
       );
-      const repaired = parseTutorRaw(repairedRaw);
+      const repaired = parseTutorRaw(repairedRaw, ctx);
       if (repaired.analysis) {
         recordTutorOutcome("structured");
         return repaired;

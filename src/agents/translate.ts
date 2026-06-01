@@ -3,6 +3,7 @@ import type { ChatMessage, ModelProvider } from "../providers/types";
 export interface TranslateContext {
   nativeLanguage: string;
   targetLanguage: string;
+  experiencePreferences: string;
   selection: string; // 用户选中的词/短语/句子
   context: string; // 选中文字所在的整句/整段(给 LLM 判断语境)
 }
@@ -26,8 +27,13 @@ You are given the SELECTION (the exact text they highlighted) and the CONTEXT
 
 RULES
 - Write entirely IN ${ctx.nativeLanguage}.
+- Follow the learner experience preferences below when choosing translation
+  style, explanation depth, terminology, and examples.
 - Be concise and scannable. No preamble, no closing remarks, no code fences.
-- Ground the explanation in how the selection is actually used in the CONTEXT.`;
+- Ground the explanation in how the selection is actually used in the CONTEXT.
+
+=== LEARNER EXPERIENCE PREFERENCES ===
+${ctx.experiencePreferences || "(none)"}`;
 }
 
 function userPrompt(ctx: TranslateContext): string {

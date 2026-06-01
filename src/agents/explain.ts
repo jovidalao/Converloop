@@ -4,6 +4,7 @@ export interface ExplainContext {
   nativeLanguage: string;
   targetLanguage: string;
   level: string;
+  experiencePreferences: string;
   profileSlice: string; // MD 档案切片(定性掌握情况),和对话 agent 同源
   reply: string; // 要讲解的对话回复
 }
@@ -20,6 +21,8 @@ what they likely don't — explain only what's likely to be unclear to them.
 
 RULES
 - Write the explanation IN ${ctx.nativeLanguage} (the learner's native language).
+- Follow the learner experience preferences below when deciding explanation
+  depth, wording, examples, and translation style.
 - Focus on what BLOCKS comprehension for a non-native reader: grammar structures,
   idioms, phrasal verbs, collocations, and idiomatic/colloquial usage — the things
   whose meaning a word-by-word reading won't reveal. Prioritize THIS learner's likely
@@ -32,6 +35,9 @@ RULES
   Be concrete.
 - If nothing in the message would trip up this learner, just say so in one line.
 - Be concise and scannable. No preamble, no closing remarks.
+
+=== LEARNER EXPERIENCE PREFERENCES ===
+${ctx.experiencePreferences || "(none)"}
 
 === LEARNER PROFILE ===
 ${ctx.profileSlice || "(no profile yet)"}`;

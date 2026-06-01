@@ -181,6 +181,21 @@ LIMIT 15;
 
 provider 解析全在 TS;**LLM HTTP 走 Rust**(`src-tauri/src/llm.rs` 的 `llm_request` / `llm_stream`,reqwest),绕过 webview CORS;流式用 reqwest `bytes_stream` + tauri `Channel` 推到前端,前端解析 SSE。config(非密)存 localStorage(`src/config.ts`),每个 provider 的 key 单独存,切换不丢。
 
+## 用户体验偏好
+
+长期体验偏好写在 MD 档案的 `## AI preferences` 段,不放设置页开关。
+档案页提供两个入口:一句话自然语言描述 → AI 自动归类到模块;或展开高级区按模块手动编辑。
+代码用 `formatExperiencePreferences(profileMd, scope)` 按流程分发:
+
+- `conversation`:普通对话回复
+- `tutor`:导师批改 + mastery 记账
+- `learning`:专项课 / Learning Agent
+- `reading`:讲解、划词翻译、双语阅读
+
+通用原则:主观偏好(地区英语、语气、回复长度、讲解风格)作为 scoped instruction
+喂给对应 agent;可确定执行的偏好(如忽略纯大小写 / 纯标点问题)同时做代码侧兜底,
+避免模型偶尔上报后进入 UI 和 mastery 计数。
+
 ## 密钥存储(应用自管加密,绝不明文)
 
 `src-tauri/src/secrets.rs`:XChaCha20-Poly1305 加密,密钥 = 本地随机 keyfile(0600)+ 机器标识 SHA-256 派生 → **设备绑定、无主密码**。前端 `src/keychain.ts` 走 `set/get/delete_secret` 命令。
@@ -219,7 +234,7 @@ v1 核心链路已完成并可用:
 - ✅ `mastery_event` 事件日志:每条 error/correct/introduced/gap 都保留结构化证据,`introduced` 不再推动掌握毕业
 - ✅ 定制化学习 Agent / 专项课:内置今日复盘、语法专项复习、表达缺口训练;支持自然语言创建和 prompt 微调;专项课会话独立于普通批改热路径
 - ✅ 学习数据页自然语言修改:LLM 只生成有限操作,代码执行 create/update/delete/状态修改,不让 LLM 直接碰计数
-- ✅ 最小 UI:聊天 / 批改面板 / 档案查看编辑 / 学习数据管理 / 设置(provider + key + TTS)
+- ✅ 最小 UI:聊天 / 批改面板 / 档案查看编辑(含 AI 自定义偏好) / 学习数据管理 / 设置(provider + key + TTS)
 
 **下一步(未实现):**
 

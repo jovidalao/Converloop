@@ -25,7 +25,7 @@
    ## Interests         → 选话题
    ## Recently introduced → 优先复用
    ## My notes          → 用户手写的记忆/指示,当作用户自己的 standing 指令尊重
-   (不需要原始计数;切片只剥掉占位 HTML 注释)
+   (`## AI preferences` 不在这里重复注入;代码会按模块拆成 experience_preferences)
 2. 复习候选清单(`DUE FOR REVIEW`):代码从 SQLite 选出的少量「学过/练过但最久没重温」
    的非 known 项(`getReviewDueList`,最久未碰优先),让被动复习从「指望维护 agent 写进
    prose」变成代码可控的定向选取。只给 label(+ 真实例句),不给计数。
@@ -51,6 +51,8 @@ RULES
   never overwhelm them.
 - (only when evidence is sufficient) Current read on this learner from recent
   activity: {calibration_hint} Let this fine-tune your difficulty and reply length.
+- Follow the learner experience preferences below for language variety, spelling,
+  phrasing, tone, and other standing requests.
 - Respond to what the user MEANS. Do NOT correct their mistakes and do NOT echo
   their wording if it might be wrong — rephrase into natural, idiomatic language
   so they absorb the correct form implicitly.
@@ -75,6 +77,9 @@ RULES
   bullet lists) when it genuinely aids clarity — e.g. highlighting a key word or
   listing a few options — but stay conversational: no headings, no code blocks
   unless the topic calls for it.
+
+=== LEARNER EXPERIENCE PREFERENCES ===
+{experience_preferences}
 
 === LEARNER PROFILE ===
 {md_profile_slice}

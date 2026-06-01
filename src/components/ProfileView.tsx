@@ -1,6 +1,7 @@
-import { PencilIcon, XIcon } from "lucide-react";
+import { PencilIcon, SparklesIcon, XIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { loadConfig } from "../config";
+import { applyProfilePreferenceInstruction } from "../orchestrator";
 import { runMaintainerNow } from "../profile/maintainer-runner";
 import {
   ensureSections,
@@ -8,6 +9,14 @@ import {
   parseProfile,
   serializeProfile,
 } from "../profile/parse";
+import {
+  isPreferenceSection,
+  PREFERENCE_SCOPE_LABEL,
+  type PreferenceScope,
+  type ProfilePreferences,
+  preferencesFromProfile,
+  updateProfilePreference,
+} from "../profile/preferences";
 import {
   readProfile,
   restoreProfile,
@@ -22,6 +31,7 @@ type Owner = "user" | "shared" | "ai";
 // 段 → 中文标题 + 归属。归属决定徽章、提示语,以及是否可编辑(ai = 只读)。
 const SECTION_META: Record<string, { zh: string; owner: Owner }> = {
   "About me": { zh: "关于我", owner: "shared" },
+  "AI preferences": { zh: "AI 自定义", owner: "user" },
   "Working on": { zh: "正在练", owner: "ai" },
   "Comfortable with": { zh: "已掌握", owner: "ai" },
   "Avoids / rarely attempts": { zh: "回避 / 很少尝试", owner: "ai" },
@@ -55,6 +65,109 @@ function displayBody(s: ProfileSection): string {
 
 function normalizeProfileMd(md: string): string {
   return serializeProfile(ensureSections(parseProfile(md)));
+}
+
+const PREFERENCE_FIELDS: Array<{
+  scope: PreferenceScope;
+  placeholder: string;
+}> = [
+  {
+    scope: "global",
+    placeholder: "适用于所有模块,例如: 使用澳大利亚英语; 默认简洁一点",
+  },
+  {
+    scope: "conversation",
+    placeholder: "只影响普通聊天,例如: 多问开放式问题; 回复不要太长",
+  },
+  {
+    scope: "tutor",
+    placeholder: "只影响批改,例如: 我经常语音输入,忽略纯大小写和标点问题",
+  },
+  {
+    scope: "learning",
+    placeholder: "只影响专项课,例如: 先诊断再练习; 每次只练一个点",
+  },
+  {
+    scope: "reading",
+    placeholder: "只影响阅读辅助,例如: 翻译更口语化; 解释习语时多给语境",
+  },
+];
+
+function PreferencesPanel({
+  preferences,
+  smartDraft,
+  smartBusy,
+  onSmartDraftChange,
+  onSmartApply,
+  onScopeChange,
+  onScopeBlur,
+}: {
+  preferences: ProfilePreferences;
+  smartDraft: string;
+  smartBusy: boolean;
+  onSmartDraftChange: (value: string) => void;
+  onSmartApply: () => void;
+  onScopeChange: (scope: PreferenceScope, value: string) => void;
+  onScopeBlur: () => void;
+}) {
+  return (
+    <section className="mt-3 rounded-lg border bg-card p-3">
+      <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <h3 className="m-0 text-sm font-semibold">AI 自定义</h3>
+          <p className="m-0 mt-1 text-sm leading-snug text-muted-foreground">
+            用自然语言描述偏好,系统会把它写进档案并分发到对应模块。
+          </p>
+        </div>
+        <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[0.7rem] text-primary">
+          你的设置 · AI 维护档案时保留
+        </span>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <Textarea
+          aria-label="一句话描述 AI 自定义"
+          className="min-h-24 resize-y text-sm leading-normal"
+          value={smartDraft}
+          onChange={(e) => onSmartDraftChange(e.target.value)}
+          placeholder="例如: 对话用澳大利亚日常英语; 我经常用语音输入,批改时不要纠结大小写和标点; 讲解时多用中文类比。"
+        />
+        <div className="flex justify-end">
+          <Button
+            type="button"
+            onClick={onSmartApply}
+            disabled={smartBusy || !smartDraft.trim()}
+          >
+            <SparklesIcon size={15} />
+            {smartBusy ? "归类中…" : "让 AI 归类保存"}
+          </Button>
+        </div>
+      </div>
+
+      <details className="mt-3">
+        <summary className="cursor-pointer text-sm font-medium text-muted-foreground">
+          按模块微调
+        </summary>
+        <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+          {PREFERENCE_FIELDS.map((field) => (
+            <div key={field.scope} className="flex flex-col gap-1.5">
+              <span className="text-sm text-muted-foreground">
+                {PREFERENCE_SCOPE_LABEL[field.scope]}
+              </span>
+              <Textarea
+                aria-label={PREFERENCE_SCOPE_LABEL[field.scope]}
+                className="min-h-28 resize-y text-sm leading-normal"
+                value={preferences[field.scope]}
+                onChange={(e) => onScopeChange(field.scope, e.target.value)}
+                onBlur={onScopeBlur}
+                placeholder={field.placeholder}
+              />
+            </div>
+          ))}
+        </div>
+      </details>
+    </section>
+  );
 }
 
 // 只读卡片:完整显示内容,卡片高度随内容自适应,内部无滚动条。
@@ -226,6 +339,8 @@ export function ProfileView() {
   const [savedMd, setSavedMd] = useState("");
   const [canUndo, setCanUndo] = useState(false);
   const [editingTitle, setEditingTitle] = useState<string | null>(null);
+  const [smartDraft, setSmartDraft] = useState("");
+  const [smartBusy, setSmartBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -255,6 +370,10 @@ export function ProfileView() {
     [loaded, raw, rawText, header, sections],
   );
   const dirty = loaded && currentMd !== savedMd;
+  const preferences = useMemo(
+    () => preferencesFromProfile(currentMd || ""),
+    [currentMd],
+  );
 
   // 失焦/卸载自动保存、文件同步都用最新值,避免闭包读到旧 state。
   const currentMdRef = useRef("");
@@ -339,6 +458,45 @@ export function ProfileView() {
     setStatus("✓ 已保存。");
   }
 
+  function applyProfileMdToState(md: string) {
+    if (raw) {
+      setRawText(md);
+      setSavedMd(md);
+    } else {
+      load(md);
+    }
+  }
+
+  function updatePreference(scope: PreferenceScope, body: string) {
+    if (!loaded || raw) return;
+    const md = updateProfilePreference(currentMd, scope, body);
+    const p = ensureSections(parseProfile(md));
+    setHeader(p.header);
+    setSections(p.sections);
+  }
+
+  async function applySmartPreference() {
+    const instruction = smartDraft.trim();
+    if (!loaded || !instruction) return;
+    setSmartBusy(true);
+    setStatus("AI 正在判断这条自定义应该放到哪个模块…");
+    try {
+      await writeProfile(currentMd);
+      const next = await applyProfilePreferenceInstruction(
+        instruction,
+        currentMd,
+      );
+      await writeProfile(next);
+      applyProfileMdToState(next);
+      setSmartDraft("");
+      setStatus("✓ 已归类并保存到档案。");
+    } catch (e) {
+      setStatus(`归类失败:${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setSmartBusy(false);
+    }
+  }
+
   function toggleRaw() {
     if (!loaded) return;
     if (!raw) {
@@ -405,7 +563,10 @@ export function ProfileView() {
 
   const gridRef = useRef<HTMLDivElement>(null);
   const colCount = useColumnCount(gridRef);
-  const columns = distribute(sections, colCount);
+  const displaySections = sections.filter(
+    (section) => !isPreferenceSection(section),
+  );
+  const columns = distribute(displaySections, colCount);
 
   return (
     <div className="flex h-full max-w-5xl flex-col overflow-y-auto px-6 pt-14 pb-6">
@@ -413,8 +574,8 @@ export function ProfileView() {
         学习者档案
       </h2>
       <p className="text-sm leading-snug text-muted-foreground">
-        对话 AI 读这份档案做个性化回复。点击「关于我」「我的笔记」可编辑;AI
-        自动维护的几段为只读。
+        对话 AI 会读这份档案做个性化回复。你可以在这里写自定义体验;AI
+        自动维护的学习状态为只读。
       </p>
       {header && (
         <p className="mt-2 truncate font-mono text-xs text-muted-foreground">
@@ -434,24 +595,35 @@ export function ProfileView() {
           spellCheck={false}
         />
       ) : (
-        // 瀑布流:JS 把卡片分配到等宽 flex 列,各列从顶部开始 → 顶边齐平、间距统一。
-        <div ref={gridRef} className="mt-3 flex items-start gap-3">
-          {columns.map((col, i) => (
-            <div key={i} className="flex min-w-0 flex-1 flex-col gap-3">
-              {col.map((s) => (
-                <SectionCard
-                  key={s.title}
-                  section={s}
-                  onEdit={
-                    isEditable(s.title)
-                      ? () => setEditingTitle(s.title)
-                      : undefined
-                  }
-                />
-              ))}
-            </div>
-          ))}
-        </div>
+        <>
+          <PreferencesPanel
+            preferences={preferences}
+            smartDraft={smartDraft}
+            smartBusy={smartBusy}
+            onSmartDraftChange={setSmartDraft}
+            onSmartApply={() => void applySmartPreference()}
+            onScopeChange={updatePreference}
+            onScopeBlur={() => void saveIfDirty()}
+          />
+          {/* 瀑布流:JS 把卡片分配到等宽 flex 列,各列从顶部开始 → 顶边齐平、间距统一。 */}
+          <div ref={gridRef} className="mt-3 flex items-start gap-3">
+            {columns.map((col, i) => (
+              <div key={i} className="flex min-w-0 flex-1 flex-col gap-3">
+                {col.map((s) => (
+                  <SectionCard
+                    key={s.title}
+                    section={s}
+                    onEdit={
+                      isEditable(s.title)
+                        ? () => setEditingTitle(s.title)
+                        : undefined
+                    }
+                  />
+                ))}
+              </div>
+            ))}
+          </div>
+        </>
       )}
 
       <div className="mt-4 flex flex-wrap items-center gap-2">

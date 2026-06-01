@@ -6,6 +6,7 @@ export interface ConversationContext {
   targetLanguage: string;
   level: string;
   profileSlice: string; // MD 档案切片(Task 7 前用占位)
+  experiencePreferences: string; // 用户在设置页显式配置的体验偏好
   reviewItems: ReviewItem[]; // 代码选的复习候选,自然复用(见 db/mastery getReviewDueList)
   calibrationHint: string; // 证据驱动的难度校准(见 lib/proficiency;证据不足时为空)
   summary: string; // 滚动摘要:较早内容的目标语 recap(自动压缩产出;无则为空)
@@ -45,6 +46,8 @@ keep the conversation flowing — another agent handles correction and feedback.
 RULES
 - Respond IN ${ctx.targetLanguage}, calibrated to ${ctx.level}: slightly stretch the user,
   never overwhelm them.${calibrationLine}
+- Follow the learner experience preferences below for language variety, spelling,
+  phrasing, tone, and other standing requests.
 - Respond to what the user MEANS. Do NOT correct their mistakes and do NOT echo
   their wording if it might be wrong — rephrase into natural, idiomatic language
   so they absorb the correct form implicitly.
@@ -69,6 +72,9 @@ RULES
   bullet lists) when it genuinely aids clarity — e.g. highlighting a key word or
   listing a few options — but stay conversational: no headings, no code blocks
   unless the topic calls for it.
+
+=== LEARNER EXPERIENCE PREFERENCES ===
+${ctx.experiencePreferences || "(none)"}
 
 === LEARNER PROFILE ===
 ${ctx.profileSlice || "(no profile yet)"}

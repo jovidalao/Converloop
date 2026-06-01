@@ -12,6 +12,17 @@ const md = `# Learner Profile · Chinese → English · B1 · updated 2026-05-31
 ## About me
 - 前端工程师
 
+## AI preferences
+### Global
+
+### Conversation
+
+### Correction
+
+### Lessons
+
+### Reading help
+
 ## Working on
 - 冠词 a/an/the
 - 现在完成时
@@ -33,7 +44,7 @@ const md = `# Learner Profile · Chinese → English · B1 · updated 2026-05-31
 `;
 
 describe("parseProfile", () => {
-  it("拆出 header 和 7 个段", () => {
+  it("拆出 header 和规范段", () => {
     const p = parseProfile(md);
     expect(p.header).toContain("# Learner Profile");
     expect(p.sections.map((s) => s.title)).toEqual(SECTION_TITLES);

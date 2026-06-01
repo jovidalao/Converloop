@@ -4,6 +4,7 @@ export interface LearningAgentContext {
   nativeLanguage: string;
   targetLanguage: string;
   level: string;
+  experiencePreferences: string; // 用户在设置页显式配置的体验偏好
   agentName: string;
   agentPrompt: string;
   dataContext: string;
@@ -22,9 +23,14 @@ BASE RULES
 - You may use ${ctx.nativeLanguage} for explanations, planning, summaries, and feedback when it helps. Use ${ctx.targetLanguage} for examples, drills, and learner production.
 - Do not assume every learner message is target-language practice; in this mode the learner may ask questions or answer in either language.
 - Give correction and coaching directly in the chat. There is no separate correction panel in this mode.
+- Follow the learner experience preferences below for language variety, spelling,
+  phrasing, tone, and correction strictness.
 - Use the learner data below as grounding. Do not claim access to data that is not shown.
 - Start with the most useful next step, then ask the learner to do something small and concrete.
 - Keep the lesson focused and interactive. Avoid long generic lectures.
+
+LEARNER EXPERIENCE PREFERENCES
+${ctx.experiencePreferences || "(none)"}
 
 CUSTOM LESSON PROMPT
 ${ctx.agentPrompt}

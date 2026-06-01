@@ -6,6 +6,9 @@ const ctx: TutorContext = {
   nativeLanguage: "Chinese",
   targetLanguage: "English",
   level: "B1",
+  experiencePreferences: "",
+  ignoreCapitalizationIssues: false,
+  ignorePunctuationIssues: false,
   weakList: [],
   history: "",
   userInput: "I go home yesterday.",
@@ -73,5 +76,65 @@ describe("analyze", () => {
 
     expect(result.analysis).toBeNull();
     expect(result.proseFeedback).toContain("【总评】");
+  });
+
+  it("把体验偏好放进结构化导师 prompt", async () => {
+    const calls: GenerateOptions[] = [];
+    const provider = stubProvider((opts) => {
+      calls.push(opts);
+      return validAnalysis;
+    });
+
+    await analyze(provider, {
+      ...ctx,
+      experiencePreferences:
+        "- Target-language variety: Australian English.\n- Correction preference: do not flag punctuation-only differences as mistakes.",
+    });
+
+    const system = calls[0].messages[0]?.content;
+    expect(system).toContain("Australian English");
+    expect(system).toContain("punctuation-only differences");
+  });
+
+  it("代码侧过滤被忽略的纯标点和大小写问题", async () => {
+    const punctuationAndCaseOnly = JSON.stringify({
+      is_correct: false,
+      corrected: "I'm happy.",
+      natural: "I'm happy.",
+      issues: [
+        {
+          category: "spelling",
+          span_original: "im",
+          span_corrected: "I'm",
+          explanation: "需要大写并加 apostrophe。",
+          severity: "minor",
+          mastery_key: "spelling:capitalization_contractions",
+          mastery_label: "大小写和撇号",
+          mastery_type: "error_pattern",
+        },
+        {
+          category: "punctuation",
+          span_original: "happy",
+          span_corrected: "happy.",
+          explanation: "句末需要标点。",
+          severity: "minor",
+          mastery_key: "punctuation:sentence_final_period",
+          mastery_label: "句末标点",
+          mastery_type: "error_pattern",
+        },
+      ],
+      mastery_updates: [],
+      expression_gap: null,
+    });
+    const provider = stubProvider(() => punctuationAndCaseOnly);
+
+    const result = await analyze(provider, {
+      ...ctx,
+      ignoreCapitalizationIssues: true,
+      ignorePunctuationIssues: true,
+    });
+
+    expect(result.analysis?.issues).toEqual([]);
+    expect(result.analysis?.is_correct).toBe(true);
   });
 });

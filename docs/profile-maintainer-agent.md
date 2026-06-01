@@ -69,8 +69,8 @@ HARD RULES
   only when the transcript clearly states it; carry existing facts forward; drop
   ones the user has contradicted. Never guess or infer beyond what was said. Skip
   one-off small talk that is not a lasting fact about the person.
-- NEVER touch the "## My notes" section — copy it through verbatim. It belongs to
-  the user.
+- NEVER touch the "## AI preferences" or "## My notes" sections — copy them
+  through verbatim. They belong to the user.
 - Keep it concise: at most 6 bullets per section. Prune items that are stale
   (not seen recently) or resolved (now "known"). Quality over completeness — this
   goes into a prompt every turn.
@@ -83,6 +83,7 @@ OUTPUT
   headers, in this order:
     # Learner Profile  ·  {native} → {target} · {level} · updated {today}
     ## About me
+    ## AI preferences
     ## Working on
     ## Comfortable with
     ## Avoids / rarely attempts
@@ -117,7 +118,7 @@ Produce the updated profile now.
 MD 是 prose,没法 schema 校验,但要做轻量 sanity check,**任何一项不过就丢弃本次结果、保留旧 MD**:
 
 - 含全部 7 个必需的 `##` 段标题(含 `## About me`);
-- `## My notes` 的内容和输入**逐字一致**(防 agent 改用户笔记);
+- `## AI preferences` 和 `## My notes` 的内容和输入**逐字一致**(防 agent 改用户自定义);
 - 长度没有异常坍缩(比如不到旧版的 30%,疑似把内容吃掉了);
 - 长度没有异常膨胀(超过 8000 字符上限,疑似无视「每段 ≤6 bullet」——档案每轮进对话 prompt,撑大会拖慢热路径);
 - 通过后**原子写入**(写临时文件再 rename),避免对话 agent 读到半截文件。
@@ -129,6 +130,17 @@ MD 是 prose,没法 schema 校验,但要做轻量 sanity check,**任何一项不
 
 ## About me
 - 前端工程师,最近换了新工作;在职读研
+
+## AI preferences
+### Global
+
+### Conversation
+
+### Correction
+
+### Lessons
+
+### Reading help
 
 ## Working on
 - 冠词 a/an/the —— 仍不稳,抽象名词前尤其
@@ -153,4 +165,4 @@ MD 是 prose,没法 schema 校验,但要做轻量 sanity check,**任何一项不
 
 - **为什么不每轮跑:** 每轮重写整份 MD = 每轮多一次随档案变大而变贵的 LLM 调用,且高频重写会让档案缓慢漂移/失真。批量跑同时压住成本和漂移。
 - **为什么 SQLite 和 MD 并存:** 只用 MD 会丢掉可信计数、可排序查询、进度可视化(见 [architecture] 决策)。只用 SQLite 则对话 agent 拿不到"这个人是谁"的定性人设。两层各管一摊。
-- **为什么保留 `## My notes`:** 让用户能纠正 agent 的误判,建立信任;本地优先的学习数据,可读可编是卖点。维护 agent 逐字保留它,而**对话 agent 会读到它**(`profileSliceForConversation` 不再剥离 My notes,只去掉占位 HTML 注释)——这是用户唯一能完全掌控、又能定向影响回复的记忆区。
+- **为什么保留 `## AI preferences` / `## My notes`:** 让用户能纠正 agent 的误判,建立信任;本地优先的学习数据,可读可编是卖点。维护 agent 逐字保留它们。`AI preferences` 由代码按模块拆给对应 prompt;`My notes` 仍作为一般用户笔记进入对话档案切片。

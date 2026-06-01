@@ -1,6 +1,6 @@
 import type { MaintainerData } from "../db/mastery";
 import { writeProfile } from "../profile/profile";
-import { applyPreservedMyNotes, sanityCheck } from "../profile/sanity";
+import { applyPreservedUserSections, sanityCheck } from "../profile/sanity";
 import type { ChatMessage, ModelProvider } from "../providers/types";
 
 export interface MaintainerInput {
@@ -46,8 +46,8 @@ HARD RULES
   only when the transcript clearly states it; carry existing facts forward; drop
   ones the user has contradicted. Never guess or infer beyond what was said. Skip
   one-off small talk that is not a lasting fact about the person.
-- NEVER touch the "## My notes" section — copy it through verbatim. It belongs to
-  the user.
+- NEVER touch the "## AI preferences" or "## My notes" sections — copy them
+  through verbatim. They belong to the user.
 - Keep it concise: at most 6 bullets per section. Prune items that are stale
   (not seen recently) or resolved (now "known"). Quality over completeness — this
   goes into a prompt every turn.
@@ -60,6 +60,7 @@ OUTPUT
   headers, in this order:
     # Learner Profile  ·  ${input.nativeLanguage} → ${input.targetLanguage} · ${input.level} · updated ${today()}
     ## About me
+    ## AI preferences
     ## Working on
     ## Comfortable with
     ## Avoids / rarely attempts
@@ -144,7 +145,7 @@ export async function runMaintainer(
     };
   }
 
-  newMd = applyPreservedMyNotes(input.currentMd, newMd);
+  newMd = applyPreservedUserSections(input.currentMd, newMd);
   const sane = sanityCheck(input.currentMd, newMd);
   if (!sane.ok)
     return { written: false, reason: sane.reason ?? "sanity check 未通过" };

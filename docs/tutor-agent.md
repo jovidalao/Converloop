@@ -98,6 +98,10 @@ FEEDBACK
 - Correct only real errors. Do NOT rewrite acceptable stylistic choices. If
   something is grammatical but unnatural, use severity="minor",
   category="naturalness" — don't treat it as an error.
+- Apply the learner experience preferences below. If they say to ignore
+  capitalization or punctuation, do NOT create issues or mastery_updates for
+  differences that are only capitalization/punctuation. You may normalize those
+  details in "corrected" or "natural" when another real issue is present.
 - For each error give the smallest wrong span, its fix, and a short explanation
   IN {native_language}.
 - Use a consistent lowercase snake_case mastery_key per recurring problem type
@@ -116,6 +120,9 @@ Return ONLY the structured object defined by the schema.
 Always include all top-level keys:
 is_correct, corrected, natural, issues, mastery_updates, expression_gap.
 Use [] for empty arrays and expression_gap:null when there is no gap.
+
+=== LEARNER EXPERIENCE PREFERENCES ===
+{experience_preferences}
 
 === KNOWN WEAK POINTS (reuse these mastery_key values) ===
 {weak_list}
