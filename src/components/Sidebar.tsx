@@ -36,7 +36,7 @@ import {
 export type MainView = "chat" | "profile" | "mastery" | "learning" | "settings";
 
 // 相对时间:1 分钟内「刚刚」,然后分钟→小时→天→周→月→年逐级进位。
-function formatRelativeTime(ts: number): string {
+export function formatRelativeTime(ts: number): string {
   const sec = Math.max(0, Math.floor((Date.now() - ts) / 1000));
   if (sec < 60) return "刚刚";
   const min = Math.floor(sec / 60);

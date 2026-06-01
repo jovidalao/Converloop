@@ -8,6 +8,7 @@ import {
   useState,
 } from "react";
 import { ChatView } from "./components/ChatView";
+import { CommandPalette } from "./components/CommandPalette";
 import { LearningAgentsView } from "./components/LearningAgentsView";
 import { MasteryView } from "./components/MasteryView";
 import { ProfileView } from "./components/ProfileView";
@@ -48,6 +49,7 @@ function App() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [view, setView] = useState<MainView>("chat");
   const [collapsed, setCollapsed] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const [resizingSidebar, setResizingSidebar] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     const saved = Number(localStorage.getItem("sidebarWidth"));
@@ -80,6 +82,11 @@ function App() {
       if (e.metaKey && e.key === ",") {
         e.preventDefault();
         withViewTransition(() => setView("settings"));
+        return;
+      }
+      if (e.metaKey && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setPaletteOpen((o) => !o);
         return;
       }
       if (e.metaKey && e.key.toLowerCase() === "n") {
@@ -225,7 +232,11 @@ function App() {
                   {collapsed ? <PanelRightIcon /> : <PanelLeftIcon />}
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="bottom" align="start" className="flex items-center gap-2">
+              <TooltipContent
+                side="bottom"
+                align="start"
+                className="flex items-center gap-2"
+              >
                 <span>{collapsed ? "展开侧栏" : "收起侧栏"}</span>
                 <kbd className="rounded border border-border/60 bg-muted px-1.5 py-0.5 font-sans text-[11px] text-muted-foreground/80">
                   ⌘B
@@ -253,7 +264,11 @@ function App() {
                     <SquarePenIcon />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent side="bottom" align="end" className="flex items-center gap-2">
+                <TooltipContent
+                  side="bottom"
+                  align="end"
+                  className="flex items-center gap-2"
+                >
                   <span>新对话</span>
                   <kbd className="rounded border border-border/60 bg-muted px-1.5 py-0.5 font-sans text-[11px] text-muted-foreground/80">
                     ⌘N
@@ -307,6 +322,16 @@ function App() {
         )}
         {view === "settings" && <SettingsView />}
       </main>
+
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        conversations={conversations}
+        learningAgents={learningAgents}
+        onSelectConversation={selectConversation}
+        onStartLearningAgent={(id) => void startLearningAgent(id)}
+        onNewChat={openDraftConversation}
+      />
     </div>
   );
 }
