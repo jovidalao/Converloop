@@ -13,6 +13,12 @@ export interface ConversationContext {
   userInput: string;
 }
 
+// 折叠空白并截到 max 字符,防止过长 example 撑大热路径 prompt(与 learning-data 一致)。
+function oneLine(s: string, max: number): string {
+  const clean = s.replace(/\s+/g, " ").trim();
+  return clean.length > max ? `${clean.slice(0, max)}...` : clean;
+}
+
 function formatReviewItems(items: ReviewItem[]): string {
   if (items.length === 0) return "(nothing due)";
   return items
@@ -20,7 +26,7 @@ function formatReviewItems(items: ReviewItem[]): string {
       const example =
         r.type === "expression_gap" && r.notes ? r.notes : r.example;
       return example
-        ? `- ${r.label} — e.g. "${example.replace(/\s+/g, " ").trim()}"`
+        ? `- ${r.label} — e.g. "${oneLine(example, 140)}"`
         : `- ${r.label}`;
     })
     .join("\n");

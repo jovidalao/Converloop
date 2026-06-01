@@ -20,6 +20,7 @@ import {
 } from "./db/turns";
 import { buildLearningDataContext } from "./learning-data";
 import { logError } from "./lib/log";
+import { estimateTokens } from "./lib/tokens";
 import { maybeRunMaintainer } from "./profile/maintainer-runner";
 import { profileSliceForConversation, readProfile } from "./profile/profile";
 import { maybeCompressConversation } from "./profile/summary-runner";
@@ -38,6 +39,9 @@ export interface TurnResult {
   reply: string;
   analysis: TutorAnalysis | null;
 }
+
+// 导师只需消歧最新一句的语境,给直近这么多轮即可;水位后的全部原文留给对话 agent。
+const TUTOR_HISTORY_TURNS = 8;
 
 export class MissingApiKeyError extends Error {
   constructor() {
@@ -102,9 +106,13 @@ export async function runTurn(
       getReviewDueList(),
       getProficiencySnapshot(),
     ]);
-  const history = formatTurns(
-    await getTurnsAfterId(conversationId, summaryData.throughId),
+  const verbatimTurns = await getTurnsAfterId(
+    conversationId,
+    summaryData.throughId,
   );
+  const history = formatTurns(verbatimTurns);
+  // 导师拿直近几轮即可,别把水位后的全部原文喂进结构化分析(省 token、缩短输入)。
+  const tutorHistory = formatTurns(verbatimTurns.slice(-TUTOR_HISTORY_TURNS));
   const profileSlice = profileSliceForConversation(profileMd);
 
   // 并行发出:对话流式,导师结构化。互不阻塞。
@@ -124,7 +132,7 @@ export async function runTurn(
   const analysisPromise = analyze(provider, {
     ...langs,
     weakList,
-    history,
+    history: tutorHistory,
     userInput,
   });
 
@@ -133,7 +141,15 @@ export async function runTurn(
   cb.onReplyComplete?.(reply);
 
   // 自动压缩:逼近上下文上限时,后台把最老的原文折叠进滚动摘要。不阻塞下一轮输入。
-  void maybeCompressConversation(conversationId);
+  // 非历史动态块 = profile + 复习列表,叠加到固定 reserve 上,让水位贴合本轮实际负载。
+  const nonHistoryTokens =
+    estimateTokens(profileSlice) +
+    estimateTokens(
+      reviewItems
+        .map((r) => `${r.label} ${r.example ?? ""} ${r.notes ?? ""}`)
+        .join("\n"),
+    );
+  void maybeCompressConversation(conversationId, nonHistoryTokens);
 
   // 批改、记账、补全 analysis_json 在后台跑,不阻塞下一轮输入。
   void analysisPromise
@@ -222,7 +238,10 @@ async function runLearningTurn(
   await persistTurn(conversationId, userInput, reply, null);
   cb.onReplyComplete?.(reply);
   // 自动压缩:逼近上下文上限时,后台把最老的原文折叠进滚动摘要。不阻塞下一轮输入。
-  void maybeCompressConversation(conversationId);
+  // 专项课的非历史动态块 = dataContext + agent prompt,通常比普通对话大得多,据此提高 reserve。
+  const nonHistoryTokens =
+    estimateTokens(dataContext) + estimateTokens(agent.prompt);
+  void maybeCompressConversation(conversationId, nonHistoryTokens);
   cb.onAnalysis(null);
   return { reply, analysis: null };
 }

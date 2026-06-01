@@ -34,8 +34,9 @@ export interface AnalyzeResult {
   error?: string;
 }
 
-function oneLine(s: string): string {
-  return s.replace(/\s+/g, " ").trim();
+function oneLine(s: string, max?: number): string {
+  const clean = s.replace(/\s+/g, " ").trim();
+  return max && clean.length > max ? `${clean.slice(0, max)}...` : clean;
 }
 
 function formatWeakList(items: WeakItem[]): string {
@@ -43,8 +44,8 @@ function formatWeakList(items: WeakItem[]): string {
   return items
     .map((w) => {
       const details = [
-        w.example ? `example="${oneLine(w.example)}"` : null,
-        w.notes ? `note="${oneLine(w.notes)}"` : null,
+        w.example ? `example="${oneLine(w.example, 120)}"` : null,
+        w.notes ? `note="${oneLine(w.notes, 120)}"` : null,
       ].filter(Boolean);
       return `- [${w.type}] ${w.label} (${w.key}) — status=${w.status}${
         details.length ? `; ${details.join("; ")}` : ""

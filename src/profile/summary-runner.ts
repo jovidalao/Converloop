@@ -20,9 +20,10 @@ const MIN_VERBATIM_TURNS = 6;
 // 摘要输出字符上限(粗略对应 token 预算)。
 const SUMMARY_CHAR_BUDGET = 1500;
 
-// 非历史部分(system 规则 + 档案 + 复习 + 校准)与模型输出的粗略 token 预留。
-// 历史预算 = 上限 * 水位 − 这个预留。估算是粗的,靠 30% headroom 吸收偏差。
-const NON_HISTORY_RESERVE = 2000;
+// 固定预留:system 规则模板 + 模型回复输出空间。会随档案/数据变大的动态块
+// (profile / 复习 / dataContext / agentPrompt)由调用方按实际估算经 dynamicContextTokens 传入。
+// 历史预算 = 上限 * 水位 − (BASE_RESERVE + 动态块)。估算是粗的,靠 30% headroom 吸收偏差。
+const BASE_RESERVE = 1200;
 
 // 新摘要尚未生成时的 token 预留(按字符预算保守折算,用于算「保留多少原文」时给摘要留位)。
 const SUMMARY_RESERVE = Math.ceil(SUMMARY_CHAR_BUDGET / 3);
@@ -53,14 +54,18 @@ export function pickFoldTurns(turns: Turn[], lowBudget: number): Turn[] {
   return foldCount > 0 ? turns.slice(0, foldCount) : [];
 }
 
-async function runJob(conversationId: string): Promise<void> {
+async function runJob(
+  conversationId: string,
+  dynamicContextTokens: number,
+): Promise<void> {
   const provider = await getProvider();
   if (!provider) return;
 
   const config = loadConfig();
   const limit = getContextLimit(config);
-  const highBudget = limit * HIGH_WATER - NON_HISTORY_RESERVE;
-  const lowBudget = limit * LOW_WATER - NON_HISTORY_RESERVE;
+  const reserve = BASE_RESERVE + dynamicContextTokens;
+  const highBudget = limit * HIGH_WATER - reserve;
+  const lowBudget = limit * LOW_WATER - reserve;
   if (lowBudget <= 0) return; // 上限小得离谱,压缩也救不了,放弃。
 
   const { summary, throughId } = await getSummary(conversationId);
@@ -92,13 +97,16 @@ async function runJob(conversationId: string): Promise<void> {
 }
 
 // 每轮持久化后调用。后台跑,单飞(按会话),绝不阻塞热路径、绝不抛。
+// dynamicContextTokens:本轮喂给主 agent 的非历史动态块(profile / 复习 / dataContext /
+// agentPrompt)的 token 估算,叠加在 BASE_RESERVE 上,让压缩水位贴合实际负载(尤其专项课)。
 export async function maybeCompressConversation(
   conversationId: string,
+  dynamicContextTokens = 0,
 ): Promise<void> {
   if (running.has(conversationId)) return;
   running.add(conversationId);
   try {
-    await runJob(conversationId);
+    await runJob(conversationId, dynamicContextTokens);
   } catch (e) {
     logError("summary", "压缩任务异常", e);
   } finally {
