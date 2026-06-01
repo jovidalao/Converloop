@@ -3,13 +3,18 @@ import {
   CheckIcon,
   CopyIcon,
   LanguagesIcon,
+  PencilIcon,
   RefreshCwIcon,
   SparklesIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { TutorAnalysis } from "../agents/schema";
 import { useConfig } from "../config";
-import { maybeAutoTitle, touchConversation } from "../db/conversations";
+import {
+  maybeAutoTitle,
+  touchConversation,
+  truncateConversationFrom,
+} from "../db/conversations";
 import {
   type ChatTurn,
   incrementBilingualCount,
@@ -26,6 +31,7 @@ import {
 import { loadTtsConfig } from "../tts/config";
 import { stopSpeech } from "../tts/playback";
 import { createReplySpeaker } from "../tts/stream";
+import { useConfirm } from "./confirm";
 import { InlineCorrection, UserSentence } from "./InlineCorrection";
 import { Markdown } from "./Markdown";
 import { ReplyExplanation } from "./ReplyExplanation";
@@ -61,6 +67,22 @@ function CopyButton({ text }: { text: string }) {
       }}
     >
       {copied ? <CheckIcon size={16} /> : <CopyIcon size={16} />}
+    </Button>
+  );
+}
+
+// 「从此处开始」:把这条用户消息的文字放回输入框重新编辑,并舍弃它(含)之后的所有对话。
+// 已记入学习记忆的内容不受影响(只删对话 turn)。
+function EditFromHereButton({ onClick }: { onClick: () => void }) {
+  return (
+    <Button
+      type="button"
+      variant="action"
+      size="action"
+      title="从此处开始:重新编辑这句,舍弃其后的对话"
+      onClick={onClick}
+    >
+      <PencilIcon size={16} />
     </Button>
   );
 }
@@ -244,7 +266,13 @@ function idiomaticText(analysis: TutorAnalysis | null): string | null {
 // 用户消息操作:复制 + 朗读。朗读优先读「地道表达」改写,没有则读纠正后的句子。
 // 作为 leading 渲染进批改操作行,排在切换按钮左边(同一行)。
 // 母语/混说轮(expression_gap)没有目标语正句可读,所以不显示朗读。
-function UserMessageActions({ turn }: { turn: ChatTurn }) {
+function UserMessageActions({
+  turn,
+  onEditFrom,
+}: {
+  turn: ChatTurn;
+  onEditFrom: () => void;
+}) {
   const analysis = turn.analysis;
   const corrected = analysis?.corrected?.trim() || turn.userText;
   const speakTarget = idiomaticText(analysis) ?? corrected;
@@ -253,6 +281,7 @@ function UserMessageActions({ turn }: { turn: ChatTurn }) {
     <>
       <CopyButton text={corrected} />
       {canSpeak && <SpeakButton text={speakTarget} />}
+      <EditFromHereButton onClick={onEditFrom} />
     </>
   );
 }
@@ -263,10 +292,12 @@ function UserTurn({
   turn,
   nativeLanguage,
   learningMode,
+  onEditFrom,
 }: {
   turn: ChatTurn;
   nativeLanguage: string;
   learningMode: boolean;
+  onEditFrom: () => void;
 }) {
   const idiomatic = idiomaticText(turn.analysis);
   const [naturalOpen, setNaturalOpen] = useState(true);
@@ -281,6 +312,7 @@ function UserTurn({
         </div>
         <div className="-mr-1 flex items-center gap-0.5">
           <CopyButton text={turn.userText} />
+          <EditFromHereButton onClick={onEditFrom} />
         </div>
       </div>
     );
@@ -310,7 +342,7 @@ function UserTurn({
         proseFeedback={turn.analysisProse}
         pending={!!turn.analysisPending}
         error={turn.analysisError}
-        leading={<UserMessageActions turn={turn} />}
+        leading={<UserMessageActions turn={turn} onEditFrom={onEditFrom} />}
         natural={
           idiomatic
             ? { open: naturalOpen, onToggle: () => setNaturalOpen((v) => !v) }
@@ -344,6 +376,7 @@ export function ChatView({
   const kickoffStartedRef = useRef(false);
   const liveTurnIdsRef = useRef<Set<string>>(new Set()); // 本会话内新发的轮次,自动双语只作用于它们
   const { nativeLanguage, autoBilingual } = useConfig();
+  const confirm = useConfirm();
   const learningMode = mode === "learning_agent";
 
   // 输入框随内容增高,最多三行,超过后内部滚动。
@@ -543,6 +576,34 @@ export function ChatView({
     }
   }
 
+  // 从某条用户消息「从此处开始」:确认后舍弃这条(含)之后的所有 turn,把原文放回输入框
+  // 供重新编辑。只删对话——已记入学习记忆(掌握/档案)的内容保留。
+  async function editFromHere(turnId: string) {
+    if (replyBusy) return;
+    const target = turns.find((t) => t.id === turnId);
+    if (!target) return;
+    const ok = await confirm({
+      title: "从这条消息重新开始?",
+      description:
+        "这条及其之后的对话会被舍弃,消息内容会回到输入框供你修改。已记入学习记忆的内容不受影响。",
+      confirmText: "舍弃并编辑",
+      cancelText: "取消",
+    });
+    if (!ok) return;
+    stopSpeech();
+    turnGenRef.current++; // 让任何在途轮次的回调失效,别再写回被删的 turn
+    await truncateConversationFrom(conversationId, turnId);
+    setTurns((prev) => {
+      const idx = prev.findIndex((t) => t.id === turnId);
+      return idx < 0 ? prev : prev.slice(0, idx);
+    });
+    setError(null);
+    setInput(target.userText);
+    inputRef.current?.focus();
+    await touchConversation(conversationId);
+    onActivity?.();
+  }
+
   // 重新生成最新一条回复:就地流式覆盖该轮气泡,失败则恢复原文。批改不变。
   async function regenerate(turnId: string) {
     if (replyBusy) return;
@@ -616,6 +677,7 @@ export function ChatView({
                 turn={turn}
                 nativeLanguage={nativeLanguage}
                 learningMode={learningMode}
+                onEditFrom={() => void editFromHere(turn.id)}
               />
             )}
             {turn.partnerText && (

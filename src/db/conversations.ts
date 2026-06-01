@@ -1,4 +1,4 @@
-import { count, desc, eq, isNull } from "drizzle-orm";
+import { and, count, desc, eq, gte, isNull } from "drizzle-orm";
 import { db } from "./client";
 import { type Conversation, conversation, turn } from "./schema";
 
@@ -98,6 +98,44 @@ export async function setSummary(
     .update(conversation)
     .set({ summary, summaryThroughId: throughId })
     .where(eq(conversation.id, id));
+}
+
+// 「从此处开始」:舍弃某会话里「从 fromId 起(含)」的所有 turn——这条之后的对话全部丢弃。
+// 只删 turn:掌握/档案是全局且独立存储的,不在此处理——已记入学习记忆的内容保留。
+// 若删除范围越过滚动摘要水位(throughId 也被删),清空摘要,让上下文从剩余原文重建。
+export async function truncateConversationFrom(
+  id: string,
+  fromId: string,
+): Promise<void> {
+  const [mark] = await db
+    .select({ createdAt: turn.createdAt })
+    .from(turn)
+    .where(eq(turn.id, fromId))
+    .limit(1);
+  if (!mark) return;
+  await db
+    .delete(turn)
+    .where(
+      and(eq(turn.conversationId, id), gte(turn.createdAt, mark.createdAt)),
+    );
+
+  const [conv] = await db
+    .select({ throughId: conversation.summaryThroughId })
+    .from(conversation)
+    .where(eq(conversation.id, id))
+    .limit(1);
+  if (!conv?.throughId) return;
+  const [stillThere] = await db
+    .select({ id: turn.id })
+    .from(turn)
+    .where(eq(turn.id, conv.throughId))
+    .limit(1);
+  if (!stillThere) {
+    await db
+      .update(conversation)
+      .set({ summary: null, summaryThroughId: null })
+      .where(eq(conversation.id, id));
+  }
 }
 
 // 删除会话连同它的所有 turn。掌握/档案是全局的,不在此处理。
