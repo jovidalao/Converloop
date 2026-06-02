@@ -196,9 +196,25 @@ function PartnerReply({
         data-selectable-context
       >
         {showBilingual && error ? (
-          <span className="text-sm leading-snug text-destructive" role="alert">
-            {error}
-          </span>
+          <div className="flex items-center gap-3">
+            <span
+              className="min-w-0 flex-1 text-sm leading-snug text-destructive"
+              role="alert"
+            >
+              {error}
+            </span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 shrink-0 gap-1.5"
+              disabled={loading}
+              onClick={() => void generate()}
+            >
+              <RefreshCwIcon size={14} />
+              重试
+            </Button>
+          </div>
         ) : showBilingual && view ? (
           <Markdown
             className="bilingual"
@@ -367,6 +383,8 @@ export function ChatView({
   const [replyBusy, setReplyBusy] = useState(false);
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // 上一次失败操作的重试入口(发送 / 重新生成 / 专项课启动共用底部错误条)。
+  const [retry, setRetry] = useState<{ run: () => void } | null>(null);
   const messagesRef = useRef<HTMLDivElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -430,7 +448,7 @@ export function ChatView({
     setReplyBusy(false);
   }
 
-  async function startLesson() {
+  async function startLesson(replacingId?: string) {
     if (!learningMode || replyBusy || kickoffStartedRef.current) return;
     stopSpeech();
     kickoffStartedRef.current = true;
@@ -439,9 +457,10 @@ export function ChatView({
     liveTurnIdsRef.current.add(turnId);
     stickToBottomRef.current = true;
     setError(null);
+    setRetry(null);
     replyCommittedRef.current = false;
     setTurns((prev) => [
-      ...prev,
+      ...(replacingId ? prev.filter((t) => t.id !== replacingId) : prev),
       {
         id: turnId,
         userText: "",
@@ -484,6 +503,9 @@ export function ChatView({
             ? e.message
             : String(e),
       );
+      // 放开 kickoff 守卫,让重试可以重新发起;重试时换掉这条失败轮次。
+      kickoffStartedRef.current = false;
+      setRetry({ run: () => void startLesson(turnId) });
     } finally {
       if (turnGenRef.current === turnGen) {
         setStreaming("");
@@ -492,21 +514,29 @@ export function ChatView({
     }
   }
 
-  async function send() {
-    const text = input.trim();
+  // opts.text:重试时复用原文(不从输入框取);opts.replacingId:换掉那条失败的旧轮次。
+  async function send(opts?: { text?: string; replacingId?: string }) {
+    const isRetry = opts?.text !== undefined;
+    const text = (opts?.text ?? input).trim();
     if (!text || replyBusy) return;
     const draftAtSend = isDraft;
     stopSpeech();
-    const isFirstMessage = turns.length === 0;
+    const priorTurns = opts?.replacingId
+      ? turns.filter((t) => t.id !== opts.replacingId)
+      : turns;
+    const isFirstMessage = priorTurns.length === 0;
     const turnGen = ++turnGenRef.current;
     const turnId = crypto.randomUUID();
     liveTurnIdsRef.current.add(turnId);
     stickToBottomRef.current = true;
-    setInput("");
+    if (!isRetry) setInput("");
     setError(null);
+    setRetry(null);
     replyCommittedRef.current = false;
     setTurns((prev) => [
-      ...prev,
+      ...(opts?.replacingId
+        ? prev.filter((t) => t.id !== opts.replacingId)
+        : prev),
       {
         id: turnId,
         userText: text,
@@ -566,6 +596,7 @@ export function ChatView({
             ? e.message
             : String(e),
       );
+      setRetry({ run: () => void send({ text, replacingId: turnId }) });
     } finally {
       if (turnGenRef.current === turnGen) {
         setStreaming("");
@@ -598,6 +629,7 @@ export function ChatView({
       return idx < 0 ? prev : prev.slice(0, idx);
     });
     setError(null);
+    setRetry(null);
     setInput(target.userText);
     inputRef.current?.focus();
     await touchConversation(conversationId);
@@ -612,6 +644,7 @@ export function ChatView({
     const original = turns.find((t) => t.id === turnId)?.partnerText ?? "";
     stickToBottomRef.current = true;
     setError(null);
+    setRetry(null);
     setReplyBusy(true);
     setRegeneratingId(turnId);
     let acc = "";
@@ -639,6 +672,7 @@ export function ChatView({
             ? e.message
             : String(e),
       );
+      setRetry({ run: () => void regenerate(turnId) });
     } finally {
       if (turnGenRef.current === turnGen) {
         setReplyBusy(false);
@@ -711,8 +745,20 @@ export function ChatView({
       </div>
       <TranslationPopover containerRef={messagesRef} />
       {error && (
-        <div className="mx-4 rounded-md bg-destructive/15 px-3 py-2 text-sm text-destructive">
-          {error}
+        <div className="mx-4 flex items-center gap-3 rounded-md bg-destructive/15 px-3 py-2 text-sm text-destructive">
+          <span className="min-w-0 flex-1">{error}</span>
+          {retry && !replyBusy && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 shrink-0 gap-1.5"
+              onClick={() => retry.run()}
+            >
+              <RefreshCwIcon size={14} />
+              重试
+            </Button>
+          )}
         </div>
       )}
       <div className="shrink-0 px-4 pt-1.5 pb-4">

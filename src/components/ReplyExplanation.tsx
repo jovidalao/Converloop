@@ -1,4 +1,4 @@
-import { BookOpenIcon } from "lucide-react";
+import { BookOpenIcon, RefreshCwIcon } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { explainReply, MissingApiKeyError } from "../orchestrator";
 import { Markdown } from "./Markdown";
@@ -93,12 +93,25 @@ export function ReplyExplanation({
       {open && (explanation || error) && (
         <div className="w-full animate-in rounded-lg border bg-card p-3 shadow-sm fade-in-0 slide-in-from-bottom-1 duration-300">
           {error ? (
-            <span
-              className="text-sm leading-snug text-destructive"
-              role="alert"
-            >
-              {error}
-            </span>
+            <div className="flex items-center gap-3">
+              <span
+                className="min-w-0 flex-1 text-sm leading-snug text-destructive"
+                role="alert"
+              >
+                {error}
+              </span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 shrink-0 gap-1.5"
+                disabled={loading}
+                onClick={() => void generate()}
+              >
+                <RefreshCwIcon size={14} />
+                重试
+              </Button>
+            </div>
           ) : (
             <div className="text-sm leading-normal text-foreground">
               <Markdown>{explanation}</Markdown>
