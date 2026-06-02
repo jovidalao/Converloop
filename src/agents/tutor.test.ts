@@ -63,7 +63,8 @@ describe("analyze", () => {
     expect(result.proseFeedback).toBeUndefined();
     expect(calls).toHaveLength(2);
     expect(calls[1].meta?.label).toBe("tutor_repair");
-    expect(calls[1].jsonObject).toBe(true);
+    expect(calls[1].jsonSchema?.name).toBe("TutorAnalysis");
+    expect(calls[1].jsonObject).toBeUndefined();
   });
 
   it("JSON 修复也失败时才退回纯文本批改", async () => {
@@ -76,6 +77,9 @@ describe("analyze", () => {
 
     expect(result.analysis).toBeNull();
     expect(result.proseFeedback).toContain("【总评】");
+    expect(result.error).toContain("结构化批改已降级为纯文本");
+    expect(result.error).toContain("initial json_schema");
+    expect(result.error).toContain("repair json_schema");
   });
 
   it("把体验偏好放进结构化导师 prompt", async () => {
@@ -94,6 +98,54 @@ describe("analyze", () => {
     const system = calls[0].messages[0]?.content;
     expect(system).toContain("Australian English");
     expect(system).toContain("punctuation-only differences");
+  });
+
+  it("中文/混合枚举不导致真实纠错退到纯文本", async () => {
+    const provider = stubProvider(() =>
+      JSON.stringify({
+        is_correct: false,
+        corrected: "Do you have any other flavor options?",
+        natural: "Do you have any other flavors available?",
+        issues: [
+          {
+            category: "grammar:article_usage／代词",
+            span_original: "another",
+            span_corrected: "any other",
+            explanation:
+              '"another" 用于单数可数名词，"flavor options" 是复数，应用 "any other"。',
+            severity: "中等",
+            mastery_key: "grammar:article_usage",
+            mastery_label: "冠词 a/an/the 的用法",
+            mastery_type: "语法",
+          },
+        ],
+        mastery_updates: [],
+        expression_gap: null,
+      }),
+    );
+
+    const result = await analyze(provider, {
+      ...ctx,
+      userInput: "Do you have another flavor options?",
+      weakList: [
+        {
+          label: "冠词 a/an/the 的用法",
+          key: "grammar:article_usage",
+          type: "grammar",
+          status: "struggling",
+        },
+      ],
+    });
+
+    expect(result.proseFeedback).toBeUndefined();
+    expect(result.analysis?.corrected).toBe(
+      "Do you have any other flavor options?",
+    );
+    expect(result.analysis?.issues[0]).toMatchObject({
+      category: "grammar",
+      severity: "moderate",
+      mastery_type: "grammar",
+    });
   });
 
   it("代码侧过滤被忽略的纯标点和大小写问题", async () => {

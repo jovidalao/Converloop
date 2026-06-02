@@ -337,9 +337,12 @@ export function InlineCorrection({
       )}
 
       {error && (
-        <p className="text-sm leading-snug text-destructive" role="alert">
+        <pre
+          className="m-0 max-w-full whitespace-pre-wrap break-words font-sans text-sm leading-snug text-destructive"
+          role="alert"
+        >
           {error}
-        </p>
+        </pre>
       )}
     </div>
   );

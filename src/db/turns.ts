@@ -34,10 +34,11 @@ export async function updateTurnAnalysis(
   id: string,
   analysis: TutorAnalysis | null,
   prose?: string | null,
+  diagnostic?: string | null,
 ): Promise<void> {
   await db
     .update(turn)
-    .set({ analysisJson: serializeTurnFeedback(analysis, prose) })
+    .set({ analysisJson: serializeTurnFeedback(analysis, prose, diagnostic) })
     .where(eq(turn.id, id));
 }
 
@@ -56,12 +57,14 @@ export interface ChatTurn {
 export function serializeTurnFeedback(
   analysis: TutorAnalysis | null,
   prose?: string | null,
+  diagnostic?: string | null,
 ): string | null {
   if (analysis) return JSON.stringify(analysis);
   if (prose?.trim()) {
     return JSON.stringify({
       [PROSE_FEEDBACK_MARKER]: true,
       body: prose.trim(),
+      diagnostic: diagnostic?.trim() || undefined,
     });
   }
   return null;
@@ -80,16 +83,25 @@ function parseStructuredAnalysisJson(json: string): TutorAnalysis | null {
 export function parseTurnFeedback(json: string | null): {
   analysis: TutorAnalysis | null;
   prose: string | null;
+  diagnostic: string | null;
 } {
-  if (!json) return { analysis: null, prose: null };
+  if (!json) return { analysis: null, prose: null, diagnostic: null };
   try {
     const v = JSON.parse(json) as Record<string, unknown>;
     if (v[PROSE_FEEDBACK_MARKER] === true && typeof v.body === "string") {
-      return { analysis: null, prose: v.body };
+      return {
+        analysis: null,
+        prose: v.body,
+        diagnostic: typeof v.diagnostic === "string" ? v.diagnostic : null,
+      };
     }
-    return { analysis: parseStructuredAnalysisJson(json), prose: null };
+    return {
+      analysis: parseStructuredAnalysisJson(json),
+      prose: null,
+      diagnostic: null,
+    };
   } catch {
-    return { analysis: null, prose: null };
+    return { analysis: null, prose: null, diagnostic: null };
   }
 }
 
@@ -100,13 +112,14 @@ export async function loadChatHistory(
 ): Promise<ChatTurn[]> {
   const turns = await getRecentTurnsForConversation(conversationId, limit);
   return turns.map((t) => {
-    const { analysis, prose } = parseTurnFeedback(t.analysisJson);
+    const { analysis, prose, diagnostic } = parseTurnFeedback(t.analysisJson);
     return {
       id: t.id,
       userText: t.userInput,
       partnerText: t.reply,
       analysis,
       analysisProse: prose,
+      analysisError: diagnostic,
     };
   });
 }

@@ -75,6 +75,28 @@ describe("anthropic REST alignment", () => {
     expect(body.tool_choice).toEqual({ type: "tool", name: "TutorAnalysis" });
   });
 
+  it("jsonObject uses a generic JSON tool instead of being ignored", () => {
+    const body = buildAnthropicRequestBody(
+      cfg,
+      {
+        messages: [{ role: "user", content: "Return JSON." }],
+        jsonObject: true,
+      },
+      false,
+    );
+    expect(body.tools).toEqual([
+      {
+        name: "JsonResponse",
+        description: "Structured JSON object response",
+        input_schema: {
+          type: "object",
+          additionalProperties: true,
+        },
+      },
+    ]);
+    expect(body.tool_choice).toEqual({ type: "tool", name: "JsonResponse" });
+  });
+
   it("extractAnthropicContent reads tool_use input as JSON", () => {
     const text = extractAnthropicContent({
       content: [

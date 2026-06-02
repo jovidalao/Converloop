@@ -185,7 +185,7 @@ export async function runTurn(
 
   // 批改、记账、补全 analysis_json 在后台跑,不阻塞下一轮输入。
   void analysisPromise
-    .then(async ({ analysis, proseFeedback, error }) => {
+    .then(async ({ analysis, proseFeedback, diagnostic, error }) => {
       if (analysis) {
         cb.onAnalysis(analysis);
         try {
@@ -199,11 +199,11 @@ export async function runTurn(
         }
       } else if (proseFeedback) {
         try {
-          await updateTurnAnalysis(turnId, null, proseFeedback);
+          await updateTurnAnalysis(turnId, null, proseFeedback, diagnostic);
         } catch (e) {
           logError("turn", "纯文本批改保存失败", e);
         }
-        cb.onAnalysis(null, { proseFeedback });
+        cb.onAnalysis(null, { proseFeedback, error: error ?? diagnostic });
       } else if (error) {
         cb.onAnalysis(null, { error });
       }

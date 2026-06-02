@@ -2,7 +2,6 @@ import { recordTutorOutcome } from "../lib/tutor-stats";
 import type { ChatMessage, ModelProvider } from "../providers/types";
 import {
   formatZodError,
-  isLikelyTutorJsonPayload,
   normalizeTutorPayload,
   parseLLMJson,
 } from "./parse-llm-json";
@@ -34,8 +33,21 @@ export interface AnalyzeResult {
   analysis: TutorAnalysis | null;
   /** 结构化 JSON 失败时,第二套 prompt 的自然语言批改(直接展示,不入 mastery 账)。 */
   proseFeedback?: string;
+  /** 开发期诊断:结构化/修复失败原因和 raw preview。 */
+  diagnostic?: string;
   error?: string;
 }
+
+type TutorParseFailureKind = "empty" | "invalid_json" | "schema";
+
+interface TutorParseFailure {
+  kind: TutorParseFailureKind;
+  message: string;
+}
+
+type TutorParseResult =
+  | { analysis: TutorAnalysis; error?: never }
+  | { analysis: null; error: TutorParseFailure };
 
 function oneLine(s: string, max?: number): string {
   const clean = s.replace(/\s+/g, " ").trim();
@@ -217,10 +229,13 @@ function applyCorrectionPreferences(
   };
 }
 
-function parseTutorRaw(raw: string, ctx: TutorContext): AnalyzeResult {
+function parseTutorRaw(raw: string, ctx: TutorContext): TutorParseResult {
   const parsedJson = parseLLMJson(raw);
   if (!parsedJson.ok) {
-    return { analysis: null, error: parsedJson.error };
+    return {
+      analysis: null,
+      error: { kind: parsedJson.kind, message: parsedJson.error },
+    };
   }
 
   const normalized = normalizeTutorPayload(parsedJson.value);
@@ -231,7 +246,10 @@ function parseTutorRaw(raw: string, ctx: TutorContext): AnalyzeResult {
 
   return {
     analysis: null,
-    error: `JSON 字段校验失败: ${formatZodError(validated.error)}`,
+    error: {
+      kind: "schema",
+      message: `JSON 字段校验失败: ${formatZodError(validated.error)}`,
+    },
   };
 }
 
@@ -266,11 +284,8 @@ async function requestStructuredTutorRaw(
 
   try {
     const raw = await provider.generate({ ...base, jsonSchema: schema });
-    if (raw.trim() && isLikelyTutorJsonPayload(raw)) return raw;
-    console.warn(
-      "json_schema 模式未返回可解析 JSON,尝试 json_object 回退",
-      raw.trim() ? `开头: ${raw.slice(0, 120)}` : "(空)",
-    );
+    if (raw.trim()) return raw;
+    console.warn("json_schema 模式返回空内容,尝试 json_object 回退");
   } catch (e) {
     console.warn("json_schema 模式请求失败,尝试 json_object 回退:", e);
   }
@@ -280,6 +295,7 @@ async function requestStructuredTutorRaw(
     temperature: 0,
     maxTokens: TUTOR_MAX_OUTPUT_TOKENS,
     jsonObject: true,
+    meta: { label: "tutor_json_object" },
   });
 }
 
@@ -328,7 +344,7 @@ ${ctx.userInput}`,
     messages,
     temperature: 0,
     maxTokens: TUTOR_MAX_OUTPUT_TOKENS,
-    jsonObject: true,
+    jsonSchema: schema,
     meta: { label: "tutor_repair" },
   });
 }
@@ -354,6 +370,30 @@ function stripModelFences(text: string): string {
   return fenced ? fenced[1].trim() : t;
 }
 
+function parseFailureText(error: TutorParseFailure): string {
+  return `${error.kind}: ${error.message}`;
+}
+
+function rawPreview(raw: string, max = 1200): string {
+  const clean = raw.trim();
+  if (!clean) return "(empty)";
+  return clean.length > max ? `${clean.slice(0, max)}\n…[truncated]` : clean;
+}
+
+function formatTutorDiagnostic(
+  attempts: { label: string; failure: string; raw?: string }[],
+): string {
+  const lines = ["结构化批改已降级为纯文本;本轮未写入 mastery。", "开发诊断:"];
+  for (const [i, attempt] of attempts.entries()) {
+    lines.push(`${i + 1}. ${attempt.label}: ${attempt.failure}`);
+    if (attempt.raw !== undefined) {
+      lines.push("raw preview:");
+      lines.push(rawPreview(attempt.raw));
+    }
+  }
+  return lines.join("\n");
+}
+
 // 结构化分析;JSON 失败时自动走第二套纯文本 prompt 并直接展示,不向用户暴露解析错误。
 export async function analyze(
   provider: ModelProvider,
@@ -364,16 +404,26 @@ export async function analyze(
     { role: "user", content: userPrompt(ctx) },
   ];
   try {
+    const diagnosticAttempts: {
+      label: string;
+      failure: string;
+      raw?: string;
+    }[] = [];
     const raw = await requestStructuredTutorRaw(provider, messages);
     const structured = parseTutorRaw(raw, ctx);
     if (structured.analysis) {
       recordTutorOutcome("structured");
       return structured;
     }
+    diagnosticAttempts.push({
+      label: "initial json_schema",
+      failure: parseFailureText(structured.error),
+      raw,
+    });
 
     console.warn(
       "导师结构化解析失败,启用纯文本第二套:",
-      structured.error,
+      parseFailureText(structured.error),
       "原始:",
       raw.slice(0, 400),
     );
@@ -383,20 +433,29 @@ export async function analyze(
         provider,
         ctx,
         raw,
-        structured.error ?? "unknown parse error",
+        parseFailureText(structured.error),
       );
       const repaired = parseTutorRaw(repairedRaw, ctx);
       if (repaired.analysis) {
         recordTutorOutcome("structured");
         return repaired;
       }
+      diagnosticAttempts.push({
+        label: "repair json_schema",
+        failure: parseFailureText(repaired.error),
+        raw: repairedRaw,
+      });
       console.warn(
         "导师 JSON 修复仍失败,启用纯文本第二套:",
-        repaired.error,
+        parseFailureText(repaired.error),
         "原始:",
         repairedRaw.slice(0, 400),
       );
     } catch (e) {
+      diagnosticAttempts.push({
+        label: "repair json_schema",
+        failure: `request_failed: ${e instanceof Error ? e.message : String(e)}`,
+      });
       console.warn("导师 JSON 修复请求失败,启用纯文本第二套:", e);
     }
 
@@ -404,13 +463,23 @@ export async function analyze(
     const proseFeedback = stripModelFences(proseRaw);
     if (proseFeedback.trim()) {
       recordTutorOutcome("prose"); // 展示了批改,但本轮不入 mastery 账
-      return { analysis: null, proseFeedback };
+      const diagnostic = formatTutorDiagnostic(diagnosticAttempts);
+      return { analysis: null, proseFeedback, diagnostic, error: diagnostic };
     }
 
     recordTutorOutcome("failed");
+    const diagnostic = formatTutorDiagnostic([
+      ...diagnosticAttempts,
+      {
+        label: "prose fallback",
+        failure: "empty_output",
+        raw: proseRaw,
+      },
+    ]);
     return {
       analysis: null,
-      error: "批改未能生成内容,请重试或检查模型设置。",
+      diagnostic,
+      error: `批改未能生成内容,请重试或检查模型设置。\n${diagnostic}`,
     };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

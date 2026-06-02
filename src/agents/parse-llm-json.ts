@@ -1,60 +1,84 @@
-/** 从 LLM 原始文本里抽出 JSON(去掉 markdown 代码块、前后说明文字)。 */
+/** 只去掉完整包裹 JSON 的 markdown fence;不从混合文本里猜测截取对象。 */
 export function extractJsonText(raw: string): string {
   const trimmed = raw.trim();
   if (!trimmed) return "";
 
-  const fenced = trimmed.match(/^```(?:json)?\s*\n?([\s\S]*?)\n?```\s*$/i);
-  if (fenced) return fenced[1].trim();
+  if (!trimmed.startsWith("```")) return trimmed;
 
-  const inlineFence = trimmed.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/i);
-  if (inlineFence) return inlineFence[1].trim();
+  const firstLineEnd = trimmed.indexOf("\n");
+  if (firstLineEnd < 0) return trimmed;
 
-  const firstBrace = trimmed.indexOf("{");
-  const lastBrace = trimmed.lastIndexOf("}");
-  if (firstBrace >= 0 && lastBrace > firstBrace) {
-    return trimmed.slice(firstBrace, lastBrace + 1);
-  }
+  const opener = trimmed.slice(3, firstLineEnd).trim().toLowerCase();
+  if (opener && opener !== "json") return trimmed;
 
-  return trimmed;
+  const body = trimmed.slice(firstLineEnd + 1);
+  const closing = body.lastIndexOf("```");
+  if (closing < 0 || body.slice(closing + 3).trim()) return trimmed;
+  return body.slice(0, closing).trim();
 }
 
-/** 粗判是否像导师 JSON(用于决定是否触发 json_object 回退)。 */
-export function isLikelyTutorJsonPayload(raw: string): boolean {
-  const text = extractJsonText(raw);
-  if (!text?.trimStart().startsWith("{")) return false;
-  try {
-    JSON.parse(text);
-    return true;
-  } catch {
-    return false;
+function stripTrailingJsonCommas(text: string): string {
+  let out = "";
+  let inString = false;
+  let escaped = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inString) {
+      out += ch;
+      if (escaped) {
+        escaped = false;
+      } else if (ch === "\\") {
+        escaped = true;
+      } else if (ch === '"') {
+        inString = false;
+      }
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+      out += ch;
+      continue;
+    }
+    if (ch === ",") {
+      let j = i + 1;
+      while (j < text.length && /\s/.test(text[j])) j++;
+      if (text[j] === "}" || text[j] === "]") continue;
+    }
+    out += ch;
   }
+  return out;
 }
 
 function proseInsteadOfJsonHint(raw: string): string | null {
   const t = raw.trim();
   if (!t || t.startsWith("{")) return null;
+  const lower = t.toLowerCase();
   if (
-    /->\s*Type:/i.test(t) ||
-    /\bWait,\s+is\b/i.test(t) ||
-    /Signal:\s*`/i.test(t) ||
-    (/```/.test(t) && !t.includes("{"))
+    t.includes("-> Type:") ||
+    lower.includes("wait, is") ||
+    t.includes("Signal: `") ||
+    (t.includes("```") && !t.includes("{"))
   ) {
     return "模型返回了推理过程而非 JSON;请确认代理支持结构化输出(tool/json_schema),或换用官方端点/模型。";
   }
   return null;
 }
 
+export type JsonParseFailureKind = "empty" | "invalid_json";
+
 export function parseLLMJson(
   raw: string,
-): { ok: true; value: unknown } | { ok: false; error: string } {
+):
+  | { ok: true; value: unknown }
+  | { ok: false; kind: JsonParseFailureKind; error: string } {
   const text = extractJsonText(raw);
   if (!text) {
-    return { ok: false, error: "模型返回空内容" };
+    return { ok: false, kind: "empty", error: "模型返回空内容" };
   }
   try {
     return { ok: true, value: JSON.parse(text) };
   } catch (e) {
-    const repaired = text.replace(/,\s*([}\]])/g, "$1");
+    const repaired = stripTrailingJsonCommas(text);
     if (repaired !== text) {
       try {
         return { ok: true, value: JSON.parse(repaired) };
@@ -67,6 +91,7 @@ export function parseLLMJson(
     const prefix = prose ?? `返回内容不是合法 JSON(${hint})`;
     return {
       ok: false,
+      kind: "invalid_json",
       error: `${prefix},开头: ${text.slice(0, 120)}…`,
     };
   }
@@ -93,12 +118,98 @@ const MASTERY_TYPES = new Set([
 const GAP_KEY_ITEM_TYPES = new Set(["vocab", "grammar", "collocation"]);
 const SIGNALS = new Set(["correct", "introduced"]);
 
+const ENUM_ALIASES: Record<string, string> = {
+  auxiliary: "grammar",
+  auxiliary_be: "grammar",
+  clause_structure: "grammar",
+  determiner: "grammar",
+  pronoun: "grammar",
+  tense: "grammar",
+  verb_tense: "grammar",
+  冠词: "grammar",
+  代词: "grammar",
+  动词时态: "grammar",
+  助动词: "grammar",
+  名词单复数: "grammar",
+  句子结构: "grammar",
+  语法: "grammar",
+  限定词: "grammar",
+
+  vocabulary: "vocab",
+  词汇: "vocab",
+
+  vocab: "word_choice",
+  vocabulary_choice: "word_choice",
+  用词: "word_choice",
+  词汇选择: "word_choice",
+
+  collocation_usage: "collocation",
+  搭配: "collocation",
+
+  spelling_error: "spelling",
+  拼写: "spelling",
+  拼写错误: "spelling",
+
+  punctuation_usage: "punctuation",
+  标点: "punctuation",
+  标点符号: "punctuation",
+
+  register_usage: "register",
+  语体: "register",
+
+  idiomaticity: "naturalness",
+  自然度: "naturalness",
+
+  error_pattern: "error_pattern",
+  错误模式: "error_pattern",
+  expression_gap: "expression_gap",
+  表达缺口: "expression_gap",
+
+  minor: "minor",
+  轻微: "minor",
+  moderate: "moderate",
+  medium: "moderate",
+  中等: "moderate",
+  major: "major",
+  severe: "major",
+  严重: "major",
+
+  correct: "correct",
+  正确: "correct",
+  introduced: "introduced",
+  引入: "introduced",
+};
+
+function enumCandidates(value: string): string[] {
+  const normalized = value
+    .normalize("NFKC")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "_");
+  return [
+    normalized,
+    ...normalized
+      .split(/[^a-z0-9_\p{Script=Han}]+/u)
+      .filter((part) => part.length > 0),
+  ];
+}
+
 function pickEnum(value: unknown, allowed: Set<string>): unknown {
   if (typeof value !== "string") return value;
-  const lower = value.trim().toLowerCase().replace(/\s+/g, "_");
-  if (allowed.has(lower)) return lower;
+  const candidates = enumCandidates(value);
+  for (const candidate of candidates) {
+    if (allowed.has(candidate)) return candidate;
+    const alias = ENUM_ALIASES[candidate];
+    if (alias && allowed.has(alias)) return alias;
+  }
+  const lower = candidates[0];
   for (const item of allowed) {
     if (item.includes(lower) || lower.includes(item)) return item;
+  }
+  for (const candidate of candidates.slice(1)) {
+    for (const item of allowed) {
+      if (item.includes(candidate) || candidate.includes(item)) return item;
+    }
   }
   return value;
 }

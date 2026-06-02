@@ -80,6 +80,19 @@ export function buildAnthropicRequestBody(
       },
     ];
     body.tool_choice = { type: "tool", name: opts.jsonSchema.name };
+  } else if (opts.jsonObject) {
+    const name = "JsonResponse";
+    body.tools = [
+      {
+        name,
+        description: "Structured JSON object response",
+        input_schema: {
+          type: "object",
+          additionalProperties: true,
+        },
+      },
+    ];
+    body.tool_choice = { type: "tool", name };
   }
 
   return body;

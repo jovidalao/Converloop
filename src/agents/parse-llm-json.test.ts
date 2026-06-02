@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   extractJsonText,
-  isLikelyTutorJsonPayload,
   normalizeTutorPayload,
   parseLLMJson,
 } from "./parse-llm-json";
@@ -12,8 +11,10 @@ describe("extractJsonText", () => {
     expect(extractJsonText('```json\n{"a":1}\n```')).toBe('{"a":1}');
   });
 
-  it("从混合文本里截取对象", () => {
-    expect(extractJsonText('Here:\n{"a":1}\nDone')).toBe('{"a":1}');
+  it("不从混合文本里猜测截取对象", () => {
+    expect(extractJsonText('Here:\n{"a":1}\nDone')).toBe(
+      'Here:\n{"a":1}\nDone',
+    );
   });
 });
 
@@ -70,6 +71,37 @@ describe("normalizeTutorPayload", () => {
       expect(parsed.data.issues[0].span_original).toBe("go");
     }
   });
+
+  it("兼容中文和混合枚举标签", () => {
+    const normalized = normalizeTutorPayload({
+      is_correct: false,
+      corrected: "Do you have any other flavor options?",
+      natural: "Do you have any other flavors available?",
+      issues: [
+        {
+          category: "grammar:article_usage／代词",
+          span_original: "another",
+          span_corrected: "any other",
+          explanation: '"another" 用于单数可数名词。',
+          severity: "中等",
+          mastery_key: "grammar:article_usage",
+          mastery_label: "冠词 a/an/the 的用法",
+          mastery_type: "语法",
+        },
+      ],
+      mastery_updates: [],
+      expression_gap: null,
+    });
+    const parsed = TutorAnalysis.safeParse(normalized);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.issues[0]).toMatchObject({
+        category: "grammar",
+        severity: "moderate",
+        mastery_type: "grammar",
+      });
+    }
+  });
 });
 
 describe("parseLLMJson", () => {
@@ -89,15 +121,5 @@ describe("parseLLMJson", () => {
     const result = parseLLMJson('{"a":[1,2,],"b":true,}');
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.value).toEqual({ a: [1, 2], b: true });
-  });
-});
-
-describe("isLikelyTutorJsonPayload", () => {
-  it("接受合法 JSON 对象", () => {
-    expect(isLikelyTutorJsonPayload('{"is_correct":true}')).toBe(true);
-  });
-
-  it("拒绝推理片段", () => {
-    expect(isLikelyTutorJsonPayload("-> Type: `vocab`")).toBe(false);
   });
 });
