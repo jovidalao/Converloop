@@ -14,15 +14,34 @@ export const LEARNING_DATA_SCOPE_VALUES = [
 
 export type LearningDataScope = (typeof LEARNING_DATA_SCOPE_VALUES)[number];
 
+export const LEARNING_AGENT_TOOL_VALUES = ["read_learning_data"] as const;
+
+export type LearningAgentTool = (typeof LEARNING_AGENT_TOOL_VALUES)[number];
+
+export const LEARNING_AGENT_WRITEBACK_POLICY_VALUES = [
+  "none",
+  "propose_review_signals",
+] as const;
+
+export type LearningAgentWritebackPolicy =
+  (typeof LEARNING_AGENT_WRITEBACK_POLICY_VALUES)[number];
+
 export interface LearningAgentDraft {
   name: string;
   description: string;
   prompt: string;
   dataScopes: LearningDataScope[];
+  version?: number;
+  allowedTools?: LearningAgentTool[];
+  writebackPolicy?: LearningAgentWritebackPolicy;
+  outputSchema?: Record<string, unknown> | null;
 }
 
 export interface LearningAgentMeta extends LearningAgent {
   dataScopes: LearningDataScope[];
+  allowedTools: LearningAgentTool[];
+  writebackPolicy: LearningAgentWritebackPolicy;
+  outputSchema: Record<string, unknown> | null;
 }
 
 export const DATA_SCOPE_LABELS: Record<LearningDataScope, string> = {
@@ -36,6 +55,9 @@ export const DATA_SCOPE_LABELS: Record<LearningDataScope, string> = {
 };
 
 export const LEARNING_DATA_SCOPES = [...LEARNING_DATA_SCOPE_VALUES];
+
+export const DEFAULT_LEARNING_AGENT_VERSION = 1;
+export const DEFAULT_LEARNING_AGENT_WRITEBACK_POLICY = "none";
 
 interface BuiltInAgent extends LearningAgentDraft {
   id: string;
@@ -161,8 +183,65 @@ function serializeScopes(scopes: LearningDataScope[]): string {
   return JSON.stringify(clean.length ? clean : ["weak_all"]);
 }
 
+function parseTools(json: string): LearningAgentTool[] {
+  try {
+    const raw = JSON.parse(json) as unknown;
+    if (!Array.isArray(raw)) return [];
+    const allowed = new Set<LearningAgentTool>(LEARNING_AGENT_TOOL_VALUES);
+    return raw.filter(
+      (v): v is LearningAgentTool =>
+        typeof v === "string" && allowed.has(v as LearningAgentTool),
+    );
+  } catch {
+    return [];
+  }
+}
+
+function serializeTools(tools: LearningAgentTool[] | undefined): string {
+  const allowed = new Set<LearningAgentTool>(LEARNING_AGENT_TOOL_VALUES);
+  const clean = (tools ?? []).filter((tool) => allowed.has(tool));
+  return JSON.stringify(clean);
+}
+
+function normalizeWritebackPolicy(
+  policy: string | undefined,
+): LearningAgentWritebackPolicy {
+  return LEARNING_AGENT_WRITEBACK_POLICY_VALUES.includes(
+    policy as LearningAgentWritebackPolicy,
+  )
+    ? (policy as LearningAgentWritebackPolicy)
+    : DEFAULT_LEARNING_AGENT_WRITEBACK_POLICY;
+}
+
+function parseOutputSchema(
+  json: string | null,
+): Record<string, unknown> | null {
+  if (!json) return null;
+  try {
+    const raw = JSON.parse(json) as unknown;
+    if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+      return raw as Record<string, unknown>;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function serializeOutputSchema(
+  schema: Record<string, unknown> | null | undefined,
+): string | null {
+  return schema ? JSON.stringify(schema) : null;
+}
+
 function hydrate(row: LearningAgent): LearningAgentMeta {
-  return { ...row, dataScopes: parseScopes(row.dataScopeJson) };
+  return {
+    ...row,
+    dataScopes: parseScopes(row.dataScopeJson),
+    allowedTools: parseTools(row.allowedToolsJson),
+    writebackPolicy: normalizeWritebackPolicy(row.writebackPolicy),
+    outputSchema: parseOutputSchema(row.outputSchemaJson),
+  };
 }
 
 // 一个内置课「发布版本」的指纹:name/description/prompt/scope 全等才算同一版。
@@ -201,6 +280,10 @@ export async function ensureBuiltInLearningAgents(): Promise<void> {
         description: item.description,
         prompt: item.prompt,
         dataScopeJson: serializeScopes(item.dataScopes),
+        version: item.version ?? DEFAULT_LEARNING_AGENT_VERSION,
+        allowedToolsJson: serializeTools(item.allowedTools),
+        writebackPolicy: normalizeWritebackPolicy(item.writebackPolicy),
+        outputSchemaJson: serializeOutputSchema(item.outputSchema),
         builtIn: 1,
         createdAt: now,
         updatedAt: now,
@@ -223,6 +306,10 @@ export async function ensureBuiltInLearningAgents(): Promise<void> {
         description: item.description,
         prompt: item.prompt,
         dataScopeJson: serializeScopes(item.dataScopes),
+        version: item.version ?? DEFAULT_LEARNING_AGENT_VERSION,
+        allowedToolsJson: serializeTools(item.allowedTools),
+        writebackPolicy: normalizeWritebackPolicy(item.writebackPolicy),
+        outputSchemaJson: serializeOutputSchema(item.outputSchema),
         updatedAt: now,
       })
       .where(eq(learningAgent.id, item.id));
@@ -259,6 +346,10 @@ export async function createLearningAgent(
     description: draft.description.trim(),
     prompt: draft.prompt.trim(),
     dataScopeJson: serializeScopes(draft.dataScopes),
+    version: draft.version ?? DEFAULT_LEARNING_AGENT_VERSION,
+    allowedToolsJson: serializeTools(draft.allowedTools),
+    writebackPolicy: normalizeWritebackPolicy(draft.writebackPolicy),
+    outputSchemaJson: serializeOutputSchema(draft.outputSchema),
     builtIn: 0,
     createdAt: now,
     updatedAt: now,
@@ -279,6 +370,13 @@ export async function updateLearningAgent(
   if (patch.prompt !== undefined) updates.prompt = patch.prompt.trim();
   if (patch.dataScopes !== undefined)
     updates.dataScopeJson = serializeScopes(patch.dataScopes);
+  if (patch.version !== undefined) updates.version = patch.version;
+  if (patch.allowedTools !== undefined)
+    updates.allowedToolsJson = serializeTools(patch.allowedTools);
+  if (patch.writebackPolicy !== undefined)
+    updates.writebackPolicy = normalizeWritebackPolicy(patch.writebackPolicy);
+  if (patch.outputSchema !== undefined)
+    updates.outputSchemaJson = serializeOutputSchema(patch.outputSchema);
 
   await db.update(learningAgent).set(updates).where(eq(learningAgent.id, id));
 }

@@ -84,6 +84,14 @@ export const learningAgent = sqliteTable("learning_agent", {
   description: text("description").notNull(),
   prompt: text("prompt").notNull(),
   dataScopeJson: text("data_scope_json").notNull(),
+  version: integer("version").notNull().default(1),
+  allowedToolsJson: text("allowed_tools_json").notNull().default("[]"),
+  writebackPolicy: text("writeback_policy", {
+    enum: ["none", "propose_review_signals"],
+  })
+    .notNull()
+    .default("none"),
+  outputSchemaJson: text("output_schema_json"),
   builtIn: integer("built_in").notNull().default(0),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
@@ -91,6 +99,50 @@ export const learningAgent = sqliteTable("learning_agent", {
 
 export type LearningAgent = typeof learningAgent.$inferSelect;
 export type NewLearningAgent = typeof learningAgent.$inferInsert;
+
+// 后台 / 异步 agent 作业日志。v1 只用于 Task Agent 规划学习项目,后续维护、
+// 摘要、回写等也复用这张表做可追踪状态。
+export const agentJob = sqliteTable("agent_job", {
+  id: text("id").primaryKey(),
+  kind: text("kind").notNull(),
+  status: text("status", {
+    enum: ["pending", "running", "succeeded", "failed"],
+  }).notNull(),
+  inputJson: text("input_json"),
+  outputJson: text("output_json"),
+  error: text("error"),
+  source: text("source", {
+    enum: ["task_agent", "maintainer", "summary", "manual"],
+  }).notNull(),
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+  startedAt: integer("started_at"),
+  finishedAt: integer("finished_at"),
+});
+
+export type AgentJob = typeof agentJob.$inferSelect;
+export type NewAgentJob = typeof agentJob.$inferInsert;
+
+// 学习项目是 Task Agent 的主要产物:一个可读计划 + 由代码创建的专项课草案。
+export const learningProject = sqliteTable("learning_project", {
+  id: text("id").primaryKey(),
+  title: text("title").notNull(),
+  goal: text("goal").notNull(),
+  status: text("status", {
+    enum: ["active", "completed", "archived"],
+  })
+    .notNull()
+    .default("active"),
+  planMd: text("plan_md").notNull().default(""),
+  notesMd: text("notes_md").notNull().default(""),
+  sourcePrompt: text("source_prompt"),
+  taskPlanJson: text("task_plan_json"),
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+});
+
+export type LearningProject = typeof learningProject.$inferSelect;
+export type NewLearningProject = typeof learningProject.$inferInsert;
 
 // 应用内部连续性标记。不是用户偏好,需要随数据库备份/迁移。
 export const appState = sqliteTable("app_state", {

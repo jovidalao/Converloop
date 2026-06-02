@@ -9,6 +9,7 @@ system prompt,可以用母语讲解,也可以用目标语言出练习。
 - 主动带一节聚焦课程:总结相关学习数据、解释关键模式、给小练习。
 - 支持内置专项课:今日复盘、语法专项复习、表达缺口训练。
 - 支持用户自然语言创建自己的专项课 Agent,再手动微调 prompt。
+- 支持由 [Task Agent](./task-agent.md) 从较大的学习目标生成专项课草案。
 - 学习会话里用户可以用母语提问或回答,不要把所有输入都当目标语产出。
 
 ## 它读什么
@@ -65,6 +66,7 @@ User message:
 ## 实现要点
 
 - DB:`learning_agent` 表保存内置和自定义 Agent。内置 Agent 缺失时 seed;启动时若某行仍等于历史发布版(`supersedes`,即用户没改过)则升级到最新种子,用户微调过的行保持不动。
+- 课程包元数据:`version`,`allowed_tools_json`,`writeback_policy`,`output_schema_json`。v1 只声明边界,不改变课堂运行逻辑;Task Agent 生成的课默认只允许读取学习数据,不回写 mastery。
 - 内置「今日复盘」「语法专项复习」的首条消息(kickoff)先输出一份结构化的详细报告(今日练习复盘 / 逐条讲解最近的语法问题),再过渡到练习;语法课随后逐个击破。
 - DB:`conversation.kind="learning_agent"` + `conversation.learning_agent_id` 区分专项课会话。
 - Orchestrator:学习会话调用 `runLearningAgent`,不调用普通 Tutor Agent,因此不显示普通批改面板、不写 mastery 计数。

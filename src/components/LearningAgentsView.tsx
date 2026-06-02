@@ -1,12 +1,17 @@
-import { WandSparklesIcon } from "lucide-react";
-import { useState } from "react";
+import { ListChecksIcon, WandSparklesIcon } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 import {
   DATA_SCOPE_LABELS,
   LEARNING_DATA_SCOPES,
   type LearningDataScope,
 } from "../db/learning-agents";
 import {
+  type LearningProject,
+  listLearningProjects,
+} from "../db/learning-projects";
+import {
   createCustomLearningAgentFromDescription,
+  createLearningProjectFromGoal,
   MissingApiKeyError,
 } from "../orchestrator";
 import { Button } from "./ui/button";
@@ -21,34 +26,71 @@ function scopeName(scope: LearningDataScope): string {
 }
 
 export function LearningAgentsView({ onRefresh }: LearningAgentsViewProps) {
-  const [request, setRequest] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [lessonRequest, setLessonRequest] = useState("");
+  const [lessonBusy, setLessonBusy] = useState(false);
+  const [projectRequest, setProjectRequest] = useState("");
+  const [projectBusy, setProjectBusy] = useState(false);
+  const [projects, setProjects] = useState<LearningProject[]>([]);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function generate() {
-    const text = request.trim();
-    if (!text || busy) return;
-    setBusy(true);
+  const refreshProjects = useCallback(
+    () => listLearningProjects().then(setProjects),
+    [],
+  );
+
+  useEffect(() => {
+    void refreshProjects();
+  }, [refreshProjects]);
+
+  function reportError(e: unknown) {
+    setError(
+      e instanceof MissingApiKeyError
+        ? e.message
+        : e instanceof Error
+          ? e.message
+          : String(e),
+    );
+  }
+
+  async function generateProject() {
+    const text = projectRequest.trim();
+    if (!text || projectBusy) return;
+    setProjectBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const result = await createLearningProjectFromGoal(text);
+      setProjectRequest("");
+      await refreshProjects();
+      await onRefresh();
+      setMessage(
+        `已创建学习项目,并生成 ${result.createdLearningAgentIds.length} 个专项课。`,
+      );
+    } catch (e) {
+      reportError(e);
+    } finally {
+      setProjectBusy(false);
+    }
+  }
+
+  async function generateLesson() {
+    const text = lessonRequest.trim();
+    if (!text || lessonBusy) return;
+    setLessonBusy(true);
     setError(null);
     setMessage(null);
     try {
       await createCustomLearningAgentFromDescription(text);
-      setRequest("");
+      setLessonRequest("");
       await onRefresh();
       setMessage(
         "已创建专项课。它已加入左侧「定制化学习」,可直接开始或在那里编辑。",
       );
     } catch (e) {
-      setError(
-        e instanceof MissingApiKeyError
-          ? e.message
-          : e instanceof Error
-            ? e.message
-            : String(e),
-      );
+      reportError(e);
     } finally {
-      setBusy(false);
+      setLessonBusy(false);
     }
   }
 
@@ -77,10 +119,51 @@ export function LearningAgentsView({ onRefresh }: LearningAgentsViewProps) {
       </div>
 
       <div className="mt-4 rounded-lg border bg-card p-3">
+        <div className="mb-2 text-sm font-semibold">学习项目</div>
+        <Textarea
+          value={projectRequest}
+          onChange={(e) => setProjectRequest(e.target.value)}
+          placeholder="例如: 我下个月要英语面试前端岗位,帮我做一个练习计划。"
+          className="min-h-24 resize-none"
+        />
+        <Button
+          type="button"
+          size="sm"
+          className="mt-2"
+          onClick={() => void generateProject()}
+          disabled={projectBusy || !projectRequest.trim()}
+        >
+          <ListChecksIcon size={15} />
+          {projectBusy ? "规划中…" : "生成项目"}
+        </Button>
+      </div>
+
+      {projects.length > 0 && (
+        <div className="mt-4 border-y py-3">
+          <div className="mb-2 text-sm font-semibold">已有学习项目</div>
+          <div className="grid gap-2">
+            {projects.map((project) => (
+              <div key={project.id} className="text-sm leading-snug">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium text-foreground">
+                    {project.title}
+                  </span>
+                  <span className="rounded border px-1.5 py-0.5 text-[11px] text-muted-foreground">
+                    {project.status}
+                  </span>
+                </div>
+                <div className="mt-1 text-muted-foreground">{project.goal}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="mt-4 rounded-lg border bg-card p-3">
         <div className="mb-2 text-sm font-semibold">自然语言创建</div>
         <Textarea
-          value={request}
-          onChange={(e) => setRequest(e.target.value)}
+          value={lessonRequest}
+          onChange={(e) => setLessonRequest(e.target.value)}
           placeholder="例如: 帮我创建一个专门练商务邮件开头和结尾的老师,根据我的表达缺口出题。"
           className="min-h-24 resize-none"
         />
@@ -88,11 +171,11 @@ export function LearningAgentsView({ onRefresh }: LearningAgentsViewProps) {
           type="button"
           size="sm"
           className="mt-2"
-          onClick={() => void generate()}
-          disabled={busy || !request.trim()}
+          onClick={() => void generateLesson()}
+          disabled={lessonBusy || !lessonRequest.trim()}
         >
           <WandSparklesIcon size={15} />
-          {busy ? "创建中…" : "自动创建"}
+          {lessonBusy ? "创建中…" : "自动创建"}
         </Button>
       </div>
 

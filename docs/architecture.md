@@ -1,6 +1,6 @@
 # Architecture (v1)
 
-AI 语言学习 agent —— 第一版范围、数据流、存储与现状。Agent 的逐字契约见各自文档:[conversation](./conversation-agent.md) · [tutor](./tutor-agent.md) · [profile-maintainer](./profile-maintainer-agent.md);母语/混说链路见 [expression-gap](./expression-gap.md)。
+AI 语言学习 agent —— 第一版范围、数据流、存储与现状。Agent 的逐字契约见各自文档:[conversation](./conversation-agent.md) · [tutor](./tutor-agent.md) · [profile-maintainer](./profile-maintainer-agent.md) · [task-agent](./task-agent.md);母语/混说链路见 [expression-gap](./expression-gap.md)。
 
 ## v1 范围(刻意收窄)
 
@@ -23,10 +23,11 @@ AI 语言学习 agent —— 第一版范围、数据流、存储与现状。Age
 | **Conversation** | 每轮(热) | MD 叙述档案 + 对话 | 纯文本,流式 | [conversation-agent](./conversation-agent.md) |
 | **Tutor** | 每轮(热,与对话并行) | SQLite 薄弱表 + 输入 | 结构化 `TutorAnalysis` | [tutor-agent](./tutor-agent.md) |
 | **Profile Maintainer** | 偶尔(后台) | 现有 MD + SQLite 聚合 + 近期对话 | 更新后的 MD | [profile-maintainer-agent](./profile-maintainer-agent.md) |
+| **Task / 学习项目** | 用户从定制化学习入口触发 | 用户目标 + 语言配置 | `learning_project` + 专项课草案 | [task-agent](./task-agent.md) |
 | **Learning / 专项课** | 用户从定制化学习入口开启 | 代码拼好的学习数据 scope + 专项 prompt | 老师型课程回复,流式 | [learning-agent](./learning-agent.md) |
 | **Explain**(按需) | 用户点「讲解」时 | 对话回复 + MD 档案切片 | 母语讲解,流式 | 见下方[按需讲解](#按需讲解-explain-agent) |
 
-热路径只有对话 ∥ 导师两个 agent;维护与讲解都不在热路径上(后台 / 按需)。代码侧的编排在 `src/orchestrator.ts`(`runTurn` = 对话 ∥ 导师 + 记账 + 持久化;`explainReply` = 按需讲解)。
+热路径只有对话 ∥ 导师两个 agent;维护、任务规划与讲解都不在热路径上(后台 / 按需)。代码侧的编排在 `src/orchestrator.ts`(`runTurn` = 对话 ∥ 导师 + 记账 + 持久化;`createLearningProjectFromGoal` = Task Agent 规划;`explainReply` = 按需讲解)。
 
 ## 两层存储:各管一摊(核心决策)
 
@@ -53,6 +54,7 @@ AI 语言学习 agent —— 第一版范围、数据流、存储与现状。Age
     → 每 10 轮触发一次后台 Profile Maintainer(单飞)
 
 按需:
+  用户输入一个较大的学习目标 → Task Agent 生成学习项目 + 专项课草案
   用户点回复上的「讲解」→ Explain Agent 读该回复 + MD 切片 → 母语流式讲解
   用户点「朗读」      → TTS(见下)合成并播放
 
@@ -65,7 +67,7 @@ AI 语言学习 agent —— 第一版范围、数据流、存储与现状。Age
 
 migration 定义在 **Rust 侧**(`src-tauri/src/lib.rs`,`tauri_plugin_sql::Builder::add_migrations`),`Database.load()` 时触发。Drizzle 只做类型安全查询,不接管 migration —— TS 侧 `src/db/schema.ts` **手动镜像** Rust 的建表,两边保持一致。
 
-当前 13 个 migration:
+当前 21 个 migration:
 
 | ver | 描述 | 表 / 变更 |
 |---|---|---|
@@ -82,6 +84,14 @@ migration 定义在 **Rust 侧**(`src-tauri/src/lib.rs`,`tauri_plugin_sql::Build
 | 11 | create_learning_agent | `learning_agent` |
 | 12 | add_conversation_kind | `conversation.kind` |
 | 13 | add_conversation_learning_agent_id | `conversation.learning_agent_id` |
+| 14 | add_conversation_summary | `conversation.summary` |
+| 15 | add_conversation_summary_through_id | `conversation.summary_through_id` |
+| 16 | add_learning_agent_version | `learning_agent.version` |
+| 17 | add_learning_agent_allowed_tools_json | `learning_agent.allowed_tools_json` |
+| 18 | add_learning_agent_writeback_policy | `learning_agent.writeback_policy` |
+| 19 | add_learning_agent_output_schema_json | `learning_agent.output_schema_json` |
+| 20 | create_agent_job | `agent_job` |
+| 21 | create_learning_project | `learning_project` |
 
 ### `mastery_item`(掌握项,起点,别一上来搞知识追踪)
 
@@ -146,6 +156,10 @@ migration 定义在 **Rust 侧**(`src-tauri/src/lib.rs`,`tauri_plugin_sql::Build
   description: string
   prompt: string
   data_scope_json: string // profile / weak_all / weak_grammar / expression_gaps / today_turns / due_review / proficiency
+  version: number
+  allowed_tools_json: string // v1: [] 或 ["read_learning_data"]
+  writeback_policy: 'none' | 'propose_review_signals'
+  output_schema_json?: string
   built_in: number        // 内置 Agent 也落库,允许用户微调 prompt
   created_at: number
   updated_at: number
@@ -153,6 +167,45 @@ migration 定义在 **Rust 侧**(`src-tauri/src/lib.rs`,`tauri_plugin_sql::Build
 ```
 
 专项课不跑普通 Tutor Agent,因此不会把用户在课堂里的母语问题误记成表达缺口;老师直接在聊天中解释和反馈。详见 [learning-agent.md](./learning-agent.md)。
+
+### `agent_job` / `learning_project`(Task Agent 任务层)
+
+`agent_job` 记录后台 / 异步 agent 作业的生命周期:
+
+```ts
+{
+  id: string
+  kind: string
+  status: 'pending' | 'running' | 'succeeded' | 'failed'
+  input_json?: string
+  output_json?: string
+  error?: string
+  source: 'task_agent' | 'maintainer' | 'summary' | 'manual'
+  created_at: number
+  updated_at: number
+  started_at?: number
+  finished_at?: number
+}
+```
+
+`learning_project` 保存 Task Agent 产出的学习计划:
+
+```ts
+{
+  id: string
+  title: string
+  goal: string
+  status: 'active' | 'completed' | 'archived'
+  plan_md: string
+  notes_md: string
+  source_prompt?: string
+  task_plan_json?: string
+  created_at: number
+  updated_at: number
+}
+```
+
+Task Agent 只产出项目计划和专项课草案;落库与创建课程包由代码执行,且不写 mastery。详见 [task-agent.md](./task-agent.md)。
 
 ### 选 top-N 喂回 prompt
 
@@ -233,6 +286,7 @@ v1 核心链路已完成并可用:
 - ✅ 理解信号(每条回复的讲解/双语请求数)· 代码定向选取的复习候选(`getReviewDueList`)· 证据驱动的难度校准(`lib/proficiency`,喂对话 agent)
 - ✅ `mastery_event` 事件日志:每条 error/correct/introduced/gap 都保留结构化证据,`introduced` 不再推动掌握毕业
 - ✅ 定制化学习 Agent / 专项课:内置今日复盘、语法专项复习、表达缺口训练;支持自然语言创建和 prompt 微调;专项课会话独立于普通批改热路径
+- ✅ Task Agent / 学习项目:把开放式学习需求规划成 `learning_project`,并生成有界专项课草案;`agent_job` 记录作业状态
 - ✅ 学习数据页自然语言修改:LLM 只生成有限操作,代码执行 create/update/delete/状态修改,不让 LLM 直接碰计数
 - ✅ 最小 UI:聊天 / 批改面板 / 档案查看编辑(含 AI 自定义偏好) / 学习数据管理 / 设置(provider + key + TTS)
 

@@ -5,12 +5,15 @@ import { runLearningAgent } from "./agents/learning";
 import { generateLearningAgentDraft } from "./agents/learning-agent-builder";
 import { classifyProfilePreferenceInstruction } from "./agents/profile-preferences";
 import type { TutorAnalysis } from "./agents/schema";
+import { planLearningProject } from "./agents/task-agent";
 import { translate } from "./agents/translate";
 import { analyze } from "./agents/tutor";
 import { getProvider, loadConfig } from "./config";
 import { applyDataEditInstruction, type DataEditResult } from "./data-edit";
+import { runTrackedAgentJob } from "./db/agent-jobs";
 import { getConversation, getSummary } from "./db/conversations";
 import { createLearningAgent, getLearningAgent } from "./db/learning-agents";
+import { createLearningProject } from "./db/learning-projects";
 import { getReviewDueList, getWeakList, recordAnalysis } from "./db/mastery";
 import { getProficiencySnapshot } from "./db/proficiency";
 import {
@@ -71,6 +74,59 @@ export async function createCustomLearningAgentFromDescription(
     level: config.level,
   });
   return createLearningAgent(draft);
+}
+
+export async function createLearningProjectFromGoal(
+  description: string,
+): Promise<{
+  projectId: string;
+  createdLearningAgentIds: string[];
+  jobId: string;
+}> {
+  const provider = await getProvider();
+  if (!provider) throw new MissingApiKeyError();
+
+  const config = loadConfig();
+  const ctx = {
+    nativeLanguage: config.nativeLanguage,
+    targetLanguage: config.targetLanguage,
+    level: config.level,
+  };
+  const { jobId, result } = await runTrackedAgentJob(
+    {
+      kind: "learning_project_plan",
+      source: "task_agent",
+      input: { description, ...ctx },
+    },
+    async () => {
+      const plan = await planLearningProject(provider, description, ctx);
+      const projectId = await createLearningProject({
+        title: plan.title,
+        goal: plan.goal,
+        planMd: plan.planMarkdown,
+        notesMd: plan.notesMarkdown,
+        sourcePrompt: description,
+        taskPlan: plan.raw,
+      });
+      const createdLearningAgentIds: string[] = [];
+      for (const lesson of plan.suggestedLessons) {
+        createdLearningAgentIds.push(await createLearningAgent(lesson));
+      }
+      return {
+        projectId,
+        createdLearningAgentIds,
+        title: plan.title,
+        goal: plan.goal,
+        nextActions: plan.nextActions,
+      };
+    },
+  );
+
+  return {
+    projectId: result.projectId,
+    createdLearningAgentIds: result.createdLearningAgentIds,
+    jobId,
+  };
 }
 
 export async function editLearningDataWithInstruction(

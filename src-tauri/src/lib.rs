@@ -110,6 +110,47 @@ const ADD_CONVERSATION_SUMMARY: &str =
 const ADD_CONVERSATION_SUMMARY_THROUGH_ID: &str =
     "ALTER TABLE conversation ADD COLUMN summary_through_id TEXT;";
 
+const ADD_LEARNING_AGENT_VERSION: &str =
+    "ALTER TABLE learning_agent ADD COLUMN version INTEGER NOT NULL DEFAULT 1;";
+
+const ADD_LEARNING_AGENT_ALLOWED_TOOLS_JSON: &str =
+    "ALTER TABLE learning_agent ADD COLUMN allowed_tools_json TEXT NOT NULL DEFAULT '[]';";
+
+const ADD_LEARNING_AGENT_WRITEBACK_POLICY: &str =
+    "ALTER TABLE learning_agent ADD COLUMN writeback_policy TEXT NOT NULL DEFAULT 'none';";
+
+const ADD_LEARNING_AGENT_OUTPUT_SCHEMA_JSON: &str =
+    "ALTER TABLE learning_agent ADD COLUMN output_schema_json TEXT;";
+
+const CREATE_AGENT_JOB: &str = "\
+CREATE TABLE IF NOT EXISTS agent_job (
+    id          TEXT PRIMARY KEY NOT NULL,
+    kind        TEXT NOT NULL,
+    status      TEXT NOT NULL,
+    input_json  TEXT,
+    output_json TEXT,
+    error       TEXT,
+    source      TEXT NOT NULL,
+    created_at  INTEGER NOT NULL,
+    updated_at  INTEGER NOT NULL,
+    started_at  INTEGER,
+    finished_at INTEGER
+);";
+
+const CREATE_LEARNING_PROJECT: &str = "\
+CREATE TABLE IF NOT EXISTS learning_project (
+    id             TEXT PRIMARY KEY NOT NULL,
+    title          TEXT NOT NULL,
+    goal           TEXT NOT NULL,
+    status         TEXT NOT NULL DEFAULT 'active',
+    plan_md        TEXT NOT NULL DEFAULT '',
+    notes_md       TEXT NOT NULL DEFAULT '',
+    source_prompt  TEXT,
+    task_plan_json TEXT,
+    created_at     INTEGER NOT NULL,
+    updated_at     INTEGER NOT NULL
+);";
+
 // 红绿灯沿用 macOS 原生按钮,位置参照 Codex 顶栏:左侧 21pt,垂直居中于 46pt chrome。
 // decorum 把按钮中心放在距窗顶 (button_h + y)/2 + 4 处;关闭按钮 button_h = 14,
 // 解 (14 + y)/2 + 4 = 23 → y = 24。
@@ -246,6 +287,42 @@ pub fn run() {
             version: 15,
             description: "add_conversation_summary_through_id",
             sql: ADD_CONVERSATION_SUMMARY_THROUGH_ID,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 16,
+            description: "add_learning_agent_version",
+            sql: ADD_LEARNING_AGENT_VERSION,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 17,
+            description: "add_learning_agent_allowed_tools_json",
+            sql: ADD_LEARNING_AGENT_ALLOWED_TOOLS_JSON,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 18,
+            description: "add_learning_agent_writeback_policy",
+            sql: ADD_LEARNING_AGENT_WRITEBACK_POLICY,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 19,
+            description: "add_learning_agent_output_schema_json",
+            sql: ADD_LEARNING_AGENT_OUTPUT_SCHEMA_JSON,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 20,
+            description: "create_agent_job",
+            sql: CREATE_AGENT_JOB,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 21,
+            description: "create_learning_project",
+            sql: CREATE_LEARNING_PROJECT,
             kind: MigrationKind::Up,
         },
     ];
