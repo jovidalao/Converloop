@@ -356,32 +356,6 @@
   background: var(--codex-sidebar-active);
   color: var(--codex-sidebar-active-fg);
 }
-.codex-sidebar-search {
-  display: flex;
-  height: 34px;
-  align-items: center;
-  gap: 10px;
-  border-radius: 9px;
-  padding: 0 10px;
-  color: var(--codex-sidebar-muted);
-}
-.codex-sidebar-search:focus-within,
-.codex-sidebar-search:hover {
-  background: var(--codex-sidebar-hover);
-  color: var(--codex-sidebar-fg);
-}
-.codex-sidebar-search input {
-  min-width: 0;
-  flex: 1;
-  border: 0;
-  background: transparent;
-  color: var(--codex-sidebar-fg);
-  font-size: 14px;
-  outline: none;
-}
-.codex-sidebar-search input::placeholder {
-  color: var(--codex-sidebar-muted);
-}
 .codex-sidebar-scroll {
   display: flex;
   min-height: 0;

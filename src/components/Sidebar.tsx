@@ -6,7 +6,6 @@ import {
   ListChecksIcon,
   PencilIcon,
   PlusIcon,
-  SearchIcon,
   SettingsIcon,
   SquarePenIcon,
   Trash2Icon,
@@ -92,7 +91,6 @@ export function Sidebar({
   const confirm = useConfirm();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
-  const [query, setQuery] = useState("");
   const [learningCollapsed, setLearningCollapsed] = useState(false);
   const [editingAgentId, setEditingAgentId] = useState<string | null>(null);
 
@@ -119,12 +117,6 @@ export function Sidebar({
     await deleteLearningAgent(agent.id);
     await onRefreshLearningAgents();
   }
-
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return conversations;
-    return conversations.filter((c) => c.title.toLowerCase().includes(q));
-  }, [conversations, query]);
 
   function startEdit(c: ConversationMeta) {
     setEditingId(c.id);
@@ -182,15 +174,6 @@ export function Sidebar({
     <aside className="codex-sidebar">
       <div className="codex-sidebar-content">
         <div className="codex-sidebar-actions">
-          <div className="codex-sidebar-search">
-            <SearchIcon className="size-4" />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="搜索"
-              spellCheck={false}
-            />
-          </div>
           <button
             type="button"
             className="codex-sidebar-action group"
@@ -292,7 +275,7 @@ export function Sidebar({
 
         <nav className="codex-sidebar-scroll">
           <div className="codex-section-label">最近</div>
-          {filtered.map((c) => {
+          {conversations.map((c) => {
             const active = view === "chat" && c.id === activeId;
             if (editingId === c.id) {
               return (
@@ -369,9 +352,9 @@ export function Sidebar({
               </div>
             );
           })}
-          {filtered.length === 0 && (
+          {conversations.length === 0 && (
             <div className="px-3 py-2 text-sm text-[color:var(--codex-sidebar-muted)]">
-              没有匹配的对话
+              还没有对话
             </div>
           )}
         </nav>

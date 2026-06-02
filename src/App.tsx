@@ -1,5 +1,10 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { PanelLeftIcon, PanelRightIcon, SquarePenIcon } from "lucide-react";
+import {
+  PanelLeftIcon,
+  PanelRightIcon,
+  SearchIcon,
+  SquarePenIcon,
+} from "lucide-react";
 import {
   type CSSProperties,
   type MouseEvent,
@@ -248,9 +253,9 @@ function App() {
         <div className="codex-titlebar">
           <span className="truncate">{topbarTitle}</span>
         </div>
-        {collapsed && (
-          <div className="codex-topbar-right">
-            <TooltipProvider delayDuration={300}>
+        <div className="codex-topbar-right">
+          <TooltipProvider delayDuration={300}>
+            {collapsed && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -275,9 +280,33 @@ function App() {
                   </kbd>
                 </TooltipContent>
               </Tooltip>
-            </TooltipProvider>
-          </div>
-        )}
+            )}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="codex-chrome-button"
+                  onClick={() => setPaletteOpen(true)}
+                  aria-label="搜索"
+                >
+                  <SearchIcon />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent
+                side="bottom"
+                align="end"
+                className="flex items-center gap-2"
+              >
+                <span>搜索</span>
+                <kbd className="rounded border border-border/60 bg-muted px-1.5 py-0.5 font-sans text-[11px] text-muted-foreground/80">
+                  ⌘K
+                </kbd>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
       </header>
 
       <Sidebar
