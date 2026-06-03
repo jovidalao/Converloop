@@ -157,10 +157,11 @@ export async function runTurn(
   userInput: string,
   conversationId: string,
   cb: TurnCallbacks,
+  turnId?: string,
 ): Promise<TurnResult> {
   const conversation = await getConversation(conversationId);
   if (conversation?.kind === "learning_agent") {
-    return runLearningTurn(userInput, conversationId, cb, false);
+    return runLearningTurn(userInput, conversationId, cb, false, turnId);
   }
 
   const provider = await getProvider();
@@ -225,7 +226,9 @@ export async function runTurn(
   });
 
   const reply = await replyPromise;
-  const turnId = await persistTurn(conversationId, userInput, reply, null);
+  // 复用前端乐观渲染时生成的 turnId(若提供):让 UI 这条气泡与持久化的 DB 行同 id,
+  // 这样「从此处开始」(按 id 截断)和「重新生成」(按 id 定位)在刷新前也能命中本轮。
+  turnId = await persistTurn(conversationId, userInput, reply, null, turnId);
   cb.onReplyComplete?.(reply);
 
   // 自动压缩:逼近上下文上限时,后台把最老的原文折叠进滚动摘要。不阻塞下一轮输入。
@@ -276,8 +279,9 @@ export async function runTurn(
 export async function startLearningSession(
   conversationId: string,
   cb: TurnCallbacks,
+  turnId?: string,
 ): Promise<TurnResult> {
-  return runLearningTurn("", conversationId, cb, true);
+  return runLearningTurn("", conversationId, cb, true, turnId);
 }
 
 async function runLearningTurn(
@@ -285,6 +289,7 @@ async function runLearningTurn(
   conversationId: string,
   cb: TurnCallbacks,
   kickoff: boolean,
+  turnId?: string,
 ): Promise<TurnResult> {
   const provider = await getProvider();
   if (!provider) throw new MissingApiKeyError();
@@ -329,7 +334,7 @@ async function runLearningTurn(
     cb.onReplyDelta,
   );
 
-  await persistTurn(conversationId, userInput, reply, null);
+  await persistTurn(conversationId, userInput, reply, null, turnId);
   cb.onReplyComplete?.(reply);
   // 自动压缩:逼近上下文上限时,后台把最老的原文折叠进滚动摘要。不阻塞下一轮输入。
   // 专项课的非历史动态块 = dataContext + agent prompt,通常比普通对话大得多,据此提高 reserve。

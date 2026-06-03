@@ -472,20 +472,24 @@ export function ChatView({
     setStreaming("");
     let acc = "";
     try {
-      const result = await startLearningSession(conversationId, {
-        onReplyDelta: (d) => {
-          acc += d;
-          setStreaming(acc);
+      const result = await startLearningSession(
+        conversationId,
+        {
+          onReplyDelta: (d) => {
+            acc += d;
+            setStreaming(acc);
+          },
+          onReplyComplete: (reply) => {
+            if (turnGenRef.current !== turnGen) return;
+            replyCommittedRef.current = true;
+            commitPartnerReply(turnId, reply);
+          },
+          onAnalysis: () => {
+            patchTurn(turnId, { analysisPending: false });
+          },
         },
-        onReplyComplete: (reply) => {
-          if (turnGenRef.current !== turnGen) return;
-          replyCommittedRef.current = true;
-          commitPartnerReply(turnId, reply);
-        },
-        onAnalysis: () => {
-          patchTurn(turnId, { analysisPending: false });
-        },
-      });
+        turnId,
+      );
       if (turnGenRef.current === turnGen && !replyCommittedRef.current) {
         commitPartnerReply(turnId, result.reply);
       }
@@ -552,26 +556,31 @@ export function ChatView({
     const speaker =
       !learningMode && loadTtsConfig().autoSpeak ? createReplySpeaker() : null;
     try {
-      const result = await runTurn(text, conversationId, {
-        onReplyDelta: (d) => {
-          acc += d;
-          setStreaming(acc);
+      const result = await runTurn(
+        text,
+        conversationId,
+        {
+          onReplyDelta: (d) => {
+            acc += d;
+            setStreaming(acc);
+          },
+          onReplyComplete: (reply) => {
+            if (turnGenRef.current !== turnGen) return;
+            replyCommittedRef.current = true;
+            commitPartnerReply(turnId, reply);
+            speaker?.finish(reply);
+          },
+          onAnalysis: (a, opts) => {
+            patchTurn(turnId, {
+              analysis: a,
+              analysisProse: opts?.proseFeedback ?? null,
+              analysisPending: false,
+              analysisError: opts?.error ?? null,
+            });
+          },
         },
-        onReplyComplete: (reply) => {
-          if (turnGenRef.current !== turnGen) return;
-          replyCommittedRef.current = true;
-          commitPartnerReply(turnId, reply);
-          speaker?.finish(reply);
-        },
-        onAnalysis: (a, opts) => {
-          patchTurn(turnId, {
-            analysis: a,
-            analysisProse: opts?.proseFeedback ?? null,
-            analysisPending: false,
-            analysisError: opts?.error ?? null,
-          });
-        },
-      });
+        turnId,
+      );
       if (turnGenRef.current === turnGen && !replyCommittedRef.current) {
         commitPartnerReply(turnId, result.reply);
         speaker?.finish(result.reply);

@@ -9,7 +9,7 @@ export async function persistTurn(
   userInput: string,
   reply: string,
   analysis: TutorAnalysis | null,
-  id = crypto.randomUUID(),
+  id: string = crypto.randomUUID(),
 ): Promise<string> {
   await db.insert(turn).values({
     id,
