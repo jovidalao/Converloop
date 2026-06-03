@@ -11,6 +11,7 @@ import {
   parseAgentModifiers,
 } from "../db/conversations";
 import { logError } from "../lib/log";
+import { getBuiltinActionOverride } from "./builtin-overrides";
 import { isAgentEnabled } from "./enablement";
 import {
   type ActionAgent,
@@ -50,6 +51,25 @@ export function registerTransformer(transformer: TransformerInfo): void {
   transformers.push(transformer);
 }
 
+// 把内置动作的用户改写(名称/说明)合并进去,让动作条与能力库展示一致。
+// deriveContext / run 各自在执行时读改写应用 prompt,这里只覆盖展示字段。
+function withActionOverride(a: ActionAgent): ActionAgent {
+  const ov = getBuiltinActionOverride(a.id);
+  if (!ov || (ov.label === undefined && ov.description === undefined)) return a;
+  return {
+    ...a,
+    label: ov.label ?? a.label,
+    description: ov.description ?? a.description,
+    card: a.card
+      ? {
+          ...a.card,
+          title: ov.label ?? a.card.title,
+          description: ov.description ?? a.card.description,
+        }
+      : a.card,
+  };
+}
+
 export function replaceCustomRuntimeAgents(input: {
   observers: Observer[];
   actions: ActionAgent[];
@@ -75,7 +95,8 @@ export function getObservers(): readonly Observer[] {
 }
 
 export function getActions(scope?: ActionScope): readonly ActionAgent[] {
-  return scope ? actions.filter((a) => a.scope === scope) : actions;
+  const list = scope ? actions.filter((a) => a.scope === scope) : actions;
+  return list.map(withActionOverride);
 }
 
 export function getTransformers(): readonly TransformerInfo[] {
@@ -99,7 +120,8 @@ export function listAgentCatalog(): AgentCatalogEntry[] {
       enabled: isAgentEnabled(o.id),
       card: o.card,
     });
-  for (const a of actions)
+  for (const raw of actions) {
+    const a = withActionOverride(raw);
     entries.push({
       id: a.id,
       kind: a.kind,
@@ -107,6 +129,7 @@ export function listAgentCatalog(): AgentCatalogEntry[] {
       scope: a.scope,
       card: a.card,
     });
+  }
   for (const t of transformers)
     entries.push({
       id: t.id,
@@ -221,9 +244,10 @@ export async function beginAction(
   actionId: string,
   ctx: ActionContext,
 ): Promise<ActionResult> {
-  const action = actions.find((a) => a.id === actionId);
-  if (!action) throw new Error(`没有注册 id=${actionId} 的动作 Agent`);
-  if (!action.deriveContext) return runAction(actionId, ctx);
+  const found = actions.find((a) => a.id === actionId);
+  if (!found) throw new Error(`没有注册 id=${actionId} 的动作 Agent`);
+  if (!found.deriveContext) return runAction(actionId, ctx);
+  const action = withActionOverride(found);
 
   const id = await createPendingDerivedConversation({
     parentId: ctx.conversationId,

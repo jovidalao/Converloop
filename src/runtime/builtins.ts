@@ -23,6 +23,7 @@ import { recordAnalysis } from "../db/mastery";
 import { formatTurns, getTurnsAfterId, updateTurnAnalysis } from "../db/turns";
 import { logError } from "../lib/log";
 import { maybeRunMaintainer } from "../profile/maintainer-runner";
+import { getBuiltinActionOverride } from "./builtin-overrides";
 import {
   registerAction,
   registerObserver,
@@ -330,7 +331,7 @@ for (const transformer of transformers) registerTransformer(transformer);
 
 // 对话衍生 Agent:点击后先创建 pending 新会话,新页面再运行 deriveContext 生成上下文并开场。
 // 原会话始终不动(非破坏式),区别于「从此处开始」(截断)。
-function makeDerivationAction(spec: {
+interface DerivationSpec {
   id: string;
   scope: ActionAgent["scope"];
   label: string;
@@ -338,7 +339,9 @@ function makeDerivationAction(spec: {
   kind: BranchKind;
   objective: string;
   modifiers?: AgentModifiers;
-}): ActionAgent {
+}
+
+function makeDerivationAction(spec: DerivationSpec): ActionAgent {
   return {
     id: spec.id,
     kind: "action",
@@ -355,16 +358,19 @@ function makeDerivationAction(spec: {
       writes: "衍生一个新对话上下文并新建会话(不改计数 / 密钥 / 设置)",
       canDisable: true,
     },
-    deriveContext: (ctx) =>
-      deriveConversationContext(ctx, {
-        label: spec.label,
-        objective: spec.objective,
-      }),
+    // label/objective 在点击时实时读改写,用户在能力库改过 prompt 就立即生效。
+    deriveContext: (ctx) => {
+      const ov = getBuiltinActionOverride(spec.id);
+      return deriveConversationContext(ctx, {
+        label: ov?.label ?? spec.label,
+        objective: ov?.objective ?? spec.objective,
+      });
+    },
   };
 }
 
-const branchActions: ActionAgent[] = [
-  makeDerivationAction({
+const derivationSpecs: DerivationSpec[] = [
+  {
     id: "builtin:action:branch_from",
     scope: "turn",
     label: "从此处分支",
@@ -372,8 +378,8 @@ const branchActions: ActionAgent[] = [
     kind: "branch_from",
     objective:
       "Create a fresh continuation based on the selected source turn. Preserve the useful setup before that point, but start the new conversation cleanly without copying visible history.",
-  }),
-  makeDerivationAction({
+  },
+  {
     id: "builtin:action:restart",
     scope: "session",
     label: "重新开始",
@@ -381,8 +387,8 @@ const branchActions: ActionAgent[] = [
     kind: "restart",
     objective:
       "Restart the same useful scenario/persona from a clean beginning. Keep the learning purpose, but do not continue as if previous turns already happened.",
-  }),
-  makeDerivationAction({
+  },
+  {
     id: "builtin:action:harder",
     scope: "session",
     label: "提高难度",
@@ -391,8 +397,8 @@ const branchActions: ActionAgent[] = [
     modifiers: { difficultyDelta: 1 },
     objective:
       "Create a harder version of the current practice. Keep the scenario and continuity that matter, but make the target-language demands richer, more idiomatic, and more challenging.",
-  }),
-  makeDerivationAction({
+  },
+  {
     id: "builtin:action:easier",
     scope: "session",
     label: "降低难度",
@@ -401,8 +407,8 @@ const branchActions: ActionAgent[] = [
     modifiers: { difficultyDelta: -1 },
     objective:
       "Create an easier version of the current practice. Keep the useful scenario, but lower the difficulty: shorter sentences, common words, clearer prompts, and one idea at a time.",
-  }),
-  makeDerivationAction({
+  },
+  {
     id: "builtin:action:swap_roles",
     scope: "session",
     label: "调换角色",
@@ -411,8 +417,8 @@ const branchActions: ActionAgent[] = [
     modifiers: { swapRoles: true },
     objective:
       "Create a role-swapped version of the current conversation. The learner should lead more of the exchange; the AI should take the counterpart role and respond naturally.",
-  }),
-  makeDerivationAction({
+  },
+  {
     id: "builtin:action:next_day",
     scope: "session",
     label: "第二天继续",
@@ -421,8 +427,8 @@ const branchActions: ActionAgent[] = [
     modifiers: { nextDay: true },
     objective:
       "Create a new-day continuation. Use relevant continuity from the source conversation, but start on the next day with a natural reconnection and a fresh opening.",
-  }),
-  makeDerivationAction({
+  },
+  {
     id: "builtin:action:change_scene",
     scope: "session",
     label: "换个场景",
@@ -430,44 +436,83 @@ const branchActions: ActionAgent[] = [
     kind: "change_scene",
     objective:
       "Create a new scenario that practices the same useful language goals from the current conversation, but changes the setting so the learner can transfer the skill.",
-  }),
-  {
-    id: "builtin:action:lesson_from_conversation",
-    kind: "action",
-    scope: "session",
-    label: "变成专项课",
-    description: "基于当前会话生成一个专项课,并新开课堂继续练。",
-    card: {
-      title: "变成专项课",
-      description: "把当前聊天里的问题和目标整理成一个可复用专项课。",
-      timing: "用户点击",
-      reads: "当前会话历史 · 语言配置",
-      writes: "创建一个专项课 Agent + 一个专项课会话",
-      canDisable: true,
-    },
-    run: async (ctx) => {
-      const provider = await getProvider();
-      if (!provider) throw new Error("未配置 API key,请到设置页填写");
-      const config = loadConfig();
-      const turns = await getTurnsAfterId(ctx.conversationId, null);
-      const history = formatTurns(turns);
-      const draft = await generateLearningAgentDraft(
-        provider,
-        `Create a focused lesson agent from this conversation. Identify the most useful practice theme, recurring mistakes, and next drill. Keep it practical and interactive.\n\n=== CONVERSATION ===\n${history || "(empty)"}`,
-        {
-          nativeLanguage: config.nativeLanguage,
-          targetLanguage: config.targetLanguage,
-          level: config.level,
-        },
-      );
-      const agentId = await createLearningAgent(draft);
-      const conversationId = await createConversation(draft.name, undefined, {
-        kind: "learning_agent",
-        learningAgentId: agentId,
-      });
-      return { navigateTo: conversationId };
-    },
   },
 ];
 
+const LESSON_FROM_CONVERSATION_ID = "builtin:action:lesson_from_conversation";
+const LESSON_FROM_CONVERSATION_DEFAULTS = {
+  label: "变成专项课",
+  description: "把当前聊天里的问题和目标整理成一个可复用专项课。",
+  objective:
+    "Create a focused lesson agent from this conversation. Identify the most useful practice theme, recurring mistakes, and next drill. Keep it practical and interactive.",
+};
+
+const lessonFromConversation: ActionAgent = {
+  id: LESSON_FROM_CONVERSATION_ID,
+  kind: "action",
+  scope: "session",
+  label: LESSON_FROM_CONVERSATION_DEFAULTS.label,
+  description: "基于当前会话生成一个专项课,并新开课堂继续练。",
+  card: {
+    title: LESSON_FROM_CONVERSATION_DEFAULTS.label,
+    description: LESSON_FROM_CONVERSATION_DEFAULTS.description,
+    timing: "用户点击",
+    reads: "当前会话历史 · 语言配置",
+    writes: "创建一个专项课 Agent + 一个专项课会话",
+    canDisable: true,
+  },
+  run: async (ctx) => {
+    const provider = await getProvider();
+    if (!provider) throw new Error("未配置 API key,请到设置页填写");
+    const config = loadConfig();
+    const turns = await getTurnsAfterId(ctx.conversationId, null);
+    const history = formatTurns(turns);
+    const instruction =
+      getBuiltinActionOverride(LESSON_FROM_CONVERSATION_ID)?.objective ??
+      LESSON_FROM_CONVERSATION_DEFAULTS.objective;
+    const draft = await generateLearningAgentDraft(
+      provider,
+      `${instruction}\n\n=== CONVERSATION ===\n${history || "(empty)"}`,
+      {
+        nativeLanguage: config.nativeLanguage,
+        targetLanguage: config.targetLanguage,
+        level: config.level,
+      },
+    );
+    const agentId = await createLearningAgent(draft);
+    const conversationId = await createConversation(draft.name, undefined, {
+      kind: "learning_agent",
+      learningAgentId: agentId,
+    });
+    return { navigateTo: conversationId };
+  },
+};
+
+const branchActions: ActionAgent[] = [
+  ...derivationSpecs.map(makeDerivationAction),
+  lessonFromConversation,
+];
+
 for (const action of branchActions) registerAction(action);
+
+// 能力库可编辑的内置对话衍生动作:默认 label/description/objective,供 UI 预填与「恢复默认」。
+// objective 即喂给衍生 Agent 的 prompt(专项课则是生成课程草案的指令)。
+export interface BuiltinActionDefault {
+  label: string;
+  description: string;
+  objective: string;
+}
+
+export const BUILTIN_ACTION_DEFAULTS: Record<string, BuiltinActionDefault> = {
+  ...Object.fromEntries(
+    derivationSpecs.map((spec) => [
+      spec.id,
+      {
+        label: spec.label,
+        description: spec.description,
+        objective: spec.objective,
+      },
+    ]),
+  ),
+  [LESSON_FROM_CONVERSATION_ID]: LESSON_FROM_CONVERSATION_DEFAULTS,
+};

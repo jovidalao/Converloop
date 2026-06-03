@@ -1,10 +1,11 @@
 import {
   DownloadIcon,
+  PencilIcon,
   PlusIcon,
   RefreshCwIcon,
   UploadIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import {
   defaultAgentOutputSchema,
@@ -16,18 +17,24 @@ import { listAgentJobs } from "../db/agent-jobs";
 import {
   createLearningAgent,
   DATA_SCOPE_LABELS,
+  getLearningAgent,
   LEARNING_DATA_SCOPES,
   type LearningAgentKind,
   type LearningAgentWritebackPolicy,
   type LearningDataScope,
+  updateLearningAgent,
 } from "../db/learning-agents";
 import type { AgentJob } from "../db/schema";
 import {
   type AgentCatalogEntry,
   type AgentKind,
+  BUILTIN_ACTION_DEFAULTS,
+  clearBuiltinActionOverride,
+  getBuiltinActionOverride,
   listAgentCatalog,
   reloadCustomRuntimeAgents,
   setAgentEnabled,
+  setBuiltinActionOverride,
 } from "../runtime";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -95,17 +102,107 @@ function timeLabel(ts: number): string {
   return new Date(ts).toLocaleString();
 }
 
+// 内置对话衍生动作的就地编辑器:改名称/说明/prompt。prompt 即喂给衍生 Agent 的目标指令,
+// 会拼到固定的系统 prompt 后面。保存写改写层(localStorage),「恢复默认」清掉改写。
+function BuiltinActionEditor({
+  id,
+  onDone,
+  onCancel,
+}: {
+  id: string;
+  onDone: () => void;
+  onCancel: () => void;
+}) {
+  const def = BUILTIN_ACTION_DEFAULTS[id];
+  const ov = getBuiltinActionOverride(id);
+  const [label, setLabel] = useState(ov?.label ?? def.label);
+  const [description, setDescription] = useState(
+    ov?.description ?? def.description,
+  );
+  const [objective, setObjective] = useState(ov?.objective ?? def.objective);
+  const overridden = Boolean(ov);
+
+  function save() {
+    setBuiltinActionOverride(id, { label, description, objective });
+    onDone();
+  }
+
+  function reset() {
+    clearBuiltinActionOverride(id);
+    onDone();
+  }
+
+  return (
+    <div className="mt-1 flex flex-col gap-2 rounded-md border bg-background p-3">
+      <div className="flex flex-col gap-1">
+        <span className="text-xs text-muted-foreground">名称</span>
+        <Input value={label} onChange={(e) => setLabel(e.target.value)} />
+      </div>
+      <div className="flex flex-col gap-1">
+        <span className="text-xs text-muted-foreground">说明</span>
+        <Input
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+        />
+      </div>
+      <div className="flex flex-col gap-1">
+        <span className="text-xs text-muted-foreground">
+          Prompt(给衍生 Agent 的目标指令)
+        </span>
+        <Textarea
+          value={objective}
+          onChange={(e) => setObjective(e.target.value)}
+          className="min-h-28 resize-y font-mono text-xs leading-relaxed"
+        />
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          size="sm"
+          onClick={save}
+          disabled={!label.trim() || !objective.trim()}
+        >
+          保存
+        </Button>
+        <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
+          取消
+        </Button>
+        {overridden && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="ml-auto text-muted-foreground"
+            onClick={reset}
+          >
+            恢复默认
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function AgentRow({
   entry,
   onToggle,
   onExport,
+  onEdit,
+  builtinEditing,
+  onToggleBuiltinEdit,
+  onBuiltinSaved,
 }: {
   entry: AgentCatalogEntry;
   onToggle: (id: string, enabled: boolean) => void;
   onExport: (id: string) => void;
+  onEdit: (id: string) => void;
+  builtinEditing: boolean;
+  onToggleBuiltinEdit: (id: string) => void;
+  onBuiltinSaved: () => void;
 }) {
   const card = entry.card;
   const custom = entry.id.startsWith("custom:");
+  const editableBuiltin = !custom && entry.id in BUILTIN_ACTION_DEFAULTS;
   return (
     <div className="flex flex-col gap-2.5 rounded-lg border bg-card p-3.5">
       <div className="flex items-start gap-3">
@@ -144,16 +241,45 @@ function AgentRow({
         </dl>
       )}
       {custom && (
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => onEdit(entry.id)}
+          >
+            <PencilIcon size={14} />
+            编辑
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => onExport(entry.id)}
+          >
+            <DownloadIcon size={14} />
+            导出包
+          </Button>
+        </div>
+      )}
+      {editableBuiltin && !builtinEditing && (
         <Button
           type="button"
           variant="outline"
           size="sm"
           className="self-start"
-          onClick={() => onExport(entry.id)}
+          onClick={() => onToggleBuiltinEdit(entry.id)}
         >
-          <DownloadIcon size={14} />
-          导出包
+          <PencilIcon size={14} />
+          编辑
         </Button>
+      )}
+      {editableBuiltin && builtinEditing && (
+        <BuiltinActionEditor
+          id={entry.id}
+          onDone={onBuiltinSaved}
+          onCancel={() => onToggleBuiltinEdit(entry.id)}
+        />
       )}
     </div>
   );
@@ -184,10 +310,13 @@ export function AgentLibraryView() {
   ]);
   const [writebackPolicy, setWritebackPolicy] =
     useState<LearningAgentWritebackPolicy>("none");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [builtinEditId, setBuiltinEditId] = useState<string | null>(null);
   const [packageText, setPackageText] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const formRef = useRef<HTMLElement>(null);
 
   const refreshJobs = useCallback(() => {
     void listAgentJobs(60).then(setJobs);
@@ -217,29 +346,75 @@ export function AgentLibraryView() {
     );
   }
 
-  async function createCustomAgent() {
+  function resetForm() {
+    setEditingId(null);
+    setKind("observer");
+    setName("");
+    setDescription("");
+    setPrompt("");
+    setScopes(["profile", "weak_all"]);
+    setWritebackPolicy("none");
+  }
+
+  async function startEdit(entryId: string) {
+    setError(null);
+    setMessage(null);
+    try {
+      const agent = await getLearningAgent(entryId.replace(/^custom:/, ""));
+      if (!agent) {
+        setError("找不到这个自定义 Agent。");
+        return;
+      }
+      setEditingId(agent.id);
+      setKind(agent.kind === "action" ? "action" : "observer");
+      setName(agent.name);
+      setDescription(agent.description);
+      setPrompt(agent.prompt);
+      setScopes(agent.dataScopes.length ? agent.dataScopes : ["weak_all"]);
+      setWritebackPolicy(agent.writebackPolicy);
+      formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  async function submitCustomAgent() {
     if (!name.trim() || !prompt.trim() || busy) return;
     setBusy(true);
     setError(null);
     setMessage(null);
     try {
-      await createLearningAgent({
-        name,
-        description: description.trim() || name,
-        prompt,
-        kind,
-        hook: hookForKind(kind),
-        dataScopes: scopes,
-        allowedTools: ["read_learning_data"],
-        writebackPolicy: kind === "observer" ? writebackPolicy : "none",
-        outputSchema: defaultAgentOutputSchema(kind),
-        enabled: true,
-      });
-      setName("");
-      setDescription("");
-      setPrompt("");
-      await refreshCatalog();
-      setMessage("自定义 Agent 已创建并启用。");
+      if (editingId) {
+        await updateLearningAgent(editingId, {
+          name,
+          description: description.trim() || name,
+          prompt,
+          kind,
+          hook: hookForKind(kind),
+          dataScopes: scopes,
+          writebackPolicy: kind === "observer" ? writebackPolicy : "none",
+          outputSchema: defaultAgentOutputSchema(kind),
+        });
+        resetForm();
+        await refreshCatalog();
+        setMessage("自定义 Agent 已更新。");
+      } else {
+        await createLearningAgent({
+          name,
+          description: description.trim() || name,
+          prompt,
+          kind,
+          hook: hookForKind(kind),
+          dataScopes: scopes,
+          allowedTools: ["read_learning_data"],
+          writebackPolicy: kind === "observer" ? writebackPolicy : "none",
+          outputSchema: defaultAgentOutputSchema(kind),
+          enabled: true,
+        });
+        resetForm();
+        await refreshCatalog();
+        setMessage("自定义 Agent 已创建并启用。");
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -299,8 +474,10 @@ export function AgentLibraryView() {
         关闭一个能力只影响它自己,不会改动你的学习数据。
       </p>
 
-      <section className="mb-6 rounded-lg border bg-card p-3.5">
-        <h3 className="m-0 mb-2 text-sm font-semibold">创建自定义 Agent</h3>
+      <section ref={formRef} className="mb-6 rounded-lg border bg-card p-3.5">
+        <h3 className="m-0 mb-2 text-sm font-semibold">
+          {editingId ? "编辑自定义 Agent" : "创建自定义 Agent"}
+        </h3>
         <div className="grid gap-2 md:grid-cols-2">
           <Input
             value={name}
@@ -370,16 +547,28 @@ export function AgentLibraryView() {
           }
           className="mt-2 min-h-28 resize-y font-mono text-xs leading-relaxed"
         />
-        <Button
-          type="button"
-          size="sm"
-          className="mt-2"
-          onClick={() => void createCustomAgent()}
-          disabled={busy || !name.trim() || !prompt.trim()}
-        >
-          <PlusIcon size={14} />
-          创建并启用
-        </Button>
+        <div className="mt-2 flex gap-2">
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => void submitCustomAgent()}
+            disabled={busy || !name.trim() || !prompt.trim()}
+          >
+            {editingId ? <PencilIcon size={14} /> : <PlusIcon size={14} />}
+            {editingId ? "保存修改" : "创建并启用"}
+          </Button>
+          {editingId && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={resetForm}
+              disabled={busy}
+            >
+              取消
+            </Button>
+          )}
+        </div>
       </section>
 
       <div className="flex flex-col gap-5">
@@ -394,6 +583,16 @@ export function AgentLibraryView() {
                 entry={entry}
                 onToggle={toggle}
                 onExport={exportPackage}
+                onEdit={(id) => void startEdit(id)}
+                builtinEditing={builtinEditId === entry.id}
+                onToggleBuiltinEdit={(id) =>
+                  setBuiltinEditId((cur) => (cur === id ? null : id))
+                }
+                onBuiltinSaved={() => {
+                  setBuiltinEditId(null);
+                  setCatalog(listAgentCatalog());
+                  setMessage("内置动作已更新。");
+                }}
               />
             ))}
           </section>
