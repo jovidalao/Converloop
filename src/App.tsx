@@ -288,7 +288,11 @@ function App() {
             ? "能力库"
             : view === "settings"
               ? "设置"
-              : "";
+              : view === "chat"
+                ? draftActive
+                  ? "新对话"
+                  : (activeConversation?.title ?? "")
+                : "";
 
   return (
     <div
