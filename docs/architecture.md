@@ -69,7 +69,7 @@ AI 语言学习 agent —— 第一版范围、数据流、存储与现状。Age
 
 migration 定义在 **Rust 侧**(`src-tauri/src/lib.rs`,`tauri_plugin_sql::Builder::add_migrations`),`Database.load()` 时触发。Drizzle 只做类型安全查询,不接管 migration —— TS 侧 `src/db/schema.ts` **手动镜像** Rust 的建表,两边保持一致。
 
-当前 21 个 migration:
+当前 31 个 migration:
 
 | ver | 描述 | 表 / 变更 |
 |---|---|---|
@@ -94,6 +94,16 @@ migration 定义在 **Rust 侧**(`src-tauri/src/lib.rs`,`tauri_plugin_sql::Build
 | 19 | add_learning_agent_output_schema_json | `learning_agent.output_schema_json` |
 | 20 | create_agent_job | `agent_job` |
 | 21 | create_learning_project | `learning_project` |
+| 22 | add_agent_job_turn_id | `agent_job.turn_id` |
+| 23 | add_conversation_parent_id | `conversation.parent_conversation_id` |
+| 24 | add_conversation_branch_source_turn_id | `conversation.branch_source_turn_id` |
+| 25 | add_conversation_branch_kind | `conversation.branch_kind` |
+| 26 | add_conversation_agent_modifiers_json | `conversation.agent_modifiers_json` |
+| 27 | add_learning_agent_kind | `learning_agent.kind` |
+| 28 | add_learning_agent_hook | `learning_agent.hook` |
+| 29 | add_learning_agent_enabled | `learning_agent.enabled` |
+| 30 | create_turn_annotation | `turn_annotation` |
+| 31 | create_memory_proposal | `memory_proposal` |
 
 ### `mastery_item`(掌握项,起点,别一上来搞知识追踪)
 
@@ -149,7 +159,7 @@ migration 定义在 **Rust 侧**(`src-tauri/src/lib.rs`,`tauri_plugin_sql::Build
 
 `conversation`(侧边栏列表,ChatGPT 式:首条消息后标题改成截断的输入)+ `turn`(每轮 input/reply/analysis JSON,挂在 conversation 下)。`conversation.kind` 区分普通练习与 `learning_agent` 专项课会话;专项课用 `learning_agent_id` 找到对应老师 prompt。代码在 `src/db/{conversations,turns}.ts`。
 
-### `learning_agent`(定制化学习 Agent / 专项课)
+### `learning_agent`(定制化学习 Agent / 自定义 Runtime Agent)
 
 ```ts
 {
@@ -158,6 +168,9 @@ migration 定义在 **Rust 侧**(`src-tauri/src/lib.rs`,`tauri_plugin_sql::Build
   description: string
   prompt: string
   data_scope_json: string // profile / weak_all / weak_grammar / expression_gaps / today_turns / due_review / proficiency
+  kind: 'lesson' | 'observer' | 'action'
+  hook?: 'conversation.observe' | 'conversation.action'
+  enabled: number
   version: number
   allowed_tools_json: string // v1: [] 或 ["read_learning_data"]
   writeback_policy: 'none' | 'propose_review_signals'
@@ -168,7 +181,27 @@ migration 定义在 **Rust 侧**(`src-tauri/src/lib.rs`,`tauri_plugin_sql::Build
 }
 ```
 
-专项课不跑普通 Tutor Agent,因此不会把用户在课堂里的母语问题误记成表达缺口;老师直接在聊天中解释和反馈。详见 [learning-agent.md](./learning-agent.md)。
+`kind="lesson"` 是专项课:不跑普通 Tutor Agent,因此不会把用户在课堂里的母语问题误记成表达缺口;老师直接在聊天中解释和反馈。`kind="observer" | "action"` 是自定义 Runtime Agent:启动 / 刷新时由 `reloadCustomRuntimeAgents()` 从 DB 加载进内存注册表。observer 输出只写 `turn_annotation`;若 `writeback_policy="propose_review_signals"`,只能创建 `memory_proposal`,等待用户确认后由代码执行有限数据操作。详见 [learning-agent.md](./learning-agent.md) 与 [agent-runtime-plan.md](./agent-runtime-plan.md)。
+
+### `turn_annotation` / `memory_proposal`(自定义 Agent 可见产物)
+
+`turn_annotation` 把自定义 observer 的结果挂到某一轮,供 Coach Panel 展示,不污染主 `turn.analysis_json`。
+
+`memory_proposal` 是待确认的学习数据写入队列:
+
+```ts
+{
+  id: string
+  status: 'pending' | 'applied' | 'dismissed'
+  agent_id: string
+  turn_id?: string
+  summary: string
+  operations_json: string // create/update/delete mastery item 的有限操作
+  result_json?: string
+}
+```
+
+确认时走 `applyDataEditOperations`:代码校验 key/type/status/action,只允许 create/update/delete/状态修改,不允许 Agent 改计数、密钥或 provider 设置。
 
 ### `agent_job` / `learning_project`(Task Agent 任务层)
 
@@ -259,7 +292,7 @@ provider 解析全在 TS;**LLM HTTP 走 Rust**(`src-tauri/src/llm.rs` 的 `llm_r
 
 ## 按需讲解(Explain Agent)
 
-不在热路径。用户点对话回复上的「讲解」按钮时触发(`orchestrator.explainReply` → `agents/explain.ts` → `components/ReplyExplanation.tsx`)。它和对话 agent **同源读 MD 档案切片**,据此判断"这个学习者大概哪里看不懂",只讲该讲的,用**母语**流式输出,不讲显而易见的。**侧重语法结构 / 习语 / 地道用法等逐词读不出来的部分,不逐词解释单词**(单词让学习者自己查,除非在此处含义不显)。
+不在热路径。用户点对话回复上的「讲解」按钮时触发(`orchestrator.explainReply` → `agents/explain.ts` → `components/ReplyExplanation.tsx`)。它和对话 agent **同源读 MD 档案切片**,据此判断"这个学习者大概哪里看不懂",只讲该讲的,用**母语**流式输出,不讲显而易见的。**侧重语法结构 / 习语 / 地道用法等逐词读不出来的部分,不逐词解释单词**(单词让学习者自己查,除非在此处含义不显)。按需讲解 / 双语阅读 / 划词解析作为 `transformer` 登记进能力库;调用时经 `runTransformer` 记录 `agent_job` 运行日志,但不持久化生成的正文。
 
 ## 朗读(TTS)
 
@@ -293,7 +326,9 @@ v1 核心链路已完成并可用:
 - ✅ 最小 UI:聊天 / 批改面板 / 档案查看编辑(含 AI 自定义偏好) / 学习数据管理 / 设置(provider + key + TTS)
 - ✅ 教练面板(Agent-first Phase 2):右栏常驻 Coach Panel,展示本轮反馈 + 本轮「系统记下了什么」(`deriveSignals` 同源);三栏工作台布局(侧栏 / 对话 / 教练),窄屏降级为抽屉。详见 [agent-runtime-plan.md](./agent-runtime-plan.md)
 - ✅ 会话动作 + 分支(Agent-first Phase 3):`conversation.action` action Agent(从此处分支 / 重新开始 / 升降难度 / 调换角色 / 第二天继续)非破坏式派生分支(`createBranch`,`conversation` 加 parent/branch_kind/agent_modifiers 列,migration v23–v26),修饰符经 `SESSION ADJUSTMENTS` 注入对话回复;动作条与按钮由注册表驱动。详见 [agent-runtime-plan.md](./agent-runtime-plan.md)
-- ✅ Agent 能力库(Agent-first Phase 4):能力库页(侧栏 → 能力库)按 kind 展示注册表里的内置 Agent(做什么/时机/读写)、启用/禁用(`runtime/enablement.ts`,localStorage)、运行日志(`agent_job`)。能力库真相源是内存注册表,未把代码 Agent 同步进 DB。详见 [agent-runtime-plan.md](./agent-runtime-plan.md)
+- ✅ Agent 能力库(Agent-first Phase 4):能力库页(侧栏 → 能力库)按 kind 展示注册表里的内置 Agent(做什么/时机/读写)、启用/禁用(`runtime/enablement.ts`,localStorage)、运行日志(`agent_job`)。按需讲解 / 双语阅读 / 划词解析也作为不可关闭的 `transformer` 能力展示并记录运行日志。能力库真相源是内存注册表,未把代码 Agent 同步进 DB。详见 [agent-runtime-plan.md](./agent-runtime-plan.md)
+- ✅ 自定义 Agent(Agent-first Phase 5):能力库提供 6 问式 prompt Agent 创建(observer/action)。observer 每轮产出 `turn_annotation` 并可提出 `memory_proposal`;Coach Panel 展示自定义观察和待确认记忆,确认后由代码执行有限数据操作。action 通过 LLM 生成分支指令并创建非破坏式分支;内置「变成专项课」动作可从当前会话生成专项课并跳转。
+- ✅ 开发者 package(Agent-first Phase 6):能力库支持导入/导出 `lang-agent.agent-package` JSON,包含 agent 元数据、`prompt.md`、`schema.json`、`examples.json`,导入前展示读取/写入权限预览并校验白名单。
 
 **下一步(未实现):**
 

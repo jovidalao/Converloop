@@ -21,6 +21,7 @@ export const HOOKS = {
   conversationIdle: "conversation.idle",
   conversationEnd: "conversation.end",
   turnExplain: "turn.explain",
+  turnBilingual: "turn.bilingual",
   turnTranslate: "turn.translate",
   profileMaintain: "profile.maintain",
 } as const;
@@ -158,4 +159,11 @@ export interface ActionAgent {
   description?: string;
   card?: AgentCard;
   run: (ctx: ActionContext) => Promise<ActionResult>;
+}
+
+// 按需 transformer(讲解 / 双语 / 划词):由 orchestrator 在调用点直接跑 + 经 runLogged 记日志,
+// 不走热路径派发。这里只登记元信息供能力库展示(始终可用,不做开关)。
+export interface TransformerInfo {
+  id: string;
+  card: AgentCard;
 }

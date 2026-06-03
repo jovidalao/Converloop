@@ -4,6 +4,7 @@ import {
   CheckIcon,
   LanguagesIcon,
 } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { useConfig } from "../config";
 import {
@@ -11,14 +12,24 @@ import {
   type MasteryType,
   type SignalKind,
 } from "../db/mastery-logic";
+import {
+  applyMemoryProposal,
+  dismissMemoryProposal,
+  listPendingMemoryProposals,
+  memoryProposalOperations,
+} from "../db/memory-proposals";
+import type { MemoryProposal, TurnAnnotation } from "../db/schema";
+import { listTurnAnnotations } from "../db/turn-annotations";
 import type { ChatTurn } from "../db/turns";
 import {
   CATEGORY_LABEL,
   SEVERITY_COLOR,
   SEVERITY_LABEL,
 } from "./InlineCorrection";
+import { Markdown } from "./Markdown";
 import type { MainView } from "./Sidebar";
 import { SpeakableText } from "./SpeakButton";
+import { Button } from "./ui/button";
 import { Spinner } from "./ui/spinner";
 
 // 教练面板:把散在气泡里的批改 + 系统「记下了什么」收拢到右栏,常驻可见。
@@ -279,6 +290,105 @@ function TurnMemory({ turn }: { turn: ChatTurn }) {
   );
 }
 
+function CustomObservations({ items }: { items: TurnAnnotation[] }) {
+  if (items.length === 0) return null;
+  return (
+    <ul className="m-0 flex list-none flex-col gap-2 p-0">
+      {items.map((item) => (
+        <li key={item.id} className="rounded-lg border bg-card p-3 text-sm">
+          <div className="mb-1.5 font-semibold">{item.title}</div>
+          <Markdown className="text-sm leading-relaxed">{item.bodyMd}</Markdown>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function MemoryProposals({
+  items,
+  onChanged,
+}: {
+  items: MemoryProposal[];
+  onChanged: () => void;
+}) {
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+
+  async function apply(id: string) {
+    setBusyId(id);
+    setMessage(null);
+    try {
+      const result = await applyMemoryProposal(id);
+      setMessage(`已应用 ${result.applied} 条。`);
+      onChanged();
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function dismiss(id: string) {
+    setBusyId(id);
+    setMessage(null);
+    try {
+      await dismissMemoryProposal(id);
+      onChanged();
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  if (items.length === 0) {
+    return (
+      <p className="m-0 text-sm text-muted-foreground">
+        没有待确认的写入建议。
+      </p>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      {items.map((item) => {
+        const ops = memoryProposalOperations(item);
+        return (
+          <div key={item.id} className="rounded-lg border bg-card p-3 text-sm">
+            <div className="font-semibold">{item.summary}</div>
+            <ul className="my-2 flex list-none flex-col gap-1 p-0 text-xs text-muted-foreground">
+              {ops.map((op, i) => (
+                <li key={`${op.action}:${op.key}:${i}`}>
+                  {op.action} · {op.key}
+                  {op.label ? ` · ${op.label}` : ""}
+                </li>
+              ))}
+            </ul>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                disabled={busyId === item.id}
+                onClick={() => void apply(item.id)}
+              >
+                确认写入
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                disabled={busyId === item.id}
+                onClick={() => void dismiss(item.id)}
+              >
+                忽略
+              </Button>
+            </div>
+          </div>
+        );
+      })}
+      {message && <p className="m-0 text-xs text-success">{message}</p>}
+    </div>
+  );
+}
+
 export function CoachPanel({
   turn,
   onOpenView,
@@ -287,6 +397,32 @@ export function CoachPanel({
   onOpenView?: (view: MainView) => void;
 }) {
   const { nativeLanguage } = useConfig();
+  const [annotations, setAnnotations] = useState<TurnAnnotation[]>([]);
+  const [proposals, setProposals] = useState<MemoryProposal[]>([]);
+
+  const refreshExtras = useCallback(() => {
+    const turnId = turn?.id;
+    if (!turnId) {
+      setAnnotations([]);
+      setProposals([]);
+      return;
+    }
+    void Promise.all([
+      listTurnAnnotations(turnId),
+      listPendingMemoryProposals(turnId),
+    ]).then(([nextAnnotations, nextProposals]) => {
+      setAnnotations(nextAnnotations);
+      setProposals(nextProposals);
+    });
+  }, [turn?.id]);
+
+  useEffect(() => {
+    refreshExtras();
+    if (!turn?.id) return;
+    const timer = window.setInterval(refreshExtras, 1500);
+    return () => window.clearInterval(timer);
+  }, [turn?.id, refreshExtras]);
+
   return (
     <div className="codex-coach-content flex h-full min-h-0 flex-col">
       <div className="flex shrink-0 items-center gap-1.5 border-b px-4 py-3">
@@ -313,6 +449,14 @@ export function CoachPanel({
                 查看全部学习数据
                 <ArrowRightIcon size={12} />
               </button>
+            </Section>
+            {annotations.length > 0 && (
+              <Section title="自定义观察">
+                <CustomObservations items={annotations} />
+              </Section>
+            )}
+            <Section title="待确认记忆">
+              <MemoryProposals items={proposals} onChanged={refreshExtras} />
             </Section>
           </>
         )}

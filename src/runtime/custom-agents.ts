@@ -1,0 +1,278 @@
+import { z } from "zod";
+import { zodToJsonSchema } from "zod-to-json-schema";
+import type { DataEditOperation as DataEditOperationType } from "../agents/data-editor";
+import { parseLLMJson } from "../agents/parse-llm-json";
+import { getProvider, loadConfig } from "../config";
+import { createBranch, getConversation } from "../db/conversations";
+import {
+  type LearningAgentMeta,
+  listRuntimeLearningAgents,
+} from "../db/learning-agents";
+import { createMemoryProposal } from "../db/memory-proposals";
+import { createTurnAnnotation } from "../db/turn-annotations";
+import { formatTurns, getTurnsAfterId } from "../db/turns";
+import { buildLearningDataContext } from "../learning-data";
+import type { ChatMessage } from "../providers/types";
+import { replaceCustomRuntimeAgents } from "./registry";
+import type { ActionAgent, Observer, PracticeContext } from "./types";
+
+const DataEditOperation = z.object({
+  action: z.enum(["update", "delete", "create"]),
+  key: z.string().min(1),
+  label: z.string().optional(),
+  type: z
+    .enum([
+      "vocab",
+      "grammar",
+      "collocation",
+      "error_pattern",
+      "expression_gap",
+    ])
+    .optional(),
+  status: z.enum(["struggling", "learning", "known"]).optional(),
+  example: z.string().nullable().optional(),
+  notes: z.string().nullable().optional(),
+});
+
+const CustomObserverOutput = z.object({
+  title: z.string().min(1),
+  body_md: z.string().min(1),
+  proposal_summary: z.string().optional(),
+  memory_proposals: z.array(DataEditOperation).optional().default([]),
+});
+
+const CustomActionOutput = z.object({
+  branch_title: z.string().optional(),
+  instruction: z.string().min(1),
+  copy_history: z.enum(["all", "none"]).optional().default("all"),
+});
+
+function jsonSchema(
+  name: string,
+  schema: z.ZodTypeAny,
+): { name: string; schema: Record<string, unknown> } {
+  const raw = zodToJsonSchema(schema, {
+    target: "jsonSchema7",
+    $refStrategy: "none",
+  }) as Record<string, unknown>;
+  delete raw.$schema;
+  return { name, schema: raw };
+}
+
+function parseStructured<T>(
+  raw: string,
+  schema: z.ZodType<T>,
+  label: string,
+): T {
+  const parsed = parseLLMJson(raw);
+  if (!parsed.ok) throw new Error(parsed.error);
+  const validated = schema.safeParse(parsed.value);
+  if (!validated.success)
+    throw new Error(
+      `${label} 输出校验失败: ${validated.error.issues
+        .map((issue) => `${issue.path.join(".") || "root"}: ${issue.message}`)
+        .join("; ")}`,
+    );
+  return validated.data;
+}
+
+function customId(agent: LearningAgentMeta): string {
+  return `custom:${agent.id}`;
+}
+
+function formatDataContext(dataContext: string): string {
+  return dataContext.trim() || "(no learning data granted)";
+}
+
+async function runCustomObserver(
+  agent: LearningAgentMeta,
+  ctx: PracticeContext,
+): Promise<void> {
+  let turnId: string;
+  try {
+    turnId = await ctx.turnPersisted;
+  } catch {
+    return;
+  }
+
+  const dataContext = await buildLearningDataContext(agent, loadConfig());
+  const messages: ChatMessage[] = [
+    {
+      role: "system",
+      content: `You are a custom observer agent in a language-learning app.
+
+Your job is to inspect the learner's current message and produce a short visible note for the Coach Panel.
+Follow the user's custom agent instructions exactly, but stay inside the output schema.
+
+Rules:
+- Return JSON only.
+- Do not claim you changed learning memory directly.
+- If you suggest memory writes, put them in memory_proposals using only create/update/delete operations.
+- Use the learner's native language for explanations unless the custom instructions say otherwise.
+
+=== CUSTOM AGENT INSTRUCTIONS ===
+${agent.prompt}`,
+    },
+    {
+      role: "user",
+      content: `=== LANGUAGES ===
+Native: ${ctx.langs.nativeLanguage}
+Target: ${ctx.langs.targetLanguage}
+Level: ${ctx.langs.level}
+
+=== LEARNING DATA YOU MAY READ ===
+${formatDataContext(dataContext)}
+
+=== RECENT CONVERSATION ===
+${ctx.tutorHistory || "(none)"}
+
+=== CURRENT USER MESSAGE ===
+${ctx.userInput}`,
+    },
+  ];
+
+  const raw = await ctx.provider.generate({
+    messages,
+    temperature: 0.2,
+    maxTokens: 2048,
+    jsonSchema: jsonSchema("CustomObserverOutput", CustomObserverOutput),
+    meta: { label: agent.id },
+  });
+  const output = parseStructured(raw, CustomObserverOutput, agent.name);
+  await createTurnAnnotation({
+    turnId,
+    agentId: customId(agent),
+    title: output.title,
+    bodyMd: output.body_md,
+    payload: output,
+  });
+  const proposals = (output.memory_proposals ?? []) as DataEditOperationType[];
+  if (
+    agent.writebackPolicy === "propose_review_signals" &&
+    proposals.length > 0
+  ) {
+    await createMemoryProposal({
+      agentId: customId(agent),
+      turnId,
+      summary: output.proposal_summary ?? output.title,
+      operations: proposals,
+    });
+  }
+}
+
+async function runCustomAction(
+  agent: LearningAgentMeta,
+  ctx: { conversationId: string },
+): Promise<{ navigateTo?: string }> {
+  const provider = await getProvider();
+  if (!provider) throw new Error("未配置 API key,请到设置页填写");
+
+  const config = loadConfig();
+  const [conversation, turns, dataContext] = await Promise.all([
+    getConversation(ctx.conversationId),
+    getTurnsAfterId(ctx.conversationId, null),
+    buildLearningDataContext(agent, config),
+  ]);
+  const title = conversation?.title?.trim() || "对话";
+  const messages: ChatMessage[] = [
+    {
+      role: "system",
+      content: `You are a custom action agent in a language-learning app.
+
+Your job is to turn the user's button click into instructions for a NEW non-destructive conversation branch.
+The app will create the branch; you only return the branch title and instructions for the conversation partner.
+
+Rules:
+- Return JSON only.
+- Do not ask for confirmation.
+- Keep instruction concrete and executable by the conversation agent.
+- Do not request changes to model keys, provider settings, or hidden counters.
+
+=== CUSTOM ACTION INSTRUCTIONS ===
+${agent.prompt}`,
+    },
+    {
+      role: "user",
+      content: `=== LANGUAGES ===
+Native: ${config.nativeLanguage}
+Target: ${config.targetLanguage}
+Level: ${config.level}
+
+=== LEARNING DATA YOU MAY READ ===
+${formatDataContext(dataContext)}
+
+=== CURRENT CONVERSATION ===
+${formatTurns(turns) || "(empty conversation)"}`,
+    },
+  ];
+
+  const raw = await provider.generate({
+    messages,
+    temperature: 0.2,
+    maxTokens: 1024,
+    jsonSchema: jsonSchema("CustomActionOutput", CustomActionOutput),
+    meta: { label: agent.id },
+  });
+  const output = parseStructured(raw, CustomActionOutput, agent.name);
+  const branchTitle = output.branch_title?.trim() || `${title} · ${agent.name}`;
+  const note = output.instruction.trim();
+  const newId = await createBranch({
+    parentId: ctx.conversationId,
+    branchKind: "custom_action",
+    title: branchTitle,
+    modifiers: {
+      note: `${agent.name}: ${note}`,
+    },
+    copyTurns: output.copy_history === "none" ? "none" : "all",
+    sourceTurnId: null,
+  });
+  return { navigateTo: newId };
+}
+
+function observerFromAgent(agent: LearningAgentMeta): Observer {
+  return {
+    id: customId(agent),
+    kind: "observer",
+    card: {
+      title: agent.name,
+      description: agent.description,
+      timing: "每轮普通练习后 · 自定义观察",
+      reads: "当前输入 · 近期对话 · 授权学习数据",
+      writes:
+        agent.writebackPolicy === "propose_review_signals"
+          ? "可提出学习数据写入建议(需用户确认)"
+          : "只写本轮 annotation",
+      canDisable: true,
+    },
+    run: (ctx) => runCustomObserver(agent, ctx),
+  };
+}
+
+function actionFromAgent(agent: LearningAgentMeta): ActionAgent {
+  return {
+    id: customId(agent),
+    kind: "action",
+    scope: "session",
+    label: agent.name,
+    description: agent.description,
+    card: {
+      title: agent.name,
+      description: agent.description,
+      timing: "用户点击",
+      reads: "当前会话 · 授权学习数据",
+      writes: "新建一个分支会话(不改计数 / 密钥 / 设置)",
+      canDisable: true,
+    },
+    run: (ctx) => runCustomAction(agent, ctx),
+  };
+}
+
+export async function reloadCustomRuntimeAgents(): Promise<void> {
+  const agents = await listRuntimeLearningAgents();
+  replaceCustomRuntimeAgents({
+    observers: agents
+      .filter((a) => a.kind === "observer")
+      .map(observerFromAgent),
+    actions: agents.filter((a) => a.kind === "action").map(actionFromAgent),
+  });
+}

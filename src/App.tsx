@@ -48,6 +48,7 @@ import {
 } from "./db/learning-agents";
 import type { ChatTurn } from "./db/turns";
 import { withViewTransition } from "./lib/view-transition";
+import { reloadCustomRuntimeAgents } from "./runtime";
 
 const SIDEBAR_MIN = 200;
 const SIDEBAR_MAX = 420;
@@ -137,10 +138,10 @@ function App() {
     [],
   );
 
-  const refreshLearningAgents = useCallback(
-    () => listLearningAgents().then(setLearningAgents),
-    [],
-  );
+  const refreshLearningAgents = useCallback(async () => {
+    await reloadCustomRuntimeAgents();
+    setLearningAgents(await listLearningAgents());
+  }, []);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: draftId is only the initial blank chat id; later draft switches must not rerun startup selection.
   useEffect(() => {

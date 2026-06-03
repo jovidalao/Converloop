@@ -14,6 +14,21 @@ export const LEARNING_DATA_SCOPE_VALUES = [
 
 export type LearningDataScope = (typeof LEARNING_DATA_SCOPE_VALUES)[number];
 
+export const LEARNING_AGENT_KIND_VALUES = [
+  "lesson",
+  "observer",
+  "action",
+] as const;
+
+export type LearningAgentKind = (typeof LEARNING_AGENT_KIND_VALUES)[number];
+
+export const RUNTIME_AGENT_HOOK_VALUES = [
+  "conversation.observe",
+  "conversation.action",
+] as const;
+
+export type RuntimeAgentHook = (typeof RUNTIME_AGENT_HOOK_VALUES)[number];
+
 export const LEARNING_AGENT_TOOL_VALUES = ["read_learning_data"] as const;
 
 export type LearningAgentTool = (typeof LEARNING_AGENT_TOOL_VALUES)[number];
@@ -31,6 +46,9 @@ export interface LearningAgentDraft {
   description: string;
   prompt: string;
   dataScopes: LearningDataScope[];
+  kind?: LearningAgentKind;
+  hook?: RuntimeAgentHook | null;
+  enabled?: boolean;
   version?: number;
   allowedTools?: LearningAgentTool[];
   writebackPolicy?: LearningAgentWritebackPolicy;
@@ -39,6 +57,9 @@ export interface LearningAgentDraft {
 
 export interface LearningAgentMeta extends LearningAgent {
   dataScopes: LearningDataScope[];
+  kind: LearningAgentKind;
+  hook: RuntimeAgentHook | null;
+  enabled: number;
   allowedTools: LearningAgentTool[];
   writebackPolicy: LearningAgentWritebackPolicy;
   outputSchema: Record<string, unknown> | null;
@@ -58,6 +79,24 @@ export const LEARNING_DATA_SCOPES = [...LEARNING_DATA_SCOPE_VALUES];
 
 export const DEFAULT_LEARNING_AGENT_VERSION = 1;
 export const DEFAULT_LEARNING_AGENT_WRITEBACK_POLICY = "none";
+
+function normalizeKind(kind: string | undefined): LearningAgentKind {
+  return LEARNING_AGENT_KIND_VALUES.includes(kind as LearningAgentKind)
+    ? (kind as LearningAgentKind)
+    : "lesson";
+}
+
+function normalizeHook(
+  hook: string | null | undefined,
+  kind: LearningAgentKind,
+): RuntimeAgentHook | null {
+  if (kind === "observer") return "conversation.observe";
+  if (kind === "action") return "conversation.action";
+  if (hook && RUNTIME_AGENT_HOOK_VALUES.includes(hook as RuntimeAgentHook)) {
+    return hook as RuntimeAgentHook;
+  }
+  return null;
+}
 
 interface BuiltInAgent extends LearningAgentDraft {
   id: string;
@@ -235,8 +274,11 @@ function serializeOutputSchema(
 }
 
 function hydrate(row: LearningAgent): LearningAgentMeta {
+  const kind = normalizeKind(row.kind);
   return {
     ...row,
+    kind,
+    hook: normalizeHook(row.hook, kind),
     dataScopes: parseScopes(row.dataScopeJson),
     allowedTools: parseTools(row.allowedToolsJson),
     writebackPolicy: normalizeWritebackPolicy(row.writebackPolicy),
@@ -320,6 +362,7 @@ export async function listLearningAgents(): Promise<LearningAgentMeta[]> {
   const rows = await db
     .select()
     .from(learningAgent)
+    .where(eq(learningAgent.kind, "lesson"))
     .orderBy(desc(learningAgent.builtIn), asc(learningAgent.createdAt));
   return rows.map(hydrate);
 }
@@ -340,12 +383,16 @@ export async function createLearningAgent(
   id = crypto.randomUUID(),
 ): Promise<string> {
   const now = Date.now();
+  const kind = normalizeKind(draft.kind);
   await db.insert(learningAgent).values({
     id,
     name: draft.name.trim(),
     description: draft.description.trim(),
     prompt: draft.prompt.trim(),
     dataScopeJson: serializeScopes(draft.dataScopes),
+    kind,
+    hook: normalizeHook(draft.hook, kind),
+    enabled: draft.enabled === false ? 0 : 1,
     version: draft.version ?? DEFAULT_LEARNING_AGENT_VERSION,
     allowedToolsJson: serializeTools(draft.allowedTools),
     writebackPolicy: normalizeWritebackPolicy(draft.writebackPolicy),
@@ -370,6 +417,14 @@ export async function updateLearningAgent(
   if (patch.prompt !== undefined) updates.prompt = patch.prompt.trim();
   if (patch.dataScopes !== undefined)
     updates.dataScopeJson = serializeScopes(patch.dataScopes);
+  if (patch.kind !== undefined) {
+    const kind = normalizeKind(patch.kind);
+    updates.kind = kind;
+    updates.hook = normalizeHook(patch.hook, kind);
+  } else if (patch.hook !== undefined) {
+    updates.hook = normalizeHook(patch.hook, "lesson");
+  }
+  if (patch.enabled !== undefined) updates.enabled = patch.enabled ? 1 : 0;
   if (patch.version !== undefined) updates.version = patch.version;
   if (patch.allowedTools !== undefined)
     updates.allowedToolsJson = serializeTools(patch.allowedTools);
@@ -385,4 +440,27 @@ export async function deleteLearningAgent(id: string): Promise<void> {
   await db
     .delete(learningAgent)
     .where(and(eq(learningAgent.id, id), eq(learningAgent.builtIn, 0)));
+}
+
+export async function listRuntimeLearningAgents(): Promise<
+  LearningAgentMeta[]
+> {
+  const rows = await db
+    .select()
+    .from(learningAgent)
+    .where(eq(learningAgent.enabled, 1))
+    .orderBy(asc(learningAgent.createdAt));
+  return rows
+    .map(hydrate)
+    .filter((a) => a.kind === "observer" || a.kind === "action");
+}
+
+export async function setLearningAgentEnabled(
+  id: string,
+  enabled: boolean,
+): Promise<void> {
+  await db
+    .update(learningAgent)
+    .set({ enabled: enabled ? 1 : 0, updatedAt: Date.now() })
+    .where(eq(learningAgent.id, id));
 }

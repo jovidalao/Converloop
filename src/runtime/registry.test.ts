@@ -5,17 +5,22 @@ import {
   getActions,
   getObservers,
   getReplyProducer,
+  getTransformers,
   registerAction,
   registerObserver,
   registerReplyProducer,
+  registerTransformer,
   runAction,
+  runTransformer,
 } from "./registry";
 import type {
   ActionAgent,
   Observer,
   PracticeContext,
   ReplyProducer,
+  TransformerInfo,
 } from "./types";
+import { HOOKS } from "./types";
 
 // 本测试只验证注册表/派发机制,故直接 import ./registry(不经 ./index,内置 Agent 不会自注册)。
 // 运行日志写入走 DB,在 vitest 里会被 fire-and-forget 的 .catch 吞掉,不影响断言。
@@ -92,5 +97,31 @@ describe("agent runtime registry", () => {
     const result = await runAction("test:action", { conversationId: "c1" });
     expect(ranWith).toBe("c1");
     expect(result.navigateTo).toBe("new-conv-id");
+  });
+
+  it("新注册的 transformer 进入能力目录,runTransformer 调用按需任务", async () => {
+    const transformer: TransformerInfo = {
+      id: "test:transformer",
+      card: {
+        title: "测试转换",
+        description: "测试用",
+        timing: "按需",
+        reads: "测试输入",
+        writes: "无",
+        canDisable: false,
+      },
+    };
+    registerTransformer(transformer);
+    expect(getTransformers().some((t) => t.id === "test:transformer")).toBe(
+      true,
+    );
+
+    const result = await runTransformer(
+      "test:transformer",
+      HOOKS.turnExplain,
+      async () => "done",
+      (text) => ({ chars: text.length }),
+    );
+    expect(result).toBe("done");
   });
 });

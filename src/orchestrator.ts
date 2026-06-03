@@ -39,8 +39,10 @@ import {
   type ConversationCallbacks,
   dispatchObservers,
   dispatchReply,
+  HOOKS,
   type LearningContext,
   type PracticeContext,
+  runTransformer,
 } from "./runtime";
 
 // 回调形状统一定义在 runtime(ConversationCallbacks),这里别名导出保持既有引用。
@@ -432,17 +434,23 @@ export async function explainReply(
   );
   const profileSlice = profileSliceForConversation(profileMd);
 
-  return explain(
-    provider,
-    {
-      nativeLanguage: config.nativeLanguage,
-      targetLanguage: config.targetLanguage,
-      level: config.level,
-      experiencePreferences,
-      profileSlice,
-      reply,
-    },
-    onDelta,
+  return runTransformer(
+    "builtin:transformer:explain",
+    HOOKS.turnExplain,
+    () =>
+      explain(
+        provider,
+        {
+          nativeLanguage: config.nativeLanguage,
+          targetLanguage: config.targetLanguage,
+          level: config.level,
+          experiencePreferences,
+          profileSlice,
+          reply,
+        },
+        onDelta,
+      ),
+    (text) => ({ chars: text.length }),
   );
 }
 
@@ -457,12 +465,18 @@ export async function bilingualReply(reply: string): Promise<string> {
     await readProfile(config),
     "reading",
   );
-  return bilingual(provider, {
-    nativeLanguage: config.nativeLanguage,
-    targetLanguage: config.targetLanguage,
-    experiencePreferences,
-    reply,
-  });
+  return runTransformer(
+    "builtin:transformer:bilingual",
+    HOOKS.turnBilingual,
+    () =>
+      bilingual(provider, {
+        nativeLanguage: config.nativeLanguage,
+        targetLanguage: config.targetLanguage,
+        experiencePreferences,
+        reply,
+      }),
+    (text) => ({ chars: text.length }),
+  );
 }
 
 // 划词翻译/解析:对话里选中一段文字,结合所在语境流式输出母语解析。
@@ -480,15 +494,21 @@ export async function translateSelection(
     await readProfile(config),
     "reading",
   );
-  return translate(
-    provider,
-    {
-      nativeLanguage: config.nativeLanguage,
-      targetLanguage: config.targetLanguage,
-      experiencePreferences,
-      selection,
-      context,
-    },
-    onDelta,
+  return runTransformer(
+    "builtin:transformer:translate",
+    HOOKS.turnTranslate,
+    () =>
+      translate(
+        provider,
+        {
+          nativeLanguage: config.nativeLanguage,
+          targetLanguage: config.targetLanguage,
+          experiencePreferences,
+          selection,
+          context,
+        },
+        onDelta,
+      ),
+    (text) => ({ chars: text.length }),
   );
 }

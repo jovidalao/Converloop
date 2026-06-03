@@ -12,7 +12,8 @@ export type BranchKind =
   | "harder"
   | "easier"
   | "swap_roles"
-  | "next_day";
+  | "next_day"
+  | "custom_action";
 
 export const BRANCH_KIND_LABEL: Record<BranchKind, string> = {
   branch_from: "分支",
@@ -21,6 +22,7 @@ export const BRANCH_KIND_LABEL: Record<BranchKind, string> = {
   easier: "更简单",
   swap_roles: "调换角色",
   next_day: "第二天",
+  custom_action: "自定义动作",
 };
 
 // 会话级调节:回复 Agent 要遵循的行为变化。LLM 观察,行为由代码注入(格式化成指令)。

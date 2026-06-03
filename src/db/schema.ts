@@ -92,6 +92,13 @@ export const learningAgent = sqliteTable("learning_agent", {
   description: text("description").notNull(),
   prompt: text("prompt").notNull(),
   dataScopeJson: text("data_scope_json").notNull(),
+  kind: text("kind", {
+    enum: ["lesson", "observer", "action"],
+  })
+    .notNull()
+    .default("lesson"),
+  hook: text("hook"),
+  enabled: integer("enabled").notNull().default(1),
   version: integer("version").notNull().default(1),
   allowedToolsJson: text("allowed_tools_json").notNull().default("[]"),
   writebackPolicy: text("writeback_policy", {
@@ -107,6 +114,38 @@ export const learningAgent = sqliteTable("learning_agent", {
 
 export type LearningAgent = typeof learningAgent.$inferSelect;
 export type NewLearningAgent = typeof learningAgent.$inferInsert;
+
+// 自定义 observer 的本轮可见产物。它不写 mastery;只把观察结果挂到某一轮,供 Coach Panel 展示。
+export const turnAnnotation = sqliteTable("turn_annotation", {
+  id: text("id").primaryKey(),
+  turnId: text("turn_id").notNull(),
+  agentId: text("agent_id").notNull(),
+  title: text("title").notNull(),
+  bodyMd: text("body_md").notNull(),
+  payloadJson: text("payload_json"),
+  createdAt: integer("created_at").notNull(),
+});
+
+export type TurnAnnotation = typeof turnAnnotation.$inferSelect;
+export type NewTurnAnnotation = typeof turnAnnotation.$inferInsert;
+
+// Agent 提出的学习数据写入建议。确认前只排队;确认后代码验证并执行有限操作。
+export const memoryProposal = sqliteTable("memory_proposal", {
+  id: text("id").primaryKey(),
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+  status: text("status", {
+    enum: ["pending", "applied", "dismissed"],
+  }).notNull(),
+  agentId: text("agent_id").notNull(),
+  turnId: text("turn_id"),
+  summary: text("summary").notNull(),
+  operationsJson: text("operations_json").notNull(),
+  resultJson: text("result_json"),
+});
+
+export type MemoryProposal = typeof memoryProposal.$inferSelect;
+export type NewMemoryProposal = typeof memoryProposal.$inferInsert;
 
 // 后台 / 异步 agent 作业日志。v1 只用于 Task Agent 规划学习项目,后续维护、
 // 摘要、回写等也复用这张表做可追踪状态。

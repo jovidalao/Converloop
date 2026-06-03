@@ -19,11 +19,13 @@ import {
   type Observer,
   type PracticeContext,
   type ReplyProducer,
+  type TransformerInfo,
 } from "./types";
 
 const replyProducers = new Map<ConversationKind, ReplyProducer>();
 const observers: Observer[] = [];
 const actions: ActionAgent[] = [];
+const transformers: TransformerInfo[] = [];
 
 export function registerReplyProducer(producer: ReplyProducer): void {
   replyProducers.set(producer.conversationKind, producer);
@@ -35,6 +37,24 @@ export function registerObserver(observer: Observer): void {
 
 export function registerAction(action: ActionAgent): void {
   actions.push(action);
+}
+
+export function registerTransformer(transformer: TransformerInfo): void {
+  transformers.push(transformer);
+}
+
+export function replaceCustomRuntimeAgents(input: {
+  observers: Observer[];
+  actions: ActionAgent[];
+}): void {
+  for (let i = observers.length - 1; i >= 0; i--) {
+    if (observers[i]?.id.startsWith("custom:")) observers.splice(i, 1);
+  }
+  for (let i = actions.length - 1; i >= 0; i--) {
+    if (actions[i]?.id.startsWith("custom:")) actions.splice(i, 1);
+  }
+  observers.push(...input.observers);
+  actions.push(...input.actions);
 }
 
 export function getReplyProducer(
@@ -49,6 +69,10 @@ export function getObservers(): readonly Observer[] {
 
 export function getActions(scope?: ActionScope): readonly ActionAgent[] {
   return scope ? actions.filter((a) => a.scope === scope) : actions;
+}
+
+export function getTransformers(): readonly TransformerInfo[] {
+  return transformers;
 }
 
 // 能力库目录:所有注册的 Agent(含当前启用态),供 UI 展示与开关。
@@ -75,6 +99,13 @@ export function listAgentCatalog(): AgentCatalogEntry[] {
       enabled: isAgentEnabled(a.id),
       scope: a.scope,
       card: a.card,
+    });
+  for (const t of transformers)
+    entries.push({
+      id: t.id,
+      kind: "transformer",
+      enabled: true,
+      card: t.card,
     });
   return entries;
 }
@@ -172,5 +203,25 @@ export async function runAction(
       turnId: ctx.sourceTurnId,
     },
     () => action.run(ctx),
+  );
+}
+
+// 按需 transformer(讲解 / 双语 / 划词)不走热路径派发,但仍进入能力库与运行日志。
+export async function runTransformer<T>(
+  transformerId: string,
+  hook: HookName,
+  fn: () => Promise<T>,
+  summarize?: (result: T) => unknown,
+): Promise<T> {
+  const transformer = transformers.find((t) => t.id === transformerId);
+  if (!transformer)
+    throw new Error(`没有注册 id=${transformerId} 的转换 Agent`);
+  return runLogged(
+    {
+      agentId: transformer.id,
+      hook,
+      summarize,
+    },
+    fn,
   );
 }

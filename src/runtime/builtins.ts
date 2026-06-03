@@ -4,23 +4,28 @@
 
 import { converse } from "../agents/conversation";
 import { runLearningAgent } from "../agents/learning";
+import { generateLearningAgentDraft } from "../agents/learning-agent-builder";
 import { analyze } from "../agents/tutor";
+import { getProvider, loadConfig } from "../config";
 import {
   type AgentModifiers,
   BRANCH_KIND_LABEL,
   type BranchKind,
   createBranch,
+  createConversation,
   formatModifierInstructions,
   getConversation,
 } from "../db/conversations";
+import { createLearningAgent } from "../db/learning-agents";
 import { recordAnalysis } from "../db/mastery";
-import { updateTurnAnalysis } from "../db/turns";
+import { formatTurns, getTurnsAfterId, updateTurnAnalysis } from "../db/turns";
 import { logError } from "../lib/log";
 import { maybeRunMaintainer } from "../profile/maintainer-runner";
 import {
   registerAction,
   registerObserver,
   registerReplyProducer,
+  registerTransformer,
 } from "./registry";
 import type {
   ActionAgent,
@@ -28,6 +33,7 @@ import type {
   Observer,
   PracticeContext,
   ReplyProducer,
+  TransformerInfo,
 } from "./types";
 
 // 普通对话主回复。读 MD 切片 + 复习候选 + 校准,流式秒回。
@@ -164,6 +170,44 @@ registerReplyProducer(conversationReply);
 registerReplyProducer(learningReply);
 registerObserver(tutorObserver);
 
+const transformers: TransformerInfo[] = [
+  {
+    id: "builtin:transformer:explain",
+    card: {
+      title: "回复讲解",
+      description: "按需用母语解释对话回复里可能卡住的结构、习语和地道用法。",
+      timing: "用户点「讲解」",
+      reads: "当前回复 · MD 档案切片 · 阅读偏好",
+      writes: "无(只产出讲解文本)",
+      canDisable: false,
+    },
+  },
+  {
+    id: "builtin:transformer:bilingual",
+    card: {
+      title: "双语阅读",
+      description: "把一条回复重排成目标语言/母语逐句对照,方便读懂长回复。",
+      timing: "用户点「双语」",
+      reads: "当前回复 · 阅读偏好",
+      writes: "无(只产出双语 Markdown)",
+      canDisable: false,
+    },
+  },
+  {
+    id: "builtin:transformer:translate",
+    card: {
+      title: "划词解析",
+      description: "结合上下文解释用户选中的词、短语或句子。",
+      timing: "用户划选文本",
+      reads: "选中文本 · 所在上下文 · 阅读偏好",
+      writes: "无(只产出解析文本)",
+      canDisable: false,
+    },
+  },
+];
+
+for (const transformer of transformers) registerTransformer(transformer);
+
 // 会话动作 Agent:多数只是「代码建分支 + 注入修饰符」。run 建好分支返回新会话 id,UI 跳过去。
 // 原会话始终不动(非破坏式),区别于「从此处开始」(截断)。
 function makeBranchAction(spec: {
@@ -264,6 +308,43 @@ const branchActions: ActionAgent[] = [
     modifiers: { nextDay: true },
     copyTurns: "all",
   }),
+  {
+    id: "builtin:action:lesson_from_conversation",
+    kind: "action",
+    scope: "session",
+    label: "变成专项课",
+    description: "基于当前会话生成一个专项课,并新开课堂继续练。",
+    card: {
+      title: "变成专项课",
+      description: "把当前聊天里的问题和目标整理成一个可复用专项课。",
+      timing: "用户点击",
+      reads: "当前会话历史 · 语言配置",
+      writes: "创建一个专项课 Agent + 一个专项课会话",
+      canDisable: true,
+    },
+    run: async (ctx) => {
+      const provider = await getProvider();
+      if (!provider) throw new Error("未配置 API key,请到设置页填写");
+      const config = loadConfig();
+      const turns = await getTurnsAfterId(ctx.conversationId, null);
+      const history = formatTurns(turns);
+      const draft = await generateLearningAgentDraft(
+        provider,
+        `Create a focused lesson agent from this conversation. Identify the most useful practice theme, recurring mistakes, and next drill. Keep it practical and interactive.\n\n=== CONVERSATION ===\n${history || "(empty)"}`,
+        {
+          nativeLanguage: config.nativeLanguage,
+          targetLanguage: config.targetLanguage,
+          level: config.level,
+        },
+      );
+      const agentId = await createLearningAgent(draft);
+      const conversationId = await createConversation(draft.name, undefined, {
+        kind: "learning_agent",
+        learningAgentId: agentId,
+      });
+      return { navigateTo: conversationId };
+    },
+  },
 ];
 
 for (const action of branchActions) registerAction(action);

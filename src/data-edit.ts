@@ -1,3 +1,4 @@
+import type { DataEditOperation } from "./agents/data-editor";
 import { planDataEdit } from "./agents/data-editor";
 import type { AppConfig } from "./config";
 import {
@@ -17,21 +18,34 @@ export interface DataEditResult {
   skipped: string[];
 }
 
-export async function applyDataEditInstruction(
-  provider: ModelProvider,
-  instruction: string,
-  config: AppConfig,
+const MASTERY_TYPES: MasteryType[] = [
+  "vocab",
+  "grammar",
+  "collocation",
+  "error_pattern",
+  "expression_gap",
+];
+
+const MASTERY_STATUSES: MasteryStatus[] = ["struggling", "learning", "known"];
+
+function validType(type: string | undefined): type is MasteryType {
+  return MASTERY_TYPES.includes(type as MasteryType);
+}
+
+function validStatus(status: string | undefined): status is MasteryStatus {
+  return MASTERY_STATUSES.includes(status as MasteryStatus);
+}
+
+export async function applyDataEditOperations(
+  operations: DataEditOperation[],
+  summary: string,
 ): Promise<DataEditResult> {
   const items = await getAllMastery();
   const existingKeys = new Set(items.map((item) => item.key));
-  const plan = await planDataEdit(provider, instruction, items, {
-    nativeLanguage: config.nativeLanguage,
-  });
-
   let applied = 0;
   const skipped: string[] = [];
 
-  for (const op of plan.operations) {
+  for (const op of operations) {
     if (op.action === "delete") {
       if (!existingKeys.has(op.key)) {
         skipped.push(`找不到 ${op.key}`);
@@ -43,19 +57,20 @@ export async function applyDataEditInstruction(
     }
 
     if (op.action === "create") {
-      if (!op.label || !op.type) {
+      if (!op.label || !validType(op.type)) {
         skipped.push(`创建 ${op.key} 缺少 label 或 type`);
         continue;
       }
       await createManualMasteryItem({
         key: op.key,
         label: op.label,
-        type: op.type as MasteryType,
-        status: (op.status ?? "learning") as MasteryStatus,
+        type: op.type,
+        status: validStatus(op.status) ? op.status : "learning",
         example: op.example,
         notes: op.notes,
       });
       applied++;
+      existingKeys.add(op.key);
       continue;
     }
 
@@ -69,11 +84,27 @@ export async function applyDataEditInstruction(
       notes: op.notes,
     });
     if (op.status) {
+      if (!validStatus(op.status)) {
+        skipped.push(`${op.key} 状态无效:${op.status}`);
+        continue;
+      }
       if (op.status === "known") await markMasteryKnown(op.key);
-      else await setMasteryStatus(op.key, op.status as MasteryStatus);
+      else await setMasteryStatus(op.key, op.status);
     }
     applied++;
   }
 
-  return { summary: plan.summary, applied, skipped };
+  return { summary, applied, skipped };
+}
+
+export async function applyDataEditInstruction(
+  provider: ModelProvider,
+  instruction: string,
+  config: AppConfig,
+): Promise<DataEditResult> {
+  const items = await getAllMastery();
+  const plan = await planDataEdit(provider, instruction, items, {
+    nativeLanguage: config.nativeLanguage,
+  });
+  return applyDataEditOperations(plan.operations, plan.summary);
 }

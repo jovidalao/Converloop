@@ -45,10 +45,10 @@
 |---|---|---|
 | 泛化 `agent_job` → 加 `turn_id`(=`agent_run` 语义) | P1 | 每次运行可追踪;热路径异步落盘 |
 | `conversation` 加 `parent_conversation_id / branch_source_turn_id / branch_kind / scenario_state_json / agent_modifiers_json`(migration v22) | P3 | 会话分支 |
-| `learning_agent` 加 `kind / hook / enabled`(+ 视需要 `agent_hook_binding` 表) | P4 | 泛化为 `agent_definition` |
-| `turn_annotation` 表 | P5 | observer 结果挂某轮,不污染主 turn |
-| `memory_proposal` 表 | P5 | 待确认的记忆写入队列 |
-| `agent_artifact` 表 | P5/P6 | Agent 生成的练习 / 报告 / 讲解 |
+| `learning_agent` 加 `kind / hook / enabled`(migration v27–v29) | P5 | 同一张表承载 lesson / observer / action |
+| `turn_annotation` 表(migration v30) | P5 | observer 结果挂某轮,不污染主 turn |
+| `memory_proposal` 表(migration v31) | P5 | 待确认的记忆写入队列 |
+| `agent_artifact` 表 | 后续 | Agent 生成的独立练习 / 报告产物;当前 annotation/proposal 已覆盖 P5 |
 
 > 迁移机制:定义在 Rust 侧 `src-tauri/src/lib.rs` 的 `add_migrations`,TS 侧 `src/db/schema.ts` 手动镜像,两边保持一致。
 
@@ -86,7 +86,7 @@
   - **修饰符注入:** `AgentModifiers`(难度增量 / 调换角色 / 第二天 / 自由 note)由 `formatModifierInstructions` 转成英文指令,经 `PracticeContext.agentModifiers` 进入对话回复的 `SESSION ADJUSTMENTS` 段(`runTurn` 与 `regenerateReply` 都注入,保持一致)。
   - **UI(注册表驱动 → #3):** ChatView 顶部加会话状态条(左:分支来源标签;右:`getActions("session")` 按钮),用户消息加 `getActions("turn")` 的「从此处分支」按钮;两者都遍历注册表,**新增动作无需再改 ChatView**。动作建好分支后经 `onNavigateConversation` 切过去。Sidebar 给分支会话加来源图标提示。**没动**发送 / 重生成 / 从此处开始(截断)逻辑。
   - **验证:** 110 单测全绿(+1 action 注册测试)、`biome + tsc` 干净、`vite build` + `cargo check` 通过。
-- **本阶段范围(刻意):** 状态条做的是「分支来源 + 高频动作」,**未做**完整的场景/角色状态条(`scenario_state_json` + 场景导演 Agent,单列为后续能力);「第二天继续」携带全历史 + 修饰符,**未做** AI 主动开场(那是 LLM 型 action,后续再加);「变成专项课」属 Phase 5;侧栏只给分支图标提示,**未做**完整 ├─ 树形嵌套。
+- **本阶段范围(刻意):** 状态条做的是「分支来源 + 高频动作」,**未做**完整的场景/角色状态条(`scenario_state_json` + 场景导演 Agent,单列为后续能力);「第二天继续」携带全历史 + 修饰符,**未做** AI 主动开场(那是 LLM 型 action,后续再加);「变成专项课」已在 Phase 5 补齐;侧栏只给分支图标提示,**未做**完整 ├─ 树形嵌套。
 - **目标:** 第二天继续 / 重新开始 / 从此处分支 / 调换角色 / 升降难度 = `conversation.action`,**创建分支而非破坏原会话**。
 - **改动:**
   - Rust migration **v22** + TS 镜像:`conversation` 加分支列(见上表)。
@@ -96,22 +96,25 @@
 - **红线:** 分支(non-destructive)要和现有「从此处开始」(destructive 截断,`ChatView.editFromHere`)**并存且语义区分清楚**。
 
 ### Phase 4 — Agent 能力库 — ✅ 已完成
-- **落地:** 新增 [AgentLibraryView](../src/components/AgentLibraryView.tsx)(侧栏「设置」菜单 → 能力库,`MainView` 加 `agents`)。按 kind 分组展示注册表里的内置 Agent,每个有 `AgentCard`(做什么 / 运行时机 / 读取 / 写入 / 能否禁用),并附运行日志(读 `agent_job`,显示 agentId·来源·状态·耗时·时间·错误)。**启用/禁用**:`runtime/enablement.ts`(localStorage + 内存缓存,热路径零额外查询),主回复 `canDisable:false`,导师/动作可关;`dispatchObservers` 跳过被禁用的 observer,并在「无启用 observer」时回调 `onAnalysis(null)` 清掉 UI 的「分析中」;ChatView 的动作条/按钮也按启用态过滤。catalog 由 `listAgentCatalog()` 读注册表 → **新增 Agent 自动出现在能力库**。
+- **落地:** 新增 [AgentLibraryView](../src/components/AgentLibraryView.tsx)(侧栏「设置」菜单 → 能力库,`MainView` 加 `agents`)。按 kind 分组展示注册表里的内置 Agent,每个有 `AgentCard`(做什么 / 运行时机 / 读取 / 写入 / 能否禁用),并附运行日志(读 `agent_job`,显示 agentId·来源·状态·耗时·时间·错误)。**启用/禁用**:`runtime/enablement.ts`(localStorage + 内存缓存,热路径零额外查询),主回复 `canDisable:false`,导师/动作可关;`dispatchObservers` 跳过被禁用的 observer,并在「无启用 observer」时回调 `onAnalysis(null)` 清掉 UI 的「分析中」;ChatView 的动作条/按钮也按启用态过滤。按需讲解 / 双语阅读 / 划词解析作为不可关闭的 `transformer` 进入能力库,调用时经 `runTransformer` 记录 `agent_job`。catalog 由 `listAgentCatalog()` 读注册表 → **新增 Agent 自动出现在能力库**。
 - **关键决策兑现:** 没有把代码内置 Agent 同步进 DB、也没做 `learning_agent → agent_definition` 大迁移——能力库的真相源就是内存注册表,启用态用 localStorage,**避免重复真相源**(Phase 1 的反过度设计承诺)。
-- **验证:** #4(每次运行有日志 + 能力库可查)· #9 部分(每个 Agent 的 `写入` 在卡片显式可见,代码边界仍是 runtime 不直接写 mastery/key/provider;自定义 Agent 的强制校验留待 Phase 5)。110 单测全绿、`biome + tsc` 干净、`vite build` 通过。
-- **本阶段范围(刻意):** 能力库列的是 Agent Runtime 的内置 Agent(对话/导师/动作);专项课(`learning_agent`)仍在「创建专项课」页管理,未合并进来;按需 transformer(讲解/双语/划词)仍是直接调用、未进注册表,故不在能力库列出。
+- **验证:** #4(每次运行有日志 + 能力库可查)· #9 部分(每个 Agent 的 `写入` 在卡片显式可见,代码边界仍是 runtime 不直接写 mastery/key/provider;自定义 Agent 的强制校验留待 Phase 5)。111 单测全绿、`biome + tsc` 干净、`vite build` 通过。
+- **本阶段范围(刻意):** 能力库列的是 Agent Runtime 的内置 Agent(对话/导师/动作/按需 transformer);专项课(`learning_agent`)仍在「创建专项课」页管理,未合并进来。transformer 只登记能力卡并复用运行日志,实际生成仍由 `orchestrator` 在用户点击/划词的调用点直接触发,不进入热路径派发。
 - **目标:** 能力库页展示内置 + 启用 / 禁用 + 权限 / 时机 / 写入策略 + run 日志。
 - **改动:** 此时才泛化 `learning_agent`(加 `kind/hook/enabled` 列,或独立 `agent_hook_binding` 表);把 P1 的代码内置 agents 登记进来(`built_in=1`);`LearningAgentsView` 升级为能力库 + run 日志视图;**启动时把 DB 绑定合并进内存注册表,每轮零查表**。
 - **验证:** #4(每次运行有日志);#9(白名单 `allowed_tools`+`writeback_policy` + 代码执行边界,自定义不能改计数 / 密钥 / provider)。
 
-### Phase 5 — 自定义 Agent(向导)
+### Phase 5 — 自定义 Agent(向导) — ✅ 已完成
+- **落地:** `learning_agent` 增加 `kind / hook / enabled`(Rust migration v27–v29 + TS 镜像),`kind="lesson"` 继续服务专项课,`kind="observer" | "action"` 由 [custom-agents.ts](../src/runtime/custom-agents.ts) 动态加载进 runtime 注册表。能力库页新增 6 问式创建表单(名称 / 描述 / 类型 / 写入策略 / 数据 scope / prompt):observer 每轮普通练习后运行,输出经 Zod schema 校验后写 `turn_annotation`;若策略为 `propose_review_signals`,只能创建 `memory_proposal`。Coach Panel 新增「自定义观察」与「待确认记忆」区,用户确认后走 `applyDataEditOperations` 做 create/update/delete/status 的有限操作。action 点击后让 LLM 生成分支标题与会话指令,代码创建 `custom_action` 非破坏式分支并注入 modifier note。内置「变成专项课」action 读取当前会话,走 `learning-agent-builder` 生成专项课并创建 `learning_agent` 会话后跳转。
+- **验证:** #5(写入前代码验证)由 `memory_proposal` + `applyDataEditOperations` 保证;#10 由能力库创建表单、Coach 待确认区、会话动作按钮保证。自定义 Agent 仍只允许 prompt/schema 型,不开放任意代码执行。
 - **目标:** 向导 6 问创建 prompt 型 observer/action;output schema 校验。
-- **改动:** `learning-agent-builder` 泛化为通用 agent-builder;observer 输出走 **`turn_annotation`** 展示;写入走 **`memory_proposal`**(新表 + Coach Panel「待确认」区,确认即走 data-edit 式代码执行)。
+- **改动:** 能力库表单直接创建 prompt 型 runtime agent;observer 输出走 **`turn_annotation`** 展示;写入走 **`memory_proposal`**(新表 + Coach Panel「待确认」区,确认即走 data-edit 式代码执行)。自然语言通用 agent-builder 留到需要更复杂向导时再做,避免为 UI 未消费的生成器扩展 scope。
 - **验证:** #5(写入前代码验证);#10(用户感知是学习动作)。
 - **红线:** 最易过度设计。第一版**严格限定 prompt/schema 型,不开放任意代码执行**(计划第十一节)。
 
-### Phase 6 — 开发者 package(**可延后,非 MVP**)
-- 导入 / 导出 `agent.json + prompt.md + schema + examples` + 权限审查 + 版本。等 P1–P5 跑通验证后再做。
+### Phase 6 — 开发者 package — ✅ 已完成
+- **落地:** 新增 [agent-package.ts](../src/agent-package.ts),定义 `lang-agent.agent-package` v1 JSON 包:agent 元数据 + `prompt.md` + `schema.json` + `examples.json`。能力库中自定义 Agent 可「导出包」,包文本可粘贴导入;导入前 `reviewAgentPackage` 展示读取 scope 与写入策略,并用 Zod 校验 kind/hook/scope/tool/writeback 白名单。导入后创建为启用的自定义 observer/action 并刷新 runtime 注册表。
+- **验证:** `agent-package.test.ts` 覆盖权限摘要与非法 tool 拒绝;113 单测全绿、`biome + tsc` 干净、`vite build` + `cargo check` 通过。文件包当前用 JSON 承载多个逻辑文件,未引入 zip / 文件系统依赖。
 
 ## 贯穿全程的铁律
 - **写入边界:** 见关键决策 #3。runtime 永不直接写 mastery / key / provider。

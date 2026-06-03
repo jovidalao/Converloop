@@ -122,6 +122,15 @@ const ADD_LEARNING_AGENT_WRITEBACK_POLICY: &str =
 const ADD_LEARNING_AGENT_OUTPUT_SCHEMA_JSON: &str =
     "ALTER TABLE learning_agent ADD COLUMN output_schema_json TEXT;";
 
+const ADD_LEARNING_AGENT_KIND: &str =
+    "ALTER TABLE learning_agent ADD COLUMN kind TEXT NOT NULL DEFAULT 'lesson';";
+
+const ADD_LEARNING_AGENT_HOOK: &str =
+    "ALTER TABLE learning_agent ADD COLUMN hook TEXT;";
+
+const ADD_LEARNING_AGENT_ENABLED: &str =
+    "ALTER TABLE learning_agent ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1;";
+
 const CREATE_AGENT_JOB: &str = "\
 CREATE TABLE IF NOT EXISTS agent_job (
     id          TEXT PRIMARY KEY NOT NULL,
@@ -161,6 +170,30 @@ CREATE TABLE IF NOT EXISTS learning_project (
     task_plan_json TEXT,
     created_at     INTEGER NOT NULL,
     updated_at     INTEGER NOT NULL
+);";
+
+const CREATE_TURN_ANNOTATION: &str = "\
+CREATE TABLE IF NOT EXISTS turn_annotation (
+    id           TEXT PRIMARY KEY NOT NULL,
+    turn_id      TEXT NOT NULL,
+    agent_id     TEXT NOT NULL,
+    title        TEXT NOT NULL,
+    body_md      TEXT NOT NULL,
+    payload_json TEXT,
+    created_at   INTEGER NOT NULL
+);";
+
+const CREATE_MEMORY_PROPOSAL: &str = "\
+CREATE TABLE IF NOT EXISTS memory_proposal (
+    id              TEXT PRIMARY KEY NOT NULL,
+    created_at      INTEGER NOT NULL,
+    updated_at      INTEGER NOT NULL,
+    status          TEXT NOT NULL,
+    agent_id        TEXT NOT NULL,
+    turn_id         TEXT,
+    summary         TEXT NOT NULL,
+    operations_json TEXT NOT NULL,
+    result_json     TEXT
 );";
 
 // 红绿灯沿用 macOS 原生按钮,位置参照 Codex 顶栏:左侧 21pt,垂直居中于 46pt chrome。
@@ -365,6 +398,36 @@ pub fn run() {
             version: 26,
             description: "add_conversation_agent_modifiers_json",
             sql: ADD_CONVERSATION_AGENT_MODIFIERS_JSON,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 27,
+            description: "add_learning_agent_kind",
+            sql: ADD_LEARNING_AGENT_KIND,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 28,
+            description: "add_learning_agent_hook",
+            sql: ADD_LEARNING_AGENT_HOOK,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 29,
+            description: "add_learning_agent_enabled",
+            sql: ADD_LEARNING_AGENT_ENABLED,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 30,
+            description: "create_turn_annotation",
+            sql: CREATE_TURN_ANNOTATION,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 31,
+            description: "create_memory_proposal",
+            sql: CREATE_MEMORY_PROPOSAL,
             kind: MigrationKind::Up,
         },
     ];
