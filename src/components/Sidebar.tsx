@@ -18,6 +18,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import {
@@ -110,6 +111,9 @@ export function Sidebar({
   const [draft, setDraft] = useState("");
   const [learningCollapsed, setLearningCollapsed] = useState(false);
   const [editingAgentId, setEditingAgentId] = useState<string | null>(null);
+  // 设置菜单:点击外部关闭时不把焦点弹回触发按钮(否则按钮残留蓝色焦点环,需再点一次才消失)。
+  // 键盘(Esc)关闭仍归还焦点,保留可达性。
+  const settingsClosedByPointer = useRef(false);
   const [conversationMenu, setConversationMenu] = useState<{
     conv: ConversationMeta;
     x: number;
@@ -469,6 +473,15 @@ export function Sidebar({
               side="top"
               align="start"
               className="w-(--radix-dropdown-menu-trigger-width)"
+              onPointerDownOutside={() => {
+                settingsClosedByPointer.current = true;
+              }}
+              onCloseAutoFocus={(e) => {
+                if (settingsClosedByPointer.current) {
+                  e.preventDefault();
+                  settingsClosedByPointer.current = false;
+                }
+              }}
             >
               <DropdownMenuItem onSelect={() => onOpenView("settings")}>
                 <SettingsIcon size={16} />
