@@ -10,9 +10,9 @@ import {
   RefreshCwIcon,
   SparklesIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TutorAnalysis } from "../agents/schema";
-import { useConfig } from "../config";
+import { getContextLimit, useConfig } from "../config";
 import {
   getConversation,
   maybeAutoTitle,
@@ -27,6 +27,7 @@ import {
   incrementExplainCount,
   loadChatHistory,
 } from "../db/turns";
+import { estimatePromptTokens } from "../lib/tokens";
 import {
   bilingualReply,
   MissingApiKeyError,
@@ -573,9 +574,26 @@ export function ChatView({
   const kickoffStartedRef = useRef(false);
   const derivationStartedRef = useRef(false);
   const liveTurnIdsRef = useRef<Set<string>>(new Set()); // 本会话内新发的轮次,自动双语只作用于它们
-  const { nativeLanguage, autoBilingual } = useConfig();
+  const config = useConfig();
+  const { nativeLanguage, autoBilingual } = config;
   const confirm = useConfirm();
   const learningMode = mode === "learning_agent";
+
+  // 输入框底部状态条:当前模型 + 上下文占用量(粗估,见 lib/tokens)。
+  const contextLimit = getContextLimit(config);
+  const usedTokens = useMemo(() => {
+    const parts: string[] = [];
+    for (const t of turns) {
+      if (t.userText) parts.push(t.userText);
+      if (t.partnerText) parts.push(t.partnerText);
+    }
+    if (streaming) parts.push(streaming);
+    return estimatePromptTokens(parts);
+  }, [turns, streaming]);
+  const usedPercent = Math.min(
+    100,
+    Math.round((usedTokens / contextLimit) * 100),
+  );
 
   // 输入框随内容增高,最多三行,超过后内部滚动。
   // biome-ignore lint/correctness/useExhaustiveDependencies: input is the intentional trigger; the effect reads inputRef after it changes, not input directly
@@ -1115,7 +1133,7 @@ export function ChatView({
           )}
         </div>
       )}
-      <div className="shrink-0 px-4 pt-1.5 pb-4">
+      <div className="shrink-0 px-4 pt-1.5 pb-1">
         <form
           className="flex items-end gap-1.5 rounded-lg border bg-card py-1.5 pr-1.5 pl-4 shadow transition-colors focus-within:border-ring"
           onSubmit={(e) => {
@@ -1161,6 +1179,13 @@ export function ChatView({
             )}
           </Button>
         </form>
+        <div
+          className="mt-0.5 flex items-center justify-end gap-3 px-1 text-[11px] text-muted-foreground/70 tabular-nums"
+          title={`约 ${usedTokens.toLocaleString()} / ${contextLimit.toLocaleString()} tokens`}
+        >
+          <span className="min-w-0 truncate">{config.model}</span>
+          <span className="shrink-0">上下文 {usedPercent}%</span>
+        </div>
       </div>
     </div>
   );
