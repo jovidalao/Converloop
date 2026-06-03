@@ -113,7 +113,7 @@
 - **红线:** 最易过度设计。第一版**严格限定 prompt/schema 型,不开放任意代码执行**(计划第十一节)。
 
 ### Phase 6 — 开发者 package — ✅ 已完成
-- **落地:** 新增 [agent-package.ts](../src/agent-package.ts),定义 `lang-agent.agent-package` v1 JSON 包:agent 元数据 + `prompt.md` + `schema.json` + `examples.json`。能力库中自定义 Agent 可「导出包」,包文本可粘贴导入;导入前 `reviewAgentPackage` 展示读取 scope 与写入策略,并用 Zod 校验 kind/hook/scope/tool/writeback 白名单。导入后创建为启用的自定义 observer/action 并刷新 runtime 注册表。
+- **落地:** 新增 [agent-package.ts](../src/agent-package.ts),定义 `lang-agent.agent-package` v1 JSON 包:runtime observer/action 元数据 + `prompt.md` + `schema.json` + `examples.json`。能力库中自定义 Agent 可「导出包」,包文本可粘贴导入;导入前 `reviewAgentPackage` 展示读取 scope 与写入策略,并用 Zod 校验 kind/hook/scope/tool/writeback 白名单。导入后创建为启用的自定义 observer/action 并刷新 runtime 注册表。专项课 package 暂不从能力库导入,避免导入后不出现在 runtime catalog。
 - **验证:** `agent-package.test.ts` 覆盖权限摘要与非法 tool 拒绝;113 单测全绿、`biome + tsc` 干净、`vite build` + `cargo check` 通过。文件包当前用 JSON 承载多个逻辑文件,未引入 zip / 文件系统依赖。
 
 ## 贯穿全程的铁律

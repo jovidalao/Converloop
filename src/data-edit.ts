@@ -53,6 +53,7 @@ export async function applyDataEditOperations(
       }
       await deleteMasteryItem(op.key);
       applied++;
+      existingKeys.delete(op.key);
       continue;
     }
 
@@ -78,16 +79,16 @@ export async function applyDataEditOperations(
       skipped.push(`找不到 ${op.key}`);
       continue;
     }
+    if (op.status && !validStatus(op.status)) {
+      skipped.push(`${op.key} 状态无效:${op.status}`);
+      continue;
+    }
     await updateMasteryItem(op.key, {
       label: op.label,
       example: op.example,
       notes: op.notes,
     });
     if (op.status) {
-      if (!validStatus(op.status)) {
-        skipped.push(`${op.key} 状态无效:${op.status}`);
-        continue;
-      }
       if (op.status === "known") await markMasteryKnown(op.key);
       else await setMasteryStatus(op.key, op.status);
     }

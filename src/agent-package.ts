@@ -3,7 +3,6 @@ import {
   createLearningAgent,
   DATA_SCOPE_LABELS,
   getLearningAgent,
-  LEARNING_AGENT_KIND_VALUES,
   LEARNING_AGENT_TOOL_VALUES,
   LEARNING_AGENT_WRITEBACK_POLICY_VALUES,
   LEARNING_DATA_SCOPE_VALUES,
@@ -15,6 +14,7 @@ import {
 
 const FORMAT = "lang-agent.agent-package";
 const VERSION = 1;
+const PACKAGE_AGENT_KIND_VALUES = ["observer", "action"] as const;
 
 const AgentPackageSchema = z.object({
   format: z.literal(FORMAT),
@@ -22,7 +22,7 @@ const AgentPackageSchema = z.object({
   agent: z.object({
     name: z.string().min(1),
     description: z.string().min(1),
-    kind: z.enum(LEARNING_AGENT_KIND_VALUES),
+    kind: z.enum(PACKAGE_AGENT_KIND_VALUES),
     hook: z.enum(RUNTIME_AGENT_HOOK_VALUES).nullable().optional(),
     dataScopes: z.array(z.enum(LEARNING_DATA_SCOPE_VALUES)).default([]),
     allowedTools: z.array(z.enum(LEARNING_AGENT_TOOL_VALUES)).default([]),
@@ -98,21 +98,23 @@ export function defaultAgentOutputSchema(
 }
 
 function packageFromAgent(agent: LearningAgentMeta): AgentPackage {
+  if (agent.kind === "lesson") throw new Error("专项课暂不支持从能力库导出包");
+  const kind = agent.kind;
   return {
     format: FORMAT,
     version: VERSION,
     agent: {
       name: agent.name,
       description: agent.description,
-      kind: agent.kind,
-      hook: agent.hook ?? hookForKind(agent.kind),
+      kind,
+      hook: agent.hook ?? hookForKind(kind),
       dataScopes: agent.dataScopes,
       allowedTools: agent.allowedTools,
       writebackPolicy: agent.writebackPolicy,
     },
     files: {
       "prompt.md": agent.prompt,
-      "schema.json": agent.outputSchema ?? defaultAgentOutputSchema(agent.kind),
+      "schema.json": agent.outputSchema ?? defaultAgentOutputSchema(kind),
       "examples.json": [],
     },
   };

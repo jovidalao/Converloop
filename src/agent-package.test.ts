@@ -50,4 +50,26 @@ describe("agent package", () => {
 
     expect(() => reviewAgentPackage(raw)).toThrow();
   });
+
+  it("rejects lesson packages in the runtime agent package importer", () => {
+    const raw = JSON.stringify({
+      format: "lang-agent.agent-package",
+      version: 1,
+      agent: {
+        name: "Lesson package",
+        description: "Not imported from the ability library.",
+        kind: "lesson",
+        hook: null,
+        dataScopes: ["weak_all"],
+        allowedTools: ["read_learning_data"],
+        writebackPolicy: "none",
+      },
+      files: {
+        "prompt.md": "Run a lesson.",
+        "examples.json": [],
+      },
+    });
+
+    expect(() => reviewAgentPackage(raw)).toThrow();
+  });
 });

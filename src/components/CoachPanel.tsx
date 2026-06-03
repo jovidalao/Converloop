@@ -313,14 +313,18 @@ function MemoryProposals({
 }) {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   async function apply(id: string) {
     setBusyId(id);
     setMessage(null);
+    setError(null);
     try {
       const result = await applyMemoryProposal(id);
       setMessage(`已应用 ${result.applied} 条。`);
       onChanged();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusyId(null);
     }
@@ -329,9 +333,12 @@ function MemoryProposals({
   async function dismiss(id: string) {
     setBusyId(id);
     setMessage(null);
+    setError(null);
     try {
       await dismissMemoryProposal(id);
       onChanged();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusyId(null);
     }
@@ -385,6 +392,7 @@ function MemoryProposals({
         );
       })}
       {message && <p className="m-0 text-xs text-success">{message}</p>}
+      {error && <p className="m-0 text-xs text-destructive">{error}</p>}
     </div>
   );
 }
