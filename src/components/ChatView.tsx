@@ -102,13 +102,24 @@ function CopyButton({ text }: { text: string }) {
 
 // 「从此处开始」:把这条用户消息的文字放回输入框重新编辑,并舍弃它(含)之后的所有对话。
 // 已记入学习记忆的内容不受影响(只删对话 turn)。
-function EditFromHereButton({ onClick }: { onClick: () => void }) {
+function EditFromHereButton({
+  onClick,
+  disabled = false,
+}: {
+  onClick: () => void;
+  disabled?: boolean;
+}) {
   return (
     <Button
       type="button"
       variant="action"
       size="action"
-      title="从此处开始:重新编辑这句,舍弃其后的对话"
+      title={
+        disabled
+          ? "正在批改,完成后即可从此处重新编辑"
+          : "从此处开始:重新编辑这句,舍弃其后的对话"
+      }
+      disabled={disabled}
       onClick={onClick}
     >
       <PencilIcon size={16} />
@@ -315,11 +326,14 @@ function UserMessageActions({
   turn,
   onEditFrom,
   onTurnAction,
+  editDisabled = false,
 }: {
   turn: ChatTurn;
   onEditFrom: () => void;
   // 注册表驱动的 turn 级动作(如「从此处分支」);新增动作无需改本组件。
   onTurnAction: (actionId: string) => void;
+  // 任一轮还在批改时禁用「从此处开始」——截断会丢弃在途批改。
+  editDisabled?: boolean;
 }) {
   const analysis = turn.analysis;
   const corrected = analysis?.corrected?.trim() || turn.userText;
@@ -329,7 +343,7 @@ function UserMessageActions({
     <>
       <CopyButton text={corrected} />
       {canSpeak && <SpeakButton text={speakTarget} />}
-      <EditFromHereButton onClick={onEditFrom} />
+      <EditFromHereButton onClick={onEditFrom} disabled={editDisabled} />
       {getActions("turn")
         .filter((a) => isAgentEnabled(a.id))
         .map((a) => (
@@ -357,6 +371,7 @@ function UserTurn({
   coachVisible,
   onEditFrom,
   onTurnAction,
+  editDisabled = false,
 }: {
   turn: ChatTurn;
   nativeLanguage: string;
@@ -364,6 +379,7 @@ function UserTurn({
   coachVisible: boolean;
   onEditFrom: () => void;
   onTurnAction: (actionId: string) => void;
+  editDisabled?: boolean;
 }) {
   const idiomatic = idiomaticText(turn.analysis);
   const [naturalOpen, setNaturalOpen] = useState(true);
@@ -378,7 +394,7 @@ function UserTurn({
         </div>
         <div className="-mr-1 flex items-center gap-0.5">
           <CopyButton text={turn.userText} />
-          <EditFromHereButton onClick={onEditFrom} />
+          <EditFromHereButton onClick={onEditFrom} disabled={editDisabled} />
         </div>
       </div>
     );
@@ -414,6 +430,7 @@ function UserTurn({
             turn={turn}
             onEditFrom={onEditFrom}
             onTurnAction={onTurnAction}
+            editDisabled={editDisabled}
           />
         }
         natural={
@@ -896,7 +913,8 @@ export function ChatView({
   // 从某条用户消息「从此处开始」:确认后舍弃这条(含)之后的所有 turn,把原文放回输入框
   // 供重新编辑。只删对话——已记入学习记忆(掌握/档案)的内容保留。
   async function editFromHere(turnId: string) {
-    if (replyBusy) return;
+    // 批改在途时截断会丢弃结果(observer 的 onAnalysis 写回已删除的 turn 变成空操作)。
+    if (replyBusy || turns.some((t) => t.analysisPending)) return;
     const target = turns.find((t) => t.id === turnId);
     if (!target) return;
     const ok = await confirm({
@@ -995,6 +1013,9 @@ export function ChatView({
   let lastReplyTurnId: string | undefined;
   for (const t of turns) if (t.partnerText) lastReplyTurnId = t.id;
 
+  // 任一轮还在批改时,「从此处开始」会截断对话、丢弃在途批改结果——批改完成前一律禁用。
+  const analyzing = turns.some((t) => t.analysisPending);
+
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col">
       <div
@@ -1029,6 +1050,7 @@ export function ChatView({
                 nativeLanguage={nativeLanguage}
                 learningMode={learningMode}
                 coachVisible={coachVisible}
+                editDisabled={analyzing}
                 onEditFrom={() => void editFromHere(turn.id)}
                 onTurnAction={(actionId) =>
                   void runConversationAction(actionId, turn.id)
