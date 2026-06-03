@@ -398,6 +398,35 @@ export function Sidebar({
                 <span className="codex-row-actions">
                   <button
                     type="button"
+                    title="重命名"
+                    aria-label="重命名"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      startEdit(c);
+                    }}
+                  >
+                    <PencilIcon className="size-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    title="删除"
+                    aria-label="删除"
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      if (
+                        await confirm({
+                          title: `删除对话「${c.title}」?`,
+                          description: "此操作不可撤销。",
+                        })
+                      ) {
+                        onDelete(c.id);
+                      }
+                    }}
+                  >
+                    <Trash2Icon className="size-3.5" />
+                  </button>
+                  <button
+                    type="button"
                     title="更多操作"
                     aria-label="更多操作"
                     onClick={(e) => openMenuFromButton(e, c)}
