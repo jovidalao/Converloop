@@ -408,7 +408,10 @@ function App() {
                     <ChevronDownIcon size={13} />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="min-w-60">
+                <DropdownMenuContent
+                  align="end"
+                  className="max-h-[min(420px,var(--radix-dropdown-menu-content-available-height))] min-w-60 overflow-y-auto"
+                >
                   {derivationActions.map((action) => (
                     <DropdownMenuItem
                       key={action.id}

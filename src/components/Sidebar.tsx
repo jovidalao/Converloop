@@ -502,39 +502,45 @@ export function Sidebar({
 
       {conversationMenu && (
         <div
-          className="fixed z-50 min-w-64 rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
-          style={{ left: conversationMenu.x, top: conversationMenu.y }}
+          className="fixed z-50 flex min-w-64 flex-col overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
+          style={{
+            left: conversationMenu.x,
+            top: conversationMenu.y,
+            maxHeight: `${Math.min(420, Math.max(160, window.innerHeight - conversationMenu.y - 16))}px`,
+          }}
           role="menu"
           onContextMenu={(e) => e.preventDefault()}
         >
-          <div className="flex items-center gap-2 px-2 py-1.5 text-xs font-medium text-muted-foreground">
+          <div className="flex shrink-0 items-center gap-2 px-2 py-1.5 text-xs font-medium text-muted-foreground">
             <SparklesIcon size={13} />
             衍生新对话
           </div>
-          {derivationActions.map((action) => (
-            <button
-              key={action.id}
-              type="button"
-              role="menuitem"
-              className="flex w-full items-start gap-2.5 rounded-sm px-2 py-1.5 text-left text-sm outline-none hover:bg-accent hover:text-accent-foreground"
-              onClick={() => {
-                onDeriveConversation(conversationMenu.conv.id, action.id);
-                setConversationMenu(null);
-              }}
-            >
-              <SparklesIcon className="mt-0.5 size-3.5 shrink-0" />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate font-medium">
-                  {action.label}
-                </span>
-                {action.description && (
-                  <span className="block truncate text-xs text-muted-foreground">
-                    {action.description}
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            {derivationActions.map((action) => (
+              <button
+                key={action.id}
+                type="button"
+                role="menuitem"
+                className="flex w-full items-start gap-2.5 rounded-sm px-2 py-1.5 text-left text-sm outline-none hover:bg-accent hover:text-accent-foreground"
+                onClick={() => {
+                  onDeriveConversation(conversationMenu.conv.id, action.id);
+                  setConversationMenu(null);
+                }}
+              >
+                <SparklesIcon className="mt-0.5 size-3.5 shrink-0" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-medium">
+                    {action.label}
                   </span>
-                )}
-              </span>
-            </button>
-          ))}
+                  {action.description && (
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {action.description}
+                    </span>
+                  )}
+                </span>
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
