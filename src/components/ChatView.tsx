@@ -426,16 +426,54 @@ function UserTurn({
   );
 }
 
-// 衍生会话顶部:默认折叠地展示这个 Agent 生成的对话上下文(场景/角色/难度/衔接等)。
-// 让用户随时能看到「这条对话是从哪里、按什么设定衍生出来的」,但不抢占聊天主场。
+// 哪些衍生会话的上下文面板已经看过:首次进入默认展开一次,之后默认折叠。
+const DERIVED_BANNER_SEEN_KEY = "lang-agent.derivedBannerSeen";
+
+function hasSeenDerivedBanner(id: string): boolean {
+  try {
+    const arr = JSON.parse(
+      localStorage.getItem(DERIVED_BANNER_SEEN_KEY) ?? "[]",
+    );
+    return Array.isArray(arr) && arr.includes(id);
+  } catch {
+    return false;
+  }
+}
+
+function markDerivedBannerSeen(id: string): void {
+  try {
+    const arr = JSON.parse(
+      localStorage.getItem(DERIVED_BANNER_SEEN_KEY) ?? "[]",
+    );
+    const list: string[] = Array.isArray(arr) ? arr : [];
+    if (!list.includes(id)) {
+      list.push(id);
+      // 封顶避免无限增长。
+      localStorage.setItem(
+        DERIVED_BANNER_SEEN_KEY,
+        JSON.stringify(list.slice(-200)),
+      );
+    }
+  } catch {
+    // localStorage 不可用时无所谓,只是退化为每次都展开。
+  }
+}
+
+// 衍生会话顶部:展示这个 Agent 生成的对话上下文(场景/角色/难度/衔接等)。
+// 首次进入默认展开,看过后默认折叠;让用户知道「这条对话从哪来、按什么设定衍生」。
 function DerivedContextBanner({
+  conversationId,
   context,
   label,
 }: {
+  conversationId: string;
   context: NewConversationContext;
   label?: string;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(() => !hasSeenDerivedBanner(conversationId));
+  useEffect(() => {
+    markDerivedBannerSeen(conversationId);
+  }, [conversationId]);
   const rows: [string, string][] = [
     ["场景", context.scenario],
     ["你的角色", context.userRole],
@@ -966,6 +1004,7 @@ export function ChatView({
       >
         {derivedBanner && (
           <DerivedContextBanner
+            conversationId={conversationId}
             context={derivedBanner.context}
             label={derivedBanner.label}
           />
