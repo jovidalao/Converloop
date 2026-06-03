@@ -154,6 +154,7 @@ export function InlineCorrection({
   error,
   leading,
   natural,
+  compact = false,
 }: {
   analysis: TutorAnalysis | null;
   proseFeedback?: string | null;
@@ -163,6 +164,8 @@ export function InlineCorrection({
   leading?: ReactNode;
   // 「地道表达」切换:内容显示在用户气泡内(见 ChatView),此处只给开关按钮。
   natural?: { open: boolean; onToggle: () => void };
+  // 教练面板可见时:气泡内只保留行内 diff 摘要,讲解/详解收进右栏,避免双份。
+  compact?: boolean;
 }) {
   // 讲解默认展开,语法详解默认收起;各 icon 各自切换。
   const [gapOpen, setGapOpen] = useState(true);
@@ -193,7 +196,7 @@ export function InlineCorrection({
             表达正确
           </span>
         )}
-        {gap && (
+        {gap && !compact && (
           <Button
             type="button"
             variant="action"
@@ -219,7 +222,7 @@ export function InlineCorrection({
             地道表达
           </Button>
         )}
-        {hasIssues && (
+        {hasIssues && !compact && (
           <Button
             type="button"
             variant="action"
@@ -235,9 +238,14 @@ export function InlineCorrection({
             </span>
           </Button>
         )}
+        {compact && (gap || hasIssues || showProse) && (
+          <span className="px-1.5 py-1 text-xs text-muted-foreground">
+            详见教练面板 →
+          </span>
+        )}
       </div>
 
-      {gap && gapOpen && (
+      {gap && gapOpen && !compact && (
         <div className="flex w-full animate-in flex-col gap-2.5 rounded-lg border bg-card p-3 text-sm leading-normal shadow-sm fade-in-0 slide-in-from-bottom-1 duration-200">
           <div className="flex flex-col gap-1">
             <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -284,7 +292,7 @@ export function InlineCorrection({
         </div>
       )}
 
-      {hasIssues && grammarOpen && analysis && (
+      {hasIssues && grammarOpen && analysis && !compact && (
         <div className="w-full animate-in rounded-lg border bg-card p-3 text-sm shadow-sm fade-in-0 slide-in-from-bottom-1 duration-200">
           <ul className="m-0 flex list-none flex-col p-0">
             {analysis.issues.map((iss, i) => (
@@ -328,7 +336,7 @@ export function InlineCorrection({
         </div>
       )}
 
-      {showProse && (
+      {showProse && !compact && (
         <div className="w-full animate-in rounded-lg border bg-card p-3 text-sm shadow-sm fade-in-0 slide-in-from-bottom-1 duration-200">
           <pre className="m-0 whitespace-pre-wrap break-words font-sans text-foreground">
             {proseFeedback!.trim()}

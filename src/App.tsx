@@ -490,6 +490,7 @@ function App() {
             onActivity={() => void refresh()}
             onActiveTurnChange={setCoachTurn}
             onNavigateConversation={selectConversation}
+            coachVisible={coachVisible}
           />
         </div>
         {view === "profile" && <ProfileView />}

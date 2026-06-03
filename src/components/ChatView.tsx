@@ -60,6 +60,8 @@ interface ChatViewProps {
   onActiveTurnChange?: (turn: ChatTurn | null) => void;
   /** 会话动作创建分支后切换到新会话(由 App 提供)。 */
   onNavigateConversation?: (id: string) => void;
+  /** 教练面板是否可见:可见时气泡内批改精简,详情只在右栏,避免双份。 */
+  coachVisible?: boolean;
 }
 
 // 复制这条回复。复制后短暂显示对勾。
@@ -337,12 +339,14 @@ function UserTurn({
   turn,
   nativeLanguage,
   learningMode,
+  coachVisible,
   onEditFrom,
   onTurnAction,
 }: {
   turn: ChatTurn;
   nativeLanguage: string;
   learningMode: boolean;
+  coachVisible: boolean;
   onEditFrom: () => void;
   onTurnAction: (actionId: string) => void;
 }) {
@@ -372,7 +376,7 @@ function UserTurn({
           analysis={turn.analysis}
           nativeLanguage={nativeLanguage}
         />
-        {idiomatic && naturalOpen && (
+        {idiomatic && naturalOpen && !coachVisible && (
           <div className="mt-2 flex items-start gap-1.5 border-t pt-2 text-sm leading-normal text-muted-foreground">
             <span
               className="mt-0.5 inline-flex shrink-0 text-primary"
@@ -389,6 +393,7 @@ function UserTurn({
         proseFeedback={turn.analysisProse}
         pending={!!turn.analysisPending}
         error={turn.analysisError}
+        compact={coachVisible}
         leading={
           <UserMessageActions
             turn={turn}
@@ -397,7 +402,7 @@ function UserTurn({
           />
         }
         natural={
-          idiomatic
+          idiomatic && !coachVisible
             ? { open: naturalOpen, onToggle: () => setNaturalOpen((v) => !v) }
             : undefined
         }
@@ -471,6 +476,7 @@ export function ChatView({
   onCreateDraftConversation,
   onActiveTurnChange,
   onNavigateConversation,
+  coachVisible = false,
 }: ChatViewProps) {
   const [turns, setTurns] = useState<ChatTurn[]>([]);
   const [input, setInput] = useState("");
@@ -968,6 +974,7 @@ export function ChatView({
                 turn={turn}
                 nativeLanguage={nativeLanguage}
                 learningMode={learningMode}
+                coachVisible={coachVisible}
                 onEditFrom={() => void editFromHere(turn.id)}
                 onTurnAction={(actionId) =>
                   void runConversationAction(actionId, turn.id)
