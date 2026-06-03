@@ -424,12 +424,20 @@ export function CoachPanel({
     });
   }, [turn?.id]);
 
+  // 后台观察 Agent 的注释/写入建议是异步落库的。不再常驻轮询:
+  // 每当本轮有新活动(切轮、批改到达)就开一个有限窗口短轮询,几秒后自动停。
+  // biome-ignore lint/correctness/useExhaustiveDependencies: analysisPending 仅作触发,批改到达时重启短轮询窗口
   useEffect(() => {
     refreshExtras();
     if (!turn?.id) return;
-    const timer = window.setInterval(refreshExtras, 1500);
+    let ticks = 0;
+    const timer = window.setInterval(() => {
+      refreshExtras();
+      ticks += 1;
+      if (ticks >= 8) window.clearInterval(timer);
+    }, 1500);
     return () => window.clearInterval(timer);
-  }, [turn?.id, refreshExtras]);
+  }, [turn?.id, turn?.analysisPending, refreshExtras]);
 
   return (
     <div className="codex-coach-content flex h-full min-h-0 flex-col">

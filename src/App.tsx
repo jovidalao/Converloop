@@ -32,6 +32,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "./components/ui/dropdown-menu";
+import { Spinner } from "./components/ui/spinner";
 import {
   Tooltip,
   TooltipContent,
@@ -398,8 +399,12 @@ function App() {
                     title="基于当前对话生成新的对话上下文"
                     data-no-window-drag
                   >
-                    <SparklesIcon size={15} />
-                    衍生新对话
+                    {derivationBusy ? (
+                      <Spinner className="size-3.5" />
+                    ) : (
+                      <SparklesIcon size={15} />
+                    )}
+                    {derivationBusy ? "生成中…" : "衍生新对话"}
                     <ChevronDownIcon size={13} />
                   </Button>
                 </DropdownMenuTrigger>

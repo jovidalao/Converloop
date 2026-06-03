@@ -64,6 +64,21 @@ interface ChatViewProps {
   coachVisible?: boolean;
 }
 
+// 回复到达前的「正在输入」提示:三点跳动。首 token 一来就被流式文本取代。
+function TypingDots() {
+  return (
+    <span
+      className="inline-flex items-center gap-1 text-muted-foreground"
+      role="status"
+      aria-label="正在输入"
+    >
+      <span className="size-1.5 animate-bounce rounded-full bg-current [animation-delay:-0.3s]" />
+      <span className="size-1.5 animate-bounce rounded-full bg-current [animation-delay:-0.15s]" />
+      <span className="size-1.5 animate-bounce rounded-full bg-current" />
+    </span>
+  );
+}
+
 // 复制这条回复。复制后短暂显示对勾。
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -1007,6 +1022,11 @@ export function ChatView({
           <div className="m-auto flex flex-col items-center gap-2 text-center text-sm leading-relaxed text-muted-foreground">
             <Spinner />
             <span>正在生成新的对话上下文…</span>
+          </div>
+        )}
+        {replyBusy && !streaming && !derivationPreparing && (
+          <div className="self-stretch py-0.5">
+            <TypingDots />
           </div>
         )}
         {streaming && (
