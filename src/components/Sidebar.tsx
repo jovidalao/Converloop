@@ -264,88 +264,88 @@ export function Sidebar({
           </button>
         </div>
 
-        <div className="codex-sidebar-learning">
-          <button
-            type="button"
-            className="codex-section-heading"
-            onClick={() => setLearningCollapsed((v) => !v)}
-          >
-            <span className="codex-sidebar-leading-icon">
-              <GraduationCapIcon className="size-4 shrink-0" />
-            </span>
-            <span className="min-w-0 flex-1 truncate">定制化学习</span>
-            {learningCollapsed ? (
-              <ChevronRightIcon className="size-3.5 shrink-0" />
-            ) : (
-              <ChevronDownIcon className="size-3.5 shrink-0" />
-            )}
-          </button>
-          <div className="codex-sidebar-list">
-            {(learningCollapsed
-              ? learningAgents.slice(0, 1)
-              : learningAgents.slice(0, 5)
-            ).map((agent) => (
-              // biome-ignore lint/a11y/useSemanticElements: can't be a <button> — it nests the edit/delete action buttons; uses role+tabIndex+keyboard instead
-              <div
-                key={agent.id}
-                role="button"
-                tabIndex={0}
-                className="codex-sidebar-row group"
-                onClick={() => onStartLearningAgent(agent.id)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    onStartLearningAgent(agent.id);
-                  }
-                }}
-                title={agent.description}
-              >
-                <span className="codex-sidebar-leading-icon">
-                  <BookOpenCheckIcon className="size-4 shrink-0" />
-                </span>
-                <span className="min-w-0 flex-1 truncate">{agent.name}</span>
-                <span className="codex-row-actions">
-                  <button
-                    type="button"
-                    title="编辑"
-                    aria-label="编辑"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setEditingAgentId(agent.id);
-                    }}
-                  >
-                    <PencilIcon className="size-3.5" />
-                  </button>
-                  {!agent.builtIn && (
+        <nav className="codex-sidebar-scroll">
+          <div className="codex-sidebar-learning">
+            <button
+              type="button"
+              className="codex-section-heading"
+              onClick={() => setLearningCollapsed((v) => !v)}
+            >
+              <span className="codex-sidebar-leading-icon">
+                <GraduationCapIcon className="size-4 shrink-0" />
+              </span>
+              <span className="min-w-0 flex-1 truncate">定制化学习</span>
+              {learningCollapsed ? (
+                <ChevronRightIcon className="size-3.5 shrink-0" />
+              ) : (
+                <ChevronDownIcon className="size-3.5 shrink-0" />
+              )}
+            </button>
+            <div className="codex-sidebar-list">
+              {(learningCollapsed
+                ? learningAgents.slice(0, 1)
+                : learningAgents.slice(0, 5)
+              ).map((agent) => (
+                // biome-ignore lint/a11y/useSemanticElements: can't be a <button> — it nests the edit/delete action buttons; uses role+tabIndex+keyboard instead
+                <div
+                  key={agent.id}
+                  role="button"
+                  tabIndex={0}
+                  className="codex-sidebar-row group"
+                  onClick={() => onStartLearningAgent(agent.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      onStartLearningAgent(agent.id);
+                    }
+                  }}
+                  title={agent.description}
+                >
+                  <span className="codex-sidebar-leading-icon">
+                    <BookOpenCheckIcon className="size-4 shrink-0" />
+                  </span>
+                  <span className="min-w-0 flex-1 truncate">{agent.name}</span>
+                  <span className="codex-row-actions">
                     <button
                       type="button"
-                      title="删除"
-                      aria-label="删除"
+                      title="编辑"
+                      aria-label="编辑"
                       onClick={(e) => {
                         e.stopPropagation();
-                        void removeAgent(agent);
+                        setEditingAgentId(agent.id);
                       }}
                     >
-                      <Trash2Icon className="size-3.5" />
+                      <PencilIcon className="size-3.5" />
                     </button>
-                  )}
-                </span>
-              </div>
-            ))}
-            {!learningCollapsed && (
-              <button
-                type="button"
-                className="codex-sidebar-row"
-                onClick={() => onOpenView("learning")}
-              >
-                <PlusIcon className="size-4" />
-                <span>创建专项课</span>
-              </button>
-            )}
+                    {!agent.builtIn && (
+                      <button
+                        type="button"
+                        title="删除"
+                        aria-label="删除"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void removeAgent(agent);
+                        }}
+                      >
+                        <Trash2Icon className="size-3.5" />
+                      </button>
+                    )}
+                  </span>
+                </div>
+              ))}
+              {!learningCollapsed && (
+                <button
+                  type="button"
+                  className="codex-sidebar-row"
+                  onClick={() => onOpenView("learning")}
+                >
+                  <PlusIcon className="size-4" />
+                  <span>创建专项课</span>
+                </button>
+              )}
+            </div>
           </div>
-        </div>
 
-        <nav className="codex-sidebar-scroll">
           <div className="codex-section-label">最近</div>
           {conversations.map((c) => {
             const active = view === "chat" && c.id === activeId;
