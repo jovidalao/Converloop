@@ -1,6 +1,8 @@
 import {
   ArrowUpIcon,
   CheckIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
   CopyIcon,
   GitBranchIcon,
   LanguagesIcon,
@@ -14,6 +16,7 @@ import { useConfig } from "../config";
 import {
   getConversation,
   maybeAutoTitle,
+  type NewConversationContext,
   parseAgentModifiers,
   touchConversation,
   truncateConversationFrom,
@@ -403,6 +406,63 @@ function UserTurn({
   );
 }
 
+// 衍生会话顶部:默认折叠地展示这个 Agent 生成的对话上下文(场景/角色/难度/衔接等)。
+// 让用户随时能看到「这条对话是从哪里、按什么设定衍生出来的」,但不抢占聊天主场。
+function DerivedContextBanner({
+  context,
+  label,
+}: {
+  context: NewConversationContext;
+  label?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const rows: [string, string][] = [
+    ["场景", context.scenario],
+    ["你的角色", context.userRole],
+    ["AI 角色", context.aiRole],
+    ["难度", context.difficulty],
+    ["衔接", context.continuitySummary],
+    ["开场", context.openingInstruction],
+    ["约束", context.constraints.join(" / ")],
+  ];
+  return (
+    <div className="rounded-lg border bg-muted/40 text-sm">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="flex w-full items-center gap-2 px-3 py-2 text-left text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <span className="shrink-0" aria-hidden>
+          {open ? (
+            <ChevronDownIcon size={14} />
+          ) : (
+            <ChevronRightIcon size={14} />
+          )}
+        </span>
+        <span className="shrink-0 text-primary" aria-hidden>
+          <SparklesIcon size={14} />
+        </span>
+        <span className="min-w-0 flex-1 truncate">
+          {label ? `${label} · ` : ""}由 Agent 衍生生成的对话上下文
+        </span>
+      </button>
+      {open && (
+        <dl className="space-y-2 border-t px-3 py-2.5 text-foreground">
+          {rows
+            .filter(([, value]) => value.trim())
+            .map(([key, value]) => (
+              <div key={key} className="flex gap-2.5">
+                <dt className="w-14 shrink-0 text-muted-foreground">{key}</dt>
+                <dd className="min-w-0 flex-1 leading-snug">{value}</dd>
+              </div>
+            ))}
+        </dl>
+      )}
+    </div>
+  );
+}
+
 export function ChatView({
   conversationId,
   isDraft = false,
@@ -419,6 +479,11 @@ export function ChatView({
   const [replyBusy, setReplyBusy] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
   const [derivationPreparing, setDerivationPreparing] = useState(false);
+  // 衍生会话的上下文(顶部折叠展示);非衍生会话为 null。
+  const [derivedBanner, setDerivedBanner] = useState<{
+    context: NewConversationContext;
+    label?: string;
+  } | null>(null);
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   // 上一次失败操作的重试入口(发送 / 重新生成 / 专项课启动共用底部错误条)。
@@ -463,6 +528,7 @@ export function ChatView({
   // biome-ignore lint/correctness/useExhaustiveDependencies: kickoff functions read current conversation state; this effect intentionally runs only on conversation/mode switch
   useEffect(() => {
     let cancelled = false;
+    setDerivedBanner(null);
     void loadChatHistory(conversationId).then(async (loaded) => {
       if (cancelled) return;
       setTurns(loaded);
@@ -470,17 +536,21 @@ export function ChatView({
         void startLesson();
         return;
       }
-      if (
-        !learningMode &&
-        loaded.length === 0 &&
-        !derivationStartedRef.current
-      ) {
+      if (!learningMode) {
         const conv = await getConversation(conversationId);
         if (cancelled) return;
-        const derivation = parseAgentModifiers(
-          conv?.agentModifiersJson ?? null,
-        ).derivation;
-        if (derivation?.status === "pending") void startDerived();
+        const mods = parseAgentModifiers(conv?.agentModifiersJson ?? null);
+        if (mods.derivedContext)
+          setDerivedBanner({
+            context: mods.derivedContext,
+            label: mods.derivation?.actionLabel,
+          });
+        if (
+          loaded.length === 0 &&
+          !derivationStartedRef.current &&
+          mods.derivation?.status === "pending"
+        )
+          void startDerived();
       }
     });
     return () => {
@@ -599,6 +669,8 @@ export function ChatView({
     setReplyBusy(true);
     setStreaming("");
     let acc = "";
+    // 衍生会话的开场同样自动朗读(与普通发送一致),关掉自动朗读时不创建。
+    const speaker = loadTtsConfig().autoSpeak ? createReplySpeaker() : null;
     try {
       const result = await startDerivedConversation(
         conversationId,
@@ -614,6 +686,7 @@ export function ChatView({
             replyCommittedRef.current = true;
             setDerivationPreparing(false);
             commitPartnerReply(turnId, reply);
+            speaker?.finish(reply);
           },
           onAnalysis: () => {
             patchTurn(turnId, { analysisPending: false });
@@ -624,10 +697,21 @@ export function ChatView({
       if (turnGenRef.current === turnGen && !replyCommittedRef.current) {
         setDerivationPreparing(false);
         commitPartnerReply(turnId, result.reply);
+        speaker?.finish(result.reply);
       }
+      // 上下文已由 orchestrator 写回会话;读出来点亮顶部折叠面板。
+      const conv = await getConversation(conversationId);
+      const mods = parseAgentModifiers(conv?.agentModifiersJson ?? null);
+      if (mods.derivedContext)
+        setDerivedBanner({
+          context: mods.derivedContext,
+          label: mods.derivation?.actionLabel,
+        });
       await touchConversation(conversationId);
       onActivity?.();
     } catch (e) {
+      stopSpeech(); // 出错则停掉正在播放的朗读。
+      speaker?.abort();
       patchTurn(turnId, {
         analysisPending: false,
         analysisError: "对话衍生失败",
@@ -646,6 +730,8 @@ export function ChatView({
         setDerivationPreparing(false);
         setStreaming("");
         setReplyBusy(false);
+      } else {
+        speaker?.abort(); // 本轮已被新动作取代,停止合成。
       }
     }
   }
@@ -857,6 +943,12 @@ export function ChatView({
         ref={messagesRef}
         onScroll={syncStickToBottom}
       >
+        {derivedBanner && (
+          <DerivedContextBanner
+            context={derivedBanner.context}
+            label={derivedBanner.label}
+          />
+        )}
         {turns.length === 0 && !streaming && (
           <div className="m-auto text-center text-sm leading-relaxed text-muted-foreground">
             {learningMode

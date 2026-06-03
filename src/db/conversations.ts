@@ -166,7 +166,6 @@ export async function createPendingDerivedConversation(opts: {
   sourceTurnId?: string | null;
   baseModifiers?: AgentModifiers;
 }): Promise<string> {
-  const parent = await getConversation(opts.parentId);
   const id = crypto.randomUUID();
   const now = Date.now();
   const modifiers: AgentModifiers = {
@@ -191,7 +190,7 @@ export async function createPendingDerivedConversation(opts: {
     branchKind: opts.branchKind,
     agentModifiersJson: JSON.stringify(modifiers),
   });
-  if (parent) await touchConversation(parent.id);
+  // 衍生是非破坏式动作:原会话保持不变,不更新其修改时间/排序。
   return id;
 }
 
