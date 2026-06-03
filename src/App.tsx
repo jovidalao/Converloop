@@ -1,9 +1,11 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   BrainIcon,
+  ChevronDownIcon,
   PanelLeftIcon,
   PanelRightIcon,
   SearchIcon,
+  SparklesIcon,
   SquarePenIcon,
 } from "lucide-react";
 import {
@@ -24,14 +26,18 @@ import { SettingsView } from "./components/SettingsView";
 import { type MainView, Sidebar } from "./components/Sidebar";
 import { Button } from "./components/ui/button";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "./components/ui/dropdown-menu";
+import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "./components/ui/tooltip";
 import {
-  BRANCH_KIND_LABEL,
-  type BranchKind,
   type ConversationMeta,
   clearActiveConversationId,
   createConversation,
@@ -48,7 +54,12 @@ import {
 } from "./db/learning-agents";
 import type { ChatTurn } from "./db/turns";
 import { withViewTransition } from "./lib/view-transition";
-import { reloadCustomRuntimeAgents } from "./runtime";
+import {
+  beginAction,
+  getActions,
+  isAgentEnabled,
+  reloadCustomRuntimeAgents,
+} from "./runtime";
 
 const SIDEBAR_MIN = 200;
 const SIDEBAR_MAX = 420;
@@ -66,6 +77,7 @@ function App() {
   );
   const [coachTurn, setCoachTurn] = useState<ChatTurn | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [derivationBusy, setDerivationBusy] = useState(false);
   const [resizingSidebar, setResizingSidebar] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     const saved = Number(localStorage.getItem("sidebarWidth"));
@@ -180,6 +192,29 @@ function App() {
     selectConversation(id);
   }
 
+  async function deriveConversation(
+    conversationId: string,
+    actionId: string,
+    sourceTurnId?: string,
+  ) {
+    if (derivationBusy) return;
+    setDerivationBusy(true);
+    try {
+      const result = await beginAction(actionId, {
+        conversationId,
+        sourceTurnId,
+      });
+      await refresh();
+      if (result.navigateTo) selectConversation(result.navigateTo);
+    } catch (e) {
+      window.alert(
+        `对话衍生失败: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    } finally {
+      setDerivationBusy(false);
+    }
+  }
+
   async function rename(id: string, title: string) {
     await renameConversation(id, title);
     await refresh();
@@ -225,18 +260,15 @@ function App() {
   const coachEligible =
     view === "chat" && (activeConversation?.kind ?? "practice") === "practice";
   const coachVisible = coachEligible && coachOpen;
-  // 分支会话的来源标签:「<动作> · 源自《父会话》」,显示在对话状态条。
-  const branchLabel = activeConversation?.branchKind
-    ? (() => {
-        const kind =
-          BRANCH_KIND_LABEL[activeConversation.branchKind as BranchKind] ??
-          "分支";
-        const parent = conversations.find(
-          (c) => c.id === activeConversation.parentConversationId,
-        );
-        return parent ? `${kind} · 源自《${parent.title}》` : kind;
-      })()
-    : undefined;
+  const derivationActions = getActions("session").filter((a) =>
+    isAgentEnabled(a.id),
+  );
+  const canDerive =
+    view === "chat" &&
+    !!activeConversation &&
+    !draftActive &&
+    activeConversation.kind === "practice" &&
+    derivationActions.length > 0;
   const topbarTitle =
     view === "profile"
       ? "学习者档案"
@@ -248,9 +280,7 @@ function App() {
             ? "能力库"
             : view === "settings"
               ? "设置"
-              : draftActive
-                ? "新对话"
-                : (activeConversation?.title ?? "新对话");
+              : "";
 
   return (
     <div
@@ -349,6 +379,47 @@ function App() {
                 </kbd>
               </TooltipContent>
             </Tooltip>
+            {canDerive && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 gap-1.5 px-2.5 text-xs"
+                    disabled={derivationBusy}
+                    title="基于当前对话生成新的对话上下文"
+                    data-no-window-drag
+                  >
+                    <SparklesIcon size={15} />
+                    衍生新对话
+                    <ChevronDownIcon size={13} />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="min-w-60">
+                  {derivationActions.map((action) => (
+                    <DropdownMenuItem
+                      key={action.id}
+                      onSelect={() =>
+                        void deriveConversation(activeId, action.id)
+                      }
+                    >
+                      <SparklesIcon size={14} />
+                      <span className="flex min-w-0 flex-col">
+                        <span className="truncate font-medium">
+                          {action.label}
+                        </span>
+                        {action.description && (
+                          <span className="max-w-64 truncate text-xs text-muted-foreground">
+                            {action.description}
+                          </span>
+                        )}
+                      </span>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
             {coachEligible && (
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -384,6 +455,9 @@ function App() {
         onNewChat={openDraftConversation}
         onStartLearningAgent={(id) => void startLearningAgent(id)}
         onRefreshLearningAgents={refreshLearningAgents}
+        onDeriveConversation={(id, actionId) =>
+          void deriveConversation(id, actionId)
+        }
         onRename={(id, t) => void rename(id, t)}
         onDelete={(id) => void remove(id)}
         onOpenView={(v) => withViewTransition(() => setView(v))}
@@ -409,7 +483,6 @@ function App() {
             onActivity={() => void refresh()}
             onActiveTurnChange={setCoachTurn}
             onNavigateConversation={selectConversation}
-            branchLabel={branchLabel}
           />
         </div>
         {view === "profile" && <ProfileView />}

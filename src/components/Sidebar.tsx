@@ -3,18 +3,20 @@ import {
   BookOpenCheckIcon,
   ChevronDownIcon,
   ChevronRightIcon,
-  GitBranchIcon,
   GraduationCapIcon,
   ListChecksIcon,
   PencilIcon,
   PlusIcon,
   SettingsIcon,
+  SparklesIcon,
   SquarePenIcon,
   Trash2Icon,
   UserRoundIcon,
 } from "lucide-react";
 import {
+  type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
+  useEffect,
   useMemo,
   useState,
 } from "react";
@@ -29,6 +31,7 @@ import {
   type LearningAgentMeta,
   updateLearningAgent,
 } from "../db/learning-agents";
+import { getActions, isAgentEnabled } from "../runtime";
 import { useConfirm } from "./confirm";
 import { LearningAgentEditDialog } from "./LearningAgentEditDialog";
 import {
@@ -73,6 +76,7 @@ interface SidebarProps {
   onNewChat: () => void;
   onStartLearningAgent: (agentId: string) => void;
   onRefreshLearningAgents: () => Promise<void>;
+  onDeriveConversation: (conversationId: string, actionId: string) => void;
   onRename: (id: string, title: string) => void;
   onDelete: (id: string) => void;
   onOpenView: (view: MainView) => void;
@@ -92,6 +96,7 @@ export function Sidebar({
   onNewChat,
   onStartLearningAgent,
   onRefreshLearningAgents,
+  onDeriveConversation,
   onRename,
   onDelete,
   onOpenView,
@@ -105,11 +110,49 @@ export function Sidebar({
   const [draft, setDraft] = useState("");
   const [learningCollapsed, setLearningCollapsed] = useState(false);
   const [editingAgentId, setEditingAgentId] = useState<string | null>(null);
+  const [conversationMenu, setConversationMenu] = useState<{
+    id: string;
+    x: number;
+    y: number;
+  } | null>(null);
+
+  const derivationActions = getActions("session").filter((a) =>
+    isAgentEnabled(a.id),
+  );
 
   const editingAgent = useMemo(
     () => learningAgents.find((a) => a.id === editingAgentId) ?? null,
     [learningAgents, editingAgentId],
   );
+
+  useEffect(() => {
+    if (!conversationMenu) return;
+    function close() {
+      setConversationMenu(null);
+    }
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") close();
+    }
+    window.addEventListener("click", close);
+    window.addEventListener("contextmenu", close);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("click", close);
+      window.removeEventListener("contextmenu", close);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [conversationMenu]);
+
+  function openConversationMenu(e: ReactMouseEvent, c: ConversationMeta) {
+    if (c.kind !== "practice" || derivationActions.length === 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setConversationMenu({
+      id: c.id,
+      x: Math.max(8, Math.min(e.clientX, window.innerWidth - 276)),
+      y: Math.max(8, Math.min(e.clientY, window.innerHeight - 320)),
+    });
+  }
 
   async function saveAgent(id: string, patch: Partial<LearningAgentDraft>) {
     await updateLearningAgent(id, patch);
@@ -315,6 +358,7 @@ export function Sidebar({
                 className="codex-sidebar-row group"
                 data-active={active}
                 onClick={() => onSelect(c.id)}
+                onContextMenu={(e) => openConversationMenu(e, c)}
                 onDoubleClick={() => startEdit(c)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
@@ -331,7 +375,7 @@ export function Sidebar({
                     className="inline-flex shrink-0 text-[color:var(--codex-sidebar-muted)]"
                     title={`分支:${BRANCH_KIND_LABEL[c.branchKind as BranchKind] ?? c.branchKind}`}
                   >
-                    <GitBranchIcon className="size-3.5" />
+                    <SparklesIcon className="size-3.5" />
                   </span>
                 )}
                 <span className="min-w-0 flex-1 truncate">{c.title}</span>
@@ -432,6 +476,47 @@ export function Sidebar({
         onPointerDown={startResize}
         title="拖动调整宽度"
       />
+
+      {conversationMenu && (
+        <div
+          className="fixed z-50 min-w-64 rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
+          style={{
+            left: conversationMenu.x,
+            top: conversationMenu.y,
+          }}
+          role="menu"
+          onContextMenu={(e) => e.preventDefault()}
+        >
+          <div className="flex items-center gap-2 px-2 py-1.5 text-xs font-medium text-muted-foreground">
+            <SparklesIcon size={13} />
+            衍生新对话
+          </div>
+          {derivationActions.map((action) => (
+            <button
+              key={action.id}
+              type="button"
+              role="menuitem"
+              className="flex w-full items-start gap-2.5 rounded-sm px-2 py-1.5 text-left text-sm outline-none hover:bg-accent hover:text-accent-foreground"
+              onClick={() => {
+                onDeriveConversation(conversationMenu.id, action.id);
+                setConversationMenu(null);
+              }}
+            >
+              <SparklesIcon className="mt-0.5 size-3.5 shrink-0" />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-medium">
+                  {action.label}
+                </span>
+                {action.description && (
+                  <span className="block truncate text-xs text-muted-foreground">
+                    {action.description}
+                  </span>
+                )}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {editingAgent && (
         <LearningAgentEditDialog

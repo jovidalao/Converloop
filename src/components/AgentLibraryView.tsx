@@ -48,7 +48,7 @@ const KIND_LABEL: Record<AgentKind, string> = {
   reply_producer: "主回复",
   observer: "观察",
   transformer: "转换",
-  action: "动作",
+  action: "对话衍生",
   background: "后台",
 };
 
@@ -321,7 +321,7 @@ export function AgentLibraryView() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="observer">观察 Agent</SelectItem>
-              <SelectItem value="action">动作 Agent</SelectItem>
+              <SelectItem value="action">对话衍生 Agent</SelectItem>
             </SelectContent>
           </Select>
           <Select
@@ -366,7 +366,7 @@ export function AgentLibraryView() {
           placeholder={
             kind === "observer"
               ? "6. Prompt: 说明每轮要观察什么、如何反馈、何时提出 memory_proposals。"
-              : "6. Prompt: 说明点击按钮后要生成怎样的分支指令。"
+              : "6. Prompt: 说明点击按钮后要如何基于当前对话生成新的对话上下文。"
           }
           className="mt-2 min-h-28 resize-y font-mono text-xs leading-relaxed"
         />

@@ -86,11 +86,26 @@ export function defaultAgentOutputSchema(
   if (kind === "action") {
     return {
       type: "object",
-      required: ["instruction"],
+      required: [
+        "title",
+        "scenario",
+        "user_role",
+        "ai_role",
+        "difficulty",
+        "opening_instruction",
+      ],
       properties: {
-        branch_title: { type: "string" },
-        instruction: { type: "string" },
-        copy_history: { enum: ["all", "none"] },
+        title: { type: "string" },
+        scenario: { type: "string" },
+        user_role: { type: "string" },
+        ai_role: { type: "string" },
+        difficulty: { type: "string" },
+        continuity_summary: { type: "string" },
+        opening_instruction: { type: "string" },
+        constraints: {
+          type: "array",
+          items: { type: "string" },
+        },
       },
     };
   }

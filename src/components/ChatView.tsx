@@ -12,7 +12,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { TutorAnalysis } from "../agents/schema";
 import { useConfig } from "../config";
 import {
+  getConversation,
   maybeAutoTitle,
+  parseAgentModifiers,
   touchConversation,
   truncateConversationFrom,
 } from "../db/conversations";
@@ -27,9 +29,10 @@ import {
   MissingApiKeyError,
   regenerateReply,
   runTurn,
+  startDerivedConversation,
   startLearningSession,
 } from "../orchestrator";
-import { getActions, isAgentEnabled, runAction } from "../runtime";
+import { beginAction, getActions, isAgentEnabled } from "../runtime";
 import { loadTtsConfig } from "../tts/config";
 import { stopSpeech } from "../tts/playback";
 import { createReplySpeaker } from "../tts/stream";
@@ -54,8 +57,6 @@ interface ChatViewProps {
   onActiveTurnChange?: (turn: ChatTurn | null) => void;
   /** 会话动作创建分支后切换到新会话(由 App 提供)。 */
   onNavigateConversation?: (id: string) => void;
-  /** 当前会话若是分支,显示来源标签(如「更高难度 · 源自《…》」)。 */
-  branchLabel?: string;
 }
 
 // 复制这条回复。复制后短暂显示对勾。
@@ -410,7 +411,6 @@ export function ChatView({
   onCreateDraftConversation,
   onActiveTurnChange,
   onNavigateConversation,
-  branchLabel,
 }: ChatViewProps) {
   const [turns, setTurns] = useState<ChatTurn[]>([]);
   const [input, setInput] = useState("");
@@ -418,6 +418,7 @@ export function ChatView({
   const [layoutTick, setLayoutTick] = useState(0);
   const [replyBusy, setReplyBusy] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
+  const [derivationPreparing, setDerivationPreparing] = useState(false);
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   // 上一次失败操作的重试入口(发送 / 重新生成 / 专项课启动共用底部错误条)。
@@ -429,6 +430,7 @@ export function ChatView({
   const turnGenRef = useRef(0);
   const replyCommittedRef = useRef(false);
   const kickoffStartedRef = useRef(false);
+  const derivationStartedRef = useRef(false);
   const liveTurnIdsRef = useRef<Set<string>>(new Set()); // 本会话内新发的轮次,自动双语只作用于它们
   const { nativeLanguage, autoBilingual } = useConfig();
   const confirm = useConfirm();
@@ -458,14 +460,27 @@ export function ChatView({
     setTurns((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
   }
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: startLesson reads current conversation state; this effect intentionally runs only on conversation/mode switch
+  // biome-ignore lint/correctness/useExhaustiveDependencies: kickoff functions read current conversation state; this effect intentionally runs only on conversation/mode switch
   useEffect(() => {
     let cancelled = false;
-    void loadChatHistory(conversationId).then((loaded) => {
+    void loadChatHistory(conversationId).then(async (loaded) => {
       if (cancelled) return;
       setTurns(loaded);
       if (learningMode && loaded.length === 0 && !kickoffStartedRef.current) {
         void startLesson();
+        return;
+      }
+      if (
+        !learningMode &&
+        loaded.length === 0 &&
+        !derivationStartedRef.current
+      ) {
+        const conv = await getConversation(conversationId);
+        if (cancelled) return;
+        const derivation = parseAgentModifiers(
+          conv?.agentModifiersJson ?? null,
+        ).derivation;
+        if (derivation?.status === "pending") void startDerived();
       }
     });
     return () => {
@@ -554,6 +569,81 @@ export function ChatView({
       setRetry({ run: () => void startLesson(turnId) });
     } finally {
       if (turnGenRef.current === turnGen) {
+        setStreaming("");
+        setReplyBusy(false);
+      }
+    }
+  }
+
+  async function startDerived(replacingId?: string) {
+    if (learningMode || replyBusy || derivationStartedRef.current) return;
+    stopSpeech();
+    derivationStartedRef.current = true;
+    const turnGen = ++turnGenRef.current;
+    const turnId = crypto.randomUUID();
+    liveTurnIdsRef.current.add(turnId);
+    stickToBottomRef.current = true;
+    setError(null);
+    setRetry(null);
+    replyCommittedRef.current = false;
+    setDerivationPreparing(true);
+    setTurns((prev) => [
+      ...(replacingId ? prev.filter((t) => t.id !== replacingId) : prev),
+      {
+        id: turnId,
+        userText: "",
+        analysis: null,
+        analysisPending: false,
+      },
+    ]);
+    setReplyBusy(true);
+    setStreaming("");
+    let acc = "";
+    try {
+      const result = await startDerivedConversation(
+        conversationId,
+        {
+          onReplyDelta: (d) => {
+            if (turnGenRef.current !== turnGen) return;
+            acc += d;
+            setDerivationPreparing(false);
+            setStreaming(acc);
+          },
+          onReplyComplete: (reply) => {
+            if (turnGenRef.current !== turnGen) return;
+            replyCommittedRef.current = true;
+            setDerivationPreparing(false);
+            commitPartnerReply(turnId, reply);
+          },
+          onAnalysis: () => {
+            patchTurn(turnId, { analysisPending: false });
+          },
+        },
+        turnId,
+      );
+      if (turnGenRef.current === turnGen && !replyCommittedRef.current) {
+        setDerivationPreparing(false);
+        commitPartnerReply(turnId, result.reply);
+      }
+      await touchConversation(conversationId);
+      onActivity?.();
+    } catch (e) {
+      patchTurn(turnId, {
+        analysisPending: false,
+        analysisError: "对话衍生失败",
+      });
+      setError(
+        e instanceof MissingApiKeyError
+          ? e.message
+          : e instanceof Error
+            ? e.message
+            : String(e),
+      );
+      derivationStartedRef.current = false;
+      setRetry({ run: () => void startDerived(turnId) });
+    } finally {
+      if (turnGenRef.current === turnGen) {
+        setDerivationPreparing(false);
         setStreaming("");
         setReplyBusy(false);
       }
@@ -732,7 +822,7 @@ export function ChatView({
     }
   }
 
-  // 会话动作(分支 / 调换角色 / 升降难度…):跑注册的 action Agent,建好分支后切换过去。
+  // 会话动作:先创建 pending 衍生会话并切换过去;新页面再生成上下文并自动开场。
   // 原会话不动(非破坏式),区别于 editFromHere(截断)。
   async function runConversationAction(
     actionId: string,
@@ -743,7 +833,7 @@ export function ChatView({
     setError(null);
     setRetry(null);
     try {
-      const result = await runAction(actionId, {
+      const result = await beginAction(actionId, {
         conversationId,
         sourceTurnId,
       });
@@ -762,38 +852,6 @@ export function ChatView({
 
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col">
-      {/* 会话状态条 + 高频动作(注册表驱动:新增 session 动作无需改本组件)。 */}
-      {!learningMode && (turns.length > 0 || branchLabel) && (
-        <div className="flex shrink-0 flex-wrap items-center gap-2 border-b px-4 py-2">
-          {branchLabel && (
-            <span
-              className="inline-flex items-center gap-1 rounded-full bg-accent px-2 py-0.5 text-xs font-medium text-primary"
-              title="这是一个分支会话,原对话保持不变"
-            >
-              <GitBranchIcon size={12} />
-              {branchLabel}
-            </span>
-          )}
-          <div className="ml-auto flex flex-wrap items-center justify-end gap-1">
-            {getActions("session")
-              .filter((a) => isAgentEnabled(a.id))
-              .map((a) => (
-                <Button
-                  key={a.id}
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 px-2 text-xs"
-                  title={a.description}
-                  disabled={actionBusy || replyBusy || turns.length === 0}
-                  onClick={() => void runConversationAction(a.id)}
-                >
-                  {a.label}
-                </Button>
-              ))}
-          </div>
-        </div>
-      )}
       <div
         className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain px-4 pt-6 pb-3"
         ref={messagesRef}
@@ -846,6 +904,12 @@ export function ChatView({
             )}
           </div>
         ))}
+        {derivationPreparing && (
+          <div className="m-auto flex flex-col items-center gap-2 text-center text-sm leading-relaxed text-muted-foreground">
+            <Spinner />
+            <span>正在生成新的对话上下文…</span>
+          </div>
+        )}
         {streaming && (
           <div className="self-stretch py-0.5 text-foreground opacity-70">
             <Markdown>{streaming}</Markdown>

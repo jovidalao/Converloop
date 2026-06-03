@@ -3,7 +3,11 @@
 
 import type { TutorAnalysis } from "../agents/schema";
 import type { WeakItem } from "../agents/tutor";
-import type { AgentModifiers } from "../db/conversations";
+import type {
+  AgentModifiers,
+  BranchKind,
+  NewConversationContext,
+} from "../db/conversations";
 import type { ReviewItem } from "../db/mastery";
 import type { ProficiencySnapshot } from "../lib/proficiency";
 import type { CorrectionPreferenceFlags } from "../profile/preferences";
@@ -80,6 +84,8 @@ interface BaseContext {
   /** 本轮 id(UI 传入或本地生成),observer 写回挂这条 turn。 */
   turnId: string;
   userInput: string;
+  /** App-triggered hidden kickoff for an empty derived conversation. */
+  openingInstruction?: string;
   langs: Langs;
   summary: string;
   history: string;
@@ -146,6 +152,12 @@ export interface ActionContext {
   sourceTurnId?: string;
 }
 
+export interface DerivationContext {
+  newConversationId: string;
+  sourceConversationId: string;
+  sourceTurnId?: string | null;
+}
+
 export interface ActionResult {
   /** 新建分支会话的 id;UI 据此切换过去。 */
   navigateTo?: string;
@@ -157,8 +169,13 @@ export interface ActionAgent {
   scope: ActionScope;
   label: string;
   description?: string;
+  branchKind?: BranchKind;
+  baseModifiers?: AgentModifiers;
   card?: AgentCard;
-  run: (ctx: ActionContext) => Promise<ActionResult>;
+  /** Conversation derivation actions create a pending conversation first, then generate context on that page. */
+  deriveContext?: (ctx: DerivationContext) => Promise<NewConversationContext>;
+  /** Legacy/non-derivation actions, e.g. turning a conversation into a lesson. */
+  run?: (ctx: ActionContext) => Promise<ActionResult>;
 }
 
 // 按需 transformer(讲解 / 双语 / 划词):由 orchestrator 在调用点直接跑 + 经 runLogged 记日志,

@@ -3,7 +3,10 @@ import { zodToJsonSchema } from "zod-to-json-schema";
 import type { DataEditOperation as DataEditOperationType } from "../agents/data-editor";
 import { parseLLMJson } from "../agents/parse-llm-json";
 import { getProvider, loadConfig } from "../config";
-import { createBranch, getConversation } from "../db/conversations";
+import {
+  getConversation,
+  type NewConversationContext,
+} from "../db/conversations";
 import {
   type LearningAgentMeta,
   listRuntimeLearningAgents,
@@ -14,7 +17,12 @@ import { formatTurns, getTurnsAfterId } from "../db/turns";
 import { buildLearningDataContext } from "../learning-data";
 import type { ChatMessage } from "../providers/types";
 import { replaceCustomRuntimeAgents } from "./registry";
-import type { ActionAgent, Observer, PracticeContext } from "./types";
+import type {
+  ActionAgent,
+  DerivationContext,
+  Observer,
+  PracticeContext,
+} from "./types";
 
 const DataEditOperation = z.object({
   action: z.enum(["update", "delete", "create"]),
@@ -42,9 +50,14 @@ const CustomObserverOutput = z.object({
 });
 
 const CustomActionOutput = z.object({
-  branch_title: z.string().optional(),
-  instruction: z.string().min(1),
-  copy_history: z.enum(["all", "none"]).optional().default("all"),
+  title: z.string().min(1).max(60),
+  scenario: z.string().min(1),
+  user_role: z.string().min(1),
+  ai_role: z.string().min(1),
+  difficulty: z.string().min(1),
+  continuity_summary: z.string().default(""),
+  opening_instruction: z.string().min(1),
+  constraints: z.array(z.string()).default([]),
 });
 
 function jsonSchema(
@@ -160,17 +173,39 @@ ${ctx.userInput}`,
   }
 }
 
+function toNewConversationContext(raw: {
+  title: string;
+  scenario: string;
+  user_role: string;
+  ai_role: string;
+  difficulty: string;
+  opening_instruction: string;
+  continuity_summary?: string;
+  constraints?: string[];
+}): NewConversationContext {
+  return {
+    title: raw.title,
+    scenario: raw.scenario,
+    userRole: raw.user_role,
+    aiRole: raw.ai_role,
+    difficulty: raw.difficulty,
+    continuitySummary: raw.continuity_summary ?? "",
+    openingInstruction: raw.opening_instruction,
+    constraints: raw.constraints ?? [],
+  };
+}
+
 async function runCustomAction(
   agent: LearningAgentMeta,
-  ctx: { conversationId: string },
-): Promise<{ navigateTo?: string }> {
+  ctx: DerivationContext,
+): Promise<NewConversationContext> {
   const provider = await getProvider();
   if (!provider) throw new Error("未配置 API key,请到设置页填写");
 
   const config = loadConfig();
   const [conversation, turns, dataContext] = await Promise.all([
-    getConversation(ctx.conversationId),
-    getTurnsAfterId(ctx.conversationId, null),
+    getConversation(ctx.sourceConversationId),
+    getTurnsAfterId(ctx.sourceConversationId, null),
     buildLearningDataContext(agent, config),
   ]);
   const title = conversation?.title?.trim() || "对话";
@@ -179,13 +214,15 @@ async function runCustomAction(
       role: "system",
       content: `You are a custom action agent in a language-learning app.
 
-Your job is to turn the user's button click into instructions for a NEW non-destructive conversation branch.
-The app will create the branch; you only return the branch title and instructions for the conversation partner.
+Your job is to turn the user's button click into a NEW conversation context.
+The app has already opened a pending new conversation page. After your output,
+the normal conversation partner will use your context to start the new conversation.
 
 Rules:
 - Return JSON only.
 - Do not ask for confirmation.
-- Keep instruction concrete and executable by the conversation agent.
+- Do not continue the old chat directly; design the hidden context for a fresh conversation.
+- Keep the opening_instruction concrete and executable by the conversation agent.
 - Do not request changes to model keys, provider settings, or hidden counters.
 
 === CUSTOM ACTION INSTRUCTIONS ===
@@ -201,7 +238,10 @@ Level: ${config.level}
 === LEARNING DATA YOU MAY READ ===
 ${formatDataContext(dataContext)}
 
-=== CURRENT CONVERSATION ===
+=== SOURCE CONVERSATION TITLE ===
+${title}
+
+=== SOURCE CONVERSATION ===
 ${formatTurns(turns) || "(empty conversation)"}`,
     },
   ];
@@ -214,19 +254,7 @@ ${formatTurns(turns) || "(empty conversation)"}`,
     meta: { label: agent.id },
   });
   const output = parseStructured(raw, CustomActionOutput, agent.name);
-  const branchTitle = output.branch_title?.trim() || `${title} · ${agent.name}`;
-  const note = output.instruction.trim();
-  const newId = await createBranch({
-    parentId: ctx.conversationId,
-    branchKind: "custom_action",
-    title: branchTitle,
-    modifiers: {
-      note: `${agent.name}: ${note}`,
-    },
-    copyTurns: output.copy_history === "none" ? "none" : "all",
-    sourceTurnId: null,
-  });
-  return { navigateTo: newId };
+  return toNewConversationContext(output);
 }
 
 function observerFromAgent(agent: LearningAgentMeta): Observer {
@@ -255,15 +283,16 @@ function actionFromAgent(agent: LearningAgentMeta): ActionAgent {
     scope: "session",
     label: agent.name,
     description: agent.description,
+    branchKind: "custom_action",
     card: {
       title: agent.name,
       description: agent.description,
       timing: "用户点击",
       reads: "当前会话 · 授权学习数据",
-      writes: "新建一个分支会话(不改计数 / 密钥 / 设置)",
+      writes: "衍生一个新对话上下文并新建会话(不改计数 / 密钥 / 设置)",
       canDisable: true,
     },
-    run: (ctx) => runCustomAction(agent, ctx),
+    deriveContext: (ctx) => runCustomAction(agent, ctx),
   };
 }
 

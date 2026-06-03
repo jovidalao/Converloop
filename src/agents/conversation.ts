@@ -13,6 +13,7 @@ export interface ConversationContext {
   summary: string; // 滚动摘要:较早内容的目标语 recap(自动压缩产出;无则为空)
   history: string;
   userInput: string;
+  openingInstruction?: string; // App 触发的隐藏开场指令(对话衍生)
 }
 
 // 折叠空白并截到 max 字符,防止过长 example 撑大热路径 prompt(与 learning-data 一致)。
@@ -96,11 +97,14 @@ ${ctx.summary}
 
 `
     : "";
+  const latest = ctx.openingInstruction?.trim()
+    ? `APP INSTRUCTION: ${ctx.openingInstruction.trim()}`
+    : ctx.userInput;
   return `${storyBlock}=== RECENT CONVERSATION ===
 ${ctx.history || "(none)"}
 
 === USER ===
-${ctx.userInput}`;
+${latest}`;
 }
 
 // 纯文本流式回复。onDelta 边收边推 UI;返回完整文本用于持久化。

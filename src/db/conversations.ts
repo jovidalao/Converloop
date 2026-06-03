@@ -13,6 +13,7 @@ export type BranchKind =
   | "easier"
   | "swap_roles"
   | "next_day"
+  | "change_scene"
   | "custom_action";
 
 export const BRANCH_KIND_LABEL: Record<BranchKind, string> = {
@@ -22,8 +23,30 @@ export const BRANCH_KIND_LABEL: Record<BranchKind, string> = {
   easier: "更简单",
   swap_roles: "调换角色",
   next_day: "第二天",
+  change_scene: "换个场景",
   custom_action: "自定义动作",
 };
+
+export interface NewConversationContext {
+  title: string;
+  scenario: string;
+  userRole: string;
+  aiRole: string;
+  difficulty: string;
+  continuitySummary: string;
+  openingInstruction: string;
+  constraints: string[];
+}
+
+export interface ConversationDerivationState {
+  actionId: string;
+  actionLabel: string;
+  status: "pending" | "ready" | "failed";
+  sourceTurnId?: string | null;
+  createdAt: number;
+  completedAt?: number;
+  error?: string | null;
+}
 
 // 会话级调节:回复 Agent 要遵循的行为变化。LLM 观察,行为由代码注入(格式化成指令)。
 export interface AgentModifiers {
@@ -31,6 +54,8 @@ export interface AgentModifiers {
   swapRoles?: boolean;
   nextDay?: boolean;
   note?: string; // 自由补充指令
+  derivation?: ConversationDerivationState;
+  derivedContext?: NewConversationContext;
 }
 
 export function parseAgentModifiers(json: string | null): AgentModifiers {
@@ -65,6 +90,20 @@ export function formatModifierInstructions(mods: AgentModifiers): string {
     lines.push(
       "- This conversation resumes an earlier one on a NEW DAY. Open with a brief, natural reconnection (a greeting or callback to before), then carry on — do not restart from scratch.",
     );
+  if (mods.derivedContext) {
+    const ctx = mods.derivedContext;
+    lines.push(`- This is a derived conversation. Use the generated context below as the source of truth for this new conversation. Do not mention that it was generated, and do not recap it as a list.
+  Title: ${ctx.title}
+  Scenario: ${ctx.scenario}
+  Learner role: ${ctx.userRole}
+  AI role: ${ctx.aiRole}
+  Difficulty: ${ctx.difficulty}
+  Continuity summary: ${ctx.continuitySummary || "(none)"}
+  Opening instruction: ${ctx.openingInstruction}
+  Constraints: ${
+    ctx.constraints.length > 0 ? ctx.constraints.join(" / ") : "(none)"
+  }`);
+  }
   if (mods.note?.trim()) lines.push(`- ${mods.note.trim()}`);
   return lines.join("\n");
 }
@@ -117,6 +156,91 @@ export async function createConversation(
     learningAgentId: opts.learningAgentId ?? null,
   });
   return id;
+}
+
+export async function createPendingDerivedConversation(opts: {
+  parentId: string;
+  actionId: string;
+  actionLabel: string;
+  branchKind: BranchKind;
+  sourceTurnId?: string | null;
+  baseModifiers?: AgentModifiers;
+}): Promise<string> {
+  const parent = await getConversation(opts.parentId);
+  const id = crypto.randomUUID();
+  const now = Date.now();
+  const modifiers: AgentModifiers = {
+    ...(opts.baseModifiers ?? {}),
+    derivation: {
+      actionId: opts.actionId,
+      actionLabel: opts.actionLabel,
+      status: "pending",
+      sourceTurnId: opts.sourceTurnId ?? null,
+      createdAt: now,
+    },
+  };
+  await db.insert(conversation).values({
+    id,
+    title: `${opts.actionLabel} · 生成中`,
+    createdAt: now,
+    updatedAt: now,
+    kind: "practice",
+    learningAgentId: null,
+    parentConversationId: opts.parentId,
+    branchSourceTurnId: opts.sourceTurnId ?? null,
+    branchKind: opts.branchKind,
+    agentModifiersJson: JSON.stringify(modifiers),
+  });
+  if (parent) await touchConversation(parent.id);
+  return id;
+}
+
+export async function completeDerivedConversation(
+  id: string,
+  context: NewConversationContext,
+): Promise<void> {
+  const conv = await getConversation(id);
+  const modifiers = parseAgentModifiers(conv?.agentModifiersJson ?? null);
+  const now = Date.now();
+  await db
+    .update(conversation)
+    .set({
+      title: context.title.trim() || conv?.title || DEFAULT_CONVERSATION_TITLE,
+      updatedAt: now,
+      agentModifiersJson: JSON.stringify({
+        ...modifiers,
+        derivedContext: context,
+        derivation: modifiers.derivation
+          ? {
+              ...modifiers.derivation,
+              status: "ready",
+              completedAt: now,
+              error: null,
+            }
+          : undefined,
+      } satisfies AgentModifiers),
+    })
+    .where(eq(conversation.id, id));
+}
+
+export async function failDerivedConversation(
+  id: string,
+  error: string,
+): Promise<void> {
+  const conv = await getConversation(id);
+  const modifiers = parseAgentModifiers(conv?.agentModifiersJson ?? null);
+  await db
+    .update(conversation)
+    .set({
+      updatedAt: Date.now(),
+      agentModifiersJson: JSON.stringify({
+        ...modifiers,
+        derivation: modifiers.derivation
+          ? { ...modifiers.derivation, status: "failed", error }
+          : undefined,
+      } satisfies AgentModifiers),
+    })
+    .where(eq(conversation.id, id));
 }
 
 // 从一个已有会话派生分支。原会话不动(非破坏式),区别于 truncateConversationFrom。

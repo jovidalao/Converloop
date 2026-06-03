@@ -2,19 +2,21 @@
 // 并在本模块求值时自注册。行为与迁移前的 orchestrator 一致,只是「谁调用它」换成了 Runtime。
 // 从 ./index 的副作用 import 触发注册。
 
+import { z } from "zod";
+import { zodToJsonSchema } from "zod-to-json-schema";
 import { converse } from "../agents/conversation";
 import { runLearningAgent } from "../agents/learning";
 import { generateLearningAgentDraft } from "../agents/learning-agent-builder";
+import { parseLLMJson } from "../agents/parse-llm-json";
 import { analyze } from "../agents/tutor";
 import { getProvider, loadConfig } from "../config";
 import {
   type AgentModifiers,
-  BRANCH_KIND_LABEL,
   type BranchKind,
-  createBranch,
   createConversation,
   formatModifierInstructions,
   getConversation,
+  type NewConversationContext,
 } from "../db/conversations";
 import { createLearningAgent } from "../db/learning-agents";
 import { recordAnalysis } from "../db/mastery";
@@ -29,12 +31,129 @@ import {
 } from "./registry";
 import type {
   ActionAgent,
+  DerivationContext,
   LearningContext,
   Observer,
   PracticeContext,
   ReplyProducer,
   TransformerInfo,
 } from "./types";
+
+const NewConversationContextSchema = z.object({
+  title: z.string().min(1).max(60),
+  scenario: z.string().min(1),
+  user_role: z.string().min(1),
+  ai_role: z.string().min(1),
+  difficulty: z.string().min(1),
+  continuity_summary: z.string().default(""),
+  opening_instruction: z.string().min(1),
+  constraints: z.array(z.string()).default([]),
+});
+
+function derivationJsonSchema(): {
+  name: string;
+  schema: Record<string, unknown>;
+} {
+  const raw = zodToJsonSchema(NewConversationContextSchema, {
+    target: "jsonSchema7",
+    $refStrategy: "none",
+  }) as Record<string, unknown>;
+  delete raw.$schema;
+  return { name: "NewConversationContext", schema: raw };
+}
+
+function parseDerivationOutput(raw: string): NewConversationContext {
+  const parsed = parseLLMJson(raw);
+  if (!parsed.ok) throw new Error(parsed.error);
+  const validated = NewConversationContextSchema.safeParse(parsed.value);
+  if (!validated.success) {
+    throw new Error(
+      `对话衍生上下文校验失败: ${validated.error.issues
+        .map((issue) => `${issue.path.join(".") || "root"}: ${issue.message}`)
+        .join("; ")}`,
+    );
+  }
+  const data = validated.data;
+  return {
+    title: data.title,
+    scenario: data.scenario,
+    userRole: data.user_role,
+    aiRole: data.ai_role,
+    difficulty: data.difficulty,
+    continuitySummary: data.continuity_summary,
+    openingInstruction: data.opening_instruction,
+    constraints: data.constraints,
+  };
+}
+
+async function deriveConversationContext(
+  ctx: DerivationContext,
+  action: {
+    label: string;
+    objective: string;
+  },
+): Promise<NewConversationContext> {
+  const provider = await getProvider();
+  if (!provider) throw new Error("未配置 API key,请到设置页填写");
+  const config = loadConfig();
+  const [sourceConversation, turns] = await Promise.all([
+    getConversation(ctx.sourceConversationId),
+    getTurnsAfterId(ctx.sourceConversationId, null),
+  ]);
+  const sourceTitle = sourceConversation?.title?.trim() || "当前对话";
+  const selectedTurn = ctx.sourceTurnId
+    ? turns.find((t) => t.id === ctx.sourceTurnId)
+    : null;
+  const selectedBlock = selectedTurn
+    ? `\n=== SELECTED SOURCE TURN ===\nUser: ${selectedTurn.userInput}\nPartner: ${selectedTurn.reply}\n`
+    : "";
+  const messages = [
+    {
+      role: "system" as const,
+      content: `You are a Conversation Derivation Agent for a language-learning app.
+
+Your job is to read an existing conversation and create a NEW conversation context.
+The app has already pushed the user into the new conversation page. After your output,
+the normal conversation partner will use your context to open the new conversation.
+
+Rules:
+- Return JSON only.
+- Do not continue the old chat directly; design the hidden context for a fresh conversation.
+- Preserve useful persona, scenario, and continuity from the source conversation when relevant.
+- Keep the new context practical for spoken/written language practice.
+- Do not ask to change model keys, provider settings, hidden counters, or raw database state.
+- The opening_instruction should tell the conversation partner how to start naturally.
+- Use concise fields; the user should feel the new conversation starts immediately, not as a report.`,
+    },
+    {
+      role: "user" as const,
+      content: `=== ACTION ===
+${action.label}
+
+=== ACTION OBJECTIVE ===
+${action.objective}
+
+=== LANGUAGES ===
+Native: ${config.nativeLanguage}
+Target: ${config.targetLanguage}
+Level: ${config.level}
+
+=== SOURCE CONVERSATION TITLE ===
+${sourceTitle}
+${selectedBlock}
+=== SOURCE CONVERSATION ===
+${formatTurns(turns) || "(empty conversation)"}`,
+    },
+  ];
+  const raw = await provider.generate({
+    messages,
+    temperature: 0.3,
+    maxTokens: 1400,
+    jsonSchema: derivationJsonSchema(),
+    meta: { label: `conversation_derivation:${action.label}` },
+  });
+  return parseDerivationOutput(raw);
+}
 
 // 普通对话主回复。读 MD 切片 + 复习候选 + 校准,流式秒回。
 const conversationReply: ReplyProducer = {
@@ -63,6 +182,7 @@ const conversationReply: ReplyProducer = {
         summary: ctx.summary,
         history: ctx.history,
         userInput: ctx.userInput,
+        openingInstruction: ctx.openingInstruction,
       },
       onDelta,
     );
@@ -208,16 +328,16 @@ const transformers: TransformerInfo[] = [
 
 for (const transformer of transformers) registerTransformer(transformer);
 
-// 会话动作 Agent:多数只是「代码建分支 + 注入修饰符」。run 建好分支返回新会话 id,UI 跳过去。
+// 对话衍生 Agent:点击后先创建 pending 新会话,新页面再运行 deriveContext 生成上下文并开场。
 // 原会话始终不动(非破坏式),区别于「从此处开始」(截断)。
-function makeBranchAction(spec: {
+function makeDerivationAction(spec: {
   id: string;
   scope: ActionAgent["scope"];
   label: string;
   description: string;
   kind: BranchKind;
+  objective: string;
   modifiers?: AgentModifiers;
-  copyTurns: "all" | "none" | "upToSource";
 }): ActionAgent {
   return {
     id: spec.id,
@@ -225,88 +345,91 @@ function makeBranchAction(spec: {
     scope: spec.scope,
     label: spec.label,
     description: spec.description,
+    branchKind: spec.kind,
+    baseModifiers: spec.modifiers,
     card: {
       title: spec.label,
       description: spec.description,
       timing: "用户点击",
       reads: spec.scope === "turn" ? "当前会话 + 选中的这一轮" : "当前会话",
-      writes: "新建一个分支会话(不改计数 / 密钥 / 设置)",
+      writes: "衍生一个新对话上下文并新建会话(不改计数 / 密钥 / 设置)",
       canDisable: true,
     },
-    run: async (ctx) => {
-      const parent = await getConversation(ctx.conversationId);
-      const baseTitle = parent?.title?.trim() || "对话";
-      const copyTurns =
-        spec.copyTurns === "upToSource"
-          ? ctx.sourceTurnId
-            ? { upToTurnId: ctx.sourceTurnId }
-            : "none"
-          : spec.copyTurns;
-      const newId = await createBranch({
-        parentId: ctx.conversationId,
-        branchKind: spec.kind,
-        title: `${baseTitle} · ${BRANCH_KIND_LABEL[spec.kind]}`,
-        modifiers: spec.modifiers,
-        copyTurns,
-        sourceTurnId: ctx.sourceTurnId ?? null,
-      });
-      return { navigateTo: newId };
-    },
+    deriveContext: (ctx) =>
+      deriveConversationContext(ctx, {
+        label: spec.label,
+        objective: spec.objective,
+      }),
   };
 }
 
 const branchActions: ActionAgent[] = [
-  makeBranchAction({
+  makeDerivationAction({
     id: "builtin:action:branch_from",
     scope: "turn",
     label: "从此处分支",
-    description: "复制到这条为止,另开一个分支继续探索(原对话保留)。",
+    description: "基于这条之前的上下文,另开一个新对话继续探索。",
     kind: "branch_from",
-    copyTurns: "upToSource",
+    objective:
+      "Create a fresh continuation based on the selected source turn. Preserve the useful setup before that point, but start the new conversation cleanly without copying visible history.",
   }),
-  makeBranchAction({
+  makeDerivationAction({
     id: "builtin:action:restart",
     scope: "session",
     label: "重新开始",
-    description: "用同样的设定另开一个空白分支重练。",
+    description: "保留核心设定,生成一个空白的新对话重练。",
     kind: "restart",
-    copyTurns: "none",
+    objective:
+      "Restart the same useful scenario/persona from a clean beginning. Keep the learning purpose, but do not continue as if previous turns already happened.",
   }),
-  makeBranchAction({
+  makeDerivationAction({
     id: "builtin:action:harder",
     scope: "session",
     label: "提高难度",
-    description: "带着当前进展另开分支,把难度调高一档。",
+    description: "生成同一练习的高难度新对话。",
     kind: "harder",
     modifiers: { difficultyDelta: 1 },
-    copyTurns: "all",
+    objective:
+      "Create a harder version of the current practice. Keep the scenario and continuity that matter, but make the target-language demands richer, more idiomatic, and more challenging.",
   }),
-  makeBranchAction({
+  makeDerivationAction({
     id: "builtin:action:easier",
     scope: "session",
     label: "降低难度",
-    description: "带着当前进展另开分支,把难度调低一档。",
+    description: "生成同一练习的简单版新对话。",
     kind: "easier",
     modifiers: { difficultyDelta: -1 },
-    copyTurns: "all",
+    objective:
+      "Create an easier version of the current practice. Keep the useful scenario, but lower the difficulty: shorter sentences, common words, clearer prompts, and one idea at a time.",
   }),
-  makeBranchAction({
+  makeDerivationAction({
     id: "builtin:action:swap_roles",
     scope: "session",
     label: "调换角色",
-    description: "另开分支,让你来主导、AI 跟随回应。",
+    description: "生成一个角色互换的新对话。",
     kind: "swap_roles",
     modifiers: { swapRoles: true },
-    copyTurns: "all",
+    objective:
+      "Create a role-swapped version of the current conversation. The learner should lead more of the exchange; the AI should take the counterpart role and respond naturally.",
   }),
-  makeBranchAction({
+  makeDerivationAction({
     id: "builtin:action:next_day",
     scope: "session",
     label: "第二天继续",
-    description: "另开分支,作为「第二天」自然地接着聊。",
+    description: "生成一个承接当前剧情的第二天新对话。",
     kind: "next_day",
     modifiers: { nextDay: true },
-    copyTurns: "all",
+    objective:
+      "Create a new-day continuation. Use relevant continuity from the source conversation, but start on the next day with a natural reconnection and a fresh opening.",
+  }),
+  makeDerivationAction({
+    id: "builtin:action:change_scene",
+    scope: "session",
+    label: "换个场景",
+    description: "保留练习目标,换一个更合适的新场景。",
+    kind: "change_scene",
+    objective:
+      "Create a new scenario that practices the same useful language goals from the current conversation, but changes the setting so the learner can transfer the skill.",
   }),
   {
     id: "builtin:action:lesson_from_conversation",

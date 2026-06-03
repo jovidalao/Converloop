@@ -4,6 +4,12 @@
 // 「新增一个 observer 不需要改 runTurn」靠的就是 getObservers() 这一层。
 
 import { recordAgentRun } from "../db/agent-jobs";
+import {
+  createPendingDerivedConversation,
+  getConversation,
+  type NewConversationContext,
+  parseAgentModifiers,
+} from "../db/conversations";
 import { logError } from "../lib/log";
 import { isAgentEnabled } from "./enablement";
 import {
@@ -14,6 +20,7 @@ import {
   type AgentCatalogEntry,
   type ConversationContext,
   type ConversationKind,
+  type DerivationContext,
   HOOKS,
   type HookName,
   type Observer,
@@ -196,13 +203,76 @@ export async function runAction(
 ): Promise<ActionResult> {
   const action = actions.find((a) => a.id === actionId);
   if (!action) throw new Error(`没有注册 id=${actionId} 的动作 Agent`);
+  const run = action.run;
+  if (!run) throw new Error(`动作 ${actionId} 不是直接执行动作`);
   return runLogged(
     {
       agentId: action.id,
       hook: HOOKS.conversationAction,
       turnId: ctx.sourceTurnId,
     },
-    () => action.run(ctx),
+    () => run(ctx),
+  );
+}
+
+// 用户点击动作时先建 pending 衍生会话,让 UI 可以立刻跳过去显示加载态。
+// 非衍生动作(如「变成专项课」)仍退回 runAction。
+export async function beginAction(
+  actionId: string,
+  ctx: ActionContext,
+): Promise<ActionResult> {
+  const action = actions.find((a) => a.id === actionId);
+  if (!action) throw new Error(`没有注册 id=${actionId} 的动作 Agent`);
+  if (!action.deriveContext) return runAction(actionId, ctx);
+
+  const id = await createPendingDerivedConversation({
+    parentId: ctx.conversationId,
+    actionId: action.id,
+    actionLabel: action.label,
+    branchKind: action.branchKind ?? "custom_action",
+    sourceTurnId: ctx.sourceTurnId ?? null,
+    baseModifiers: action.baseModifiers,
+  });
+  return { navigateTo: id };
+}
+
+// 新衍生会话页面挂载后调用:读取 pending 状态,运行对应 action agent 生成新上下文。
+// 这里只负责 Agent 运行与日志;持久化 ready/failed 状态由 orchestrator 处理,避免 registry
+// 直接决定会话开场逻辑。
+export async function derivePendingAction(
+  newConversationId: string,
+): Promise<NewConversationContext> {
+  const conversation = await getConversation(newConversationId);
+  const modifiers = parseAgentModifiers(
+    conversation?.agentModifiersJson ?? null,
+  );
+  const derivation = modifiers.derivation;
+  if (!conversation || !derivation) {
+    throw new Error("这个会话没有待生成的对话衍生上下文");
+  }
+  if (!conversation.parentConversationId) {
+    throw new Error("衍生会话缺少来源对话");
+  }
+  const action = actions.find((a) => a.id === derivation.actionId);
+  if (!action?.deriveContext) {
+    throw new Error(`动作 ${derivation.actionId} 不能生成对话衍生上下文`);
+  }
+  const ctx: DerivationContext = {
+    newConversationId,
+    sourceConversationId: conversation.parentConversationId,
+    sourceTurnId: conversation.branchSourceTurnId,
+  };
+  return runLogged(
+    {
+      agentId: action.id,
+      hook: HOOKS.conversationAction,
+      turnId: ctx.sourceTurnId ?? undefined,
+      summarize: (result: NewConversationContext) => ({
+        title: result.title,
+        scenario: result.scenario,
+      }),
+    },
+    () => action.deriveContext?.(ctx) as Promise<NewConversationContext>,
   );
 }
 

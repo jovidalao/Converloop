@@ -79,19 +79,21 @@
 - **验证:** 批改 / 讲解 / 双语在右栏可用不回退;#6(用户看得见记住了什么)初步成立。
 - **红线:** `ChatView` 822 行、状态多(streaming/turnGen/retry/截断)。**只搬「反馈展示」,绝不动发送 / 重生成 / 从此处开始的逻辑**——最易「顺手改」翻车处。
 
-### Phase 3 — 会话动作 Agent + 分支 — ✅ 已完成
+### Phase 3 — 对话衍生 Agent + 新会话开场 — ✅ 已完成
 - **落地:**
-  - **数据模型:** `conversation` 加 `parent_conversation_id / branch_source_turn_id / branch_kind / agent_modifiers_json`(Rust migration v23–v26 + TS 镜像)。`createBranch()`(`db/conversations.ts`)非破坏式派生新会话,可 `copyTurns: all | none | {upToTurnId}`(复制的 turn 拿新 id、保留批改,不重跑导师 → 不碰 mastery)。
-  - **action agent:** runtime 新增 `ActionAgent`(`scope: session|turn`)+ `conversation.action` hook + `registerAction/getActions/runAction`(带日志)。内置 6 个:从此处分支(turn)、重新开始 / 提高难度 / 降低难度 / 调换角色 / 第二天继续(session),都是「代码建分支 + 注入修饰符」,`run` 返回要跳转的新会话 id。
-  - **修饰符注入:** `AgentModifiers`(难度增量 / 调换角色 / 第二天 / 自由 note)由 `formatModifierInstructions` 转成英文指令,经 `PracticeContext.agentModifiers` 进入对话回复的 `SESSION ADJUSTMENTS` 段(`runTurn` 与 `regenerateReply` 都注入,保持一致)。
-  - **UI(注册表驱动 → #3):** ChatView 顶部加会话状态条(左:分支来源标签;右:`getActions("session")` 按钮),用户消息加 `getActions("turn")` 的「从此处分支」按钮;两者都遍历注册表,**新增动作无需再改 ChatView**。动作建好分支后经 `onNavigateConversation` 切过去。Sidebar 给分支会话加来源图标提示。**没动**发送 / 重生成 / 从此处开始(截断)逻辑。
-  - **验证:** 110 单测全绿(+1 action 注册测试)、`biome + tsc` 干净、`vite build` + `cargo check` 通过。
-- **本阶段范围(刻意):** 状态条做的是「分支来源 + 高频动作」,**未做**完整的场景/角色状态条(`scenario_state_json` + 场景导演 Agent,单列为后续能力);「第二天继续」携带全历史 + 修饰符,**未做** AI 主动开场(那是 LLM 型 action,后续再加);「变成专项课」已在 Phase 5 补齐;侧栏只给分支图标提示,**未做**完整 ├─ 树形嵌套。
-- **目标:** 第二天继续 / 重新开始 / 从此处分支 / 调换角色 / 升降难度 = `conversation.action`,**创建分支而非破坏原会话**。
+  - **数据模型:** `conversation` 加 `parent_conversation_id / branch_source_turn_id / branch_kind / agent_modifiers_json`(Rust migration v23–v26 + TS 镜像)。`agent_modifiers_json` 现在同时保存 `derivation.status` 与 `derivedContext`,不用新增表即可表达 pending/ready/failed。
+  - **对话衍生 action agent:** runtime 新增 `ActionAgent.deriveContext`。用户点击后先由 `beginAction()` 创建 pending 新会话并立刻跳转;新 `ChatView` 检测 pending 后调用 `startDerivedConversation()`:运行对应 Agent 读取来源对话,生成 `NewConversationContext(title/scenario/userRole/aiRole/difficulty/continuitySummary/openingInstruction/constraints)`,保存为 ready,再用隐藏 kickoff 让普通 Conversation Agent 自动开场。空 kickoff 不跑 Tutor,避免误记学习数据。
+  - **内置衍生 Agent:** 从此处分支(turn)、重新开始 / 提高难度 / 降低难度 / 调换角色 / 第二天继续 / 换个场景(session)。每个都是“读当前对话 → 生成新上下文 → 新对话自动开场”,原对话不动。
+  - **修饰符注入:** `AgentModifiers` 仍保留难度增量 / 调换角色 / 第二天 / 自由 note,并新增 `derivedContext`;`formatModifierInstructions` 把生成的新上下文转成 `SESSION ADJUSTMENTS`,供主回复 Agent 遵循。
+  - **UI(注册表驱动 → #3):** 对话页内部顶部状态条已移除;单一主入口「衍生新对话」移动到 App 顶栏右侧,使用 AI/星星图标。侧边栏对话行右键也提供同一组衍生动作。点击菜单项后立即进入新会话页面,先显示「正在生成新的对话上下文…」,再流式显示 AI 开场。用户消息仍有 `getActions("turn")` 的「从此处分支」按钮。Sidebar 给衍生会话加来源图标提示。**没动**发送 / 重生成 / 从此处开始(截断)逻辑。
+  - **自定义衍生 Agent:** 能力库里的 `kind="action"` 改为用户可见的「对话衍生 Agent」。自定义 action 输出同一份 `NewConversationContext`,不再只是生成一句 modifier 指令。
+- **本阶段范围(刻意):** 侧栏只给衍生会话图标提示,**未做**完整 ├─ 树形嵌套;`scenario_state_json` 仍未单独建列,当前上下文存于 `agent_modifiers_json.derivedContext`。
+- **目标:** 第二天继续 / 重新开始 / 从此处分支 / 调换角色 / 升降难度 / 换场景 = `conversation.action`,**创建新会话并自动开场,不破坏原会话**。
 - **改动:**
-  - Rust migration **v22** + TS 镜像:`conversation` 加分支列(见上表)。
-  - `src/db/conversations.ts` 加 `createBranch()`;`Sidebar` 展示分支树;状态条读 `scenario_state_json`。
-  - **多数 action 是「代码建分支 + 给 reply_producer 注入 modifier」,未必都要 LLM**;LLM 只在需要生成新场景设定时介入。
+  - 复用 Rust migration v23–v26 的分支列;不新增表。
+  - `src/db/conversations.ts` 加 pending/ready/failed 衍生状态读写;`Sidebar` 继续展示来源图标。
+  - `src/runtime/registry.ts` 提供 `beginAction()` 与 `derivePendingAction()`;前者立刻建新会话,后者在新页面运行 Agent 生成上下文。
+  - `src/orchestrator.ts` 提供 `startDerivedConversation()`:保存新上下文后隐藏 kickoff,让普通对话 Agent 自动开场。
 - **验证:** #7(动作建分支不破坏原会话);#3(加按钮类 agent 靠注册表 + Coach/状态条插槽,不改 ChatView 主结构)。
 - **红线:** 分支(non-destructive)要和现有「从此处开始」(destructive 截断,`ChatView.editFromHere`)**并存且语义区分清楚**。
 
@@ -105,7 +107,7 @@
 - **验证:** #4(每次运行有日志);#9(白名单 `allowed_tools`+`writeback_policy` + 代码执行边界,自定义不能改计数 / 密钥 / provider)。
 
 ### Phase 5 — 自定义 Agent(向导) — ✅ 已完成
-- **落地:** `learning_agent` 增加 `kind / hook / enabled`(Rust migration v27–v29 + TS 镜像),`kind="lesson"` 继续服务专项课,`kind="observer" | "action"` 由 [custom-agents.ts](../src/runtime/custom-agents.ts) 动态加载进 runtime 注册表。能力库页新增 6 问式创建表单(名称 / 描述 / 类型 / 写入策略 / 数据 scope / prompt):observer 每轮普通练习后运行,输出经 Zod schema 校验后写 `turn_annotation`;若策略为 `propose_review_signals`,只能创建 `memory_proposal`。Coach Panel 新增「自定义观察」与「待确认记忆」区,用户确认后走 `applyDataEditOperations` 做 create/update/delete/status 的有限操作。action 点击后让 LLM 生成分支标题与会话指令,代码创建 `custom_action` 非破坏式分支并注入 modifier note。内置「变成专项课」action 读取当前会话,走 `learning-agent-builder` 生成专项课并创建 `learning_agent` 会话后跳转。
+- **落地:** `learning_agent` 增加 `kind / hook / enabled`(Rust migration v27–v29 + TS 镜像),`kind="lesson"` 继续服务专项课,`kind="observer" | "action"` 由 [custom-agents.ts](../src/runtime/custom-agents.ts) 动态加载进 runtime 注册表。能力库页新增 6 问式创建表单(名称 / 描述 / 类型 / 写入策略 / 数据 scope / prompt):observer 每轮普通练习后运行,输出经 Zod schema 校验后写 `turn_annotation`;若策略为 `propose_review_signals`,只能创建 `memory_proposal`。Coach Panel 新增「自定义观察」与「待确认记忆」区,用户确认后走 `applyDataEditOperations` 做 create/update/delete/status 的有限操作。action 作为「对话衍生 Agent」运行:点击后先进入 pending 新会话,再让 LLM 生成 `NewConversationContext`,代码保存上下文并自动开场。内置「变成专项课」action 读取当前会话,走 `learning-agent-builder` 生成专项课并创建 `learning_agent` 会话后跳转。
 - **验证:** #5(写入前代码验证)由 `memory_proposal` + `applyDataEditOperations` 保证;#10 由能力库创建表单、Coach 待确认区、会话动作按钮保证。自定义 Agent 仍只允许 prompt/schema 型,不开放任意代码执行。
 - **目标:** 向导 6 问创建 prompt 型 observer/action;output schema 校验。
 - **改动:** 能力库表单直接创建 prompt 型 runtime agent;observer 输出走 **`turn_annotation`** 展示;写入走 **`memory_proposal`**(新表 + Coach Panel「待确认」区,确认即走 data-edit 式代码执行)。自然语言通用 agent-builder 留到需要更复杂向导时再做,避免为 UI 未消费的生成器扩展 scope。

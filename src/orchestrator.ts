@@ -10,6 +10,8 @@ import { getProvider, loadConfig } from "./config";
 import { applyDataEditInstruction, type DataEditResult } from "./data-edit";
 import { runTrackedAgentJob } from "./db/agent-jobs";
 import {
+  completeDerivedConversation,
+  failDerivedConversation,
   formatModifierInstructions,
   getConversation,
   getSummary,
@@ -37,6 +39,7 @@ import { profileSliceForConversation, readProfile } from "./profile/profile";
 import { maybeCompressConversation } from "./profile/summary-runner";
 import {
   type ConversationCallbacks,
+  derivePendingAction,
   dispatchObservers,
   dispatchReply,
   HOOKS,
@@ -276,6 +279,96 @@ export async function startLearningSession(
   turnId?: string,
 ): Promise<TurnResult> {
   return runLearningTurn("", conversationId, cb, true, turnId);
+}
+
+export async function startDerivedConversation(
+  conversationId: string,
+  cb: TurnCallbacks,
+  turnId?: string,
+): Promise<TurnResult> {
+  const provider = await getProvider();
+  if (!provider) throw new MissingApiKeyError();
+
+  let openingInstruction = "";
+  try {
+    const derivedContext = await derivePendingAction(conversationId);
+    await completeDerivedConversation(conversationId, derivedContext);
+    openingInstruction = `Start this newly derived conversation now. Follow the derived conversation context exactly, especially this opening instruction: ${derivedContext.openingInstruction}`;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    await failDerivedConversation(conversationId, msg);
+    throw e;
+  }
+
+  const config = loadConfig();
+  const langs = {
+    nativeLanguage: config.nativeLanguage,
+    targetLanguage: config.targetLanguage,
+    level: config.level,
+  };
+
+  const [summaryData, weakList, profileMd, reviewItems, proficiency, conv] =
+    await Promise.all([
+      getSummary(conversationId),
+      getWeakList(),
+      readProfile(config),
+      getReviewDueList(),
+      getProficiencySnapshot(),
+      getConversation(conversationId),
+    ]);
+  const verbatimTurns = await getTurnsAfterId(
+    conversationId,
+    summaryData.throughId,
+  );
+  const history = formatTurns(verbatimTurns);
+  const profileSlice = profileSliceForConversation(profileMd);
+  const conversationPreferences = formatExperiencePreferences(
+    profileMd,
+    "conversation",
+  );
+  const id = turnId ?? crypto.randomUUID();
+  const turnPersisted = Promise.resolve(id);
+
+  const ctx: PracticeContext = {
+    kind: "practice",
+    provider,
+    conversationId,
+    turnId: id,
+    userInput: "",
+    openingInstruction,
+    langs,
+    profileSlice,
+    conversationPreferences,
+    tutorPreferences: "",
+    tutorFlags: {
+      ignoreCapitalizationIssues: false,
+      ignorePunctuationIssues: false,
+    },
+    summary: summaryData.summary ?? "",
+    history,
+    tutorHistory: "",
+    weakList,
+    reviewItems,
+    proficiency,
+    agentModifiers: parseAgentModifiers(conv?.agentModifiersJson ?? null),
+    callbacks: cb,
+    turnPersisted,
+  };
+
+  const reply = await dispatchReply(ctx, cb.onReplyDelta);
+  await persistTurn(conversationId, "", reply, null, id);
+  cb.onReplyComplete?.(reply);
+  cb.onAnalysis(null);
+
+  const nonHistoryTokens =
+    estimateTokens(profileSlice) +
+    estimateTokens(
+      reviewItems
+        .map((r) => `${r.label} ${r.example ?? ""} ${r.notes ?? ""}`)
+        .join("\n"),
+    );
+  void maybeCompressConversation(conversationId, nonHistoryTokens);
+  return { reply, analysis: null };
 }
 
 async function runLearningTurn(
