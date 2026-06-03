@@ -333,21 +333,6 @@
 .codex-coach-content {
   width: var(--codex-coach-width);
 }
-/* 窄屏:不挤压对话,改成从右侧浮出的抽屉。 */
-@media (max-width: 1024px) {
-  .codex-shell[data-coach-open="true"] {
-    --codex-coach-width-current: 0px;
-  }
-  .codex-shell[data-coach-open="true"] .codex-coach {
-    position: absolute;
-    top: var(--codex-topbar-h);
-    right: 0;
-    bottom: 0;
-    z-index: 35;
-    width: min(var(--codex-coach-width), 88vw);
-    box-shadow: -8px 0 24px oklch(0 0 0 / 18%);
-  }
-}
 .codex-sidebar-actions {
   display: grid;
   grid-template-columns: minmax(0, 1fr);

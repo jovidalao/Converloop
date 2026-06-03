@@ -1,6 +1,5 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
-  BrainIcon,
   ChevronDownIcon,
   PanelLeftIcon,
   PanelRightIcon,
@@ -452,7 +451,7 @@ function App() {
                     aria-pressed={coachVisible}
                     aria-label={coachVisible ? "隐藏教练面板" : "显示教练面板"}
                   >
-                    <BrainIcon />
+                    <PanelRightIcon />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent side="bottom" align="end">
