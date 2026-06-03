@@ -27,10 +27,20 @@ function applyTheme(theme: Theme) {
   const dark = theme === "dark" || (theme === "system" && systemPrefersDark());
   document.documentElement.classList.toggle("dark", dark);
   // Sync the native macOS window appearance so the traffic-light buttons
-  // (notably their unfocused gray) match the in-app theme instead of trailing
-  // the system appearance.
+  // (notably their unfocused gray) match the in-app theme. In "system" mode we
+  // must reset to null (follow OS): forcing an explicit window theme pins the
+  // webview's prefers-color-scheme to that value, which would stop "system"
+  // from ever tracking the OS appearance again.
   void getCurrentWindow()
-    .setTheme(dark ? "dark" : "light")
+    .setTheme(theme === "system" ? null : dark ? "dark" : "light")
+    .then(() => {
+      // After releasing a previously-pinned theme, the media query may only
+      // reflect the OS once setTheme settles; re-read so "system" lands right
+      // even if no "change" event fires.
+      if (theme === "system") {
+        document.documentElement.classList.toggle("dark", systemPrefersDark());
+      }
+    })
     .catch(() => {});
 }
 
