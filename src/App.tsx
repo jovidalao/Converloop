@@ -7,6 +7,7 @@ import {
   SearchIcon,
   SparklesIcon,
   SquarePenIcon,
+  XIcon,
 } from "lucide-react";
 import {
   type CSSProperties,
@@ -78,6 +79,7 @@ function App() {
   const [coachTurn, setCoachTurn] = useState<ChatTurn | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [derivationBusy, setDerivationBusy] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
   const [resizingSidebar, setResizingSidebar] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     const saved = Number(localStorage.getItem("sidebarWidth"));
@@ -91,6 +93,13 @@ function App() {
   useEffect(() => {
     localStorage.setItem("coachOpen", String(coachOpen));
   }, [coachOpen]);
+
+  // 顶层轻量提示(如衍生失败):几秒后自动消失,也可手动关。
+  useEffect(() => {
+    if (!toast) return;
+    const timer = window.setTimeout(() => setToast(null), 6000);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
 
   // 切换会话时清掉上一会话残留的本轮反馈,等新会话 ChatView 重新上报。
   // biome-ignore lint/correctness/useExhaustiveDependencies: activeId 仅作触发,effect 不读它
@@ -207,9 +216,7 @@ function App() {
       await refresh();
       if (result.navigateTo) selectConversation(result.navigateTo);
     } catch (e) {
-      window.alert(
-        `对话衍生失败: ${e instanceof Error ? e.message : String(e)}`,
-      );
+      setToast(`对话衍生失败：${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setDerivationBusy(false);
     }
@@ -512,6 +519,20 @@ function App() {
         onStartLearningAgent={(id) => void startLearningAgent(id)}
         onNewChat={openDraftConversation}
       />
+
+      {toast && (
+        <div className="-translate-x-1/2 fixed bottom-6 left-1/2 z-50 flex max-w-[min(90vw,30rem)] items-center gap-3 rounded-lg border border-destructive/30 bg-card px-4 py-3 text-sm text-foreground shadow-lg">
+          <span className="min-w-0 flex-1">{toast}</span>
+          <button
+            type="button"
+            className="shrink-0 text-muted-foreground transition-colors hover:text-foreground"
+            onClick={() => setToast(null)}
+            aria-label="关闭"
+          >
+            <XIcon size={15} />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

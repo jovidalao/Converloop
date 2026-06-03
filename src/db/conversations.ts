@@ -228,9 +228,12 @@ export async function failDerivedConversation(
 ): Promise<void> {
   const conv = await getConversation(id);
   const modifiers = parseAgentModifiers(conv?.agentModifiersJson ?? null);
+  // 标题随状态改为「… · 生成失败」,避免侧栏永远停在「生成中」。
+  const label = modifiers.derivation?.actionLabel ?? "衍生对话";
   await db
     .update(conversation)
     .set({
+      title: `${label} · 生成失败`,
       updatedAt: Date.now(),
       agentModifiersJson: JSON.stringify({
         ...modifiers,
