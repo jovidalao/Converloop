@@ -1,5 +1,6 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
+  ArrowLeftIcon,
   ChevronDownIcon,
   PanelLeftIcon,
   PanelRightIcon,
@@ -333,6 +334,25 @@ function App() {
                 </kbd>
               </TooltipContent>
             </Tooltip>
+            {view !== "chat" && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="codex-chrome-button"
+                    onClick={() => withViewTransition(() => setView("chat"))}
+                    aria-label="返回对话"
+                  >
+                    <ArrowLeftIcon />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" align="start">
+                  <span>返回对话</span>
+                </TooltipContent>
+              </Tooltip>
+            )}
           </TooltipProvider>
         </div>
         <div className="codex-titlebar">
