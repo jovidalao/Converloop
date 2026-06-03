@@ -5,6 +5,7 @@ import {
   ChevronRightIcon,
   GraduationCapIcon,
   ListChecksIcon,
+  MoreHorizontalIcon,
   PencilIcon,
   PlusIcon,
   SettingsIcon,
@@ -111,7 +112,7 @@ export function Sidebar({
   const [learningCollapsed, setLearningCollapsed] = useState(false);
   const [editingAgentId, setEditingAgentId] = useState<string | null>(null);
   const [conversationMenu, setConversationMenu] = useState<{
-    id: string;
+    conv: ConversationMeta;
     x: number;
     y: number;
   } | null>(null);
@@ -143,14 +144,26 @@ export function Sidebar({
     };
   }, [conversationMenu]);
 
+  // 右键:在鼠标处弹出完整上下文菜单(衍生 + 重命名 + 删除)。
   function openConversationMenu(e: ReactMouseEvent, c: ConversationMeta) {
-    if (c.kind !== "practice" || derivationActions.length === 0) return;
     e.preventDefault();
     e.stopPropagation();
     setConversationMenu({
-      id: c.id,
+      conv: c,
       x: Math.max(8, Math.min(e.clientX, window.innerWidth - 276)),
       y: Math.max(8, Math.min(e.clientY, window.innerHeight - 320)),
+    });
+  }
+
+  // 「⋯」按钮:键盘/触控板可达的同一菜单,锚定到按钮下方。
+  function openMenuFromButton(e: ReactMouseEvent, c: ConversationMeta) {
+    e.preventDefault();
+    e.stopPropagation();
+    const r = e.currentTarget.getBoundingClientRect();
+    setConversationMenu({
+      conv: c,
+      x: Math.max(8, Math.min(r.right - 256, window.innerWidth - 276)),
+      y: Math.max(8, Math.min(r.bottom + 4, window.innerHeight - 320)),
     });
   }
 
@@ -385,32 +398,11 @@ export function Sidebar({
                 <span className="codex-row-actions">
                   <button
                     type="button"
-                    title="重命名"
-                    aria-label="重命名"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      startEdit(c);
-                    }}
+                    title="更多操作"
+                    aria-label="更多操作"
+                    onClick={(e) => openMenuFromButton(e, c)}
                   >
-                    <PencilIcon className="size-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    title="删除"
-                    aria-label="删除"
-                    onClick={async (e) => {
-                      e.stopPropagation();
-                      if (
-                        await confirm({
-                          title: `删除对话「${c.title}」?`,
-                          description: "此操作不可撤销。",
-                        })
-                      ) {
-                        onDelete(c.id);
-                      }
-                    }}
-                  >
-                    <Trash2Icon className="size-3.5" />
+                    <MoreHorizontalIcon className="size-3.5" />
                   </button>
                 </span>
               </div>
@@ -477,46 +469,85 @@ export function Sidebar({
         title="拖动调整宽度"
       />
 
-      {conversationMenu && (
-        <div
-          className="fixed z-50 min-w-64 rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
-          style={{
-            left: conversationMenu.x,
-            top: conversationMenu.y,
-          }}
-          role="menu"
-          onContextMenu={(e) => e.preventDefault()}
-        >
-          <div className="flex items-center gap-2 px-2 py-1.5 text-xs font-medium text-muted-foreground">
-            <SparklesIcon size={13} />
-            衍生新对话
-          </div>
-          {derivationActions.map((action) => (
-            <button
-              key={action.id}
-              type="button"
-              role="menuitem"
-              className="flex w-full items-start gap-2.5 rounded-sm px-2 py-1.5 text-left text-sm outline-none hover:bg-accent hover:text-accent-foreground"
-              onClick={() => {
-                onDeriveConversation(conversationMenu.id, action.id);
-                setConversationMenu(null);
-              }}
+      {conversationMenu &&
+        (() => {
+          const c = conversationMenu.conv;
+          const showDerivation =
+            c.kind === "practice" && derivationActions.length > 0;
+          return (
+            <div
+              className="fixed z-50 min-w-64 rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
+              style={{ left: conversationMenu.x, top: conversationMenu.y }}
+              role="menu"
+              onContextMenu={(e) => e.preventDefault()}
             >
-              <SparklesIcon className="mt-0.5 size-3.5 shrink-0" />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate font-medium">
-                  {action.label}
-                </span>
-                {action.description && (
-                  <span className="block truncate text-xs text-muted-foreground">
-                    {action.description}
-                  </span>
-                )}
-              </span>
-            </button>
-          ))}
-        </div>
-      )}
+              {showDerivation && (
+                <>
+                  <div className="flex items-center gap-2 px-2 py-1.5 text-xs font-medium text-muted-foreground">
+                    <SparklesIcon size={13} />
+                    衍生新对话
+                  </div>
+                  {derivationActions.map((action) => (
+                    <button
+                      key={action.id}
+                      type="button"
+                      role="menuitem"
+                      className="flex w-full items-start gap-2.5 rounded-sm px-2 py-1.5 text-left text-sm outline-none hover:bg-accent hover:text-accent-foreground"
+                      onClick={() => {
+                        onDeriveConversation(c.id, action.id);
+                        setConversationMenu(null);
+                      }}
+                    >
+                      <SparklesIcon className="mt-0.5 size-3.5 shrink-0" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate font-medium">
+                          {action.label}
+                        </span>
+                        {action.description && (
+                          <span className="block truncate text-xs text-muted-foreground">
+                            {action.description}
+                          </span>
+                        )}
+                      </span>
+                    </button>
+                  ))}
+                  <div className="my-1 h-px bg-border" />
+                </>
+              )}
+              <button
+                type="button"
+                role="menuitem"
+                className="flex w-full items-center gap-2.5 rounded-sm px-2 py-1.5 text-left text-sm outline-none hover:bg-accent hover:text-accent-foreground"
+                onClick={() => {
+                  startEdit(c);
+                  setConversationMenu(null);
+                }}
+              >
+                <PencilIcon className="size-3.5 shrink-0" />
+                重命名
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="flex w-full items-center gap-2.5 rounded-sm px-2 py-1.5 text-left text-sm text-destructive outline-none hover:bg-accent"
+                onClick={async () => {
+                  setConversationMenu(null);
+                  if (
+                    await confirm({
+                      title: `删除对话「${c.title}」?`,
+                      description: "此操作不可撤销。",
+                    })
+                  ) {
+                    onDelete(c.id);
+                  }
+                }}
+              >
+                <Trash2Icon className="size-3.5 shrink-0" />
+                删除
+              </button>
+            </div>
+          );
+        })()}
 
       {editingAgent && (
         <LearningAgentEditDialog
