@@ -34,6 +34,35 @@ export async function createAgentJob(input: {
   return id;
 }
 
+// 一次性落一条「已完成」的 Agent 运行日志(= agent_run 语义)。热路径用:跑完后
+// fire-and-forget 写入,单次 insert,不在 LLM 调用前插行。token 暂不记(provider 接口未暴露)。
+export async function recordAgentRun(run: {
+  kind: string; // hook 名,如 "conversation.reply"
+  source: AgentJobSource;
+  agentId?: string;
+  turnId?: string;
+  status: "succeeded" | "failed";
+  output?: unknown;
+  error?: string | null;
+  startedAt: number;
+  finishedAt: number;
+}): Promise<void> {
+  await db.insert(agentJob).values({
+    id: crypto.randomUUID(),
+    kind: run.kind,
+    status: run.status,
+    inputJson: run.agentId ? JSON.stringify({ agentId: run.agentId }) : null,
+    outputJson: payloadJson(run.output),
+    error: run.error ?? null,
+    source: run.source,
+    turnId: run.turnId ?? null,
+    createdAt: run.startedAt,
+    updatedAt: run.finishedAt,
+    startedAt: run.startedAt,
+    finishedAt: run.finishedAt,
+  });
+}
+
 export async function listAgentJobs(limit = 50): Promise<AgentJob[]> {
   return db
     .select()

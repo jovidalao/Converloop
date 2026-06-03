@@ -29,6 +29,8 @@ AI 语言学习 agent —— 第一版范围、数据流、存储与现状。Age
 
 热路径只有对话 ∥ 导师两个 agent;维护、任务规划与讲解都不在热路径上(后台 / 按需)。代码侧的编排在 `src/orchestrator.ts`(`runTurn` = 对话 ∥ 导师 + 记账 + 持久化;`createLearningProjectFromGoal` = Task Agent 规划;`explainReply` = 按需讲解)。
 
+> **Agent Runtime(Phase 1):** 对话 / 专项课的主回复(reply_producer)与导师批改(observer)不再硬编码在 `runTurn` 里,而是经 `src/runtime` 的注册表派发(`dispatchReply` 按会话 kind 取唯一回复 Agent,`dispatchObservers` 遍历所有 observer 并行触发)。内置 Agent 在 `src/runtime/builtins.ts` 自注册;新增 observer 只需 `registerObserver`,不必改 `runTurn`。记账仍在代码侧(导师 observer 调 `recordAnalysis`,LLM 不碰计数)。每次运行经 `recordAgentRun` 落一条 `agent_job` 日志(`source="conversation"`,关联 `turn_id`)。详见 [agent-runtime-plan.md](./agent-runtime-plan.md)。
+
 ## 两层存储:各管一摊(核心决策)
 
 | 层 | 存什么 | 谁维护 | 为什么 |
@@ -289,6 +291,9 @@ v1 核心链路已完成并可用:
 - ✅ Task Agent / 学习项目:把开放式学习需求规划成 `learning_project`,并生成有界专项课草案;`agent_job` 记录作业状态
 - ✅ 学习数据页自然语言修改:LLM 只生成有限操作,代码执行 create/update/delete/状态修改,不让 LLM 直接碰计数
 - ✅ 最小 UI:聊天 / 批改面板 / 档案查看编辑(含 AI 自定义偏好) / 学习数据管理 / 设置(provider + key + TTS)
+- ✅ 教练面板(Agent-first Phase 2):右栏常驻 Coach Panel,展示本轮反馈 + 本轮「系统记下了什么」(`deriveSignals` 同源);三栏工作台布局(侧栏 / 对话 / 教练),窄屏降级为抽屉。详见 [agent-runtime-plan.md](./agent-runtime-plan.md)
+- ✅ 会话动作 + 分支(Agent-first Phase 3):`conversation.action` action Agent(从此处分支 / 重新开始 / 升降难度 / 调换角色 / 第二天继续)非破坏式派生分支(`createBranch`,`conversation` 加 parent/branch_kind/agent_modifiers 列,migration v23–v26),修饰符经 `SESSION ADJUSTMENTS` 注入对话回复;动作条与按钮由注册表驱动。详见 [agent-runtime-plan.md](./agent-runtime-plan.md)
+- ✅ Agent 能力库(Agent-first Phase 4):能力库页(侧栏 → 能力库)按 kind 展示注册表里的内置 Agent(做什么/时机/读写)、启用/禁用(`runtime/enablement.ts`,localStorage)、运行日志(`agent_job`)。能力库真相源是内存注册表,未把代码 Agent 同步进 DB。详见 [agent-runtime-plan.md](./agent-runtime-plan.md)
 
 **下一步(未实现):**
 

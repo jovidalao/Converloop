@@ -2,6 +2,7 @@ import {
   ArrowUpIcon,
   CheckIcon,
   CopyIcon,
+  GitBranchIcon,
   LanguagesIcon,
   PencilIcon,
   RefreshCwIcon,
@@ -28,6 +29,7 @@ import {
   runTurn,
   startLearningSession,
 } from "../orchestrator";
+import { getActions, isAgentEnabled, runAction } from "../runtime";
 import { loadTtsConfig } from "../tts/config";
 import { stopSpeech } from "../tts/playback";
 import { createReplySpeaker } from "../tts/stream";
@@ -48,6 +50,12 @@ interface ChatViewProps {
   onActivity?: () => void;
   /** 新对话草稿首轮成功持久化后,补建真实 conversation 行。 */
   onCreateDraftConversation?: (id: string) => Promise<void>;
+  /** 把最新一轮上报给右栏教练面板;批改到达时会再次上报(只读,不改本组件逻辑)。 */
+  onActiveTurnChange?: (turn: ChatTurn | null) => void;
+  /** 会话动作创建分支后切换到新会话(由 App 提供)。 */
+  onNavigateConversation?: (id: string) => void;
+  /** 当前会话若是分支,显示来源标签(如「更高难度 · 源自《…》」)。 */
+  branchLabel?: string;
 }
 
 // 复制这条回复。复制后短暂显示对勾。
@@ -285,9 +293,12 @@ function idiomaticText(analysis: TutorAnalysis | null): string | null {
 function UserMessageActions({
   turn,
   onEditFrom,
+  onTurnAction,
 }: {
   turn: ChatTurn;
   onEditFrom: () => void;
+  // 注册表驱动的 turn 级动作(如「从此处分支」);新增动作无需改本组件。
+  onTurnAction: (actionId: string) => void;
 }) {
   const analysis = turn.analysis;
   const corrected = analysis?.corrected?.trim() || turn.userText;
@@ -298,6 +309,20 @@ function UserMessageActions({
       <CopyButton text={corrected} />
       {canSpeak && <SpeakButton text={speakTarget} />}
       <EditFromHereButton onClick={onEditFrom} />
+      {getActions("turn")
+        .filter((a) => isAgentEnabled(a.id))
+        .map((a) => (
+          <Button
+            key={a.id}
+            type="button"
+            variant="action"
+            size="action"
+            title={`${a.label}:${a.description ?? ""}`}
+            onClick={() => onTurnAction(a.id)}
+          >
+            <GitBranchIcon size={16} />
+          </Button>
+        ))}
     </>
   );
 }
@@ -309,11 +334,13 @@ function UserTurn({
   nativeLanguage,
   learningMode,
   onEditFrom,
+  onTurnAction,
 }: {
   turn: ChatTurn;
   nativeLanguage: string;
   learningMode: boolean;
   onEditFrom: () => void;
+  onTurnAction: (actionId: string) => void;
 }) {
   const idiomatic = idiomaticText(turn.analysis);
   const [naturalOpen, setNaturalOpen] = useState(true);
@@ -358,7 +385,13 @@ function UserTurn({
         proseFeedback={turn.analysisProse}
         pending={!!turn.analysisPending}
         error={turn.analysisError}
-        leading={<UserMessageActions turn={turn} onEditFrom={onEditFrom} />}
+        leading={
+          <UserMessageActions
+            turn={turn}
+            onEditFrom={onEditFrom}
+            onTurnAction={onTurnAction}
+          />
+        }
         natural={
           idiomatic
             ? { open: naturalOpen, onToggle: () => setNaturalOpen((v) => !v) }
@@ -375,12 +408,16 @@ export function ChatView({
   mode = "practice",
   onActivity,
   onCreateDraftConversation,
+  onActiveTurnChange,
+  onNavigateConversation,
+  branchLabel,
 }: ChatViewProps) {
   const [turns, setTurns] = useState<ChatTurn[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState("");
   const [layoutTick, setLayoutTick] = useState(0);
   const [replyBusy, setReplyBusy] = useState(false);
+  const [actionBusy, setActionBusy] = useState(false);
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   // 上一次失败操作的重试入口(发送 / 重新生成 / 专项课启动共用底部错误条)。
@@ -435,6 +472,11 @@ export function ChatView({
       cancelled = true;
     };
   }, [conversationId, learningMode]);
+
+  // 最新一轮上报给教练面板。turns 在批改到达时会被 patch(新对象),故 analysis 一到就自动重报。
+  useEffect(() => {
+    onActiveTurnChange?.(turns.length ? turns[turns.length - 1] : null);
+  }, [turns, onActiveTurnChange]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: turns/streaming/layoutTick are intentional scroll triggers; the effect reads refs only
   useEffect(() => {
@@ -690,14 +732,70 @@ export function ChatView({
     }
   }
 
+  // 会话动作(分支 / 调换角色 / 升降难度…):跑注册的 action Agent,建好分支后切换过去。
+  // 原会话不动(非破坏式),区别于 editFromHere(截断)。
+  async function runConversationAction(
+    actionId: string,
+    sourceTurnId?: string,
+  ) {
+    if (actionBusy || replyBusy) return;
+    setActionBusy(true);
+    setError(null);
+    setRetry(null);
+    try {
+      const result = await runAction(actionId, {
+        conversationId,
+        sourceTurnId,
+      });
+      onActivity?.();
+      if (result.navigateTo) onNavigateConversation?.(result.navigateTo);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setActionBusy(false);
+    }
+  }
+
   // 最新一条带回复的轮次——「重新生成」只挂在它上面。
   let lastReplyTurnId: string | undefined;
   for (const t of turns) if (t.partnerText) lastReplyTurnId = t.id;
 
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col">
+      {/* 会话状态条 + 高频动作(注册表驱动:新增 session 动作无需改本组件)。 */}
+      {!learningMode && (turns.length > 0 || branchLabel) && (
+        <div className="flex shrink-0 flex-wrap items-center gap-2 border-b px-4 py-2">
+          {branchLabel && (
+            <span
+              className="inline-flex items-center gap-1 rounded-full bg-accent px-2 py-0.5 text-xs font-medium text-primary"
+              title="这是一个分支会话,原对话保持不变"
+            >
+              <GitBranchIcon size={12} />
+              {branchLabel}
+            </span>
+          )}
+          <div className="ml-auto flex flex-wrap items-center justify-end gap-1">
+            {getActions("session")
+              .filter((a) => isAgentEnabled(a.id))
+              .map((a) => (
+                <Button
+                  key={a.id}
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-xs"
+                  title={a.description}
+                  disabled={actionBusy || replyBusy || turns.length === 0}
+                  onClick={() => void runConversationAction(a.id)}
+                >
+                  {a.label}
+                </Button>
+              ))}
+          </div>
+        </div>
+      )}
       <div
-        className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain px-4 pt-14 pb-3"
+        className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain px-4 pt-6 pb-3"
         ref={messagesRef}
         onScroll={syncStickToBottom}
       >
@@ -721,6 +819,9 @@ export function ChatView({
                 nativeLanguage={nativeLanguage}
                 learningMode={learningMode}
                 onEditFrom={() => void editFromHere(turn.id)}
+                onTurnAction={(actionId) =>
+                  void runConversationAction(actionId, turn.id)
+                }
               />
             )}
             {turn.partnerText && (

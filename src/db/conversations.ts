@@ -1,9 +1,71 @@
-import { and, count, desc, eq, gte, isNull } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, isNull, lte } from "drizzle-orm";
 import { db } from "./client";
-import { type Conversation, conversation, turn } from "./schema";
+import { type Conversation, conversation, type Turn, turn } from "./schema";
 
 export type ConversationMeta = Conversation;
 export type ConversationKind = Conversation["kind"];
+
+// 会话分支(Phase 3)。分支是非破坏式动作:从原会话派生新会话,原会话保持不变。
+export type BranchKind =
+  | "branch_from"
+  | "restart"
+  | "harder"
+  | "easier"
+  | "swap_roles"
+  | "next_day";
+
+export const BRANCH_KIND_LABEL: Record<BranchKind, string> = {
+  branch_from: "分支",
+  restart: "重新开始",
+  harder: "更高难度",
+  easier: "更简单",
+  swap_roles: "调换角色",
+  next_day: "第二天",
+};
+
+// 会话级调节:回复 Agent 要遵循的行为变化。LLM 观察,行为由代码注入(格式化成指令)。
+export interface AgentModifiers {
+  difficultyDelta?: number; // +1 更难 / -1 更简单
+  swapRoles?: boolean;
+  nextDay?: boolean;
+  note?: string; // 自由补充指令
+}
+
+export function parseAgentModifiers(json: string | null): AgentModifiers {
+  if (!json) return {};
+  try {
+    const raw = JSON.parse(json) as unknown;
+    if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+      return raw as AgentModifiers;
+    }
+  } catch {
+    // 损坏的 JSON 退化为无调节
+  }
+  return {};
+}
+
+// 把会话级调节转成喂给对话 Agent 的英文指令;无调节返回空串。
+export function formatModifierInstructions(mods: AgentModifiers): string {
+  const lines: string[] = [];
+  if (mods.difficultyDelta && mods.difficultyDelta > 0)
+    lines.push(
+      "- Push the difficulty noticeably HIGHER than this learner's usual level: longer, richer, more idiomatic sentences that stretch them, while staying just within reach.",
+    );
+  if (mods.difficultyDelta && mods.difficultyDelta < 0)
+    lines.push(
+      "- EASE the difficulty below this learner's usual level: shorter sentences, high-frequency vocabulary, one idea at a time.",
+    );
+  if (mods.swapRoles)
+    lines.push(
+      "- Swap conversational roles: let the LEARNER lead and ask the questions; you mostly respond and follow their lead, nudging them to drive the exchange.",
+    );
+  if (mods.nextDay)
+    lines.push(
+      "- This conversation resumes an earlier one on a NEW DAY. Open with a brief, natural reconnection (a greeting or callback to before), then carry on — do not restart from scratch.",
+    );
+  if (mods.note?.trim()) lines.push(`- ${mods.note.trim()}`);
+  return lines.join("\n");
+}
 
 // 新会话的占位标题;首条消息发出后由 ChatView 改成截断的输入内容(ChatGPT 式)。
 export const DEFAULT_CONVERSATION_TITLE = "新对话";
@@ -52,6 +114,79 @@ export async function createConversation(
     kind: opts.kind ?? "practice",
     learningAgentId: opts.learningAgentId ?? null,
   });
+  return id;
+}
+
+// 从一个已有会话派生分支。原会话不动(非破坏式),区别于 truncateConversationFrom。
+// copyTurns: "all" 复制全部历史 / "none" 空白开始 / {upToTurnId} 复制到该轮(含)。
+// 复制的 turn 拿到新 id 挂到分支下,保留 createdAt/批改,不重新跑导师(不影响 mastery)。
+export async function createBranch(opts: {
+  parentId: string;
+  branchKind: BranchKind;
+  title: string;
+  modifiers?: AgentModifiers;
+  copyTurns: "all" | "none" | { upToTurnId: string };
+  sourceTurnId?: string | null;
+}): Promise<string> {
+  const id = crypto.randomUUID();
+  const now = Date.now();
+  const mods =
+    opts.modifiers && Object.keys(opts.modifiers).length > 0
+      ? opts.modifiers
+      : null;
+  await db.insert(conversation).values({
+    id,
+    title: opts.title.trim() || DEFAULT_CONVERSATION_TITLE,
+    createdAt: now,
+    updatedAt: now,
+    kind: "practice",
+    learningAgentId: null,
+    parentConversationId: opts.parentId,
+    branchSourceTurnId: opts.sourceTurnId ?? null,
+    branchKind: opts.branchKind,
+    agentModifiersJson: mods ? JSON.stringify(mods) : null,
+  });
+
+  if (opts.copyTurns !== "none") {
+    let rows: Turn[];
+    if (opts.copyTurns === "all") {
+      rows = await db
+        .select()
+        .from(turn)
+        .where(eq(turn.conversationId, opts.parentId))
+        .orderBy(asc(turn.createdAt));
+    } else {
+      const [mark] = await db
+        .select({ createdAt: turn.createdAt })
+        .from(turn)
+        .where(eq(turn.id, opts.copyTurns.upToTurnId))
+        .limit(1);
+      rows = mark
+        ? await db
+            .select()
+            .from(turn)
+            .where(
+              and(
+                eq(turn.conversationId, opts.parentId),
+                lte(turn.createdAt, mark.createdAt),
+              ),
+            )
+            .orderBy(asc(turn.createdAt))
+        : [];
+    }
+    for (const r of rows) {
+      await db.insert(turn).values({
+        id: crypto.randomUUID(),
+        createdAt: r.createdAt,
+        userInput: r.userInput,
+        reply: r.reply,
+        analysisJson: r.analysisJson,
+        conversationId: id,
+        explainCount: r.explainCount,
+        bilingualCount: r.bilingualCount,
+      });
+    }
+  }
   return id;
 }
 

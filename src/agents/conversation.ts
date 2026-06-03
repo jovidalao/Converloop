@@ -9,6 +9,7 @@ export interface ConversationContext {
   experiencePreferences: string; // 用户在设置页显式配置的体验偏好
   reviewItems: ReviewItem[]; // 代码选的复习候选,自然复用(见 db/mastery getReviewDueList)
   calibrationHint: string; // 证据驱动的难度校准(见 lib/proficiency;证据不足时为空)
+  sessionAdjustments: string; // 会话级调节指令(分支带来的难度/角色/第二天等;无则为空)
   summary: string; // 滚动摘要:较早内容的目标语 recap(自动压缩产出;无则为空)
   history: string;
   userInput: string;
@@ -38,6 +39,10 @@ function systemPrompt(ctx: ConversationContext): string {
   // 证据足够时,把动态读数作为额外一行校准提示;不足则只用静态 level。
   const calibrationLine = ctx.calibrationHint
     ? `\n- Current read on this learner from recent activity: ${ctx.calibrationHint} Let this fine-tune your difficulty and reply length.`
+    : "";
+  // 会话级调节(分支)优先于默认行为;无调节时整段省略。
+  const adjustmentsBlock = ctx.sessionAdjustments
+    ? `\n\n=== SESSION ADJUSTMENTS (apply on top of everything above) ===\n${ctx.sessionAdjustments}`
     : "";
   return `You are a warm, natural conversation partner for a ${ctx.nativeLanguage} speaker
 learning ${ctx.targetLanguage} at roughly ${ctx.level} level. Your only job here is to
@@ -71,7 +76,7 @@ RULES
 - Keep it to a natural chat length. You may use light Markdown (bold, italics,
   bullet lists) when it genuinely aids clarity — e.g. highlighting a key word or
   listing a few options — but stay conversational: no headings, no code blocks
-  unless the topic calls for it.
+  unless the topic calls for it.${adjustmentsBlock}
 
 === LEARNER EXPERIENCE PREFERENCES ===
 ${ctx.experiencePreferences || "(none)"}

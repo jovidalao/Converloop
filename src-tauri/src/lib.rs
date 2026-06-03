@@ -137,6 +137,18 @@ CREATE TABLE IF NOT EXISTS agent_job (
     finished_at INTEGER
 );";
 
+const ADD_AGENT_JOB_TURN_ID: &str =
+    "ALTER TABLE agent_job ADD COLUMN turn_id TEXT;";
+
+const ADD_CONVERSATION_PARENT_ID: &str =
+    "ALTER TABLE conversation ADD COLUMN parent_conversation_id TEXT;";
+const ADD_CONVERSATION_BRANCH_SOURCE_TURN_ID: &str =
+    "ALTER TABLE conversation ADD COLUMN branch_source_turn_id TEXT;";
+const ADD_CONVERSATION_BRANCH_KIND: &str =
+    "ALTER TABLE conversation ADD COLUMN branch_kind TEXT;";
+const ADD_CONVERSATION_AGENT_MODIFIERS_JSON: &str =
+    "ALTER TABLE conversation ADD COLUMN agent_modifiers_json TEXT;";
+
 const CREATE_LEARNING_PROJECT: &str = "\
 CREATE TABLE IF NOT EXISTS learning_project (
     id             TEXT PRIMARY KEY NOT NULL,
@@ -323,6 +335,36 @@ pub fn run() {
             version: 21,
             description: "create_learning_project",
             sql: CREATE_LEARNING_PROJECT,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 22,
+            description: "add_agent_job_turn_id",
+            sql: ADD_AGENT_JOB_TURN_ID,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 23,
+            description: "add_conversation_parent_id",
+            sql: ADD_CONVERSATION_PARENT_ID,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 24,
+            description: "add_conversation_branch_source_turn_id",
+            sql: ADD_CONVERSATION_BRANCH_SOURCE_TURN_ID,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 25,
+            description: "add_conversation_branch_kind",
+            sql: ADD_CONVERSATION_BRANCH_KIND,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 26,
+            description: "add_conversation_agent_modifiers_json",
+            sql: ADD_CONVERSATION_AGENT_MODIFIERS_JSON,
             kind: MigrationKind::Up,
         },
     ];

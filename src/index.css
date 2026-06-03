@@ -144,6 +144,8 @@
 .codex-shell {
   --codex-topbar-h: 46px;
   --codex-sidebar-width-current: var(--sidebar-width);
+  --codex-coach-width: 340px;
+  --codex-coach-width-current: 0px;
   --codex-main-bg: var(--background);
   --codex-topbar-bg: oklch(0.985 0 0);
   --codex-sidebar-bg: oklch(0.975 0 0);
@@ -166,7 +168,9 @@
 
   position: relative;
   display: grid;
-  grid-template-columns: var(--codex-sidebar-width-current) minmax(0, 1fr);
+  grid-template-columns:
+    var(--codex-sidebar-width-current) minmax(0, 1fr)
+    var(--codex-coach-width-current);
   grid-template-rows: var(--codex-topbar-h) minmax(0, 1fr);
   height: 100%;
   min-height: 100vh;
@@ -216,6 +220,9 @@
 }
 .codex-shell[data-sidebar-collapsed="true"] {
   --codex-sidebar-width-current: 0px;
+}
+.codex-shell[data-coach-open="true"] {
+  --codex-coach-width-current: var(--codex-coach-width);
 }
 .codex-shell[data-sidebar-resizing="true"] {
   transition: none;
@@ -313,6 +320,33 @@
   grid-row: 2;
   min-width: 0;
   background: var(--codex-main-bg);
+}
+.codex-coach {
+  grid-column: 3;
+  grid-row: 2;
+  min-width: 0;
+  overflow: hidden;
+  border-left: 1px solid var(--codex-border);
+  background: var(--codex-sidebar-bg);
+  color: var(--codex-sidebar-fg);
+}
+.codex-coach-content {
+  width: var(--codex-coach-width);
+}
+/* 窄屏:不挤压对话,改成从右侧浮出的抽屉。 */
+@media (max-width: 1024px) {
+  .codex-shell[data-coach-open="true"] {
+    --codex-coach-width-current: 0px;
+  }
+  .codex-shell[data-coach-open="true"] .codex-coach {
+    position: absolute;
+    top: var(--codex-topbar-h);
+    right: 0;
+    bottom: 0;
+    z-index: 35;
+    width: min(var(--codex-coach-width), 88vw);
+    box-shadow: -8px 0 24px oklch(0 0 0 / 18%);
+  }
 }
 .codex-sidebar-actions {
   display: grid;

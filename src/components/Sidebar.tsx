@@ -1,7 +1,9 @@
 import {
+  BlocksIcon,
   BookOpenCheckIcon,
   ChevronDownIcon,
   ChevronRightIcon,
+  GitBranchIcon,
   GraduationCapIcon,
   ListChecksIcon,
   PencilIcon,
@@ -16,7 +18,11 @@ import {
   useMemo,
   useState,
 } from "react";
-import type { ConversationMeta } from "../db/conversations";
+import {
+  BRANCH_KIND_LABEL,
+  type BranchKind,
+  type ConversationMeta,
+} from "../db/conversations";
 import {
   deleteLearningAgent,
   type LearningAgentDraft,
@@ -32,7 +38,13 @@ import {
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
 
-export type MainView = "chat" | "profile" | "mastery" | "learning" | "settings";
+export type MainView =
+  | "chat"
+  | "profile"
+  | "mastery"
+  | "learning"
+  | "agents"
+  | "settings";
 
 // 相对时间:1 分钟内「刚刚」,然后分钟→小时→天→周→月→年逐级进位。
 export function formatRelativeTime(ts: number): string {
@@ -314,6 +326,14 @@ export function Sidebar({
                 {c.kind === "learning_agent" && (
                   <BookOpenCheckIcon className="size-3.5 shrink-0" />
                 )}
+                {c.branchKind && (
+                  <span
+                    className="inline-flex shrink-0 text-[color:var(--codex-sidebar-muted)]"
+                    title={`分支:${BRANCH_KIND_LABEL[c.branchKind as BranchKind] ?? c.branchKind}`}
+                  >
+                    <GitBranchIcon className="size-3.5" />
+                  </span>
+                )}
                 <span className="min-w-0 flex-1 truncate">{c.title}</span>
                 <span className="codex-row-meta group-hover:hidden">
                   {formatRelativeTime(c.updatedAt)}
@@ -368,7 +388,8 @@ export function Sidebar({
                 data-active={
                   view === "settings" ||
                   view === "mastery" ||
-                  view === "profile"
+                  view === "profile" ||
+                  view === "agents"
                 }
                 title="设置"
                 aria-label="设置"
@@ -392,6 +413,10 @@ export function Sidebar({
               <DropdownMenuItem onSelect={() => onOpenView("mastery")}>
                 <ListChecksIcon size={16} />
                 数据
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => onOpenView("agents")}>
+                <BlocksIcon size={16} />
+                能力库
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => onOpenView("profile")}>
                 <UserRoundIcon size={16} />

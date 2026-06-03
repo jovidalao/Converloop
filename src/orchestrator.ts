@@ -1,32 +1,32 @@
 import { bilingual } from "./agents/bilingual";
 import { converse } from "./agents/conversation";
 import { explain } from "./agents/explain";
-import { runLearningAgent } from "./agents/learning";
 import { generateLearningAgentDraft } from "./agents/learning-agent-builder";
 import { classifyProfilePreferenceInstruction } from "./agents/profile-preferences";
 import type { TutorAnalysis } from "./agents/schema";
 import { planLearningProject } from "./agents/task-agent";
 import { translate } from "./agents/translate";
-import { analyze } from "./agents/tutor";
 import { getProvider, loadConfig } from "./config";
 import { applyDataEditInstruction, type DataEditResult } from "./data-edit";
 import { runTrackedAgentJob } from "./db/agent-jobs";
-import { getConversation, getSummary } from "./db/conversations";
+import {
+  formatModifierInstructions,
+  getConversation,
+  getSummary,
+  parseAgentModifiers,
+} from "./db/conversations";
 import { createLearningAgent, getLearningAgent } from "./db/learning-agents";
 import { createLearningProject } from "./db/learning-projects";
-import { getReviewDueList, getWeakList, recordAnalysis } from "./db/mastery";
+import { getReviewDueList, getWeakList } from "./db/mastery";
 import { getProficiencySnapshot } from "./db/proficiency";
 import {
   formatTurns,
   getTurnsAfterId,
   persistTurn,
-  updateTurnAnalysis,
   updateTurnReply,
 } from "./db/turns";
 import { buildLearningDataContext } from "./learning-data";
-import { logError } from "./lib/log";
 import { estimateTokens } from "./lib/tokens";
-import { maybeRunMaintainer } from "./profile/maintainer-runner";
 import {
   appendClassifiedPreferences,
   correctionPreferenceFlags,
@@ -35,16 +35,16 @@ import {
 } from "./profile/preferences";
 import { profileSliceForConversation, readProfile } from "./profile/profile";
 import { maybeCompressConversation } from "./profile/summary-runner";
+import {
+  type ConversationCallbacks,
+  dispatchObservers,
+  dispatchReply,
+  type LearningContext,
+  type PracticeContext,
+} from "./runtime";
 
-export interface TurnCallbacks {
-  onReplyDelta: (delta: string) => void;
-  /** 对话流式结束、可继续输入时触发;批改仍在后台进行。 */
-  onReplyComplete?: (reply: string) => void;
-  onAnalysis: (
-    analysis: TutorAnalysis | null,
-    opts?: { error?: string; proseFeedback?: string },
-  ) => void;
-}
+// 回调形状统一定义在 runtime(ConversationCallbacks),这里别名导出保持既有引用。
+export type TurnCallbacks = ConversationCallbacks;
 
 export interface TurnResult {
   reply: string;
@@ -199,36 +199,59 @@ export async function runTurn(
   );
   const tutorPreferences = formatExperiencePreferences(profileMd, "tutor");
   const tutorFlags = correctionPreferenceFlags(profileMd);
-
-  // 并行发出:对话流式,导师结构化。互不阻塞。
-  const replyPromise = converse(
-    provider,
-    {
-      ...langs,
-      experiencePreferences: conversationPreferences,
-      profileSlice,
-      reviewItems,
-      calibrationHint: proficiency.calibrationHint,
-      summary: summaryData.summary ?? "",
-      history,
-      userInput,
-    },
-    cb.onReplyDelta,
+  // 会话级调节(分支带来的难度/角色/第二天);普通会话为空对象,回复 Agent 自然忽略。
+  const agentModifiers = parseAgentModifiers(
+    conversation?.agentModifiersJson ?? null,
   );
-  const analysisPromise = analyze(provider, {
-    ...langs,
-    experiencePreferences: tutorPreferences,
-    ignoreCapitalizationIssues: tutorFlags.ignoreCapitalizationIssues,
-    ignorePunctuationIssues: tutorFlags.ignorePunctuationIssues,
-    weakList,
-    history: tutorHistory,
-    userInput,
-  });
 
-  const reply = await replyPromise;
   // 复用前端乐观渲染时生成的 turnId(若提供):让 UI 这条气泡与持久化的 DB 行同 id,
   // 这样「从此处开始」(按 id 截断)和「重新生成」(按 id 定位)在刷新前也能命中本轮。
-  turnId = await persistTurn(conversationId, userInput, reply, null, turnId);
+  const id = turnId ?? crypto.randomUUID();
+  // observer 与日志都挂这条 turn;observer 写回前等 turnPersisted,避免往未落库的行写。
+  let resolvePersisted!: (value: string) => void;
+  let rejectPersisted!: (reason: unknown) => void;
+  const turnPersisted = new Promise<string>((resolve, reject) => {
+    resolvePersisted = resolve;
+    rejectPersisted = reject;
+  });
+  void turnPersisted.catch(() => {}); // observer 也会 catch;这里兜底防未处理 rejection
+
+  const ctx: PracticeContext = {
+    kind: "practice",
+    provider,
+    conversationId,
+    turnId: id,
+    userInput,
+    langs,
+    profileSlice,
+    conversationPreferences,
+    tutorPreferences,
+    tutorFlags,
+    summary: summaryData.summary ?? "",
+    history,
+    tutorHistory,
+    weakList,
+    reviewItems,
+    proficiency,
+    agentModifiers,
+    callbacks: cb,
+    turnPersisted,
+  };
+
+  // 主回复 ∥ observer 并行触发。observer fire-and-forget,自行等 turnPersisted 后走代码记账。
+  const replyPromise = dispatchReply(ctx, cb.onReplyDelta);
+  dispatchObservers(ctx);
+
+  let reply: string;
+  try {
+    reply = await replyPromise;
+  } catch (e) {
+    rejectPersisted(e); // 回复失败 → turn 不落库,observer 放弃记账(与迁移前一致)
+    throw e;
+  }
+
+  await persistTurn(conversationId, userInput, reply, null, id);
+  resolvePersisted(id);
   cb.onReplyComplete?.(reply);
 
   // 自动压缩:逼近上下文上限时,后台把最老的原文折叠进滚动摘要。不阻塞下一轮输入。
@@ -241,37 +264,6 @@ export async function runTurn(
         .join("\n"),
     );
   void maybeCompressConversation(conversationId, nonHistoryTokens);
-
-  // 批改、记账、补全 analysis_json 在后台跑,不阻塞下一轮输入。
-  void analysisPromise
-    .then(async ({ analysis, proseFeedback, diagnostic, error }) => {
-      if (analysis) {
-        cb.onAnalysis(analysis);
-        try {
-          await recordAnalysis(analysis, turnId);
-          await updateTurnAnalysis(turnId, analysis);
-          void maybeRunMaintainer();
-        } catch (e) {
-          const msg = e instanceof Error ? e.message : String(e);
-          logError("turn", "批改记账失败", e);
-          cb.onAnalysis(analysis, { error: `批改已显示但保存失败: ${msg}` });
-        }
-      } else if (proseFeedback) {
-        try {
-          await updateTurnAnalysis(turnId, null, proseFeedback, diagnostic);
-        } catch (e) {
-          logError("turn", "纯文本批改保存失败", e);
-        }
-        cb.onAnalysis(null, { proseFeedback, error: error ?? diagnostic });
-      } else if (error) {
-        cb.onAnalysis(null, { error });
-      }
-    })
-    .catch((e) => {
-      const msg = e instanceof Error ? e.message : String(e);
-      logError("turn", "批改失败", e);
-      cb.onAnalysis(null, { error: `批改失败: ${msg}` });
-    });
 
   return { reply, analysis: null };
 }
@@ -316,25 +308,40 @@ async function runLearningTurn(
     await getTurnsAfterId(conversationId, summaryData.throughId),
   );
 
-  const reply = await runLearningAgent(
+  const id = turnId ?? crypto.randomUUID();
+  // 专项课不跑 observer;turnPersisted 只为满足 ConversationContext 形状,落库后 resolve。
+  let resolvePersisted!: (value: string) => void;
+  const turnPersisted = new Promise<string>((resolve) => {
+    resolvePersisted = resolve;
+  });
+  void turnPersisted.catch(() => {});
+
+  const ctx: LearningContext = {
+    kind: "learning_agent",
     provider,
-    {
+    conversationId,
+    turnId: id,
+    userInput,
+    langs: {
       nativeLanguage: config.nativeLanguage,
       targetLanguage: config.targetLanguage,
       level: config.level,
-      experiencePreferences,
-      agentName: agent.name,
-      agentPrompt: agent.prompt,
-      dataContext,
-      summary: summaryData.summary ?? "",
-      history,
-      userInput,
-      kickoff,
     },
-    cb.onReplyDelta,
-  );
+    experiencePreferences,
+    agentName: agent.name,
+    agentPrompt: agent.prompt,
+    dataContext,
+    summary: summaryData.summary ?? "",
+    history,
+    kickoff,
+    callbacks: cb,
+    turnPersisted,
+  };
 
-  await persistTurn(conversationId, userInput, reply, null, turnId);
+  const reply = await dispatchReply(ctx, cb.onReplyDelta);
+
+  await persistTurn(conversationId, userInput, reply, null, id);
+  resolvePersisted(id);
   cb.onReplyComplete?.(reply);
   // 自动压缩:逼近上下文上限时,后台把最老的原文折叠进滚动摘要。不阻塞下一轮输入。
   // 专项课的非历史动态块 = dataContext + agent prompt,通常比普通对话大得多,据此提高 reserve。
@@ -360,13 +367,15 @@ export async function regenerateReply(
   if (!provider) throw new MissingApiKeyError();
 
   const config = loadConfig();
-  // 上下文构成与 runTurn 的对话侧一致:摘要 + 水位后原文,叠加 profile / 复习 / 校准。
-  const [summaryData, profileMd, reviewItems, proficiency] = await Promise.all([
-    getSummary(conversationId),
-    readProfile(config),
-    getReviewDueList(),
-    getProficiencySnapshot(),
-  ]);
+  // 上下文构成与 runTurn 的对话侧一致:摘要 + 水位后原文,叠加 profile / 复习 / 校准 / 会话调节。
+  const [summaryData, profileMd, reviewItems, proficiency, conv] =
+    await Promise.all([
+      getSummary(conversationId),
+      readProfile(config),
+      getReviewDueList(),
+      getProficiencySnapshot(),
+      getConversation(conversationId),
+    ]);
   const verbatimTurns = await getTurnsAfterId(
     conversationId,
     summaryData.throughId,
@@ -391,6 +400,9 @@ export async function regenerateReply(
       profileSlice: profileSliceForConversation(profileMd),
       reviewItems,
       calibrationHint: proficiency.calibrationHint,
+      sessionAdjustments: formatModifierInstructions(
+        parseAgentModifiers(conv?.agentModifiersJson ?? null),
+      ),
       summary: summaryData.summary ?? "",
       history,
       userInput: target.userInput,

@@ -73,6 +73,14 @@ export const conversation = sqliteTable("conversation", {
   // 进摘要的最后一个 turn.id(水位)。NULL = 尚未压缩,退化为纯原文回放。
   summary: text("summary"),
   summaryThroughId: text("summary_through_id"),
+  // 会话分支(Agent-first Phase 3,migration v23–v26)。分支是非破坏式动作:从原会话派生
+  // 出新会话,原会话不动。parentConversationId 指向来源会话;branchSourceTurnId 是「从此处
+  // 分支」选中的那条 turn;branchKind 标记动作类型;agentModifiersJson 是回复 Agent 要遵循
+  // 的会话级调节(难度 / 调换角色 / 第二天)。普通会话这几列全为 NULL。
+  parentConversationId: text("parent_conversation_id"),
+  branchSourceTurnId: text("branch_source_turn_id"),
+  branchKind: text("branch_kind"),
+  agentModifiersJson: text("agent_modifiers_json"),
 });
 
 export type Conversation = typeof conversation.$inferSelect;
@@ -112,8 +120,10 @@ export const agentJob = sqliteTable("agent_job", {
   outputJson: text("output_json"),
   error: text("error"),
   source: text("source", {
-    enum: ["task_agent", "maintainer", "summary", "manual"],
+    enum: ["task_agent", "maintainer", "summary", "manual", "conversation"],
   }).notNull(),
+  // 热路径 Agent 运行日志关联的 turn(migration v22)。后台作业为 NULL。
+  turnId: text("turn_id"),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
   startedAt: integer("started_at"),

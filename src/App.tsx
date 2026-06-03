@@ -1,5 +1,6 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
+  BrainIcon,
   PanelLeftIcon,
   PanelRightIcon,
   SearchIcon,
@@ -12,7 +13,9 @@ import {
   useEffect,
   useState,
 } from "react";
+import { AgentLibraryView } from "./components/AgentLibraryView";
 import { ChatView } from "./components/ChatView";
+import { CoachPanel } from "./components/CoachPanel";
 import { CommandPalette } from "./components/CommandPalette";
 import { LearningAgentsView } from "./components/LearningAgentsView";
 import { MasteryView } from "./components/MasteryView";
@@ -27,6 +30,8 @@ import {
   TooltipTrigger,
 } from "./components/ui/tooltip";
 import {
+  BRANCH_KIND_LABEL,
+  type BranchKind,
   type ConversationMeta,
   clearActiveConversationId,
   createConversation,
@@ -41,6 +46,7 @@ import {
   type LearningAgentMeta,
   listLearningAgents,
 } from "./db/learning-agents";
+import type { ChatTurn } from "./db/turns";
 import { withViewTransition } from "./lib/view-transition";
 
 const SIDEBAR_MIN = 200;
@@ -54,6 +60,10 @@ function App() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [view, setView] = useState<MainView>("chat");
   const [collapsed, setCollapsed] = useState(false);
+  const [coachOpen, setCoachOpen] = useState(
+    () => localStorage.getItem("coachOpen") !== "false",
+  );
+  const [coachTurn, setCoachTurn] = useState<ChatTurn | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [resizingSidebar, setResizingSidebar] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(() => {
@@ -65,8 +75,22 @@ function App() {
     localStorage.setItem("sidebarWidth", String(sidebarWidth));
   }, [sidebarWidth]);
 
+  useEffect(() => {
+    localStorage.setItem("coachOpen", String(coachOpen));
+  }, [coachOpen]);
+
+  // 切换会话时清掉上一会话残留的本轮反馈,等新会话 ChatView 重新上报。
+  // biome-ignore lint/correctness/useExhaustiveDependencies: activeId 仅作触发,effect 不读它
+  useEffect(() => {
+    setCoachTurn(null);
+  }, [activeId]);
+
   const toggleSidebar = useCallback(() => {
     setCollapsed((c) => !c);
+  }, []);
+
+  const toggleCoach = useCallback(() => {
+    setCoachOpen((c) => !c);
   }, []);
 
   const openDraftConversation = useCallback(() => {
@@ -196,6 +220,22 @@ function App() {
 
   const activeConversation = conversations.find((c) => c.id === activeId);
   const draftActive = view === "chat" && activeId === draftId;
+  // 教练面板只在普通练习对话出现(专项课在对话内反馈,无结构化批改)。
+  const coachEligible =
+    view === "chat" && (activeConversation?.kind ?? "practice") === "practice";
+  const coachVisible = coachEligible && coachOpen;
+  // 分支会话的来源标签:「<动作> · 源自《父会话》」,显示在对话状态条。
+  const branchLabel = activeConversation?.branchKind
+    ? (() => {
+        const kind =
+          BRANCH_KIND_LABEL[activeConversation.branchKind as BranchKind] ??
+          "分支";
+        const parent = conversations.find(
+          (c) => c.id === activeConversation.parentConversationId,
+        );
+        return parent ? `${kind} · 源自《${parent.title}》` : kind;
+      })()
+    : undefined;
   const topbarTitle =
     view === "profile"
       ? "学习者档案"
@@ -203,16 +243,19 @@ function App() {
         ? "学习数据"
         : view === "learning"
           ? "创建专项课"
-          : view === "settings"
-            ? "设置"
-            : draftActive
-              ? "新对话"
-              : (activeConversation?.title ?? "新对话");
+          : view === "agents"
+            ? "能力库"
+            : view === "settings"
+              ? "设置"
+              : draftActive
+                ? "新对话"
+                : (activeConversation?.title ?? "新对话");
 
   return (
     <div
       className="codex-shell"
       data-sidebar-collapsed={collapsed}
+      data-coach-open={coachVisible}
       data-sidebar-resizing={resizingSidebar}
       style={{ "--sidebar-width": `${sidebarWidth}px` } as CSSProperties}
     >
@@ -305,6 +348,27 @@ function App() {
                 </kbd>
               </TooltipContent>
             </Tooltip>
+            {coachEligible && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="codex-chrome-button"
+                    onClick={toggleCoach}
+                    data-active={coachVisible}
+                    aria-pressed={coachVisible}
+                    aria-label={coachVisible ? "隐藏教练面板" : "显示教练面板"}
+                  >
+                    <BrainIcon />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" align="end">
+                  <span>{coachVisible ? "隐藏教练面板" : "显示教练面板"}</span>
+                </TooltipContent>
+              </Tooltip>
+            )}
           </TooltipProvider>
         </div>
       </header>
@@ -342,6 +406,9 @@ function App() {
             mode={activeConversation?.kind ?? "practice"}
             onCreateDraftConversation={materializeDraftConversation}
             onActivity={() => void refresh()}
+            onActiveTurnChange={setCoachTurn}
+            onNavigateConversation={selectConversation}
+            branchLabel={branchLabel}
           />
         </div>
         {view === "profile" && <ProfileView />}
@@ -349,8 +416,18 @@ function App() {
         {view === "learning" && (
           <LearningAgentsView onRefresh={refreshLearningAgents} />
         )}
+        {view === "agents" && <AgentLibraryView />}
         {view === "settings" && <SettingsView />}
       </main>
+
+      {coachVisible && (
+        <aside className="codex-coach">
+          <CoachPanel
+            turn={coachTurn}
+            onOpenView={(v) => withViewTransition(() => setView(v))}
+          />
+        </aside>
+      )}
 
       <CommandPalette
         open={paletteOpen}

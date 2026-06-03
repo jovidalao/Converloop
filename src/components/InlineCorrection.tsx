@@ -11,7 +11,7 @@ import { SpeakableText } from "./SpeakButton";
 import { Button } from "./ui/button";
 import { Spinner } from "./ui/spinner";
 
-const CATEGORY_LABEL: Record<Issue["category"], string> = {
+export const CATEGORY_LABEL: Record<Issue["category"], string> = {
   grammar: "语法",
   word_choice: "用词",
   collocation: "搭配",
@@ -21,13 +21,13 @@ const CATEGORY_LABEL: Record<Issue["category"], string> = {
   naturalness: "自然度",
 };
 
-const SEVERITY_COLOR: Record<Issue["severity"], string> = {
+export const SEVERITY_COLOR: Record<Issue["severity"], string> = {
   minor: "text-muted-foreground",
   moderate: "text-warning",
   major: "text-destructive",
 };
 
-const SEVERITY_LABEL: Record<Issue["severity"], string> = {
+export const SEVERITY_LABEL: Record<Issue["severity"], string> = {
   minor: "轻微",
   moderate: "中等",
   major: "严重",
