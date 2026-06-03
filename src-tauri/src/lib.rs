@@ -210,6 +210,17 @@ fn apply_traffic_lights_inset(win: &tauri::WebviewWindow) {
     let _ = win.set_traffic_lights_inset(TRAFFIC_LIGHTS_X, TRAFFIC_LIGHTS_Y);
 }
 
+/// 重新钉一次交通灯位置。改动 NSWindow 外观(window.setTheme)会让 AppKit 把
+/// 标准窗口按钮重排回默认位,而 inset 只在启动 + resize 时重定位;前端切换主题后
+/// 调一次本命令把灯重新钉回居中。非 macOS 为空操作。
+#[tauri::command]
+fn reapply_traffic_lights(window: tauri::WebviewWindow) {
+    #[cfg(target_os = "macos")]
+    apply_traffic_lights_inset(&window);
+    #[cfg(not(target_os = "macos"))]
+    let _ = window;
+}
+
 /// 把交通灯钉在自定义位置。关键是「绘制前」重定位:监听 AppKit 原生的
 /// NSWindowDidResizeNotification(主线程、同步、绘制前派发),在回调里重设 inset。
 /// 不再用 Tauri 的 on_window_event(它在绘制后才触发,会看到灯先跳回默认位再跳回来),
@@ -459,6 +470,7 @@ pub fn run() {
             profile::write_profile,
             profile::snapshot_profile,
             profile::restore_profile,
+            reapply_traffic_lights,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
