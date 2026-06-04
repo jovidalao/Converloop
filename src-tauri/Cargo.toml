@@ -18,7 +18,10 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+# macos-private-api: 透明窗口 + NSVisualEffect 毛玻璃(原生质感)的前置条件。
+# 注意:用到 macOS 私有 API 会让应用无法上架 Mac App Store——本项目是开源 BYOK 桌面端,
+# 不走商店分发,可以接受这一取舍。
+tauri = { version = "2", features = ["macos-private-api"] }
 tauri-plugin-opener = "2"
 tauri-plugin-sql = { version = "2", features = ["sqlite"] }
 # macOS: 提供 set_traffic_lights_inset(把红绿灯挪进侧栏卡片内)。只用它的 trait,
@@ -42,4 +45,7 @@ objc2 = "0.6"
 objc2-foundation = { version = "0.3", features = ["NSNotification", "NSString", "NSOperation"] }
 objc2-app-kit = { version = "0.3", features = ["NSWindow"] }
 block2 = "0.6"
+# 原生毛玻璃(NSVisualEffectView)。半透明侧栏/标题栏让窗口透出桌面与背后窗口,
+# 摆脱「网页套壳」的实心填充观感。仅 macOS。
+window-vibrancy = "0.6"
 

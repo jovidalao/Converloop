@@ -556,7 +556,7 @@ function App() {
         />
       </div>
 
-      <main className="vt-main codex-main relative flex min-h-0 flex-col overflow-hidden">
+      <main className="codex-main relative flex min-h-0 flex-col overflow-hidden">
         <div
           className="flex min-h-0 flex-1 flex-col data-[hidden=true]:hidden"
           data-hidden={view !== "chat"}

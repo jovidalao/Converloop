@@ -61,7 +61,7 @@ function ToggleField({
   children: ReactNode;
 }) {
   return (
-    <label className="mb-3.5 flex cursor-pointer items-center gap-2.5 text-sm">
+    <label className="mb-3.5 flex items-center gap-2.5 text-sm">
       <Switch checked={checked} onCheckedChange={onChange} />
       <span>{children}</span>
     </label>

@@ -189,7 +189,7 @@ export function CommandPalette({
                     role="option"
                     aria-selected={isSelected}
                     data-selected={isSelected}
-                    className="mx-1 flex cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2 text-sm data-[selected=true]:bg-accent"
+                    className="mx-1 flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm data-[selected=true]:bg-accent"
                     onMouseMove={() => setSelected(idx)}
                     onClick={() => activate(item)}
                   >

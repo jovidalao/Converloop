@@ -2384,6 +2384,7 @@ dependencies = [
  "tauri-plugin-decorum",
  "tauri-plugin-opener",
  "tauri-plugin-sql",
+ "window-vibrancy",
 ]
 
 [[package]]

@@ -145,7 +145,7 @@ function PreferencesPanel({
       </div>
 
       <details className="mt-3">
-        <summary className="cursor-pointer text-sm font-medium text-muted-foreground">
+        <summary className="text-sm font-medium text-muted-foreground">
           按模块微调
         </summary>
         <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">

@@ -80,7 +80,9 @@
   --popover-foreground: var(--foreground);
   --border: var(--foreground-10);
   --input: var(--foreground-10);
-  --ring: color-mix(in srgb, var(--brand) 55%, transparent);
+  /* 键盘焦点环跟随系统强调色(controlAccentColor),而非硬编码品牌色——原生 app 的焦点环
+     用的是用户在系统里选的强调色。品牌紫仍保留给主按钮等主动作。 */
+  --ring: AccentColor;
 
   /* === shadows === */
   --shadow-border-opacity: 0.08;
@@ -169,7 +171,7 @@
   --popover-foreground: var(--foreground);
   --border: color-mix(in srgb, var(--foreground) 12%, transparent);
   --input: color-mix(in srgb, var(--foreground) 15%, transparent);
-  --ring: color-mix(in srgb, var(--brand) 55%, transparent);
+  --ring: AccentColor;
 
   /* === shadows (stronger in dark) === */
   --shadow-border-opacity: 0.15;
@@ -251,10 +253,14 @@
     margin: 0;
     overflow: hidden;
     overscroll-behavior: none;
+    /* 透明到底,露出 NSVisualEffect 毛玻璃(实际填充由各面板自己负责;主区不透明)。 */
+    background: transparent;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply text-foreground;
     font-family: var(--font-sans);
+    /* 复选框/单选/进度条等原生控件跟随系统强调色(System Settings 里用户选的颜色)。 */
+    accent-color: auto;
   }
 }
 
@@ -341,7 +347,8 @@
   height: 100%;
   min-height: 100vh;
   overflow: hidden;
-  background: var(--codex-main-bg);
+  /* 透明:让侧栏/标题栏/教练栏透出窗口毛玻璃;主对话区由 .codex-main 自己铺不透明底。 */
+  background: transparent;
   color: var(--foreground);
   transition: grid-template-columns 0.22s cubic-bezier(0.2, 0, 0, 1);
 }
@@ -382,7 +389,7 @@
   --accent-foreground: oklch(0.95 0 0);
   --border: var(--codex-border);
   --input: oklch(1 0 0 / 14%);
-  --ring: color-mix(in srgb, var(--brand) 55%, transparent);
+  --ring: AccentColor;
 }
 .codex-shell[data-sidebar-collapsed="true"] {
   --codex-sidebar-width-current: 0px;
@@ -403,7 +410,8 @@
   align-items: center;
   height: var(--codex-topbar-h);
   border-bottom: 1px solid var(--codex-border);
-  background: var(--codex-topbar-bg);
+  /* 透明标题栏:统一工具栏区透出毛玻璃,像原生 unified toolbar。 */
+  background: transparent;
 }
 .codex-topbar-left {
   position: absolute;
@@ -459,7 +467,8 @@
   min-width: 0;
   overflow: hidden;
   border-right: 1px solid var(--codex-border);
-  background: var(--codex-sidebar-bg);
+  /* 透明:半透明侧栏透出毛玻璃(Mail/Notes/Finder 式)。hover/active 用半透明叠层。 */
+  background: transparent;
   color: var(--codex-sidebar-fg);
 }
 .codex-sidebar-content {
@@ -493,7 +502,8 @@
   min-width: 0;
   overflow: hidden;
   border-left: 1px solid var(--codex-border);
-  background: var(--codex-sidebar-bg);
+  /* 透明:教练栏与侧栏同款半透明,透出毛玻璃。 */
+  background: transparent;
   color: var(--codex-sidebar-fg);
 }
 .codex-coach-content {
@@ -520,7 +530,6 @@
   color: var(--codex-sidebar-fg);
   font: inherit;
   text-align: left;
-  cursor: pointer;
 }
 .codex-sidebar-action {
   height: 34px;
@@ -737,18 +746,11 @@
   animation: message-in 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-/* 视图过渡:只用于主区切页;侧栏收展使用 grid column transition,避免快照抖动。 */
-.vt-main {
-  view-transition-name: app-main;
-}
+/* 切页用「直切」而非交叉淡入——原生 app 在视图间是硬切,不做路由级淡入(那是网页习惯)。
+   侧栏收展仍用 grid column transition(见 .codex-shell)。 */
 
 @media (prefers-reduced-motion: reduce) {
   .animate-message-in {
     animation: none;
-  }
-  ::view-transition-group(*),
-  ::view-transition-old(*),
-  ::view-transition-new(*) {
-    animation: none !important;
   }
 }

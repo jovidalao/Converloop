@@ -215,6 +215,16 @@ fn apply_traffic_lights_inset(win: &tauri::WebviewWindow) {
     let _ = win.set_traffic_lights_inset(TRAFFIC_LIGHTS_X, TRAFFIC_LIGHTS_Y);
 }
 
+/// 给整个窗口铺一层原生毛玻璃(Sidebar 材质)。窗口透明 + 前端只让侧栏/标题栏/教练栏
+/// 透出(主对话区保持不透明、保证文字可读),于是只在这些 chrome 区域看到桌面/背后窗口的
+/// 模糊——和 Mail/Notes/Finder 的半透明侧栏一致。state=None → 跟随窗口激活态自动明暗,
+/// 这是 AppKit 的原生行为;材质会跟随 setTheme 设置的窗口外观切换明暗,无需手动重铺。
+#[cfg(target_os = "macos")]
+fn apply_window_vibrancy(win: &tauri::WebviewWindow) {
+    use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
+    let _ = apply_vibrancy(win, NSVisualEffectMaterial::Sidebar, None, None);
+}
+
 /// 重新钉一次交通灯位置。改动 NSWindow 外观(window.setTheme)会让 AppKit 把
 /// 标准窗口按钮重排回默认位,而 inset 只在启动 + resize 时重定位;前端切换主题后
 /// 调一次本命令把灯重新钉回居中。非 macOS 为空操作。
@@ -466,6 +476,7 @@ pub fn run() {
             {
                 use tauri::Manager;
                 if let Some(win) = app.get_webview_window("main") {
+                    apply_window_vibrancy(&win);
                     setup_traffic_lights(win);
                 }
             }

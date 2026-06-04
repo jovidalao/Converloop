@@ -49,7 +49,7 @@ export function MentionMenu({
             role="option"
             aria-selected={isSelected}
             data-selected={isSelected}
-            className="mx-1 flex cursor-pointer items-baseline gap-2.5 rounded-md px-2.5 py-1.5 text-sm data-[selected=true]:bg-accent"
+            className="mx-1 flex items-baseline gap-2.5 rounded-md px-2.5 py-1.5 text-sm data-[selected=true]:bg-accent"
             onMouseMove={() => onHover(idx)}
             onMouseDown={(e) => {
               // 不让输入框失焦;在 mousedown 即激活(常见自动完成范式)。
