@@ -7,7 +7,7 @@ export function Spinner({ className }: { className?: string }) {
     <span
       aria-hidden
       className={cn(
-        "inline-block size-[13px] animate-spin rounded-full border-2 border-current/30 border-t-current",
+        "inline-block size-[13px] animate-spin rounded-full border-2 border-current/30 border-t-current bg-transparent",
         className,
       )}
     />

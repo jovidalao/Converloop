@@ -92,7 +92,13 @@ export function ReplyExplanation({
           aria-expanded={!!expanded}
           title="根据你的掌握情况讲解这条回复"
         >
-          {loading ? <Spinner /> : <BookOpenIcon size={16} />}
+          <span className="inline-flex size-4 shrink-0 items-center justify-center">
+            {loading ? (
+              <Spinner className="size-3.5 border-transparent border-t-current" />
+            ) : (
+              <BookOpenIcon className="size-4" />
+            )}
+          </span>
           <span>讲解</span>
         </Button>
         {trailingActions}

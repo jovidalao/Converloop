@@ -302,7 +302,13 @@ function PartnerReply({
             aria-pressed={!!showBilingual}
             title="目标语言/母语逐句对照"
           >
-            {loading ? <Spinner /> : <LanguagesIcon size={16} />}
+            <span className="inline-flex size-4 shrink-0 items-center justify-center">
+              {loading ? (
+                <Spinner className="size-3.5 border-transparent border-t-current" />
+              ) : (
+                <LanguagesIcon className="size-4" />
+              )}
+            </span>
             <span>双语阅读</span>
           </Button>
         }
