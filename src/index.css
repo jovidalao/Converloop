@@ -5,63 +5,175 @@
 @custom-variant dark (&:is(.dark *));
 
 /* ============================================================
-   shadcn/ui default palette (neutral base, oklch).
-   Light is :root; dark overrides under .dark (toggled by the
-   theme provider). success/warning are app extensions for the
-   correction system (green / amber) — shadcn ships neither.
+   Craft-style 6-color design system (oklch). Replaces the stock
+   shadcn neutral grayscale. Light is :root; dark overrides under
+   .dark (toggled by the theme provider).
+
+   6 base colors → learning semantics:
+     brand (→ primary)  AI 教练 / 主能力 / 主动作 (purple)
+     info               表达缺口 / 待确认 (amber)
+     success            说对 / 已掌握 (green)
+     destructive        错误 / 失败 / 删除 (red)
+
+   shadcn-compat mapping onto this codebase's existing conventions:
+     --primary = brand  → drives bg-primary buttons, text-primary
+                          highlights, border-primary selected states.
+     --accent  = neutral hover / selected surface (foreground-mix);
+                 keeps shadcn's hover:bg-accent role, stays neutral.
+   Derived layers use color-mix:
+     --foreground-N  solid mix toward background (borders, weak panels).
+     /N alpha is applied at call sites (e.g. bg-primary/10).
    ============================================================ */
 :root {
   --radius: 0.625rem;
 
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
+  /* === 6 base colors === */
+  --background: oklch(0.985 0.0025 286);
+  --foreground: oklch(0.21 0.012 285);
+  --foreground-rgb: 42, 40, 48; /* for shadow border rings */
+  --brand: oklch(0.55 0.2 292); /* purple — brand / primary action */
+  --brand-foreground: oklch(0.985 0.004 286);
+  --brand-rgb: 104, 78, 168;
+  --info: oklch(0.72 0.14 71); /* amber — expression gap / pending */
+  --info-rgb: 184, 124, 38;
+  --success: oklch(0.58 0.13 153); /* green — correct / mastered */
+  --success-rgb: 40, 120, 70;
+  --destructive: oklch(0.577 0.245 27.325); /* red — error / delete */
+  --destructive-rgb: 184, 60, 50;
+
+  /* === text variants (mixed toward foreground for readable labels) === */
+  --info-text: color-mix(in oklab, var(--info) 52%, var(--foreground));
+  --success-text: color-mix(in oklab, var(--success) 52%, var(--foreground));
+  --destructive-text: color-mix(in oklab, var(--destructive) 52%, var(--foreground));
+
+  /* === foreground solid-mix scale (toward background) === */
+  --foreground-2: color-mix(in oklch, var(--foreground) 2%, var(--background));
+  --foreground-3: color-mix(in oklch, var(--foreground) 3%, var(--background));
+  --foreground-5: color-mix(in oklch, var(--foreground) 5%, var(--background));
+  --foreground-10: color-mix(in oklch, var(--foreground) 10%, var(--background));
+  --foreground-20: color-mix(in oklch, var(--foreground) 20%, var(--background));
+  --foreground-30: color-mix(in oklch, var(--foreground) 30%, var(--background));
+  --foreground-40: color-mix(in oklch, var(--foreground) 40%, var(--background));
+  --foreground-50: color-mix(in oklch, var(--foreground) 50%, var(--background));
+  --foreground-60: color-mix(in oklch, var(--foreground) 60%, var(--background));
+  --foreground-70: color-mix(in oklch, var(--foreground) 70%, var(--background));
+  --foreground-80: color-mix(in oklch, var(--foreground) 80%, var(--background));
+  --foreground-90: color-mix(in oklch, var(--foreground) 90%, var(--background));
+  --foreground-95: color-mix(in oklch, var(--foreground) 95%, var(--background));
+
+  /* === shadcn-compat (derived from the 6 base colors) === */
+  --primary: var(--brand);
+  --primary-foreground: var(--brand-foreground);
+  --secondary: var(--foreground-5);
+  --secondary-foreground: var(--foreground);
+  --muted: var(--foreground-5);
+  --muted-foreground: var(--foreground-50);
+  --accent: var(--foreground-5);
+  --accent-foreground: var(--foreground);
   --destructive-foreground: oklch(0.985 0 0);
-  --success: oklch(0.59 0.13 154);
   --success-foreground: oklch(0.985 0 0);
-  --warning: oklch(0.62 0.13 75);
+  --warning: var(--info); /* back-compat alias → info amber */
   --warning-foreground: oklch(0.985 0 0);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --card: var(--background);
+  --card-foreground: var(--foreground);
+  --popover: var(--background);
+  --popover-foreground: var(--foreground);
+  --border: var(--foreground-10);
+  --input: var(--foreground-10);
+  --ring: color-mix(in srgb, var(--brand) 55%, transparent);
+
+  /* === shadows === */
+  --shadow-border-opacity: 0.08;
+  --shadow-blur-opacity: 0.06;
+  --shadow-minimal:
+    rgba(var(--foreground-rgb), 0.06) 0 0 0 1px,
+    rgba(0, 0, 0, var(--shadow-blur-opacity)) 0 1px 1px -0.5px,
+    rgba(0, 0, 0, var(--shadow-blur-opacity)) 0 3px 3px -1.5px;
+  --shadow-minimal-flat: rgba(var(--foreground-rgb), 0.06) 0 0 0 1px;
+  --shadow-modal-small:
+    rgba(var(--foreground-rgb), 0.06) 0 0 0 1px,
+    rgba(0, 0, 0, calc(var(--shadow-blur-opacity) * 0.67)) 0 1px 1px -0.5px,
+    rgba(0, 0, 0, calc(var(--shadow-blur-opacity) * 0.67)) 0 3px 3px 0,
+    rgba(0, 0, 0, calc(var(--shadow-blur-opacity) * 0.33)) 0 6px 6px 0,
+    rgba(0, 0, 0, calc(var(--shadow-blur-opacity) * 0.33)) 0 12px 12px 0,
+    rgba(0, 0, 0, calc(var(--shadow-blur-opacity) * 0.33)) 0 24px 24px 0;
+
+  /* === panel / layout constants (craft panel shell, used from Phase 2) === */
+  --radius-panel: 12px;
+  --panel-gap: 6px;
+  --panel-inset: 6px;
+
+  /* === z-index scale === */
+  --z-base: 0;
+  --z-sticky: 20;
+  --z-titlebar: 40;
+  --z-panel: 50;
+  --z-dropdown: 100;
+  --z-tooltip: 150;
+  --z-modal: 200;
+  --z-overlay: 300;
+  --z-island: 400;
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.269 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.371 0 0);
-  --accent-foreground: oklch(0.985 0 0);
+  /* === 6 base colors (brighter for dark surfaces) === */
+  --background: oklch(0.185 0.012 286);
+  --foreground: oklch(0.92 0.006 286);
+  --foreground-rgb: 226, 224, 232;
+  --brand: oklch(0.67 0.18 293);
+  --brand-foreground: oklch(0.16 0.012 286);
+  --brand-rgb: 124, 96, 188;
+  --info: oklch(0.74 0.14 72);
+  --info-rgb: 200, 142, 56;
+  --success: oklch(0.66 0.14 156);
+  --success-rgb: 50, 145, 90;
   --destructive: oklch(0.704 0.191 22.216);
+  --destructive-rgb: 200, 84, 70;
+
+  /* === text variants === */
+  --info-text: color-mix(in oklab, var(--info) 52%, var(--foreground));
+  --success-text: color-mix(in oklab, var(--success) 52%, var(--foreground));
+  --destructive-text: color-mix(in oklab, var(--destructive) 52%, var(--foreground));
+
+  /* === foreground solid-mix scale === */
+  --foreground-2: color-mix(in oklch, var(--foreground) 2%, var(--background));
+  --foreground-3: color-mix(in oklch, var(--foreground) 3%, var(--background));
+  --foreground-5: color-mix(in oklch, var(--foreground) 5%, var(--background));
+  --foreground-10: color-mix(in oklch, var(--foreground) 10%, var(--background));
+  --foreground-20: color-mix(in oklch, var(--foreground) 20%, var(--background));
+  --foreground-30: color-mix(in oklch, var(--foreground) 30%, var(--background));
+  --foreground-40: color-mix(in oklch, var(--foreground) 40%, var(--background));
+  --foreground-50: color-mix(in oklch, var(--foreground) 50%, var(--background));
+  --foreground-60: color-mix(in oklch, var(--foreground) 60%, var(--background));
+  --foreground-70: color-mix(in oklch, var(--foreground) 70%, var(--background));
+  --foreground-80: color-mix(in oklch, var(--foreground) 80%, var(--background));
+  --foreground-90: color-mix(in oklch, var(--foreground) 90%, var(--background));
+  --foreground-95: color-mix(in oklch, var(--foreground) 95%, var(--background));
+
+  /* === shadcn-compat === */
+  --primary: var(--brand);
+  --primary-foreground: var(--brand-foreground);
+  --secondary: var(--foreground-5);
+  --secondary-foreground: var(--foreground);
+  --muted: var(--foreground-5);
+  --muted-foreground: var(--foreground-50);
+  --accent: var(--foreground-10);
+  --accent-foreground: var(--foreground);
   --destructive-foreground: oklch(0.985 0 0);
-  --success: oklch(0.7 0.14 156);
   --success-foreground: oklch(0.205 0 0);
-  --warning: oklch(0.77 0.13 80);
+  --warning: var(--info);
   --warning-foreground: oklch(0.205 0 0);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
+  --card: oklch(0.205 0.012 286);
+  --card-foreground: var(--foreground);
+  --popover: oklch(0.225 0.012 286);
+  --popover-foreground: var(--foreground);
+  --border: color-mix(in srgb, var(--foreground) 12%, transparent);
+  --input: color-mix(in srgb, var(--foreground) 15%, transparent);
+  --ring: color-mix(in srgb, var(--brand) 55%, transparent);
+
+  /* === shadows (stronger in dark) === */
+  --shadow-border-opacity: 0.15;
+  --shadow-blur-opacity: 0.12;
 }
 
 @theme inline {
@@ -88,6 +200,29 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+
+  /* brand + craft semantic extensions */
+  --color-brand: var(--brand);
+  --color-brand-foreground: var(--brand-foreground);
+  --color-info: var(--info);
+  --color-info-text: var(--info-text);
+  --color-success-text: var(--success-text);
+  --color-destructive-text: var(--destructive-text);
+
+  /* foreground solid-mix scale → bg-foreground-5, text-foreground-50, … */
+  --color-foreground-2: var(--foreground-2);
+  --color-foreground-3: var(--foreground-3);
+  --color-foreground-5: var(--foreground-5);
+  --color-foreground-10: var(--foreground-10);
+  --color-foreground-20: var(--foreground-20);
+  --color-foreground-30: var(--foreground-30);
+  --color-foreground-40: var(--foreground-40);
+  --color-foreground-50: var(--foreground-50);
+  --color-foreground-60: var(--foreground-60);
+  --color-foreground-70: var(--foreground-70);
+  --color-foreground-80: var(--foreground-80);
+  --color-foreground-90: var(--foreground-90);
+  --color-foreground-95: var(--foreground-95);
 
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -120,6 +255,37 @@
   body {
     @apply bg-background text-foreground;
     font-family: var(--font-sans);
+  }
+}
+
+/* ============================================================
+   Shadow utilities (craft). Layered, low-noise elevation that
+   reads as a thin tinted border + soft blur in light, and an
+   outline-only ring in dark. Use on popovers / cards / islands.
+   ============================================================ */
+@layer utilities {
+  .shadow-minimal {
+    box-shadow: var(--shadow-minimal);
+  }
+  .shadow-minimal-flat {
+    box-shadow: var(--shadow-minimal-flat);
+  }
+  .shadow-modal-small {
+    box-shadow: var(--shadow-modal-small);
+  }
+  /* Tinted shadow — set --shadow-color: r, g, b at the call site. */
+  .shadow-tinted {
+    --shadow-color: var(--foreground-rgb);
+    box-shadow:
+      rgba(var(--shadow-color), calc(var(--shadow-border-opacity) * 1.5)) 0 0 0 1px,
+      rgba(var(--shadow-color), var(--shadow-border-opacity)) 0 1px 1px -0.5px,
+      rgba(var(--shadow-color), var(--shadow-blur-opacity)) 0 3px 3px -1.5px,
+      rgba(var(--shadow-color), calc(var(--shadow-blur-opacity) * 0.67)) 0 6px 6px -3px;
+  }
+  /* Dark: outline only, no blur glow. */
+  .dark .shadow-tinted {
+    box-shadow:
+      rgba(var(--shadow-color), calc(var(--shadow-border-opacity) * 3)) 0 0 0 1px;
   }
 }
 
@@ -206,8 +372,8 @@
   --card-foreground: oklch(0.92 0 0);
   --popover: oklch(0.22 0 0);
   --popover-foreground: oklch(0.92 0 0);
-  --primary: oklch(0.9 0 0);
-  --primary-foreground: oklch(0.18 0 0);
+  --primary: var(--brand);
+  --primary-foreground: var(--brand-foreground);
   --secondary: oklch(0.24 0 0);
   --secondary-foreground: oklch(0.9 0 0);
   --muted: oklch(0.23 0 0);
@@ -216,7 +382,7 @@
   --accent-foreground: oklch(0.95 0 0);
   --border: var(--codex-border);
   --input: oklch(1 0 0 / 14%);
-  --ring: oklch(0.72 0 0);
+  --ring: color-mix(in srgb, var(--brand) 55%, transparent);
 }
 .codex-shell[data-sidebar-collapsed="true"] {
   --codex-sidebar-width-current: 0px;
@@ -394,6 +560,33 @@
   gap: 2px;
   padding-bottom: 12px;
 }
+/* Collapsible group body: animate height via grid-template-rows 1fr↔0fr
+   (no JS measuring) plus an opacity fade. Used by EntitySection. */
+.codex-collapsible {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 0.2s cubic-bezier(0.2, 0, 0, 1);
+}
+.codex-collapsible[data-collapsed] {
+  grid-template-rows: 0fr;
+}
+.codex-collapsible-inner {
+  display: grid;
+  min-height: 0;
+  gap: 2px;
+  overflow: hidden;
+  opacity: 1;
+  transition: opacity 0.18s ease;
+}
+.codex-collapsible[data-collapsed] .codex-collapsible-inner {
+  opacity: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .codex-collapsible,
+  .codex-collapsible-inner {
+    transition: none;
+  }
+}
 .codex-section-heading {
   height: 34px;
   padding: 0 10px;
@@ -511,6 +704,26 @@
    动画(Layer 2)。零依赖:CSS 关键帧 + 原生 View Transitions。
    全部在「减弱动态效果」下降级为无动画。
    ============================================================ */
+
+/* 聊天滚动区上下渐变遮罩:内容在边缘淡出,不硬切(craft 风格)。遮罩相对视口固定,
+   随内容滚动产生稳定的渐隐边。fade 高度可调。 */
+.chat-scroll-mask {
+  --chat-fade: 20px;
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    black var(--chat-fade),
+    black calc(100% - var(--chat-fade)),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    black var(--chat-fade),
+    black calc(100% - var(--chat-fade)),
+    transparent 100%
+  );
+}
 
 /* 新消息入场:上移淡入。只作用于本会话新发的轮次(ChatView 按 liveTurnIds 加类),
    历史加载不动。 */

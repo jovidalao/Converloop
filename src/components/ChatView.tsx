@@ -11,7 +11,14 @@ import {
   RefreshCwIcon,
   SparklesIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { ReplySuggestionSource } from "../agents/reply-suggestion";
 import type { TutorAnalysis } from "../agents/schema";
 import {
@@ -36,6 +43,7 @@ import {
   loadChatHistory,
 } from "../db/turns";
 import { estimatePromptTokens } from "../lib/tokens";
+import { deriveTurnActivities, type TurnActivity } from "../lib/turn-activity";
 import {
   bilingualReply,
   MissingApiKeyError,
@@ -56,6 +64,7 @@ import { ReplyExplanation } from "./ReplyExplanation";
 import { SlashMenu } from "./SlashMenu";
 import { SpeakButton } from "./SpeakButton";
 import { TranslationPopover } from "./TranslationPopover";
+import { ThinkingIndicator, TurnActivityRow } from "./TurnActivity";
 import { Button } from "./ui/button";
 import { Spinner } from "./ui/spinner";
 
@@ -73,21 +82,6 @@ interface ChatViewProps {
   onNavigateConversation?: (id: string) => void;
   /** 教练面板是否可见:可见时气泡内批改精简,详情只在右栏,避免双份。 */
   coachVisible?: boolean;
-}
-
-// 回复到达前的「正在输入」提示:三点跳动。首 token 一来就被流式文本取代。
-function TypingDots() {
-  return (
-    <span
-      className="inline-flex items-center gap-1 text-muted-foreground"
-      role="status"
-      aria-label="正在输入"
-    >
-      <span className="size-1.5 animate-bounce rounded-full bg-current [animation-delay:-0.3s]" />
-      <span className="size-1.5 animate-bounce rounded-full bg-current [animation-delay:-0.15s]" />
-      <span className="size-1.5 animate-bounce rounded-full bg-current" />
-    </span>
-  );
 }
 
 // 复制这条回复。复制后短暂显示对勾。
@@ -835,6 +829,25 @@ function DerivedContextBanner({
   );
 }
 
+// 一轮 = 用户输入 + 对话回复 + (默认折叠的)活动行。活动行把本轮的渐进披露收口到
+// 一处:中间区保持轻,细节一键展开。教练面板打开时把细节交给右栏,这里只渲染对话本身。
+function TurnCard({
+  live,
+  activities,
+  children,
+}: {
+  live: boolean;
+  activities: TurnActivity[];
+  children: ReactNode;
+}) {
+  return (
+    <div className={`flex flex-col gap-2${live ? " animate-message-in" : ""}`}>
+      {children}
+      {activities.length > 0 && <TurnActivityRow activities={activities} />}
+    </div>
+  );
+}
+
 export function ChatView({
   conversationId,
   isDraft = false,
@@ -1425,7 +1438,7 @@ export function ChatView({
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col">
       <div
-        className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain px-4 pt-6 pb-3"
+        className="chat-scroll-mask flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain px-4 pt-6 pb-3"
         ref={messagesRef}
         onScroll={syncStickToBottom}
       >
@@ -1444,11 +1457,14 @@ export function ChatView({
           </div>
         )}
         {turns.map((turn) => (
-          <div
+          <TurnCard
             key={turn.id}
-            className={`flex flex-col gap-2${
-              liveTurnIdsRef.current.has(turn.id) ? " animate-message-in" : ""
-            }`}
+            live={liveTurnIdsRef.current.has(turn.id)}
+            activities={
+              coachVisible
+                ? []
+                : deriveTurnActivities(turn).filter((a) => a.kind === "memory")
+            }
           >
             {turn.userText.trim() && (
               <UserTurn
@@ -1492,7 +1508,7 @@ export function ChatView({
                 regenerating={regeneratingId === turn.id}
               />
             )}
-          </div>
+          </TurnCard>
         ))}
         {derivationPreparing && (
           <div className="m-auto flex flex-col items-center gap-2 text-center text-sm leading-relaxed text-muted-foreground">
@@ -1500,12 +1516,10 @@ export function ChatView({
             <span>正在生成新的对话上下文…</span>
           </div>
         )}
-        {replyBusy && !streaming && !derivationPreparing && (
-          <div className="self-stretch py-0.5">
-            <TypingDots />
-          </div>
+        {replyBusy && !derivationPreparing && streaming.trim().length < 2 && (
+          <ThinkingIndicator className="self-stretch py-0.5" />
         )}
-        {streaming && (
+        {streaming.trim().length >= 2 && (
           <div className="self-stretch py-0.5 text-foreground opacity-70">
             <Markdown>{streaming}</Markdown>
           </div>

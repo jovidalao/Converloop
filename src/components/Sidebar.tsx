@@ -1,10 +1,9 @@
 import {
   BlocksIcon,
   BookOpenCheckIcon,
-  ChevronDownIcon,
-  ChevronRightIcon,
   GraduationCapIcon,
   ListChecksIcon,
+  MessageSquareIcon,
   PencilIcon,
   PlusIcon,
   SettingsIcon,
@@ -34,6 +33,7 @@ import {
 } from "../db/learning-agents";
 import { getActions, isAgentEnabled } from "../runtime";
 import { useConfirm } from "./confirm";
+import { EntityRow, EntityRowAction, EntitySection } from "./EntityRow";
 import { LearningAgentEditDialog } from "./LearningAgentEditDialog";
 import {
   DropdownMenu,
@@ -123,6 +123,11 @@ export function Sidebar({
   const derivationActions = getActions("session").filter((a) =>
     isAgentEnabled(a.id),
   );
+
+  // Learning section peeks the first lesson while collapsed; the rest live in
+  // the animated body (capped at 5 like before).
+  const firstLearningAgent = learningAgents[0];
+  const restLearningAgents = learningAgents.slice(1, 5);
 
   const editingAgent = useMemo(
     () => learningAgents.find((a) => a.id === editingAgentId) ?? null,
@@ -242,6 +247,38 @@ export function Sidebar({
     window.addEventListener("pointercancel", finishResize);
   }
 
+  const renderAgentRow = (agent: LearningAgentMeta) => (
+    <EntityRow
+      key={agent.id}
+      icon={<BookOpenCheckIcon className="size-3.5 shrink-0" />}
+      title={agent.name}
+      tooltip={agent.description}
+      onSelect={() => onStartLearningAgent(agent.id)}
+      actions={
+        <>
+          <EntityRowAction
+            label="编辑"
+            icon={<PencilIcon className="size-3.5" />}
+            onClick={(e) => {
+              e.stopPropagation();
+              setEditingAgentId(agent.id);
+            }}
+          />
+          {!agent.builtIn && (
+            <EntityRowAction
+              label="删除"
+              icon={<Trash2Icon className="size-3.5" />}
+              onClick={(e) => {
+                e.stopPropagation();
+                void removeAgent(agent);
+              }}
+            />
+          )}
+        </>
+      }
+    />
+  );
+
   return (
     <aside className="codex-sidebar">
       <div className="codex-sidebar-content">
@@ -265,86 +302,22 @@ export function Sidebar({
         </div>
 
         <nav className="codex-sidebar-scroll">
-          <div className="codex-sidebar-learning">
-            <button
-              type="button"
-              className="codex-section-heading"
-              onClick={() => setLearningCollapsed((v) => !v)}
-            >
-              <span className="codex-sidebar-leading-icon">
-                <GraduationCapIcon className="size-4 shrink-0" />
-              </span>
-              <span className="min-w-0 flex-1 truncate">定制化学习</span>
-              {learningCollapsed ? (
-                <ChevronRightIcon className="size-3.5 shrink-0" />
-              ) : (
-                <ChevronDownIcon className="size-3.5 shrink-0" />
-              )}
-            </button>
-            <div className="codex-sidebar-list">
-              {(learningCollapsed
-                ? learningAgents.slice(0, 1)
-                : learningAgents.slice(0, 5)
-              ).map((agent) => (
-                // biome-ignore lint/a11y/useSemanticElements: can't be a <button> — it nests the edit/delete action buttons; uses role+tabIndex+keyboard instead
-                <div
-                  key={agent.id}
-                  role="button"
-                  tabIndex={0}
-                  className="codex-sidebar-row group"
-                  onClick={() => onStartLearningAgent(agent.id)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      onStartLearningAgent(agent.id);
-                    }
-                  }}
-                  title={agent.description}
-                >
-                  <span className="codex-sidebar-leading-icon">
-                    <BookOpenCheckIcon className="size-4 shrink-0" />
-                  </span>
-                  <span className="min-w-0 flex-1 truncate">{agent.name}</span>
-                  <span className="codex-row-actions">
-                    <button
-                      type="button"
-                      title="编辑"
-                      aria-label="编辑"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setEditingAgentId(agent.id);
-                      }}
-                    >
-                      <PencilIcon className="size-3.5" />
-                    </button>
-                    {!agent.builtIn && (
-                      <button
-                        type="button"
-                        title="删除"
-                        aria-label="删除"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          void removeAgent(agent);
-                        }}
-                      >
-                        <Trash2Icon className="size-3.5" />
-                      </button>
-                    )}
-                  </span>
-                </div>
-              ))}
-              {!learningCollapsed && (
-                <button
-                  type="button"
-                  className="codex-sidebar-row"
-                  onClick={() => onOpenView("learning")}
-                >
-                  <PlusIcon className="size-4" />
-                  <span>创建专项课</span>
-                </button>
-              )}
-            </div>
-          </div>
+          <EntitySection
+            icon={<GraduationCapIcon className="size-4 shrink-0" />}
+            label="定制化学习"
+            collapsed={learningCollapsed}
+            onToggle={() => setLearningCollapsed((v) => !v)}
+            pinned={
+              firstLearningAgent ? renderAgentRow(firstLearningAgent) : null
+            }
+          >
+            {restLearningAgents.map(renderAgentRow)}
+            <EntityRow
+              icon={<PlusIcon className="size-3.5 shrink-0" />}
+              title="创建专项课"
+              onSelect={() => onOpenView("learning")}
+            />
+          </EntitySection>
 
           <div className="codex-section-label">最近</div>
           {conversations.map((c) => {
@@ -367,80 +340,66 @@ export function Sidebar({
               );
             }
             return (
-              // biome-ignore lint/a11y/useSemanticElements: can't be a <button> — it nests the rename/delete action buttons; uses role+tabIndex+keyboard instead
-              <div
+              <EntityRow
                 key={c.id}
-                role="button"
-                tabIndex={0}
-                className="codex-sidebar-row group"
-                data-active={active}
-                onClick={() => onSelect(c.id)}
-                onContextMenu={(e) => openConversationMenu(e, c)}
-                onDoubleClick={() => startEdit(c)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    onSelect(c.id);
-                  }
-                }}
-              >
-                {c.kind === "learning_agent" && (
-                  <BookOpenCheckIcon className="size-3.5 shrink-0" />
-                )}
-                {c.branchKind && (
-                  <span
-                    className="inline-flex shrink-0 text-[color:var(--codex-sidebar-muted)]"
-                    title={`分支:${BRANCH_KIND_LABEL[c.branchKind as BranchKind] ?? c.branchKind}`}
-                  >
-                    <SparklesIcon className="size-3.5" />
-                  </span>
-                )}
-                <span className="min-w-0 flex-1 truncate">{c.title}</span>
-                <span className="codex-row-meta group-hover:hidden">
-                  {formatRelativeTime(c.updatedAt)}
-                </span>
-                <span className="codex-row-actions">
-                  <button
-                    type="button"
-                    title="重命名"
-                    aria-label="重命名"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      startEdit(c);
-                    }}
-                  >
-                    <PencilIcon className="size-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    title="删除"
-                    aria-label="删除"
-                    onClick={async (e) => {
-                      e.stopPropagation();
-                      if (
-                        await confirm({
-                          title: `删除对话「${c.title}」?`,
-                          description: "此操作不可撤销。",
-                        })
-                      ) {
-                        onDelete(c.id);
-                      }
-                    }}
-                  >
-                    <Trash2Icon className="size-3.5" />
-                  </button>
-                  {c.kind === "practice" && derivationActions.length > 0 && (
-                    <button
-                      type="button"
-                      title="衍生新对话"
-                      aria-label="衍生新对话"
-                      onClick={(e) => openMenuFromButton(e, c)}
+                active={active}
+                icon={
+                  c.kind === "learning_agent" ? (
+                    <BookOpenCheckIcon className="size-3.5 shrink-0" />
+                  ) : (
+                    <MessageSquareIcon className="size-3.5 shrink-0" />
+                  )
+                }
+                title={c.title}
+                badges={
+                  c.branchKind ? (
+                    <span
+                      className="inline-flex shrink-0 text-[color:var(--codex-sidebar-muted)]"
+                      title={`分支:${BRANCH_KIND_LABEL[c.branchKind as BranchKind] ?? c.branchKind}`}
                     >
                       <SparklesIcon className="size-3.5" />
-                    </button>
-                  )}
-                </span>
-              </div>
+                    </span>
+                  ) : null
+                }
+                meta={formatRelativeTime(c.updatedAt)}
+                onSelect={() => onSelect(c.id)}
+                onContextMenu={(e) => openConversationMenu(e, c)}
+                onDoubleClick={() => startEdit(c)}
+                actions={
+                  <>
+                    <EntityRowAction
+                      label="重命名"
+                      icon={<PencilIcon className="size-3.5" />}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        startEdit(c);
+                      }}
+                    />
+                    <EntityRowAction
+                      label="删除"
+                      icon={<Trash2Icon className="size-3.5" />}
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        if (
+                          await confirm({
+                            title: `删除对话「${c.title}」?`,
+                            description: "此操作不可撤销。",
+                          })
+                        ) {
+                          onDelete(c.id);
+                        }
+                      }}
+                    />
+                    {c.kind === "practice" && derivationActions.length > 0 && (
+                      <EntityRowAction
+                        label="衍生新对话"
+                        icon={<SparklesIcon className="size-3.5" />}
+                        onClick={(e) => openMenuFromButton(e, c)}
+                      />
+                    )}
+                  </>
+                }
+              />
             );
           })}
           {conversations.length === 0 && (
@@ -515,7 +474,7 @@ export function Sidebar({
 
       {conversationMenu && (
         <div
-          className="fixed z-50 flex min-w-64 flex-col overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
+          className="fixed z-50 flex min-w-64 flex-col overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-minimal"
           style={{
             left: conversationMenu.x,
             top: conversationMenu.y,

@@ -16,9 +16,14 @@ export default defineConfig(async () => ({
     },
   },
 
-  // Don't run the vendored cherry-studio-main checkout's test suite.
+  // Don't run the vendored design-reference checkouts' test suites
+  // (cherry-studio-main, craft-agents-oss-main — the latter uses bun:test).
   test: {
-    exclude: [...configDefaults.exclude, "cherry-studio-main/**"],
+    exclude: [
+      ...configDefaults.exclude,
+      "cherry-studio-main/**",
+      "craft-agents-oss-main/**",
+    ],
   },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
