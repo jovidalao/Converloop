@@ -36,12 +36,20 @@ import {
   touchConversation,
   truncateConversationFrom,
 } from "../db/conversations";
+import { getWeakList } from "../db/mastery";
 import {
   type ChatTurn,
   incrementBilingualCount,
   incrementExplainCount,
   loadChatHistory,
 } from "../db/turns";
+import {
+  applyMention,
+  filterMentions,
+  type MentionItem,
+  mentionQueryAt,
+  toMentionItem,
+} from "../lib/mentions";
 import { estimatePromptTokens } from "../lib/tokens";
 import { deriveTurnActivities, type TurnActivity } from "../lib/turn-activity";
 import {
@@ -60,6 +68,7 @@ import { createReplySpeaker } from "../tts/stream";
 import { useConfirm } from "./confirm";
 import { InlineCorrection, UserSentence } from "./InlineCorrection";
 import { Markdown } from "./Markdown";
+import { MentionMenu } from "./MentionMenu";
 import { ReplyExplanation } from "./ReplyExplanation";
 import { SlashMenu } from "./SlashMenu";
 import { SpeakButton } from "./SpeakButton";
@@ -930,6 +939,55 @@ export function ChatView({
     setSlashSelected((s) => (s < slashCommands.length ? s : 0));
   }, [slashCommands.length]);
 
+  // 对话栏 @ 上下文:输入 @ 时弹出学习数据(弱项 / 表达缺口)菜单,选中把词条插回输入框。
+  // 纯输入层自动完成,不走隐藏上下文通道、不动 orchestrator。键盘导航同样在 textarea 拦截。
+  const [mentionItems, setMentionItems] = useState<MentionItem[] | null>(null);
+  const [mentionSelected, setMentionSelected] = useState(0);
+  const [mentionDismissed, setMentionDismissed] = useState(false);
+  const mentionQuery = useMemo(
+    () => mentionQueryAt(input, input.length),
+    [input],
+  );
+  // 首次出现 @ 时拉取弱项列表(只取一次,之后客户端过滤)。空列表也缓存,避免重复查询。
+  useEffect(() => {
+    if (mentionQuery !== null && mentionItems === null) {
+      void getWeakList(30).then((rows) =>
+        setMentionItems(rows.map(toMentionItem)),
+      );
+    }
+  }, [mentionQuery, mentionItems]);
+  const mentionMatches = useMemo(
+    () =>
+      mentionQuery !== null && !mentionDismissed && mentionItems
+        ? filterMentions(mentionItems, mentionQuery.token)
+        : [],
+    [mentionQuery, mentionDismissed, mentionItems],
+  );
+  const mentionOpen = mentionMatches.length > 0;
+
+  // 退出 @ 语境(无 token)后清掉「Esc 关闭」标记,下次再输入 @ 可重新弹出。
+  useEffect(() => {
+    if (mentionQuery === null && mentionDismissed) setMentionDismissed(false);
+  }, [mentionQuery, mentionDismissed]);
+
+  // 过滤结果变化后选中项夹回 0。
+  useEffect(() => {
+    setMentionSelected((s) => (s < mentionMatches.length ? s : 0));
+  }, [mentionMatches.length]);
+
+  // 选中 @ 条目:替换光标前的 @token 为词条文本(末尾补空格),光标落到其后。
+  function activateMention(item: MentionItem) {
+    const result = applyMention(input, input.length, item);
+    if (!result) return;
+    setInput(result.value);
+    requestAnimationFrame(() => {
+      const el = inputRef.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(result.caret, result.caret);
+    });
+  }
+
   // 输入框随内容增高,最多三行,超过后内部滚动。
   // biome-ignore lint/correctness/useExhaustiveDependencies: input is the intentional trigger; the effect reads inputRef after it changes, not input directly
   useEffect(() => {
@@ -1435,6 +1493,19 @@ export function ChatView({
   // 任一轮还在批改时,「从此处开始」会截断对话、丢弃在途批改结果——批改完成前一律禁用。
   const analyzing = turns.some((t) => t.analysisPending);
 
+  // 输入台上方的 active option badges:一眼看到本轮带的学习上下文(模式 + 衍生设定)。
+  const optionBadges: { label: string; tone: "info" | "muted" }[] = [
+    learningMode
+      ? { label: "专项课", tone: "info" }
+      : { label: "练习", tone: "muted" },
+  ];
+  if (derivedBanner) {
+    optionBadges.push({ label: derivedBanner.label ?? "衍生", tone: "info" });
+    const diff = derivedBanner.context.difficulty?.trim();
+    if (diff && diff.length <= 16)
+      optionBadges.push({ label: `难度·${diff}`, tone: "muted" });
+  }
+
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col">
       <div
@@ -1554,85 +1625,141 @@ export function ChatView({
               onActivate={activateSlashCommand}
             />
           )}
-          <form
-            className="flex items-end gap-1.5 rounded-lg border bg-card py-1.5 pr-1.5 pl-4 shadow transition-colors focus-within:border-ring"
-            onSubmit={(e) => {
-              e.preventDefault();
-              submitInput();
-            }}
-          >
-            <textarea
-              ref={inputRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                // 菜单打开时拦截导航键(IME 合成中不拦截),不冒泡到发送。
-                if (slashOpen && !e.nativeEvent.isComposing) {
-                  if (e.key === "ArrowDown") {
-                    e.preventDefault();
-                    setSlashSelected((s) => (s + 1) % slashCommands.length);
-                    return;
-                  }
-                  if (e.key === "ArrowUp") {
-                    e.preventDefault();
-                    setSlashSelected(
-                      (s) =>
-                        (s - 1 + slashCommands.length) % slashCommands.length,
-                    );
-                    return;
-                  }
-                  if (e.key === "Tab") {
-                    e.preventDefault();
-                    const c = slashCommands[slashSelected];
-                    if (c) completeSlashCommand(c);
-                    return;
-                  }
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    const c = slashCommands[slashSelected];
-                    if (c) activateSlashCommand(c);
-                    return;
-                  }
-                  if (e.key === "Escape") {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setSlashDismissed(true);
-                    return;
-                  }
-                }
-                if (
-                  e.key === "Enter" &&
-                  !e.shiftKey &&
-                  !e.nativeEvent.isComposing
-                ) {
-                  e.preventDefault();
-                  submitInput();
-                }
-              }}
-              rows={1}
-              placeholder={
-                learningMode
-                  ? "问老师、回答练习，母语/目标语言都可以…"
-                  : "用目标语言输入一句话…（输入 / 查看命令）"
-              }
-              disabled={replyBusy}
-              className="max-h-[calc(1.4em*3+0.9rem)] min-w-0 flex-1 resize-none border-none bg-transparent py-2 text-base leading-snug outline-none placeholder:text-muted-foreground"
+          {mentionOpen && (
+            <MentionMenu
+              items={mentionMatches}
+              selected={mentionSelected}
+              onHover={setMentionSelected}
+              onActivate={activateMention}
             />
-            <Button
-              type="submit"
-              size="icon"
-              className="size-9 transition-transform active:scale-90"
-              disabled={replyBusy || !input.trim()}
-              title="发送"
-              aria-label="发送"
+          )}
+          <div className="flex flex-col rounded-lg border bg-card shadow-minimal transition-colors focus-within:border-ring">
+            {optionBadges.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5 px-3.5 pt-2">
+                {optionBadges.map((b) => (
+                  <span
+                    key={b.label}
+                    className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[11px] font-medium ${
+                      b.tone === "info"
+                        ? "bg-primary/10 text-primary"
+                        : "bg-muted text-muted-foreground"
+                    }`}
+                  >
+                    {b.label}
+                  </span>
+                ))}
+              </div>
+            )}
+            <form
+              className="flex items-end gap-1.5 py-1.5 pr-1.5 pl-4"
+              onSubmit={(e) => {
+                e.preventDefault();
+                submitInput();
+              }}
             >
-              {replyBusy ? (
-                <Spinner className="size-3.5" />
-              ) : (
-                <ArrowUpIcon className="size-4.5" />
-              )}
-            </Button>
-          </form>
+              <textarea
+                ref={inputRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => {
+                  // 菜单打开时拦截导航键(IME 合成中不拦截),不冒泡到发送。
+                  if (slashOpen && !e.nativeEvent.isComposing) {
+                    if (e.key === "ArrowDown") {
+                      e.preventDefault();
+                      setSlashSelected((s) => (s + 1) % slashCommands.length);
+                      return;
+                    }
+                    if (e.key === "ArrowUp") {
+                      e.preventDefault();
+                      setSlashSelected(
+                        (s) =>
+                          (s - 1 + slashCommands.length) % slashCommands.length,
+                      );
+                      return;
+                    }
+                    if (e.key === "Tab") {
+                      e.preventDefault();
+                      const c = slashCommands[slashSelected];
+                      if (c) completeSlashCommand(c);
+                      return;
+                    }
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      const c = slashCommands[slashSelected];
+                      if (c) activateSlashCommand(c);
+                      return;
+                    }
+                    if (e.key === "Escape") {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setSlashDismissed(true);
+                      return;
+                    }
+                  }
+                  if (mentionOpen && !e.nativeEvent.isComposing) {
+                    if (e.key === "ArrowDown") {
+                      e.preventDefault();
+                      setMentionSelected(
+                        (s) => (s + 1) % mentionMatches.length,
+                      );
+                      return;
+                    }
+                    if (e.key === "ArrowUp") {
+                      e.preventDefault();
+                      setMentionSelected(
+                        (s) =>
+                          (s - 1 + mentionMatches.length) %
+                          mentionMatches.length,
+                      );
+                      return;
+                    }
+                    if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey)) {
+                      e.preventDefault();
+                      const it = mentionMatches[mentionSelected];
+                      if (it) activateMention(it);
+                      return;
+                    }
+                    if (e.key === "Escape") {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setMentionDismissed(true);
+                      return;
+                    }
+                  }
+                  if (
+                    e.key === "Enter" &&
+                    !e.shiftKey &&
+                    !e.nativeEvent.isComposing
+                  ) {
+                    e.preventDefault();
+                    submitInput();
+                  }
+                }}
+                rows={1}
+                placeholder={
+                  learningMode
+                    ? "问老师、回答练习，母语/目标语言都可以…"
+                    : "用目标语言输入一句话…（/ 命令 · @ 引用学习点）"
+                }
+                disabled={replyBusy}
+                className="max-h-[calc(1.4em*3+0.9rem)] min-w-0 flex-1 resize-none border-none bg-transparent py-2 text-base leading-snug outline-none placeholder:text-muted-foreground"
+              />
+              <Button
+                type="submit"
+                size="icon"
+                className="size-9 transition-transform active:scale-90"
+                disabled={replyBusy || !input.trim()}
+                title="发送"
+                aria-label="发送"
+              >
+                {replyBusy ? (
+                  <Spinner className="size-3.5" />
+                ) : (
+                  <ArrowUpIcon className="size-4.5" />
+                )}
+              </Button>
+            </form>
+          </div>
         </div>
         <div
           className="mt-0.5 flex items-center justify-end gap-3 px-1 text-[11px] text-muted-foreground/70 tabular-nums"
