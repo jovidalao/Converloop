@@ -128,8 +128,8 @@ interface ModelBrand {
   className?: string;
 }
 
-function modelBrand(model: string, providerType: ProviderType): ModelBrand {
-  const lower = `${providerType} ${model}`.toLowerCase();
+function modelBrand(model: string): ModelBrand {
+  const lower = model.trim().toLowerCase();
   if (
     lower.includes("anthropic") ||
     lower.includes("claude") ||
@@ -223,19 +223,13 @@ function modelBrand(model: string, providerType: ProviderType): ModelBrand {
     };
   }
   return {
-    name: MODEL_PROVIDER_LABEL[providerType],
+    name: modelShortName(model),
     className: "text-muted-foreground",
   };
 }
 
-function ModelLogo({
-  model,
-  providerType,
-}: {
-  model: string;
-  providerType: ProviderType;
-}) {
-  const brand = modelBrand(model, providerType);
+function ModelLogo({ model }: { model: string }) {
+  const brand = modelBrand(model);
   return (
     <span
       className={`inline-flex size-4 shrink-0 items-center justify-center [&_svg]:size-4 ${brand.className}`}
@@ -1822,7 +1816,7 @@ export function ChatView({
           )}
         </div>
       )}
-      <div className="shrink-0 pr-2 pb-4 pl-4 pt-1.5">
+      <div className="shrink-0 px-4 pb-4 pt-1.5">
         <div className="relative">
           {slashOpen && (
             <SlashMenu
@@ -1959,13 +1953,10 @@ export function ChatView({
                   disabled={replyBusy}
                 >
                   <SelectTrigger
-                    className="h-8 w-auto max-w-[13rem] min-w-0 border-0 bg-transparent px-2 text-xs text-muted-foreground shadow-none hover:bg-accent hover:text-foreground focus-visible:ring-1"
+                    className="h-8 w-auto max-w-[13rem] min-w-0 gap-2.5 border-0 bg-transparent px-2 text-xs text-muted-foreground shadow-none hover:bg-accent hover:text-foreground focus-visible:ring-1"
                     aria-label="选择模型"
                   >
-                    <ModelLogo
-                      model={config.model}
-                      providerType={config.providerType}
-                    />
+                    <ModelLogo model={config.model} />
                     <span className="min-w-0 truncate">
                       {modelShortName(config.model)}
                     </span>
@@ -1973,23 +1964,25 @@ export function ChatView({
                   <SelectContent align="start" className="min-w-56">
                     {!usingPresetModel && (
                       <SelectItem value="current">
-                        <ModelLogo
-                          model={config.model}
-                          providerType={config.providerType}
-                        />
-                        当前 · {modelShortName(config.model)}
+                        <span className="flex items-center gap-2.5">
+                          <ModelLogo model={config.model} />
+                          <span>
+                            当前 · {modelShortName(config.model)}
+                          </span>
+                        </span>
                       </SelectItem>
                     )}
                     {MODEL_PROVIDERS.map((providerType) => {
                       const preset = PROVIDER_PRESETS[providerType];
                       return (
                         <SelectItem key={providerType} value={providerType}>
-                          <ModelLogo
-                            model={preset.model}
-                            providerType={providerType}
-                          />
-                          {MODEL_PROVIDER_LABEL[providerType]} ·{" "}
-                          {modelShortName(preset.model)}
+                          <span className="flex items-center gap-2.5">
+                            <ModelLogo model={preset.model} />
+                            <span>
+                              {MODEL_PROVIDER_LABEL[providerType]} ·{" "}
+                              {modelShortName(preset.model)}
+                            </span>
+                          </span>
                         </SelectItem>
                       );
                     })}
