@@ -33,7 +33,7 @@ import { Button } from "./ui/button";
 import { Spinner } from "./ui/spinner";
 
 // 教练面板:把散在气泡里的批改 + 系统「记下了什么」收拢到右栏,常驻可见。
-// Phase 2 与气泡内反馈并存(见 docs/agent-runtime-plan.md);只展示,不改发送/记账逻辑。
+// 只展示,不改发送/记账逻辑;后续视觉打磨见 docs/craft-ui-plan.md。
 
 const SIGNAL_LABEL: Record<SignalKind, string> = {
   error: "记为出错",

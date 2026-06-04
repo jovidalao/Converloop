@@ -1,5 +1,5 @@
-// Agent Runtime —— hook 派发缝隙的类型层(Phase 1)。
-// 见 docs/agent-runtime-plan.md。这里只定义类型与 hook 名,不含运行逻辑。
+// Agent Runtime —— hook 派发缝隙的类型层。
+// 运行时现状见 docs/architecture.md;这里只定义类型与 hook 名,不含运行逻辑。
 
 import type { TutorAnalysis } from "../agents/schema";
 import type { WeakItem } from "../agents/tutor";
@@ -13,8 +13,8 @@ import type { ProficiencySnapshot } from "../lib/proficiency";
 import type { CorrectionPreferenceFlags } from "../profile/preferences";
 import type { ModelProvider } from "../providers/types";
 
-// 运行阶段 hook。Phase 1 只接线前两个(reply ∥ observe);其余先登记为常量、
-// 不接线(YAGNI),标记未来的挂载点,见 docs/agent-runtime-plan.md 第三节。
+// 运行阶段 hook。当前只接线实际使用的 hook;其余先登记为常量,
+// 不接线(YAGNI),仅标记未来的挂载点。
 export const HOOKS = {
   conversationReply: "conversation.reply",
   conversationObserve: "conversation.observe",
