@@ -3,7 +3,6 @@ import {
   BookOpenCheckIcon,
   GraduationCapIcon,
   ListChecksIcon,
-  MessageSquareIcon,
   PencilIcon,
   PlusIcon,
   SettingsIcon,
@@ -21,11 +20,7 @@ import {
   useState,
 } from "react";
 import { actionShortcutLabel, getAppAction } from "@/lib/app-actions";
-import {
-  BRANCH_KIND_LABEL,
-  type BranchKind,
-  type ConversationMeta,
-} from "../db/conversations";
+import type { ConversationMeta } from "../db/conversations";
 import {
   deleteLearningAgent,
   type LearningAgentDraft,
@@ -348,21 +343,9 @@ export function Sidebar({
                 icon={
                   c.kind === "learning_agent" ? (
                     <BookOpenCheckIcon className="size-3.5 shrink-0" />
-                  ) : (
-                    <MessageSquareIcon className="size-3.5 shrink-0" />
-                  )
+                  ) : undefined
                 }
                 title={c.title}
-                badges={
-                  c.branchKind ? (
-                    <span
-                      className="inline-flex shrink-0 text-[color:var(--codex-sidebar-muted)]"
-                      title={`分支:${BRANCH_KIND_LABEL[c.branchKind as BranchKind] ?? c.branchKind}`}
-                    >
-                      <SparklesIcon className="size-3.5" />
-                    </span>
-                  ) : null
-                }
                 meta={formatRelativeTime(c.updatedAt)}
                 onSelect={() => onSelect(c.id)}
                 onContextMenu={(e) => openConversationMenu(e, c)}

@@ -1,3 +1,15 @@
+import anthropicLogo from "@lobehub/icons-static-svg/icons/anthropic.svg?raw";
+import claudeLogo from "@lobehub/icons-static-svg/icons/claude-color.svg?raw";
+import cohereLogo from "@lobehub/icons-static-svg/icons/cohere-color.svg?raw";
+import deepSeekLogo from "@lobehub/icons-static-svg/icons/deepseek-color.svg?raw";
+import geminiLogo from "@lobehub/icons-static-svg/icons/gemini-color.svg?raw";
+import grokLogo from "@lobehub/icons-static-svg/icons/grok.svg?raw";
+import groqLogo from "@lobehub/icons-static-svg/icons/groq.svg?raw";
+import metaLogo from "@lobehub/icons-static-svg/icons/meta-color.svg?raw";
+import mistralLogo from "@lobehub/icons-static-svg/icons/mistral-color.svg?raw";
+import openAiLogo from "@lobehub/icons-static-svg/icons/openai.svg?raw";
+import perplexityLogo from "@lobehub/icons-static-svg/icons/perplexity-color.svg?raw";
+import qwenLogo from "@lobehub/icons-static-svg/icons/qwen-color.svg?raw";
 import {
   ArrowUpIcon,
   CheckIcon,
@@ -27,7 +39,13 @@ import {
   type SlashCommand,
   slashMenuToken,
 } from "../commands";
-import { getContextLimit, useConfig } from "../config";
+import {
+  getContextLimit,
+  PROVIDER_PRESETS,
+  type ProviderType,
+  saveConfig,
+  useConfig,
+} from "../config";
 import {
   getConversation,
   maybeAutoTitle,
@@ -75,6 +93,7 @@ import { SlashMenu } from "./SlashMenu";
 import { SpeakButton } from "./SpeakButton";
 import { ThinkingIndicator, TurnActivityRow } from "./TurnActivity";
 import { Button } from "./ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger } from "./ui/select";
 import { Spinner } from "./ui/spinner";
 
 interface ChatViewProps {
@@ -91,6 +110,170 @@ interface ChatViewProps {
   onNavigateConversation?: (id: string) => void;
   /** 教练面板是否可见:可见时气泡内批改精简,详情只在右栏,避免双份。 */
   coachVisible?: boolean;
+}
+
+const MODEL_PROVIDER_LABEL: Record<ProviderType, string> = {
+  openai: "OpenAI",
+  gemini: "Gemini",
+  anthropic: "Claude",
+};
+
+const MODEL_PROVIDERS = Object.keys(PROVIDER_PRESETS) as ProviderType[];
+const INPUT_TEXTAREA_MIN_HEIGHT = 52;
+const INPUT_TEXTAREA_MAX_HEIGHT = 96;
+
+interface ModelBrand {
+  name: string;
+  svg?: string;
+  className?: string;
+}
+
+function modelBrand(model: string, providerType: ProviderType): ModelBrand {
+  const lower = `${providerType} ${model}`.toLowerCase();
+  if (
+    lower.includes("anthropic") ||
+    lower.includes("claude") ||
+    lower.includes("sonnet") ||
+    lower.includes("haiku") ||
+    lower.includes("opus")
+  ) {
+    return {
+      name: lower.includes("anthropic") ? "Anthropic" : "Claude",
+      svg: lower.includes("anthropic") ? anthropicLogo : claudeLogo,
+      className: "text-[#D97757]",
+    };
+  }
+  if (lower.includes("gemini") || lower.includes("google")) {
+    return {
+      name: "Google Gemini",
+      svg: geminiLogo,
+      className: "text-[#8E75FF]",
+    };
+  }
+  if (
+    lower.includes("openai") ||
+    lower.includes("gpt") ||
+    lower.includes("chatgpt") ||
+    /\bo[134]\b/.test(lower)
+  ) {
+    return {
+      name: "OpenAI",
+      svg: openAiLogo,
+      className: "text-foreground",
+    };
+  }
+  if (lower.includes("deepseek")) {
+    return {
+      name: "DeepSeek",
+      svg: deepSeekLogo,
+      className: "text-[#4D6BFE]",
+    };
+  }
+  if (lower.includes("qwen") || lower.includes("dashscope")) {
+    return {
+      name: "Qwen",
+      svg: qwenLogo,
+      className: "text-[#615CED]",
+    };
+  }
+  if (lower.includes("llama") || lower.includes("meta")) {
+    return {
+      name: "Meta Llama",
+      svg: metaLogo,
+      className: "text-[#1D65C1]",
+    };
+  }
+  if (lower.includes("mistral") || lower.includes("mixtral")) {
+    return {
+      name: "Mistral",
+      svg: mistralLogo,
+      className: "text-[#FA520F]",
+    };
+  }
+  if (
+    lower.includes("grok") ||
+    lower.includes("xai") ||
+    lower.includes("x-ai")
+  ) {
+    return {
+      name: "xAI",
+      svg: grokLogo,
+      className: "text-foreground",
+    };
+  }
+  if (lower.includes("groq")) {
+    return {
+      name: "Groq",
+      svg: groqLogo,
+      className: "text-[#F55036]",
+    };
+  }
+  if (lower.includes("perplexity") || lower.includes("pplx")) {
+    return {
+      name: "Perplexity",
+      svg: perplexityLogo,
+      className: "text-[#22B8CD]",
+    };
+  }
+  if (lower.includes("cohere") || lower.includes("command-r")) {
+    return {
+      name: "Cohere",
+      svg: cohereLogo,
+      className: "text-[#39594D]",
+    };
+  }
+  return {
+    name: MODEL_PROVIDER_LABEL[providerType],
+    className: "text-muted-foreground",
+  };
+}
+
+function ModelLogo({
+  model,
+  providerType,
+}: {
+  model: string;
+  providerType: ProviderType;
+}) {
+  const brand = modelBrand(model, providerType);
+  return (
+    <span
+      className={`inline-flex size-4 shrink-0 items-center justify-center [&_svg]:size-4 ${brand.className}`}
+      title={brand.name}
+      role="img"
+      aria-label={brand.name}
+    >
+      {brand.svg ? (
+        <span
+          className="contents"
+          // biome-ignore lint/security/noDangerouslySetInnerHtml: vetted local SVG asset string
+          dangerouslySetInnerHTML={{ __html: brand.svg }}
+        />
+      ) : (
+        <SparklesIcon className="size-3.5" />
+      )}
+    </span>
+  );
+}
+
+function modelShortName(model: string): string {
+  const raw = model.trim();
+  const lower = raw.toLowerCase();
+  if (lower.includes("sonnet")) {
+    const version = lower.match(/sonnet[-_ ]?([0-9](?:\.[0-9])?)/)?.[1];
+    return version ? `Sonnet ${version}` : "Sonnet";
+  }
+  if (lower.includes("haiku")) return "Haiku";
+  if (lower.includes("opus")) return "Opus";
+  if (lower.includes("gpt-4o-mini")) return "GPT-4o mini";
+  if (lower.includes("gpt-4o")) return "GPT-4o";
+  if (lower.includes("gemini")) {
+    return raw
+      .replace(/^gemini[-_ ]?/i, "Gemini ")
+      .replace(/[-_ ]flash$/i, " Flash")
+      .replace(/[-_]/g, " ");
+  }
+  return raw || "模型";
 }
 
 // 复制这条回复。复制后短暂显示对勾。
@@ -994,7 +1177,13 @@ export function ChatView({
     const el = inputRef.current;
     if (!el) return;
     el.style.height = "auto";
-    el.style.height = `${el.scrollHeight}px`;
+    const nextHeight = Math.min(
+      Math.max(el.scrollHeight, INPUT_TEXTAREA_MIN_HEIGHT),
+      INPUT_TEXTAREA_MAX_HEIGHT,
+    );
+    el.style.height = `${nextHeight}px`;
+    el.style.overflowY =
+      el.scrollHeight > INPUT_TEXTAREA_MAX_HEIGHT ? "auto" : "hidden";
   }, [input]);
 
   function syncStickToBottom() {
@@ -1505,6 +1694,24 @@ export function ChatView({
     if (diff && diff.length <= 16)
       optionBadges.push({ label: `难度·${diff}`, tone: "muted" });
   }
+  const currentPreset = PROVIDER_PRESETS[config.providerType];
+  const usingPresetModel =
+    config.model.trim() === currentPreset.model &&
+    config.baseUrl.trim() === currentPreset.baseUrl;
+  const modelSelectValue = usingPresetModel ? config.providerType : "current";
+  const contextTitle = `约 ${usedTokens.toLocaleString()} / ${contextLimit.toLocaleString()} tokens · 上下文 ${usedPercent}%`;
+
+  function selectModelProvider(value: string) {
+    if (value === "current") return;
+    const providerType = value as ProviderType;
+    const preset = PROVIDER_PRESETS[providerType];
+    saveConfig({
+      ...config,
+      providerType,
+      baseUrl: preset.baseUrl,
+      model: preset.model,
+    });
+  }
 
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col">
@@ -1615,7 +1822,7 @@ export function ChatView({
           )}
         </div>
       )}
-      <div className="shrink-0 px-4 pt-1.5 pb-1">
+      <div className="shrink-0 pr-2 pb-4 pl-4 pt-1.5">
         <div className="relative">
           {slashOpen && (
             <SlashMenu
@@ -1633,25 +1840,9 @@ export function ChatView({
               onActivate={activateMention}
             />
           )}
-          <div className="flex flex-col rounded-lg border bg-card shadow-minimal transition-colors focus-within:border-ring">
-            {optionBadges.length > 0 && (
-              <div className="flex flex-wrap items-center gap-1.5 px-3.5 pt-2">
-                {optionBadges.map((b) => (
-                  <span
-                    key={b.label}
-                    className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[11px] font-medium ${
-                      b.tone === "info"
-                        ? "bg-primary/10 text-primary"
-                        : "bg-muted text-muted-foreground"
-                    }`}
-                  >
-                    {b.label}
-                  </span>
-                ))}
-              </div>
-            )}
+          <div className="overflow-hidden rounded-xl border bg-card shadow-minimal transition-colors">
             <form
-              className="flex items-end gap-1.5 py-1.5 pr-1.5 pl-4"
+              className="flex flex-col"
               onSubmit={(e) => {
                 e.preventDefault();
                 submitInput();
@@ -1742,31 +1933,85 @@ export function ChatView({
                     : "用目标语言输入一句话…（/ 命令 · @ 引用学习点）"
                 }
                 disabled={replyBusy}
-                className="max-h-[calc(1.4em*3+0.9rem)] min-w-0 flex-1 resize-none border-none bg-transparent py-2 text-base leading-snug outline-none placeholder:text-muted-foreground"
+                className="max-h-24 min-h-[3.25rem] min-w-0 resize-none border-none bg-transparent px-4 pt-3 pb-1.5 text-base leading-snug outline-none placeholder:text-muted-foreground"
               />
-              <Button
-                type="submit"
-                size="icon"
-                className="size-9 transition-transform active:scale-90"
-                disabled={replyBusy || !input.trim()}
-                title="发送"
-                aria-label="发送"
-              >
-                {replyBusy ? (
-                  <Spinner className="size-3.5" />
-                ) : (
-                  <ArrowUpIcon className="size-4.5" />
-                )}
-              </Button>
+              <div className="flex min-h-11 items-center gap-2 px-2 py-1.5">
+                <div
+                  className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5"
+                  title={contextTitle}
+                >
+                  {optionBadges.map((b) => (
+                    <span
+                      key={b.label}
+                      className={`inline-flex max-w-32 items-center truncate rounded-md px-1.5 py-0.5 text-[11px] font-medium ${
+                        b.tone === "info"
+                          ? "bg-primary/10 text-primary"
+                          : "bg-muted text-muted-foreground"
+                      }`}
+                    >
+                      {b.label}
+                    </span>
+                  ))}
+                </div>
+                <Select
+                  value={modelSelectValue}
+                  onValueChange={selectModelProvider}
+                  disabled={replyBusy}
+                >
+                  <SelectTrigger
+                    className="h-8 w-auto max-w-[13rem] min-w-0 border-0 bg-transparent px-2 text-xs text-muted-foreground shadow-none hover:bg-accent hover:text-foreground focus-visible:ring-1"
+                    aria-label="选择模型"
+                  >
+                    <ModelLogo
+                      model={config.model}
+                      providerType={config.providerType}
+                    />
+                    <span className="min-w-0 truncate">
+                      {modelShortName(config.model)}
+                    </span>
+                  </SelectTrigger>
+                  <SelectContent align="start" className="min-w-56">
+                    {!usingPresetModel && (
+                      <SelectItem value="current">
+                        <ModelLogo
+                          model={config.model}
+                          providerType={config.providerType}
+                        />
+                        当前 · {modelShortName(config.model)}
+                      </SelectItem>
+                    )}
+                    {MODEL_PROVIDERS.map((providerType) => {
+                      const preset = PROVIDER_PRESETS[providerType];
+                      return (
+                        <SelectItem key={providerType} value={providerType}>
+                          <ModelLogo
+                            model={preset.model}
+                            providerType={providerType}
+                          />
+                          {MODEL_PROVIDER_LABEL[providerType]} ·{" "}
+                          {modelShortName(preset.model)}
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+                <Button
+                  type="submit"
+                  size="icon"
+                  className="size-8 rounded-full transition-transform active:scale-90"
+                  disabled={replyBusy || !input.trim()}
+                  title="发送"
+                  aria-label="发送"
+                >
+                  {replyBusy ? (
+                    <Spinner className="size-3.5" />
+                  ) : (
+                    <ArrowUpIcon className="size-4" />
+                  )}
+                </Button>
+              </div>
             </form>
           </div>
-        </div>
-        <div
-          className="mt-0.5 flex items-center justify-end gap-3 px-1 text-[11px] text-muted-foreground/70 tabular-nums"
-          title={`约 ${usedTokens.toLocaleString()} / ${contextLimit.toLocaleString()} tokens`}
-        >
-          <span className="min-w-0 truncate">{config.model}</span>
-          <span className="shrink-0">上下文 {usedPercent}%</span>
         </div>
       </div>
     </div>
