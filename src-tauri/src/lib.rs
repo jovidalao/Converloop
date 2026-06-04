@@ -196,6 +196,11 @@ CREATE TABLE IF NOT EXISTS memory_proposal (
     result_json     TEXT
 );";
 
+// 离档轮次(/btw「顺便问一句」):仍落库、仍显示在记录里,但构建上下文时跳过它,
+// 也不喂给维护 agent。代码记账,LLM 不碰。旧数据默认 0(=照常计入)。
+const ADD_TURN_EXCLUDE_FROM_CONTEXT: &str =
+    "ALTER TABLE turn ADD COLUMN exclude_from_context INTEGER NOT NULL DEFAULT 0;";
+
 // 红绿灯沿用 macOS 原生按钮,位置参照 Codex 顶栏:左侧 21pt,垂直居中于 46pt chrome。
 // decorum 把按钮中心放在距窗顶 (button_h + y)/2 + 4 处;关闭按钮 button_h = 14,
 // 解 (14 + y)/2 + 4 = 23 → y = 24。
@@ -439,6 +444,12 @@ pub fn run() {
             version: 31,
             description: "create_memory_proposal",
             sql: CREATE_MEMORY_PROPOSAL,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 32,
+            description: "add_turn_exclude_from_context",
+            sql: ADD_TURN_EXCLUDE_FROM_CONTEXT,
             kind: MigrationKind::Up,
         },
     ];

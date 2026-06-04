@@ -12,6 +12,7 @@ function mkTurn(i: number, replyLen = 400): Turn {
     conversationId: "c1",
     explainCount: 0,
     bilingualCount: 0,
+    excludeFromContext: 0,
   };
 }
 

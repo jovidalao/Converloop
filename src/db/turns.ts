@@ -10,6 +10,7 @@ export async function persistTurn(
   reply: string,
   analysis: TutorAnalysis | null,
   id: string = crypto.randomUUID(),
+  opts: { excludeFromContext?: boolean } = {},
 ): Promise<string> {
   await db.insert(turn).values({
     id,
@@ -18,6 +19,7 @@ export async function persistTurn(
     reply,
     analysisJson: analysis ? JSON.stringify(analysis) : null,
     conversationId,
+    excludeFromContext: opts.excludeFromContext ? 1 : 0,
   });
   return id;
 }
@@ -52,6 +54,8 @@ export interface ChatTurn {
   analysisProse?: string | null;
   analysisPending?: boolean;
   analysisError?: string | null;
+  /** /btw 离档轮:仍显示在记录里,但不计入后续上下文,也不批改。 */
+  excludeFromContext?: boolean;
 }
 
 export function serializeTurnFeedback(
@@ -120,6 +124,7 @@ export async function loadChatHistory(
       analysis,
       analysisProse: prose,
       analysisError: diagnostic,
+      excludeFromContext: t.excludeFromContext === 1,
     };
   });
 }
@@ -192,11 +197,17 @@ export async function getTurnsAfterId(
   conversationId: string,
   afterId: string | null,
 ): Promise<Turn[]> {
+  // 离档轮(/btw)永不计入上下文:context 构建处统一在 SQL 层过滤掉。
   const all = () =>
     db
       .select()
       .from(turn)
-      .where(eq(turn.conversationId, conversationId))
+      .where(
+        and(
+          eq(turn.conversationId, conversationId),
+          eq(turn.excludeFromContext, 0),
+        ),
+      )
       .orderBy(turn.createdAt);
   if (!afterId) return all();
 
@@ -214,6 +225,7 @@ export async function getTurnsAfterId(
     .where(
       and(
         eq(turn.conversationId, conversationId),
+        eq(turn.excludeFromContext, 0),
         gte(turn.createdAt, mark.createdAt),
       ),
     )
@@ -232,7 +244,7 @@ export async function formatHistorySince(
   const rows = await db
     .select()
     .from(turn)
-    .where(gt(turn.createdAt, sinceMs))
+    .where(and(gt(turn.createdAt, sinceMs), eq(turn.excludeFromContext, 0)))
     .orderBy(desc(turn.createdAt))
     .limit(maxTurns);
   const lines: string[] = [];

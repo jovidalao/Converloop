@@ -214,6 +214,8 @@ export const turn = sqliteTable("turn", {
   conversationId: text("conversation_id"),
   explainCount: integer("explain_count").notNull().default(0),
   bilingualCount: integer("bilingual_count").notNull().default(0),
+  // 离档轮次(/btw):1 = 仍显示在记录里,但构建上下文 / 喂维护 agent 时跳过(migration v32)。
+  excludeFromContext: integer("exclude_from_context").notNull().default(0),
 });
 
 export type Turn = typeof turn.$inferSelect;

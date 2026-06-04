@@ -185,10 +185,20 @@ export async function runTurn(
   conversationId: string,
   cb: TurnCallbacks,
   turnId?: string,
+  opts: { offRecord?: boolean } = {},
 ): Promise<TurnResult> {
+  // 离档轮(/btw「顺便问一句」):照常读上下文+流式回复,但不批改、不计入后续上下文、不压缩。
+  const offRecord = opts.offRecord ?? false;
   const conversation = await getConversation(conversationId);
   if (conversation?.kind === "learning_agent") {
-    return runLearningTurn(userInput, conversationId, cb, false, turnId);
+    return runLearningTurn(
+      userInput,
+      conversationId,
+      cb,
+      false,
+      turnId,
+      offRecord,
+    );
   }
 
   const provider = await getProvider();
@@ -266,8 +276,10 @@ export async function runTurn(
   };
 
   // 主回复 ∥ observer 并行触发。observer fire-and-forget,自行等 turnPersisted 后走代码记账。
+  // 离档轮不批改:不派发 observer,直接告诉 UI 本轮无批改(清掉「分析中」)。
   const replyPromise = dispatchReply(ctx, cb.onReplyDelta);
-  dispatchObservers(ctx);
+  if (offRecord) cb.onAnalysis(null);
+  else dispatchObservers(ctx);
 
   let reply: string;
   try {
@@ -277,20 +289,25 @@ export async function runTurn(
     throw e;
   }
 
-  await persistTurn(conversationId, userInput, reply, null, id);
+  await persistTurn(conversationId, userInput, reply, null, id, {
+    excludeFromContext: offRecord,
+  });
   resolvePersisted(id);
   cb.onReplyComplete?.(reply);
 
   // 自动压缩:逼近上下文上限时,后台把最老的原文折叠进滚动摘要。不阻塞下一轮输入。
   // 非历史动态块 = profile + 复习列表,叠加到固定 reserve 上,让水位贴合本轮实际负载。
-  const nonHistoryTokens =
-    estimateTokens(profileSlice) +
-    estimateTokens(
-      reviewItems
-        .map((r) => `${r.label} ${r.example ?? ""} ${r.notes ?? ""}`)
-        .join("\n"),
-    );
-  void maybeCompressConversation(conversationId, nonHistoryTokens);
+  // 离档轮不进上下文,自然不增加压缩压力,跳过。
+  if (!offRecord) {
+    const nonHistoryTokens =
+      estimateTokens(profileSlice) +
+      estimateTokens(
+        reviewItems
+          .map((r) => `${r.label} ${r.example ?? ""} ${r.notes ?? ""}`)
+          .join("\n"),
+      );
+    void maybeCompressConversation(conversationId, nonHistoryTokens);
+  }
 
   return { reply, analysis: null };
 }
@@ -399,6 +416,7 @@ async function runLearningTurn(
   cb: TurnCallbacks,
   kickoff: boolean,
   turnId?: string,
+  offRecord = false,
 ): Promise<TurnResult> {
   const provider = await getProvider();
   if (!provider) throw new MissingApiKeyError();
@@ -457,14 +475,19 @@ async function runLearningTurn(
 
   const reply = await dispatchReply(ctx, cb.onReplyDelta);
 
-  await persistTurn(conversationId, userInput, reply, null, id);
+  await persistTurn(conversationId, userInput, reply, null, id, {
+    excludeFromContext: offRecord,
+  });
   resolvePersisted(id);
   cb.onReplyComplete?.(reply);
   // 自动压缩:逼近上下文上限时,后台把最老的原文折叠进滚动摘要。不阻塞下一轮输入。
   // 专项课的非历史动态块 = dataContext + agent prompt,通常比普通对话大得多,据此提高 reserve。
-  const nonHistoryTokens =
-    estimateTokens(dataContext) + estimateTokens(agent.prompt);
-  void maybeCompressConversation(conversationId, nonHistoryTokens);
+  // 离档轮不进上下文,跳过压缩。
+  if (!offRecord) {
+    const nonHistoryTokens =
+      estimateTokens(dataContext) + estimateTokens(agent.prompt);
+    void maybeCompressConversation(conversationId, nonHistoryTokens);
+  }
   cb.onAnalysis(null);
   return { reply, analysis: null };
 }

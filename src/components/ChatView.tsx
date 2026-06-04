@@ -14,6 +14,12 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReplySuggestionSource } from "../agents/reply-suggestion";
 import type { TutorAnalysis } from "../agents/schema";
+import {
+  matchSlashCommands,
+  parseSlashInput,
+  type SlashCommand,
+  slashMenuToken,
+} from "../commands";
 import { getContextLimit, useConfig } from "../config";
 import {
   getConversation,
@@ -47,6 +53,7 @@ import { useConfirm } from "./confirm";
 import { InlineCorrection, UserSentence } from "./InlineCorrection";
 import { Markdown } from "./Markdown";
 import { ReplyExplanation } from "./ReplyExplanation";
+import { SlashMenu } from "./SlashMenu";
 import { SpeakButton } from "./SpeakButton";
 import { TranslationPopover } from "./TranslationPopover";
 import { Button } from "./ui/button";
@@ -340,6 +347,7 @@ function PartnerReply({
   text,
   autoOpen = false,
   learningMode = false,
+  offRecord = false,
   onFirstExplain,
   onFirstBilingual,
   onLayoutChange,
@@ -352,6 +360,8 @@ function PartnerReply({
   text: string;
   autoOpen?: boolean;
   learningMode?: boolean;
+  /** /btw 离档轮的回复:藏掉「推荐回复」(其依赖按 turnId 查上下文,离档轮已被排除会报错)。 */
+  offRecord?: boolean;
   /** 用户首次主动点开讲解/双语时各触发一次(理解信号记账;自动展开不算)。 */
   onFirstExplain?: () => void;
   onFirstBilingual?: () => void;
@@ -441,12 +451,14 @@ function PartnerReply({
         </div>
         <div className="-ml-1 flex items-center gap-0.5">
           <CopyButton text={text} />
-          <ReplySuggestionButton suggestion={replySuggestion} />
+          {!offRecord && <ReplySuggestionButton suggestion={replySuggestion} />}
         </div>
-        <ReplySuggestionPanel
-          suggestion={replySuggestion}
-          onUse={onUseSuggestion}
-        />
+        {!offRecord && (
+          <ReplySuggestionPanel
+            suggestion={replySuggestion}
+            onUse={onUseSuggestion}
+          />
+        )}
       </div>
     );
   }
@@ -510,14 +522,18 @@ function PartnerReply({
                 {regenerating ? <Spinner /> : <RefreshCwIcon size={16} />}
               </Button>
             )}
-            <ReplySuggestionButton suggestion={replySuggestion} />
+            {!offRecord && (
+              <ReplySuggestionButton suggestion={replySuggestion} />
+            )}
           </>
         }
         extraPanels={
-          <ReplySuggestionPanel
-            suggestion={replySuggestion}
-            onUse={onUseSuggestion}
-          />
+          offRecord ? null : (
+            <ReplySuggestionPanel
+              suggestion={replySuggestion}
+              onUse={onUseSuggestion}
+            />
+          )
         }
         trailingActions={
           <Button
@@ -635,6 +651,25 @@ function UserTurn({
     resetKey: `${turn.id}:${turn.userText}`,
     onLayoutChange,
   });
+  // 离档轮(/btw):虚线气泡 + 「不计入上下文」标记;不批改、不显示改正/推荐/分支等操作。
+  if (turn.excludeFromContext) {
+    return (
+      <div className="flex max-w-[min(88%,520px)] flex-col items-end gap-1 self-end">
+        <div
+          className="whitespace-pre-wrap rounded-2xl rounded-br-sm border border-dashed bg-secondary/50 px-3.5 py-2.5 text-base leading-normal text-foreground"
+          data-selectable-context
+        >
+          {turn.userText}
+        </div>
+        <div className="-mr-1 flex items-center gap-1.5 pr-1">
+          <span className="text-[11px] text-muted-foreground/70">
+            顺便一问 · 不计入上下文
+          </span>
+          <CopyButton text={turn.userText} />
+        </div>
+      </div>
+    );
+  }
   if (learningMode) {
     return (
       <div className="flex max-w-[min(88%,520px)] flex-col items-end gap-1.5 self-end">
@@ -845,6 +880,7 @@ export function ChatView({
   const usedTokens = useMemo(() => {
     const parts: string[] = [];
     for (const t of turns) {
+      if (t.excludeFromContext) continue; // 离档轮(/btw)不进上下文,不计入占用量
       if (t.userText) parts.push(t.userText);
       if (t.partnerText) parts.push(t.partnerText);
     }
@@ -855,6 +891,31 @@ export function ChatView({
     100,
     Math.round((usedTokens / contextLimit) * 100),
   );
+
+  // 对话栏斜杠命令(/btw 等):输入以 / 开头、命令词还在编辑时弹出菜单。键盘导航在 textarea
+  // 拦截;Esc 关闭直到退出命令语境再重开。action 类命令仅在能衍生分支(practice 且非草稿)时出现。
+  const [slashSelected, setSlashSelected] = useState(0);
+  const [slashDismissed, setSlashDismissed] = useState(false);
+  const slashToken = useMemo(() => slashMenuToken(input), [input]);
+  const canDerive = !learningMode && !isDraft;
+  const slashCommands = useMemo(
+    () =>
+      slashToken !== null && !slashDismissed
+        ? matchSlashCommands(slashToken, { canDerive })
+        : [],
+    [slashToken, slashDismissed, canDerive],
+  );
+  const slashOpen = slashCommands.length > 0;
+
+  // 退出命令语境(无 token)时清掉「Esc 关闭」标记,下次再输入 / 即可重新弹出。
+  useEffect(() => {
+    if (slashToken === null && slashDismissed) setSlashDismissed(false);
+  }, [slashToken, slashDismissed]);
+
+  // 过滤结果变化后选中项可能越界——夹回 0。
+  useEffect(() => {
+    setSlashSelected((s) => (s < slashCommands.length ? s : 0));
+  }, [slashCommands.length]);
 
   // 输入框随内容增高,最多三行,超过后内部滚动。
   // biome-ignore lint/correctness/useExhaustiveDependencies: input is the intentional trigger; the effect reads inputRef after it changes, not input directly
@@ -1098,11 +1159,17 @@ export function ChatView({
     }
   }
 
-  // opts.text:重试时复用原文(不从输入框取);opts.replacingId:换掉那条失败的旧轮次。
-  async function send(opts?: { text?: string; replacingId?: string }) {
+  // opts.text:重试时复用原文(不从输入框取);opts.replacingId:换掉那条失败的旧轮次;
+  // opts.offRecord:/btw 离档轮——照常回复但不批改、不计入上下文(气泡带标记)。
+  async function send(opts?: {
+    text?: string;
+    replacingId?: string;
+    offRecord?: boolean;
+  }) {
     const isRetry = opts?.text !== undefined;
     const text = (opts?.text ?? input).trim();
     if (!text || replyBusy) return;
+    const offRecord = opts?.offRecord ?? false;
     const draftAtSend = isDraft;
     stopSpeech();
     const priorTurns = opts?.replacingId
@@ -1125,7 +1192,8 @@ export function ChatView({
         id: turnId,
         userText: text,
         analysis: null,
-        analysisPending: !learningMode,
+        analysisPending: !learningMode && !offRecord,
+        excludeFromContext: offRecord,
       },
     ]);
     setReplyBusy(true);
@@ -1160,6 +1228,7 @@ export function ChatView({
           },
         },
         turnId,
+        { offRecord },
       );
       if (turnGenRef.current === turnGen && !replyCommittedRef.current) {
         commitPartnerReply(turnId, result.reply);
@@ -1167,8 +1236,9 @@ export function ChatView({
       }
       if (draftAtSend) await onCreateDraftConversation?.(conversationId);
       // 轮次已持久化:更新会话排序,首条消息顺带自动命名,再刷新侧边栏。
+      // 离档轮(/btw)不定义会话主题,不参与自动命名。
       await touchConversation(conversationId);
-      if ((isFirstMessage || draftAtSend) && !learningMode)
+      if ((isFirstMessage || draftAtSend) && !learningMode && !offRecord)
         await maybeAutoTitle(conversationId, text);
       onActivity?.();
     } catch (e) {
@@ -1185,7 +1255,9 @@ export function ChatView({
             ? e.message
             : String(e),
       );
-      setRetry({ run: () => void send({ text, replacingId: turnId }) });
+      setRetry({
+        run: () => void send({ text, replacingId: turnId, offRecord }),
+      });
     } finally {
       if (turnGenRef.current === turnGen) {
         setStreaming("");
@@ -1295,6 +1367,54 @@ export function ChatView({
     }
   }
 
+  // 提交输入:先判斜杠命令。message 类(/btw)走离档发送;action 类执行现有会话动作;
+  // meta(/help)展开完整命令清单;非命令照常发送。菜单已关闭时由 Enter / 发送键走到这里。
+  function submitInput() {
+    const parsed = parseSlashInput(input);
+    if (!parsed) {
+      void send();
+      return;
+    }
+    if (parsed.command.kind === "message") {
+      if (!parsed.rest) return; // 只敲了命令、没正文:不发送
+      setInput("");
+      void send({ text: parsed.rest, offRecord: true });
+      return;
+    }
+    if (parsed.command.kind === "meta") {
+      setInput("/"); // /help:展开完整命令清单
+      requestAnimationFrame(() => inputRef.current?.focus());
+      return;
+    }
+    if (parsed.command.actionId) {
+      setInput("");
+      void runConversationAction(parsed.command.actionId);
+    }
+  }
+
+  // 菜单里选中某命令(Enter / 点击):message 补成 "/btw " 进入正文输入;meta 展开全部;
+  // action 立即执行(清空输入,菜单随之关闭)。
+  function activateSlashCommand(command: SlashCommand) {
+    if (command.kind === "action") {
+      if (command.actionId) {
+        setInput("");
+        void runConversationAction(command.actionId);
+      }
+      return;
+    }
+    // message → "/name "(进入正文态);meta(/help)→ "/"(展开完整清单)。
+    setInput(command.kind === "message" ? `/${command.name} ` : "/");
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }
+
+  // Tab 补全命令名:message 补成 "/btw "(进入正文态),其余补成 "/btw"(再 Enter 执行)。
+  function completeSlashCommand(command: SlashCommand) {
+    setInput(
+      command.kind === "message" ? `/${command.name} ` : `/${command.name}`,
+    );
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }
+
   // 最新一条带回复的轮次——「重新生成」只挂在它上面。
   let lastReplyTurnId: string | undefined;
   for (const t of turns) if (t.partnerText) lastReplyTurnId = t.id;
@@ -1352,6 +1472,7 @@ export function ChatView({
                 turnId={turn.id}
                 text={turn.partnerText}
                 learningMode={learningMode}
+                offRecord={turn.excludeFromContext}
                 autoOpen={
                   !learningMode &&
                   autoBilingual &&
@@ -1362,7 +1483,9 @@ export function ChatView({
                 onLayoutChange={requestLayoutScroll}
                 onUseSuggestion={useSuggestedReply}
                 onRegenerate={
-                  !learningMode && turn.id === lastReplyTurnId
+                  !learningMode &&
+                  !turn.excludeFromContext &&
+                  turn.id === lastReplyTurnId
                     ? () => void regenerate(turn.id)
                     : undefined
                 }
@@ -1408,51 +1531,95 @@ export function ChatView({
         </div>
       )}
       <div className="shrink-0 px-4 pt-1.5 pb-1">
-        <form
-          className="flex items-end gap-1.5 rounded-lg border bg-card py-1.5 pr-1.5 pl-4 shadow transition-colors focus-within:border-ring"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void send();
-          }}
-        >
-          <textarea
-            ref={inputRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (
-                e.key === "Enter" &&
-                !e.shiftKey &&
-                !e.nativeEvent.isComposing
-              ) {
-                e.preventDefault();
-                void send();
-              }
+        <div className="relative">
+          {slashOpen && (
+            <SlashMenu
+              commands={slashCommands}
+              selected={slashSelected}
+              onHover={setSlashSelected}
+              onActivate={activateSlashCommand}
+            />
+          )}
+          <form
+            className="flex items-end gap-1.5 rounded-lg border bg-card py-1.5 pr-1.5 pl-4 shadow transition-colors focus-within:border-ring"
+            onSubmit={(e) => {
+              e.preventDefault();
+              submitInput();
             }}
-            rows={1}
-            placeholder={
-              learningMode
-                ? "问老师、回答练习，母语/目标语言都可以…"
-                : "用目标语言输入一句话…"
-            }
-            disabled={replyBusy}
-            className="max-h-[calc(1.4em*3+0.9rem)] min-w-0 flex-1 resize-none border-none bg-transparent py-2 text-base leading-snug outline-none placeholder:text-muted-foreground"
-          />
-          <Button
-            type="submit"
-            size="icon"
-            className="size-9 transition-transform active:scale-90"
-            disabled={replyBusy || !input.trim()}
-            title="发送"
-            aria-label="发送"
           >
-            {replyBusy ? (
-              <Spinner className="size-3.5" />
-            ) : (
-              <ArrowUpIcon className="size-4.5" />
-            )}
-          </Button>
-        </form>
+            <textarea
+              ref={inputRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                // 菜单打开时拦截导航键(IME 合成中不拦截),不冒泡到发送。
+                if (slashOpen && !e.nativeEvent.isComposing) {
+                  if (e.key === "ArrowDown") {
+                    e.preventDefault();
+                    setSlashSelected((s) => (s + 1) % slashCommands.length);
+                    return;
+                  }
+                  if (e.key === "ArrowUp") {
+                    e.preventDefault();
+                    setSlashSelected(
+                      (s) =>
+                        (s - 1 + slashCommands.length) % slashCommands.length,
+                    );
+                    return;
+                  }
+                  if (e.key === "Tab") {
+                    e.preventDefault();
+                    const c = slashCommands[slashSelected];
+                    if (c) completeSlashCommand(c);
+                    return;
+                  }
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    const c = slashCommands[slashSelected];
+                    if (c) activateSlashCommand(c);
+                    return;
+                  }
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setSlashDismissed(true);
+                    return;
+                  }
+                }
+                if (
+                  e.key === "Enter" &&
+                  !e.shiftKey &&
+                  !e.nativeEvent.isComposing
+                ) {
+                  e.preventDefault();
+                  submitInput();
+                }
+              }}
+              rows={1}
+              placeholder={
+                learningMode
+                  ? "问老师、回答练习，母语/目标语言都可以…"
+                  : "用目标语言输入一句话…（输入 / 查看命令）"
+              }
+              disabled={replyBusy}
+              className="max-h-[calc(1.4em*3+0.9rem)] min-w-0 flex-1 resize-none border-none bg-transparent py-2 text-base leading-snug outline-none placeholder:text-muted-foreground"
+            />
+            <Button
+              type="submit"
+              size="icon"
+              className="size-9 transition-transform active:scale-90"
+              disabled={replyBusy || !input.trim()}
+              title="发送"
+              aria-label="发送"
+            >
+              {replyBusy ? (
+                <Spinner className="size-3.5" />
+              ) : (
+                <ArrowUpIcon className="size-4.5" />
+              )}
+            </Button>
+          </form>
+        </div>
         <div
           className="mt-0.5 flex items-center justify-end gap-3 px-1 text-[11px] text-muted-foreground/70 tabular-nums"
           title={`约 ${usedTokens.toLocaleString()} / ${contextLimit.toLocaleString()} tokens`}
