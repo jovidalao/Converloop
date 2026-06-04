@@ -333,7 +333,7 @@ v1 核心链路已完成并可用:
 
 **下一步(未实现):**
 
-- 按 [craft-ui-plan.md](./craft-ui-plan.md) 重做界面设计体系:✅ Phase 1 Craft 式设计令牌(6 色系统,`primary`=品牌紫 / `accent`=中性面 / `info` / `success` / `destructive` + `foreground-N` 混合层级 + shadow / z-index)、✅ Phase 2 `EntityRow`/`EntitySection` + 丝滑 Sidebar(统一行原语、折叠动画)、✅ Phase 3 `TurnCard` + 活动适配器(`lib/turn-activity.ts`,与 `deriveSignals` 同源)+ 思考指示 + 渐变滚动遮罩;**待做**:输入区控制台、选区浮岛、Coach inspector 精修、微交互 / 快捷键。
+- 按 [craft-ui-plan.md](./craft-ui-plan.md) 重做界面设计体系:✅ Phase 1 Craft 式设计令牌(6 色系统,`primary`=品牌紫 / `accent`=中性面 / `info` / `success` / `destructive` + `foreground-N` 混合层级 + shadow / z-index)、✅ Phase 2 `EntityRow`/`EntitySection` + 丝滑 Sidebar(统一行原语、折叠动画)、✅ Phase 3 `TurnCard` + 活动适配器(`lib/turn-activity.ts`,与 `deriveSignals` 同源)+ 思考指示 + 渐变滚动遮罩、✅ Phase 4 输入台控制台(`@` 学习上下文菜单 `lib/mentions.ts` + active-option badges + `/`·`@` 菜单统一);**待做**:选区浮岛、Coach inspector 精修、微交互 / 快捷键。
 - 专项课的完成度闭环:课堂练习里用户确认「会了」后,回写 `correct` 复习信号。
 - 维护 agent 的「会话结束 / 空闲超时」触发(目前只有每 10 轮 + 手动)。
 - Anthropic 显式 `cache_control` 缓存断点。
