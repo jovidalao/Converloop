@@ -4,7 +4,7 @@ import {
   CheckIcon,
   LanguagesIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { useConfig } from "../config";
 import {
@@ -21,6 +21,7 @@ import {
 import type { MemoryProposal, TurnAnnotation } from "../db/schema";
 import { listTurnAnnotations } from "../db/turn-annotations";
 import type { ChatTurn } from "../db/turns";
+import { deriveTurnActivities, type TurnActivity } from "../lib/turn-activity";
 import {
   CATEGORY_LABEL,
   SEVERITY_COLOR,
@@ -71,6 +72,98 @@ function Section({
       </h3>
       {children}
     </section>
+  );
+}
+
+type InspectorPanel = "feedback" | "memory" | "observations" | "proposals";
+
+const ACTIVITY_TONE: Record<TurnActivity["status"], string> = {
+  pending: "bg-muted text-muted-foreground",
+  ok: "bg-success/10 text-success",
+  info: "bg-primary/10 text-primary",
+  error: "bg-destructive/10 text-destructive",
+};
+
+function ActivityChips({
+  activities,
+  onSelect,
+}: {
+  activities: TurnActivity[];
+  onSelect: (panel: InspectorPanel) => void;
+}) {
+  if (activities.length === 0) return null;
+  return (
+    <div className="flex flex-col gap-2">
+      <h3 className="m-0 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        本轮活动
+      </h3>
+      <div className="flex flex-wrap gap-1.5">
+        {activities.map((activity, index) => (
+          <button
+            key={`${activity.kind}:${index}`}
+            type="button"
+            className={cn(
+              "inline-flex max-w-full items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-colors hover:bg-accent hover:text-foreground",
+              ACTIVITY_TONE[activity.status],
+            )}
+            onClick={() =>
+              onSelect(activity.kind === "memory" ? "memory" : "feedback")
+            }
+            title={activity.preview}
+          >
+            {activity.status === "pending" && (
+              <Spinner className="size-3 shrink-0" />
+            )}
+            <span className="min-w-0 truncate">{activity.label}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function InspectorTabs({
+  active,
+  memoryCount,
+  annotationCount,
+  proposalCount,
+  onChange,
+}: {
+  active: InspectorPanel;
+  memoryCount: number;
+  annotationCount: number;
+  proposalCount: number;
+  onChange: (panel: InspectorPanel) => void;
+}) {
+  const tabs: { id: InspectorPanel; label: string; count?: number }[] = [
+    { id: "feedback", label: "反馈" },
+    { id: "memory", label: "记忆", count: memoryCount },
+    { id: "observations", label: "观察", count: annotationCount },
+    { id: "proposals", label: "待确认", count: proposalCount },
+  ];
+  return (
+    <div className="grid grid-cols-4 gap-1 rounded-lg bg-muted p-1">
+      {tabs.map((tab) => (
+        <button
+          key={tab.id}
+          type="button"
+          className={cn(
+            "flex min-w-0 items-center justify-center gap-1 rounded-md px-1.5 py-1.5 text-xs font-medium transition-colors",
+            active === tab.id
+              ? "bg-background text-foreground shadow-minimal-flat"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+          onClick={() => onChange(tab.id)}
+        >
+          <span className="truncate">{tab.label}</span>
+          {tab.count !== undefined && tab.count > 0 && (
+            <span className="rounded-full bg-foreground-10 px-1.5 py-0.5 text-[10px] tabular-nums">
+              {tab.count}
+            </span>
+          )}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -244,7 +337,13 @@ function FieldLabel({
 // 本轮学习记忆:从批改派生出代码即将记账的信号(与 deriveSignals 同源,无竞态)。
 // 这是「凡是写入学习记忆的事情,用户都应该看得见」(验收 #6)的核心。
 function TurnMemory({ turn }: { turn: ChatTurn }) {
-  if (!turn.analysis) return null;
+  if (!turn.analysis) {
+    return (
+      <p className="m-0 text-sm text-muted-foreground">
+        批改完成后,这里会显示本轮写入学习数据的内容。
+      </p>
+    );
+  }
   const signals = deriveSignals(turn.analysis);
   if (signals.length === 0) {
     return (
@@ -291,7 +390,11 @@ function TurnMemory({ turn }: { turn: ChatTurn }) {
 }
 
 function CustomObservations({ items }: { items: TurnAnnotation[] }) {
-  if (items.length === 0) return null;
+  if (items.length === 0) {
+    return (
+      <p className="m-0 text-sm text-muted-foreground">本轮暂无自定义观察。</p>
+    );
+  }
   return (
     <ul className="m-0 flex list-none flex-col gap-2 p-0">
       {items.map((item) => (
@@ -407,6 +510,21 @@ export function CoachPanel({
   const { nativeLanguage } = useConfig();
   const [annotations, setAnnotations] = useState<TurnAnnotation[]>([]);
   const [proposals, setProposals] = useState<MemoryProposal[]>([]);
+  const [activePanel, setActivePanel] = useState<InspectorPanel>("feedback");
+
+  const activities = useMemo(
+    () => (turn ? deriveTurnActivities(turn) : []),
+    [turn],
+  );
+  const memoryCount = useMemo(
+    () => (turn?.analysis ? deriveSignals(turn.analysis).length : 0),
+    [turn?.analysis],
+  );
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: turn id is only the reset trigger.
+  useEffect(() => {
+    setActivePanel("feedback");
+  }, [turn?.id]);
 
   const refreshExtras = useCallback(() => {
     const turnId = turn?.id;
@@ -452,28 +570,45 @@ export function CoachPanel({
           </p>
         ) : (
           <>
-            <Section title="本轮反馈">
-              <TurnFeedback turn={turn} nativeLanguage={nativeLanguage} />
-            </Section>
-            <Section title="本轮学习记忆">
-              <TurnMemory turn={turn} />
-              <button
-                type="button"
-                className="mt-1 inline-flex items-center gap-1 self-start text-xs text-muted-foreground transition-colors hover:text-foreground"
-                onClick={() => onOpenView?.("mastery")}
-              >
-                查看全部学习数据
-                <ArrowRightIcon size={12} />
-              </button>
-            </Section>
-            {annotations.length > 0 && (
+            <ActivityChips
+              activities={activities}
+              onSelect={(panel) => setActivePanel(panel)}
+            />
+            <InspectorTabs
+              active={activePanel}
+              memoryCount={memoryCount}
+              annotationCount={annotations.length}
+              proposalCount={proposals.length}
+              onChange={setActivePanel}
+            />
+            {activePanel === "feedback" && (
+              <Section title="本轮反馈">
+                <TurnFeedback turn={turn} nativeLanguage={nativeLanguage} />
+              </Section>
+            )}
+            {activePanel === "memory" && (
+              <Section title="本轮学习记忆">
+                <TurnMemory turn={turn} />
+                <button
+                  type="button"
+                  className="mt-1 inline-flex items-center gap-1 self-start text-xs text-muted-foreground transition-colors hover:text-foreground"
+                  onClick={() => onOpenView?.("mastery")}
+                >
+                  查看全部学习数据
+                  <ArrowRightIcon size={12} />
+                </button>
+              </Section>
+            )}
+            {activePanel === "observations" && (
               <Section title="自定义观察">
                 <CustomObservations items={annotations} />
               </Section>
             )}
-            <Section title="待确认记忆">
-              <MemoryProposals items={proposals} onChanged={refreshExtras} />
-            </Section>
+            {activePanel === "proposals" && (
+              <Section title="待确认记忆">
+                <MemoryProposals items={proposals} onChanged={refreshExtras} />
+              </Section>
+            )}
           </>
         )}
       </div>

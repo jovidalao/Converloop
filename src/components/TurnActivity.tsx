@@ -1,18 +1,43 @@
 import { ChevronRightIcon } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { TurnActivity, TurnActivityStatus } from "@/lib/turn-activity";
 import { cn } from "@/lib/utils";
+
+const DEFAULT_THINKING_LABEL = "正在思考…";
+const PROCESSING_MESSAGES = [
+  "正在组织回复…",
+  "正在匹配学习重点…",
+  "正在准备批改线索…",
+];
 
 // Calm "thinking" state shown before the first reply tokens arrive. Replaces the
 // bare bouncing dots with a labelled, pulsing indicator so the pre-reply gap has
 // a stable lifecycle instead of a flash (see craft-ui-plan §6 思考过程 UI).
 export function ThinkingIndicator({
-  label = "正在思考…",
+  label = DEFAULT_THINKING_LABEL,
   className,
 }: {
   label?: string;
   className?: string;
 }) {
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    const startedAt = Date.now();
+    const timer = window.setInterval(() => {
+      setElapsed(Math.floor((Date.now() - startedAt) / 1000));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const message =
+    label === DEFAULT_THINKING_LABEL
+      ? PROCESSING_MESSAGES[
+          Math.floor(elapsed / 4) % PROCESSING_MESSAGES.length
+        ]
+      : label;
+  const accessibleLabel = elapsed >= 2 ? `${message} ${elapsed} 秒` : message;
+
   return (
     <div
       className={cn(
@@ -20,14 +45,19 @@ export function ThinkingIndicator({
         className,
       )}
       role="status"
-      aria-label={label}
+      aria-label={accessibleLabel}
     >
       <span className="inline-flex items-center gap-1" aria-hidden>
         <span className="size-1.5 animate-bounce rounded-full bg-current [animation-delay:-0.3s]" />
         <span className="size-1.5 animate-bounce rounded-full bg-current [animation-delay:-0.15s]" />
         <span className="size-1.5 animate-bounce rounded-full bg-current" />
       </span>
-      <span className="animate-pulse">{label}</span>
+      <span className="animate-pulse">{message}</span>
+      {elapsed >= 2 && (
+        <span className="rounded-full bg-foreground-10 px-1.5 py-0.5 text-[11px] tabular-nums text-muted-foreground/80">
+          {elapsed}s
+        </span>
+      )}
     </div>
   );
 }

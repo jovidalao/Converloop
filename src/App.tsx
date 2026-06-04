@@ -20,6 +20,7 @@ import { AgentLibraryView } from "./components/AgentLibraryView";
 import { ChatView } from "./components/ChatView";
 import { CoachPanel } from "./components/CoachPanel";
 import { CommandPalette } from "./components/CommandPalette";
+import { KeyboardShortcutsDialog } from "./components/KeyboardShortcutsDialog";
 import { LearningAgentsView } from "./components/LearningAgentsView";
 import { MasteryView } from "./components/MasteryView";
 import { ProfileView } from "./components/ProfileView";
@@ -55,6 +56,7 @@ import {
   listLearningAgents,
 } from "./db/learning-agents";
 import type { ChatTurn } from "./db/turns";
+import { actionShortcutLabel, matchesActionShortcut } from "./lib/app-actions";
 import { withViewTransition } from "./lib/view-transition";
 import {
   beginAction,
@@ -79,6 +81,7 @@ function App() {
   );
   const [coachTurn, setCoachTurn] = useState<ChatTurn | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [derivationBusy, setDerivationBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [resizingSidebar, setResizingSidebar] = useState(false);
@@ -125,35 +128,79 @@ function App() {
     });
   }, []);
 
-  // ⌘, 设置 · ⌘B 侧栏 · ⌘N 新对话(macOS 惯例)
+  const focusPanel = useCallback((panel: "sidebar" | "chat" | "coach") => {
+    if (panel === "sidebar") {
+      setCollapsed(false);
+      requestAnimationFrame(() => {
+        document.querySelector<HTMLElement>(".codex-sidebar")?.focus();
+      });
+      return;
+    }
+    if (panel === "chat") {
+      withViewTransition(() => setView("chat"));
+      requestAnimationFrame(() => {
+        const input = document.querySelector<HTMLTextAreaElement>(
+          ".codex-main textarea",
+        );
+        input?.focus();
+      });
+      return;
+    }
+    setCoachOpen(true);
+    requestAnimationFrame(() => {
+      document.querySelector<HTMLElement>(".codex-coach")?.focus();
+    });
+  }, []);
+
+  // ⌘, 设置 · ⌘B 侧栏 · ⌘N 新对话 · ⌘1/2/3 聚焦三栏 · ⌘/ 快捷键。
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       const inField =
         e.target instanceof HTMLElement &&
         !!e.target.closest("input, textarea, select, [contenteditable]");
-      if (e.metaKey && e.key === ",") {
+      if (matchesActionShortcut(e, "settings")) {
         e.preventDefault();
         withViewTransition(() => setView("settings"));
         return;
       }
-      if (e.metaKey && e.key.toLowerCase() === "k") {
+      if (matchesActionShortcut(e, "command-palette")) {
         e.preventDefault();
         setPaletteOpen((o) => !o);
         return;
       }
-      if (e.metaKey && e.key.toLowerCase() === "n") {
+      if (matchesActionShortcut(e, "new-chat")) {
         e.preventDefault();
         openDraftConversation();
         return;
       }
-      if (e.metaKey && e.key.toLowerCase() === "b" && !inField) {
+      if (matchesActionShortcut(e, "shortcuts")) {
+        e.preventDefault();
+        setShortcutsOpen((o) => !o);
+        return;
+      }
+      if (matchesActionShortcut(e, "focus-sidebar")) {
+        e.preventDefault();
+        focusPanel("sidebar");
+        return;
+      }
+      if (matchesActionShortcut(e, "focus-chat")) {
+        e.preventDefault();
+        focusPanel("chat");
+        return;
+      }
+      if (matchesActionShortcut(e, "focus-coach")) {
+        e.preventDefault();
+        focusPanel("coach");
+        return;
+      }
+      if (matchesActionShortcut(e, "toggle-sidebar") && !inField) {
         e.preventDefault();
         toggleSidebar();
       }
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [toggleSidebar, openDraftConversation]);
+  }, [toggleSidebar, openDraftConversation, focusPanel]);
 
   const refresh = useCallback(
     () => listConversations().then(setConversations),
@@ -330,7 +377,7 @@ function App() {
               >
                 <span>{collapsed ? "展开侧栏" : "收起侧栏"}</span>
                 <kbd className="rounded border border-border/60 bg-muted px-1.5 py-0.5 font-sans text-[11px] text-muted-foreground/80">
-                  ⌘B
+                  {actionShortcutLabel("toggle-sidebar")}
                 </kbd>
               </TooltipContent>
             </Tooltip>
@@ -381,7 +428,7 @@ function App() {
                 >
                   <span>新对话</span>
                   <kbd className="rounded border border-border/60 bg-muted px-1.5 py-0.5 font-sans text-[11px] text-muted-foreground/80">
-                    ⌘N
+                    {actionShortcutLabel("new-chat")}
                   </kbd>
                 </TooltipContent>
               </Tooltip>
@@ -406,7 +453,7 @@ function App() {
               >
                 <span>搜索</span>
                 <kbd className="rounded border border-border/60 bg-muted px-1.5 py-0.5 font-sans text-[11px] text-muted-foreground/80">
-                  ⌘K
+                  {actionShortcutLabel("command-palette")}
                 </kbd>
               </TooltipContent>
             </Tooltip>
@@ -483,29 +530,31 @@ function App() {
         </div>
       </header>
 
-      <Sidebar
-        conversations={conversations}
-        learningAgents={learningAgents}
-        activeId={activeId}
-        newChatActive={draftActive}
-        view={view}
-        onSelect={selectConversation}
-        onNewChat={openDraftConversation}
-        onStartLearningAgent={(id) => void startLearningAgent(id)}
-        onRefreshLearningAgents={refreshLearningAgents}
-        onDeriveConversation={(id, actionId) =>
-          void deriveConversation(id, actionId)
-        }
-        onRename={(id, t) => void rename(id, t)}
-        onDelete={(id) => void remove(id)}
-        onOpenView={(v) => withViewTransition(() => setView(v))}
-        width={sidebarWidth}
-        onResize={(w) =>
-          setSidebarWidth(Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, w)))
-        }
-        onResizeStart={() => setResizingSidebar(true)}
-        onResizeEnd={() => setResizingSidebar(false)}
-      />
+      <div className="contents" data-focus-zone="sidebar">
+        <Sidebar
+          conversations={conversations}
+          learningAgents={learningAgents}
+          activeId={activeId}
+          newChatActive={draftActive}
+          view={view}
+          onSelect={selectConversation}
+          onNewChat={openDraftConversation}
+          onStartLearningAgent={(id) => void startLearningAgent(id)}
+          onRefreshLearningAgents={refreshLearningAgents}
+          onDeriveConversation={(id, actionId) =>
+            void deriveConversation(id, actionId)
+          }
+          onRename={(id, t) => void rename(id, t)}
+          onDelete={(id) => void remove(id)}
+          onOpenView={(v) => withViewTransition(() => setView(v))}
+          width={sidebarWidth}
+          onResize={(w) =>
+            setSidebarWidth(Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, w)))
+          }
+          onResizeStart={() => setResizingSidebar(true)}
+          onResizeEnd={() => setResizingSidebar(false)}
+        />
+      </div>
 
       <main className="vt-main codex-main relative flex min-h-0 flex-col overflow-hidden">
         <div
@@ -534,7 +583,7 @@ function App() {
       </main>
 
       {coachVisible && (
-        <aside className="codex-coach">
+        <aside className="codex-coach" tabIndex={-1}>
           <CoachPanel
             turn={coachTurn}
             onOpenView={(v) => withViewTransition(() => setView(v))}
@@ -550,6 +599,11 @@ function App() {
         onSelectConversation={selectConversation}
         onStartLearningAgent={(id) => void startLearningAgent(id)}
         onNewChat={openDraftConversation}
+      />
+
+      <KeyboardShortcutsDialog
+        open={shortcutsOpen}
+        onClose={() => setShortcutsOpen(false)}
       />
 
       {toast && (

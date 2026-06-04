@@ -20,6 +20,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { actionShortcutLabel, getAppAction } from "@/lib/app-actions";
 import {
   BRANCH_KIND_LABEL,
   type BranchKind,
@@ -123,6 +124,7 @@ export function Sidebar({
   const derivationActions = getActions("session").filter((a) =>
     isAgentEnabled(a.id),
   );
+  const newChatAction = getAppAction("new-chat");
 
   // Learning section peeks the first lesson while collapsed; the rest live in
   // the animated body (capped at 5 like before).
@@ -280,7 +282,7 @@ export function Sidebar({
   );
 
   return (
-    <aside className="codex-sidebar">
+    <aside className="codex-sidebar" tabIndex={-1}>
       <div className="codex-sidebar-content">
         <div className="codex-sidebar-actions">
           <button
@@ -288,15 +290,15 @@ export function Sidebar({
             className="codex-sidebar-action group"
             data-active={newChatActive}
             onClick={onNewChat}
-            title="新对话 ⌘N"
-            aria-keyshortcuts="Meta+N"
+            title={`${newChatAction.label} ${actionShortcutLabel("new-chat")}`}
+            aria-keyshortcuts={newChatAction.ariaKeyshortcuts}
           >
             <span className="codex-sidebar-leading-icon">
               <SquarePenIcon className="size-4" />
             </span>
             <span>新对话</span>
             <kbd className="ml-auto rounded border border-border/60 bg-muted px-1.5 py-0.5 font-sans text-[11px] text-muted-foreground/80 opacity-0 transition-opacity group-hover:opacity-100">
-              ⌘N
+              {actionShortcutLabel("new-chat")}
             </kbd>
           </button>
         </div>
@@ -446,7 +448,7 @@ export function Sidebar({
                 <SettingsIcon size={16} />
                 设置
                 <kbd className="ml-auto rounded border border-border/60 bg-muted px-1.5 py-0.5 font-sans text-[11px] text-muted-foreground/80">
-                  ⌘,
+                  {actionShortcutLabel("settings")}
                 </kbd>
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => onOpenView("mastery")}>

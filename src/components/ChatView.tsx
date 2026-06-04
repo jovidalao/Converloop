@@ -65,6 +65,7 @@ import { beginAction, getActions, isAgentEnabled } from "../runtime";
 import { loadTtsConfig } from "../tts/config";
 import { stopSpeech } from "../tts/playback";
 import { createReplySpeaker } from "../tts/stream";
+import { AnnotationIsland } from "./AnnotationIsland";
 import { useConfirm } from "./confirm";
 import { InlineCorrection, UserSentence } from "./InlineCorrection";
 import { Markdown } from "./Markdown";
@@ -72,7 +73,6 @@ import { MentionMenu } from "./MentionMenu";
 import { ReplyExplanation } from "./ReplyExplanation";
 import { SlashMenu } from "./SlashMenu";
 import { SpeakButton } from "./SpeakButton";
-import { TranslationPopover } from "./TranslationPopover";
 import { ThinkingIndicator, TurnActivityRow } from "./TurnActivity";
 import { Button } from "./ui/button";
 import { Spinner } from "./ui/spinner";
@@ -1597,7 +1597,7 @@ export function ChatView({
         )}
         <div ref={endRef} />
       </div>
-      <TranslationPopover containerRef={messagesRef} />
+      <AnnotationIsland containerRef={messagesRef} />
       {error && (
         <div className="mx-4 flex items-center gap-3 rounded-md bg-destructive/15 px-3 py-2 text-sm text-destructive">
           <span className="min-w-0 flex-1">{error}</span>

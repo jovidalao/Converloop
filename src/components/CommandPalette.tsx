@@ -12,6 +12,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { actionShortcutLabel } from "@/lib/app-actions";
 import type { ConversationMeta } from "../db/conversations";
 import type { LearningAgentMeta } from "../db/learning-agents";
 import { formatRelativeTime } from "./Sidebar";
@@ -211,7 +212,7 @@ function PaletteRow({ item }: { item: PaletteItem }) {
         <SquarePenIcon className="size-4 shrink-0 text-muted-foreground" />
         <span className="min-w-0 flex-1 truncate">新对话</span>
         <kbd className="rounded border border-border/60 bg-muted px-1.5 py-0.5 font-sans text-[11px] text-muted-foreground/80">
-          ⌘N
+          {actionShortcutLabel("new-chat")}
         </kbd>
       </>
     );

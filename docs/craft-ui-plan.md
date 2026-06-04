@@ -13,6 +13,20 @@
 
 核心不是照搬 craft 的通用 agent IDE,而是学习它的设计纪律:低噪声、强层级、渐进披露、精密微交互、键盘优先。
 
+## 当前实现状态
+
+截至 2026-06-04,Phase 1-7 已落地:
+
+- Phase 1:Craft 式 6 色语义 token、混合层级、shadow / z-index / panel radius。
+- Phase 2:`EntityRow` / `EntitySection` 与丝滑 Sidebar。
+- Phase 3:`TurnCard`、`lib/turn-activity.ts`、活动折叠行、思考指示与滚动渐变遮罩。
+- Phase 4:输入区控制台、active option badges、`@` 学习上下文菜单与 `/` 菜单统一。
+- Phase 5:`AnnotationIsland` 选区浮岛,支持解析、朗读、加入生词,并保留选区。
+- Phase 6:Coach Inspector tab 化,对齐本轮反馈、学习记忆、自定义观察、待确认记忆。
+- Phase 7:全局快捷键元数据、`Cmd+1/2/3` 聚焦 panel、快捷键弹窗、带耗时的 processing indicator。
+
+后续只做持续视觉 QA 与小步打磨,不再新增一条独立旧计划。
+
 ## 不可破坏的边界
 
 - 不改学习系统铁律:对话 agent 读 MD,导师 agent 读 SQLite;代码写 SQLite,维护 agent 写 MD。
