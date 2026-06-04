@@ -272,6 +272,7 @@ function PartnerReply({
       <ReplyExplanation
         text={text}
         onFirstOpen={onFirstExplain}
+        onLayoutChange={onLayoutChange}
         actions={
           <>
             <CopyButton text={text} />
