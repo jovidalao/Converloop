@@ -27,6 +27,7 @@ export const HOOKS = {
   turnExplain: "turn.explain",
   turnBilingual: "turn.bilingual",
   turnTranslate: "turn.translate",
+  turnReplySuggestion: "turn.reply_suggestion",
   profileMaintain: "profile.maintain",
 } as const;
 

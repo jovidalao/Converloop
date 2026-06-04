@@ -3,6 +3,11 @@ import { converse } from "./agents/conversation";
 import { explain } from "./agents/explain";
 import { generateLearningAgentDraft } from "./agents/learning-agent-builder";
 import { classifyProfilePreferenceInstruction } from "./agents/profile-preferences";
+import {
+  type ReplySuggestionResult,
+  type ReplySuggestionSource,
+  suggestReplyText,
+} from "./agents/reply-suggestion";
 import type { TutorAnalysis } from "./agents/schema";
 import { planLearningProject } from "./agents/task-agent";
 import { translate } from "./agents/translate";
@@ -58,12 +63,29 @@ export interface TurnResult {
 
 // 导师只需消歧最新一句的语境,给直近这么多轮即可;水位后的全部原文留给对话 agent。
 const TUTOR_HISTORY_TURNS = 8;
+const SUGGESTION_CONTEXT_CHARS = 12000;
 
 export class MissingApiKeyError extends Error {
   constructor() {
     super("未配置 API key,请到设置页填写");
     this.name = "MissingApiKeyError";
   }
+}
+
+function tailTurnsByChars<T extends { userInput: string; reply: string }>(
+  turns: T[],
+  charBudget: number,
+): T[] {
+  let used = 0;
+  let start = turns.length;
+  for (let i = turns.length - 1; i >= 0; i--) {
+    const next = turns[i];
+    const cost = next.userInput.length + next.reply.length + 32;
+    if (used + cost > charBudget && start < turns.length) break;
+    used += cost;
+    start = i;
+  }
+  return turns.slice(start);
 }
 
 export async function createCustomLearningAgentFromDescription(
@@ -569,6 +591,64 @@ export async function bilingualReply(reply: string): Promise<string> {
         reply,
       }),
     (text) => ({ chars: text.length }),
+  );
+}
+
+// 推荐回复:用户消息下=按已发送含义改写成地道目标语;AI 回复下=基于上下文生成下一句。
+// 按需 transformer,不进热路径、不持久化、不更新学习计数。
+export async function suggestReply(
+  conversationId: string,
+  turnId: string,
+  source: ReplySuggestionSource,
+  onDelta: (delta: string) => void,
+): Promise<ReplySuggestionResult> {
+  const provider = await getProvider();
+  if (!provider) throw new MissingApiKeyError();
+
+  const config = loadConfig();
+  const [profileMd, turns] = await Promise.all([
+    readProfile(config),
+    getTurnsAfterId(conversationId, null),
+  ]);
+  const idx = turns.findIndex((t) => t.id === turnId);
+  if (idx < 0) throw new Error("找不到要生成推荐回复的消息");
+
+  const target = turns[idx];
+  const contextTurns =
+    source === "user_message" ? turns.slice(0, idx) : turns.slice(0, idx + 1);
+  const history = formatTurns(
+    tailTurnsByChars(contextTurns, SUGGESTION_CONTEXT_CHARS),
+  );
+  const profileSlice = profileSliceForConversation(profileMd);
+  const experiencePreferences = formatExperiencePreferences(
+    profileMd,
+    "conversation",
+  );
+
+  return runTransformer(
+    "builtin:transformer:reply_suggestion",
+    HOOKS.turnReplySuggestion,
+    () =>
+      suggestReplyText(
+        provider,
+        {
+          nativeLanguage: config.nativeLanguage,
+          targetLanguage: config.targetLanguage,
+          level: config.level,
+          experiencePreferences,
+          profileSlice,
+          history,
+          source,
+          userMessage: source === "user_message" ? target.userInput : undefined,
+          partnerReply: source === "partner_reply" ? target.reply : undefined,
+        },
+        onDelta,
+      ),
+    (result) => ({
+      chars: result.text.length,
+      finishReason: result.finishReason?.raw,
+      source,
+    }),
   );
 }
 

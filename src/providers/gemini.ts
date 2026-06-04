@@ -1,5 +1,10 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
-import type { ChatMessage, GenerateOptions, ModelProvider } from "./types";
+import type {
+  ChatMessage,
+  FinishReason,
+  GenerateOptions,
+  ModelProvider,
+} from "./types";
 
 // 原生 Gemini 适配器(generateContent / streamGenerateContent)。
 // HTTP 走 Rust 的 llm_request / llm_stream(同 OpenAI 适配器,通用 HTTP)。
@@ -142,6 +147,24 @@ export function geminiStreamUrl(cfg: GeminiConfig): string {
   return `${baseModelsUrl(cfg)}:streamGenerateContent?alt=sse`;
 }
 
+function finishReason(raw: string | null | undefined): FinishReason | null {
+  if (!raw) return null;
+  const kind =
+    raw === "MAX_TOKENS"
+      ? "length"
+      : raw === "STOP"
+        ? "stop"
+        : raw === "SAFETY" ||
+            raw === "RECITATION" ||
+            raw === "PROHIBITED_CONTENT" ||
+            raw === "SPII"
+          ? "content_filter"
+          : raw === "MALFORMED_FUNCTION_CALL"
+            ? "tool_use"
+            : "other";
+  return { kind, raw, provider: "gemini" };
+}
+
 // 从一个 GenerateContentResponse 里抽出所有 parts 的 text。
 function extractText(json: unknown): string {
   const res = json as {
@@ -161,24 +184,30 @@ function extractText(json: unknown): string {
 function consumeSseLines(
   lines: string[],
   onDelta: (delta: string) => void,
-): string {
+): { text: string; finishReason: FinishReason | null } {
   let acc = "";
+  let finalReason: FinishReason | null = null;
   for (const line of lines) {
     const t = line.trim();
     if (!t.startsWith("data:")) continue;
     const data = t.slice(5).trim();
     if (data === "" || data === "[DONE]") continue;
     try {
-      const delta = extractText(JSON.parse(data));
+      const json = JSON.parse(data) as {
+        candidates?: { finishReason?: string; content?: GeminiContent }[];
+      };
+      const delta = extractText(json);
       if (delta) {
         acc += delta;
         onDelta(delta);
       }
+      finalReason =
+        finishReason(json.candidates?.[0]?.finishReason) ?? finalReason;
     } catch {
       // 半截 JSON,等后续 chunk 拼齐
     }
   }
-  return acc;
+  return { text: acc, finishReason: finalReason };
 }
 
 export function createGeminiProvider(cfg: GeminiConfig): ModelProvider {
@@ -195,12 +224,15 @@ export function createGeminiProvider(cfg: GeminiConfig): ModelProvider {
     async stream(opts, onDelta) {
       let full = "";
       let buffer = "";
+      let finalReason: FinishReason | null = null;
       const channel = new Channel<string>();
       channel.onmessage = (chunk) => {
         buffer += chunk;
         const parts = buffer.split("\n");
         buffer = parts.pop() ?? "";
-        full += consumeSseLines(parts, onDelta);
+        const consumed = consumeSseLines(parts, onDelta);
+        full += consumed.text;
+        finalReason = consumed.finishReason ?? finalReason;
       };
       await invoke("llm_stream", {
         url: geminiStreamUrl(cfg),
@@ -208,7 +240,12 @@ export function createGeminiProvider(cfg: GeminiConfig): ModelProvider {
         body: buildGeminiRequestBody(opts),
         onChunk: channel,
       });
-      if (buffer.trim()) full += consumeSseLines([buffer], onDelta);
+      if (buffer.trim()) {
+        const consumed = consumeSseLines([buffer], onDelta);
+        full += consumed.text;
+        finalReason = consumed.finishReason ?? finalReason;
+      }
+      if (finalReason) opts.onFinish?.(finalReason);
       return full;
     },
   };

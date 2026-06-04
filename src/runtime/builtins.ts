@@ -325,6 +325,17 @@ const transformers: TransformerInfo[] = [
       canDisable: false,
     },
   },
+  {
+    id: "builtin:transformer:reply_suggestion",
+    card: {
+      title: "推荐回复",
+      description: "按需基于某条消息和上下文生成学习者可以发送的地道回复。",
+      timing: "用户点「推荐回复」",
+      reads: "当前消息 · 会话上下文 · MD 档案切片 · 表达偏好",
+      writes: "无(只产出建议文本)",
+      canDisable: false,
+    },
+  },
 ];
 
 for (const transformer of transformers) registerTransformer(transformer);

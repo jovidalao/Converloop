@@ -12,6 +12,19 @@ export interface JsonSchemaSpec {
   schema: Record<string, unknown>;
 }
 
+export type FinishReasonKind =
+  | "stop"
+  | "length"
+  | "content_filter"
+  | "tool_use"
+  | "other";
+
+export interface FinishReason {
+  kind: FinishReasonKind;
+  raw: string;
+  provider: "openai" | "anthropic" | "gemini";
+}
+
 export interface GenerateOptions {
   messages: ChatMessage[];
   temperature?: number;
@@ -22,6 +35,8 @@ export interface GenerateOptions {
   jsonObject?: boolean;
   /** 非功能元数据(给插件用,如日志区分是哪个 agent 在调)。provider 本身忽略它。 */
   meta?: { label?: string };
+  /** provider 返回的结束原因;用于识别 max_tokens 等截断。 */
+  onFinish?: (reason: FinishReason) => void;
 }
 
 export interface ModelProvider {

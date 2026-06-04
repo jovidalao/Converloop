@@ -1,5 +1,10 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
-import type { ChatMessage, GenerateOptions, ModelProvider } from "./types";
+import type {
+  ChatMessage,
+  FinishReason,
+  GenerateOptions,
+  ModelProvider,
+} from "./types";
 
 // 原生 Anthropic Messages API。结构化输出走 tool_use + input_schema。
 export interface AnthropicConfig {
@@ -110,6 +115,19 @@ function authHeaders(cfg: AnthropicConfig): Record<string, string> {
   };
 }
 
+function finishReason(raw: string | null | undefined): FinishReason | null {
+  if (!raw) return null;
+  const kind =
+    raw === "max_tokens"
+      ? "length"
+      : raw === "end_turn" || raw === "stop_sequence"
+        ? "stop"
+        : raw === "tool_use"
+          ? "tool_use"
+          : "other";
+  return { kind, raw, provider: "anthropic" };
+}
+
 type ContentBlock =
   | { type: "text"; text: string }
   | { type: "thinking"; thinking?: string }
@@ -142,8 +160,9 @@ export function extractAnthropicContent(json: unknown): string {
 function consumeAnthropicSseLines(
   lines: string[],
   onDelta: (delta: string) => void,
-): string {
+): { text: string; finishReason: FinishReason | null } {
   let acc = "";
+  let finalReason: FinishReason | null = null;
   for (const line of lines) {
     const t = line.trim();
     if (!t.startsWith("data:")) continue;
@@ -152,7 +171,7 @@ function consumeAnthropicSseLines(
     try {
       const json = JSON.parse(data) as {
         type?: string;
-        delta?: { type?: string; text?: string };
+        delta?: { type?: string; text?: string; stop_reason?: string | null };
       };
       if (
         json.type === "content_block_delta" &&
@@ -164,11 +183,14 @@ function consumeAnthropicSseLines(
           onDelta(text);
         }
       }
+      if (json.type === "message_delta") {
+        finalReason = finishReason(json.delta?.stop_reason) ?? finalReason;
+      }
     } catch {
       // 半截 JSON,等后续 chunk 拼齐
     }
   }
-  return acc;
+  return { text: acc, finishReason: finalReason };
 }
 
 export function createAnthropicProvider(cfg: AnthropicConfig): ModelProvider {
@@ -186,12 +208,15 @@ export function createAnthropicProvider(cfg: AnthropicConfig): ModelProvider {
     async stream(opts, onDelta) {
       let full = "";
       let buffer = "";
+      let finalReason: FinishReason | null = null;
       const channel = new Channel<string>();
       channel.onmessage = (chunk) => {
         buffer += chunk;
         const parts = buffer.split("\n");
         buffer = parts.pop() ?? "";
-        full += consumeAnthropicSseLines(parts, onDelta);
+        const consumed = consumeAnthropicSseLines(parts, onDelta);
+        full += consumed.text;
+        finalReason = consumed.finishReason ?? finalReason;
       };
       await invoke("llm_stream", {
         url,
@@ -199,7 +224,12 @@ export function createAnthropicProvider(cfg: AnthropicConfig): ModelProvider {
         body: buildAnthropicRequestBody(cfg, opts, true),
         onChunk: channel,
       });
-      if (buffer.trim()) full += consumeAnthropicSseLines([buffer], onDelta);
+      if (buffer.trim()) {
+        const consumed = consumeAnthropicSseLines([buffer], onDelta);
+        full += consumed.text;
+        finalReason = consumed.finishReason ?? finalReason;
+      }
+      if (finalReason) opts.onFinish?.(finalReason);
       return full;
     },
   };

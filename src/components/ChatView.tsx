@@ -6,11 +6,13 @@ import {
   CopyIcon,
   GitBranchIcon,
   LanguagesIcon,
+  MessageSquareReplyIcon,
   PencilIcon,
   RefreshCwIcon,
   SparklesIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ReplySuggestionSource } from "../agents/reply-suggestion";
 import type { TutorAnalysis } from "../agents/schema";
 import { getContextLimit, useConfig } from "../config";
 import {
@@ -35,6 +37,7 @@ import {
   runTurn,
   startDerivedConversation,
   startLearningSession,
+  suggestReply,
 } from "../orchestrator";
 import { beginAction, getActions, isAgentEnabled } from "../runtime";
 import { loadTtsConfig } from "../tts/config";
@@ -101,6 +104,206 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
+interface ReplySuggestionControl {
+  open: boolean;
+  loading: boolean;
+  text: string;
+  error: string | null;
+  warning: string | null;
+  expanded: boolean;
+  onToggle: () => void;
+  onRetry: () => void;
+}
+
+function useReplySuggestion({
+  conversationId,
+  turnId,
+  source,
+  resetKey,
+  onLayoutChange,
+}: {
+  conversationId: string;
+  turnId: string;
+  source: ReplySuggestionSource;
+  resetKey: string;
+  onLayoutChange?: () => void;
+}): ReplySuggestionControl {
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [text, setText] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
+  const requestIdRef = useRef(0);
+  const previousResetKeyRef = useRef(resetKey);
+
+  useEffect(() => {
+    if (previousResetKeyRef.current === resetKey) return;
+    previousResetKeyRef.current = resetKey;
+    requestIdRef.current++;
+    setOpen(false);
+    setLoading(false);
+    setText("");
+    setError(null);
+    setWarning(null);
+  }, [resetKey]);
+
+  useEffect(() => {
+    if (open || loading || text || error || warning) onLayoutChange?.();
+  }, [open, loading, text, error, warning, onLayoutChange]);
+
+  async function generate() {
+    const requestId = ++requestIdRef.current;
+    setLoading(true);
+    setError(null);
+    setWarning(null);
+    setText("");
+    let acc = "";
+    try {
+      const result = await suggestReply(conversationId, turnId, source, (d) => {
+        if (requestIdRef.current !== requestId) return;
+        acc += d;
+        setText(acc);
+      });
+      if (requestIdRef.current === requestId) {
+        setText(result.text);
+        setWarning(
+          result.finishReason?.kind === "length"
+            ? `推荐回复因输出长度限制被截断(${result.finishReason.provider}:${result.finishReason.raw})。可以重试;反馈问题时请带上括号里的原因。`
+            : null,
+        );
+      }
+    } catch (e) {
+      if (requestIdRef.current !== requestId) return;
+      setError(
+        e instanceof MissingApiKeyError
+          ? e.message
+          : e instanceof Error
+            ? e.message
+            : String(e),
+      );
+    } finally {
+      if (requestIdRef.current === requestId) setLoading(false);
+    }
+  }
+
+  function toggle() {
+    if (loading) return;
+    if (!text && !error) {
+      setOpen(true);
+      void generate();
+      return;
+    }
+    setOpen((v) => !v);
+  }
+
+  return {
+    open,
+    loading,
+    text,
+    error,
+    warning,
+    expanded: open && (loading || !!text || !!error),
+    onToggle: toggle,
+    onRetry: () => void generate(),
+  };
+}
+
+function ReplySuggestionButton({
+  suggestion,
+}: {
+  suggestion: ReplySuggestionControl;
+}) {
+  return (
+    <Button
+      type="button"
+      variant="action"
+      size="action"
+      data-active={suggestion.expanded}
+      onClick={suggestion.onToggle}
+      disabled={suggestion.loading}
+      aria-expanded={suggestion.expanded}
+      title="生成推荐回复"
+    >
+      <span className="inline-flex size-4 shrink-0 items-center justify-center">
+        <MessageSquareReplyIcon className="size-4" />
+      </span>
+      <span>推荐回复</span>
+    </Button>
+  );
+}
+
+function ReplySuggestionPanel({
+  suggestion,
+  onUse,
+}: {
+  suggestion: ReplySuggestionControl;
+  onUse?: (text: string) => void;
+}) {
+  if (
+    !suggestion.open ||
+    (!suggestion.loading && !suggestion.text && !suggestion.error)
+  )
+    return null;
+  return (
+    <div className="w-full animate-in rounded-lg border bg-card p-3 shadow-sm fade-in-0 slide-in-from-bottom-1 duration-200">
+      {suggestion.error ? (
+        <div className="flex items-center gap-3">
+          <span
+            className="min-w-0 flex-1 text-sm leading-snug text-destructive"
+            role="alert"
+          >
+            {suggestion.error}
+          </span>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 shrink-0 gap-1.5"
+            disabled={suggestion.loading}
+            onClick={suggestion.onRetry}
+          >
+            <RefreshCwIcon size={14} />
+            重试
+          </Button>
+        </div>
+      ) : suggestion.text ? (
+        <div className="flex items-start gap-2">
+          <div className="min-w-0 flex-1 space-y-2">
+            {suggestion.warning && (
+              <p className="m-0 rounded-md bg-warning/10 px-2 py-1.5 text-xs leading-snug text-warning">
+                {suggestion.warning}
+              </p>
+            )}
+            <div
+              className="text-sm leading-normal text-foreground"
+              data-selectable-context
+            >
+              <Markdown>{suggestion.text}</Markdown>
+            </div>
+          </div>
+          <Button
+            type="button"
+            variant="action"
+            size="action"
+            className="size-7 p-0"
+            disabled={suggestion.loading}
+            onClick={() => onUse?.(suggestion.text)}
+            title="填入输入框"
+            aria-label="填入输入框"
+          >
+            <PencilIcon size={14} />
+          </Button>
+        </div>
+      ) : (
+        <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
+          <Spinner />
+          正在生成推荐回复…
+        </span>
+      )}
+    </div>
+  );
+}
+
 // 「从此处开始」:把这条用户消息的文字放回输入框重新编辑,并舍弃它(含)之后的所有对话。
 // 已记入学习记忆的内容不受影响(只删对话 turn)。
 function EditFromHereButton({
@@ -132,6 +335,8 @@ function EditFromHereButton({
 // 双语对照按需 AI 生成、替换显示原文,再点恢复;状态留在组件内,不持久化。
 // 关键:朗读始终读原文(目标语言版),SpeakButton 永远拿原始 text。
 function PartnerReply({
+  conversationId,
+  turnId,
   text,
   autoOpen = false,
   learningMode = false,
@@ -139,8 +344,11 @@ function PartnerReply({
   onFirstBilingual,
   onLayoutChange,
   onRegenerate,
+  onUseSuggestion,
   regenerating = false,
 }: {
+  conversationId: string;
+  turnId: string;
   text: string;
   autoOpen?: boolean;
   learningMode?: boolean;
@@ -150,6 +358,7 @@ function PartnerReply({
   onLayoutChange?: () => void;
   /** 提供时显示「重新生成回复」按钮(仅挂在最新一条回复上)。 */
   onRegenerate?: () => void;
+  onUseSuggestion?: (text: string) => void;
   regenerating?: boolean;
 }) {
   const [open, setOpen] = useState(false); // 当前是否显示双语对照
@@ -158,6 +367,13 @@ function PartnerReply({
   const [error, setError] = useState<string | null>(null);
   const didAutoOpen = useRef(false);
   const prevTextRef = useRef(text);
+  const replySuggestion = useReplySuggestion({
+    conversationId,
+    turnId,
+    source: "partner_reply",
+    resetKey: `${turnId}:${text}`,
+    onLayoutChange,
+  });
 
   // 回复被「重新生成」替换后,旧的双语对照不再对应,收起重置(首次挂载不动,避免和 autoOpen 打架)。
   useEffect(() => {
@@ -225,7 +441,12 @@ function PartnerReply({
         </div>
         <div className="-ml-1 flex items-center gap-0.5">
           <CopyButton text={text} />
+          <ReplySuggestionButton suggestion={replySuggestion} />
         </div>
+        <ReplySuggestionPanel
+          suggestion={replySuggestion}
+          onUse={onUseSuggestion}
+        />
       </div>
     );
   }
@@ -289,7 +510,14 @@ function PartnerReply({
                 {regenerating ? <Spinner /> : <RefreshCwIcon size={16} />}
               </Button>
             )}
+            <ReplySuggestionButton suggestion={replySuggestion} />
           </>
+        }
+        extraPanels={
+          <ReplySuggestionPanel
+            suggestion={replySuggestion}
+            onUse={onUseSuggestion}
+          />
         }
         trailingActions={
           <Button
@@ -332,11 +560,13 @@ function idiomaticText(analysis: TutorAnalysis | null): string | null {
 // 母语/混说轮(expression_gap)没有目标语正句可读,所以不显示朗读。
 function UserMessageActions({
   turn,
+  suggestion,
   onEditFrom,
   onTurnAction,
   editDisabled = false,
 }: {
   turn: ChatTurn;
+  suggestion: ReplySuggestionControl;
   onEditFrom: () => void;
   // 注册表驱动的 turn 级动作(如「从此处分支」);新增动作无需改本组件。
   onTurnAction: (actionId: string) => void;
@@ -351,6 +581,7 @@ function UserMessageActions({
     <>
       <CopyButton text={corrected} />
       {canSpeak && <SpeakButton text={speakTarget} />}
+      <ReplySuggestionButton suggestion={suggestion} />
       <EditFromHereButton onClick={onEditFrom} disabled={editDisabled} />
       {getActions("turn")
         .filter((a) => isAgentEnabled(a.id))
@@ -374,23 +605,36 @@ function UserMessageActions({
 // 「地道表达」的开关状态留在这里,同时驱动气泡内容和操作行里的切换按钮。
 function UserTurn({
   turn,
+  conversationId,
   nativeLanguage,
   learningMode,
   coachVisible,
   onEditFrom,
   onTurnAction,
+  onLayoutChange,
+  onUseSuggestion,
   editDisabled = false,
 }: {
   turn: ChatTurn;
+  conversationId: string;
   nativeLanguage: string;
   learningMode: boolean;
   coachVisible: boolean;
   onEditFrom: () => void;
   onTurnAction: (actionId: string) => void;
+  onLayoutChange?: () => void;
+  onUseSuggestion?: (text: string) => void;
   editDisabled?: boolean;
 }) {
   const idiomatic = idiomaticText(turn.analysis);
   const [naturalOpen, setNaturalOpen] = useState(true);
+  const replySuggestion = useReplySuggestion({
+    conversationId,
+    turnId: turn.id,
+    source: "user_message",
+    resetKey: `${turn.id}:${turn.userText}`,
+    onLayoutChange,
+  });
   if (learningMode) {
     return (
       <div className="flex max-w-[min(88%,520px)] flex-col items-end gap-1.5 self-end">
@@ -402,8 +646,13 @@ function UserTurn({
         </div>
         <div className="-mr-1 flex items-center gap-0.5">
           <CopyButton text={turn.userText} />
+          <ReplySuggestionButton suggestion={replySuggestion} />
           <EditFromHereButton onClick={onEditFrom} disabled={editDisabled} />
         </div>
+        <ReplySuggestionPanel
+          suggestion={replySuggestion}
+          onUse={onUseSuggestion}
+        />
       </div>
     );
   }
@@ -436,6 +685,7 @@ function UserTurn({
         leading={
           <UserMessageActions
             turn={turn}
+            suggestion={replySuggestion}
             onEditFrom={onEditFrom}
             onTurnAction={onTurnAction}
             editDisabled={editDisabled}
@@ -446,6 +696,10 @@ function UserTurn({
             ? { open: naturalOpen, onToggle: () => setNaturalOpen((v) => !v) }
             : undefined
         }
+      />
+      <ReplySuggestionPanel
+        suggestion={replySuggestion}
+        onUse={onUseSuggestion}
       />
     </div>
   );
@@ -620,6 +874,13 @@ export function ChatView({
 
   const requestLayoutScroll = useCallback(() => {
     setLayoutTick((n) => n + 1);
+  }, []);
+
+  const useSuggestedReply = useCallback((text: string) => {
+    const next = text.trim();
+    if (!next) return;
+    setInput(next);
+    requestAnimationFrame(() => inputRef.current?.focus());
   }, []);
 
   function patchTurn(id: string, patch: Partial<ChatTurn>) {
@@ -1072,18 +1333,23 @@ export function ChatView({
             {turn.userText.trim() && (
               <UserTurn
                 turn={turn}
+                conversationId={conversationId}
                 nativeLanguage={nativeLanguage}
                 learningMode={learningMode}
                 coachVisible={coachVisible}
+                onLayoutChange={requestLayoutScroll}
                 editDisabled={analyzing}
                 onEditFrom={() => void editFromHere(turn.id)}
                 onTurnAction={(actionId) =>
                   void runConversationAction(actionId, turn.id)
                 }
+                onUseSuggestion={useSuggestedReply}
               />
             )}
             {turn.partnerText && (
               <PartnerReply
+                conversationId={conversationId}
+                turnId={turn.id}
                 text={turn.partnerText}
                 learningMode={learningMode}
                 autoOpen={
@@ -1094,6 +1360,7 @@ export function ChatView({
                 onFirstExplain={() => void incrementExplainCount(turn.id)}
                 onFirstBilingual={() => void incrementBilingualCount(turn.id)}
                 onLayoutChange={requestLayoutScroll}
+                onUseSuggestion={useSuggestedReply}
                 onRegenerate={
                   !learningMode && turn.id === lastReplyTurnId
                     ? () => void regenerate(turn.id)

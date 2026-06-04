@@ -1,5 +1,5 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
-import type { GenerateOptions, ModelProvider } from "./types";
+import type { FinishReason, GenerateOptions, ModelProvider } from "./types";
 
 // OpenAI 兼容适配器:覆盖 OpenAI / OpenRouter / LM Studio 等。
 // HTTP 走 Rust 的 llm_request / llm_stream(绕过 CORS + 真流式)。
@@ -77,12 +77,28 @@ function endpoint(cfg: OpenAIConfig): string {
   return `${cfg.baseUrl.replace(/\/+$/, "")}/chat/completions`;
 }
 
+function finishReason(raw: string | null | undefined): FinishReason | null {
+  if (!raw) return null;
+  const kind =
+    raw === "stop"
+      ? "stop"
+      : raw === "length"
+        ? "length"
+        : raw === "content_filter"
+          ? "content_filter"
+          : raw === "tool_calls" || raw === "function_call"
+            ? "tool_use"
+            : "other";
+  return { kind, raw, provider: "openai" };
+}
+
 // 从一批已按 \n 切好的 SSE 行里抽取 delta.content,累加并回调。
 function consumeSseLines(
   lines: string[],
   onDelta: (delta: string) => void,
-): string {
+): { text: string; finishReason: FinishReason | null } {
   let acc = "";
+  let finalReason: FinishReason | null = null;
   for (const line of lines) {
     const t = line.trim();
     if (!t.startsWith("data:")) continue;
@@ -95,11 +111,13 @@ function consumeSseLines(
         acc += delta;
         onDelta(delta);
       }
+      finalReason =
+        finishReason(json.choices?.[0]?.finish_reason) ?? finalReason;
     } catch {
       // 半截 JSON 或 keep-alive,忽略(完整行会在后续 chunk 拼齐)
     }
   }
-  return acc;
+  return { text: acc, finishReason: finalReason };
 }
 
 export function createOpenAIProvider(cfg: OpenAIConfig): ModelProvider {
@@ -118,12 +136,15 @@ export function createOpenAIProvider(cfg: OpenAIConfig): ModelProvider {
     async stream(opts, onDelta) {
       let full = "";
       let buffer = "";
+      let finalReason: FinishReason | null = null;
       const channel = new Channel<string>();
       channel.onmessage = (chunk) => {
         buffer += chunk;
         const parts = buffer.split("\n");
         buffer = parts.pop() ?? ""; // 留下可能不完整的最后一行
-        full += consumeSseLines(parts, onDelta);
+        const consumed = consumeSseLines(parts, onDelta);
+        full += consumed.text;
+        finalReason = consumed.finishReason ?? finalReason;
       };
       await invoke("llm_stream", {
         url,
@@ -132,7 +153,12 @@ export function createOpenAIProvider(cfg: OpenAIConfig): ModelProvider {
         onChunk: channel,
       });
       // 收尾:flush 残留 buffer 里的完整行(防止漏掉最后一块)
-      if (buffer.trim()) full += consumeSseLines([buffer], onDelta);
+      if (buffer.trim()) {
+        const consumed = consumeSseLines([buffer], onDelta);
+        full += consumed.text;
+        finalReason = consumed.finishReason ?? finalReason;
+      }
+      if (finalReason) opts.onFinish?.(finalReason);
       return full;
     },
   };

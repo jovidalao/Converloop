@@ -12,12 +12,14 @@ export function ReplyExplanation({
   text,
   actions,
   trailingActions,
+  extraPanels,
   onFirstOpen,
   onLayoutChange,
 }: {
   text: string;
   actions?: ReactNode;
   trailingActions?: ReactNode;
+  extraPanels?: ReactNode;
   /** 用户首次点开讲解时触发一次(理解信号记账,见 db/turns)。 */
   onFirstOpen?: () => void;
   /** 讲解展开或流式内容改变时通知父级滚动容器按需贴底。 */
@@ -132,6 +134,7 @@ export function ReplyExplanation({
           )}
         </div>
       )}
+      {extraPanels}
     </div>
   );
 }

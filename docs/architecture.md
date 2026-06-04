@@ -1,6 +1,6 @@
 # Architecture (v1)
 
-AI 语言学习 agent —— 第一版范围、数据流、存储与现状。Agent 的逐字契约见各自文档:[conversation](./conversation-agent.md) · [tutor](./tutor-agent.md) · [profile-maintainer](./profile-maintainer-agent.md) · [task-agent](./task-agent.md);母语/混说链路见 [expression-gap](./expression-gap.md)。
+AI 语言学习 agent —— 第一版范围、数据流、存储与现状。Agent 的逐字契约见各自文档:[conversation](./conversation-agent.md) · [tutor](./tutor-agent.md) · [profile-maintainer](./profile-maintainer-agent.md) · [task-agent](./task-agent.md) · [reply-suggestion](./reply-suggestion-agent.md);母语/混说链路见 [expression-gap](./expression-gap.md)。
 
 ## v1 范围(刻意收窄)
 
@@ -26,8 +26,9 @@ AI 语言学习 agent —— 第一版范围、数据流、存储与现状。Age
 | **Task / 学习项目** | 用户从定制化学习入口触发 | 用户目标 + 语言配置 | `learning_project` + 专项课草案 | [task-agent](./task-agent.md) |
 | **Learning / 专项课** | 用户从定制化学习入口开启 | 代码拼好的学习数据 scope + 专项 prompt | 老师型课程回复,流式 | [learning-agent](./learning-agent.md) |
 | **Explain**(按需) | 用户点「讲解」时 | 对话回复 + MD 档案切片 | 母语讲解,流式 | 见下方[按需讲解](#按需讲解-explain-agent) |
+| **Reply Suggestion**(按需) | 用户点「推荐回复」时 | 被点击消息 + 会话上下文 + MD 档案切片 | 推荐用户可发送的目标语回复 | [reply-suggestion-agent](./reply-suggestion-agent.md) |
 
-热路径只有对话 ∥ 导师两个 agent;维护、任务规划与讲解都不在热路径上(后台 / 按需)。代码侧的编排在 `src/orchestrator.ts`(`runTurn` = 对话 ∥ 导师 + 记账 + 持久化;`createLearningProjectFromGoal` = Task Agent 规划;`explainReply` = 按需讲解)。
+热路径只有对话 ∥ 导师两个 agent;维护、任务规划、讲解与推荐回复都不在热路径上(后台 / 按需)。代码侧的编排在 `src/orchestrator.ts`(`runTurn` = 对话 ∥ 导师 + 记账 + 持久化;`createLearningProjectFromGoal` = Task Agent 规划;`explainReply` = 按需讲解;`suggestReply` = 按需推荐回复)。
 
 > **Agent Runtime(Phase 1):** 对话 / 专项课的主回复(reply_producer)与导师批改(observer)不再硬编码在 `runTurn` 里,而是经 `src/runtime` 的注册表派发(`dispatchReply` 按会话 kind 取唯一回复 Agent,`dispatchObservers` 遍历所有 observer 并行触发)。内置 Agent 在 `src/runtime/builtins.ts` 自注册;新增 observer 只需 `registerObserver`,不必改 `runTurn`。记账仍在代码侧(导师 observer 调 `recordAnalysis`,LLM 不碰计数)。每次运行经 `recordAgentRun` 落一条 `agent_job` 日志(`source="conversation"`,关联 `turn_id`)。详见 [agent-runtime-plan.md](./agent-runtime-plan.md)。
 
