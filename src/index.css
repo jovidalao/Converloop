@@ -319,6 +319,11 @@
   --codex-coach-width: 340px;
   --codex-coach-width-current: 0px;
   --codex-main-bg: var(--background);
+  --codex-main-material: color-mix(
+    in srgb,
+    var(--codex-main-bg) 82%,
+    transparent
+  );
   --codex-topbar-bg: oklch(0.985 0 0);
   --codex-sidebar-bg: oklch(0.975 0 0);
   --codex-sidebar-fg: oklch(0.22 0 0);
@@ -347,13 +352,18 @@
   height: 100%;
   min-height: 100vh;
   overflow: hidden;
-  /* 透明:让侧栏/标题栏/教练栏透出窗口毛玻璃;主对话区由 .codex-main 自己铺不透明底。 */
+  /* 透明:让侧栏/标题栏/教练栏透出窗口毛玻璃;主对话区作为独立 material panel。 */
   background: transparent;
   color: var(--foreground);
   transition: grid-template-columns 0.22s cubic-bezier(0.2, 0, 0, 1);
 }
 .dark .codex-shell {
   --codex-main-bg: oklch(0.145 0 0);
+  --codex-main-material: color-mix(
+    in srgb,
+    var(--codex-main-bg) 76%,
+    transparent
+  );
   --codex-topbar-bg: oklch(0.15 0 0);
   --codex-sidebar-bg: var(--codex-main-bg);
   --codex-sidebar-fg: oklch(0.88 0 0);
@@ -409,7 +419,6 @@
   grid-template-columns: 132px minmax(0, 1fr) 132px;
   align-items: center;
   height: var(--codex-topbar-h);
-  border-bottom: 1px solid var(--codex-border);
   /* 透明标题栏:统一工具栏区透出毛玻璃,像原生 unified toolbar。 */
   background: transparent;
 }
@@ -466,7 +475,6 @@
   position: relative;
   min-width: 0;
   overflow: hidden;
-  border-right: 1px solid var(--codex-border);
   /* 透明:半透明侧栏透出毛玻璃(Mail/Notes/Finder 式)。hover/active 用半透明叠层。 */
   background: transparent;
   color: var(--codex-sidebar-fg);
@@ -483,7 +491,6 @@
     transform 0.22s cubic-bezier(0.2, 0, 0, 1);
 }
 .codex-shell[data-sidebar-collapsed="true"] .codex-sidebar {
-  border-right-color: transparent;
   pointer-events: none;
 }
 .codex-shell[data-sidebar-collapsed="true"] .codex-sidebar-content {
@@ -494,14 +501,18 @@
   grid-column: 2;
   grid-row: 2;
   min-width: 0;
-  background: var(--codex-main-bg);
+  margin: 0 var(--panel-inset) var(--panel-inset) var(--panel-gap);
+  border-radius: var(--radius-panel);
+  background: var(--codex-main-material);
+  box-shadow: var(--shadow-minimal);
+  backdrop-filter: saturate(180%) blur(28px);
+  -webkit-backdrop-filter: saturate(180%) blur(28px);
 }
 .codex-coach {
   grid-column: 3;
   grid-row: 2;
   min-width: 0;
   overflow: hidden;
-  border-left: 1px solid var(--codex-border);
   /* 透明:教练栏与侧栏同款半透明,透出毛玻璃。 */
   background: transparent;
   color: var(--codex-sidebar-fg);
