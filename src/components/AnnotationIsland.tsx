@@ -12,6 +12,7 @@ import {
   addSelectionToLearningData,
   translateSelection,
 } from "../orchestrator";
+import { isAgentHidden } from "../runtime";
 import { playSpeech, stopSpeech } from "../tts/playback";
 import { speakText } from "../tts/speak";
 import { Markdown } from "./Markdown";
@@ -278,13 +279,15 @@ export function AnnotationIsland({
       {/* 半透明毛玻璃材质 + 柔和投影,贴近 macOS NSPopover 观感 */}
       <div className="overflow-hidden rounded-xl border border-border/60 bg-popover/85 shadow-modal-small backdrop-blur-2xl backdrop-saturate-150 supports-[backdrop-filter]:bg-popover/75">
         <div className="flex items-center gap-1 border-b border-border/60 px-1.5 py-1.5">
-          <IslandButton
-            icon={<LanguagesIcon size={14} />}
-            label="解析"
-            active={view === "analysis"}
-            disabled={busy !== null && busy !== "analysis"}
-            onClick={() => void startAnalysis()}
-          />
+          {!isAgentHidden("builtin:transformer:translate") && (
+            <IslandButton
+              icon={<LanguagesIcon size={14} />}
+              label="解析"
+              active={view === "analysis"}
+              disabled={busy !== null && busy !== "analysis"}
+              onClick={() => void startAnalysis()}
+            />
+          )}
           <IslandButton
             icon={
               busy === "speak" ? (

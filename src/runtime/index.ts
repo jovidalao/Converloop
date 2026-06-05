@@ -8,3 +8,4 @@ export * from "./custom-agents";
 export * from "./enablement";
 export * from "./registry";
 export * from "./types";
+export * from "./visibility";

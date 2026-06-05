@@ -1,4 +1,5 @@
 import type { ChatMessage, ModelProvider } from "../providers/types";
+import { appendUserInstructions } from "./custom-instructions";
 
 export interface ExplainContext {
   nativeLanguage: string;
@@ -7,11 +8,12 @@ export interface ExplainContext {
   experiencePreferences: string;
   profileSlice: string; // MD 档案切片(定性掌握情况),和对话 agent 同源
   reply: string; // 要讲解的对话回复
+  customInstructions?: string; // 用户在能力库追加的补充指令
 }
 
 // 按需讲解:不在热路径,读 MD 档案判断"这个学习者大概哪里看不懂"。
 function systemPrompt(ctx: ExplainContext): string {
-  return `You are a patient tutor helping a ${ctx.nativeLanguage} speaker learning
+  const base = `You are a patient tutor helping a ${ctx.nativeLanguage} speaker learning
 ${ctx.targetLanguage} at roughly ${ctx.level} level understand a message they just
 received from their conversation partner.
 
@@ -41,6 +43,7 @@ ${ctx.experiencePreferences || "(none)"}
 
 === LEARNER PROFILE ===
 ${ctx.profileSlice || "(no profile yet)"}`;
+  return appendUserInstructions(base, ctx.customInstructions);
 }
 
 function userPrompt(ctx: ExplainContext): string {

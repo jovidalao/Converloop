@@ -3,6 +3,7 @@ import type {
   FinishReason,
   ModelProvider,
 } from "../providers/types";
+import { appendUserInstructions } from "./custom-instructions";
 
 export type ReplySuggestionSource = "user_message" | "partner_reply";
 
@@ -16,6 +17,7 @@ export interface ReplySuggestionContext {
   source: ReplySuggestionSource;
   userMessage?: string;
   partnerReply?: string;
+  customInstructions?: string; // 用户在能力库追加的补充指令
 }
 
 export interface ReplySuggestionResult {
@@ -32,7 +34,7 @@ could have sent in ${ctx.targetLanguage}.`
       : `The learner clicked a recommendation button under the partner's latest reply.
 Suggest ONE natural, idiomatic next reply the learner could send in ${ctx.targetLanguage}.`;
 
-  return `You help a ${ctx.nativeLanguage} speaker learning ${ctx.targetLanguage}
+  const base = `You help a ${ctx.nativeLanguage} speaker learning ${ctx.targetLanguage}
 at roughly ${ctx.level} level write a good chat reply.
 
 ${task}
@@ -53,6 +55,7 @@ ${ctx.experiencePreferences || "(none)"}
 
 === LEARNER PROFILE ===
 ${ctx.profileSlice || "(no profile yet)"}`;
+  return appendUserInstructions(base, ctx.customInstructions);
 }
 
 function userPrompt(ctx: ReplySuggestionContext): string {

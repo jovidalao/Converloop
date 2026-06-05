@@ -24,6 +24,7 @@ import { CoachPanel } from "./components/CoachPanel";
 import { CommandPalette } from "./components/CommandPalette";
 import { KeyboardShortcutsDialog } from "./components/KeyboardShortcutsDialog";
 import { LearningAgentsView } from "./components/LearningAgentsView";
+import { LogsView } from "./components/LogsView";
 import { MasteryView } from "./components/MasteryView";
 import { ProfileView } from "./components/ProfileView";
 import { SettingsView } from "./components/SettingsView";
@@ -90,6 +91,7 @@ const SETTINGS_VIEWS: ReadonlySet<MainView> = new Set<MainView>([
   "settings-tts",
   "mastery",
   "agents",
+  "settings-logs",
   "profile",
 ]);
 
@@ -480,26 +482,22 @@ function App() {
     activeConversation.kind === "practice" &&
     derivationActions.length > 0;
   const settingsMode = isSettingsView(view);
+  const TOPBAR_TITLES: Partial<Record<MainView, string>> = {
+    profile: "学习者档案",
+    mastery: "学习数据",
+    learning: "创建专项课",
+    agents: "能力库",
+    "settings-logs": "日志",
+    "settings-general": "通用设置",
+    "settings-llm": "LLM 提供商",
+    "settings-tts": "TTS 提供商",
+  };
   const topbarTitle =
-    view === "profile"
-      ? "学习者档案"
-      : view === "mastery"
-        ? "学习数据"
-        : view === "learning"
-          ? "创建专项课"
-          : view === "agents"
-            ? "能力库"
-            : view === "settings-general"
-              ? "通用设置"
-              : view === "settings-llm"
-                ? "LLM 提供商"
-                : view === "settings-tts"
-                  ? "TTS 提供商"
-                  : view === "chat"
-                    ? draftActive
-                      ? "新对话"
-                      : (activeConversation?.title ?? "")
-                    : "";
+    view === "chat"
+      ? draftActive
+        ? "新对话"
+        : (activeConversation?.title ?? "")
+      : (TOPBAR_TITLES[view] ?? "");
 
   const secondaryView =
     view === "profile" ? (
@@ -509,7 +507,9 @@ function App() {
     ) : view === "learning" ? (
       <LearningAgentsView onRefresh={refreshLearningAgents} />
     ) : view === "agents" ? (
-      <AgentLibraryView />
+      <AgentLibraryView onOpenView={(v) => navigateTo({ view: v, activeId })} />
+    ) : view === "settings-logs" ? (
+      <LogsView />
     ) : view === "settings-general" ? (
       <SettingsView section="general" />
     ) : view === "settings-llm" ? (

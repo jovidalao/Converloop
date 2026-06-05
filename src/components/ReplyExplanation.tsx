@@ -1,6 +1,7 @@
 import { BookOpenIcon, RefreshCwIcon } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { explainReply, MissingApiKeyError } from "../orchestrator";
+import { isAgentHidden } from "../runtime";
 import { Markdown } from "./Markdown";
 import { Button } from "./ui/button";
 import { Spinner } from "./ui/spinner";
@@ -79,30 +80,34 @@ export function ReplyExplanation({
   }
 
   const expanded = open && (explanation || error);
+  // 「回复讲解」被删除(隐藏)后,只藏掉讲解按钮,复制/朗读/双语等其它操作照常。
+  const explainHidden = isAgentHidden("builtin:transformer:explain");
 
   return (
     <div className="flex w-full flex-col gap-1.5">
       <div className="-ml-1 flex items-center gap-0.5">
         {actions}
-        <Button
-          type="button"
-          variant="action"
-          size="action"
-          data-active={!!expanded}
-          onClick={handleClick}
-          disabled={loading}
-          aria-expanded={!!expanded}
-          title="根据你的掌握情况讲解这条回复"
-        >
-          <span className="inline-flex size-4 shrink-0 items-center justify-center">
-            {loading ? (
-              <Spinner className="size-3.5 border-transparent border-t-current" />
-            ) : (
-              <BookOpenIcon className="size-4" />
-            )}
-          </span>
-          <span>讲解</span>
-        </Button>
+        {!explainHidden && (
+          <Button
+            type="button"
+            variant="action"
+            size="action"
+            data-active={!!expanded}
+            onClick={handleClick}
+            disabled={loading}
+            aria-expanded={!!expanded}
+            title="根据你的掌握情况讲解这条回复"
+          >
+            <span className="inline-flex size-4 shrink-0 items-center justify-center">
+              {loading ? (
+                <Spinner className="size-3.5 border-transparent border-t-current" />
+              ) : (
+                <BookOpenIcon className="size-4" />
+              )}
+            </span>
+            <span>讲解</span>
+          </Button>
+        )}
         {trailingActions}
       </div>
       {open && (explanation || error) && (

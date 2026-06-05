@@ -200,6 +200,7 @@ function observerFromAgent(agent: LearningAgentMeta): Observer {
     card: {
       title: agent.name,
       description: agent.description,
+      entry: "auto_turn",
       timing: "每轮普通练习后 · 自定义观察",
       reads: "当前输入 · 近期对话 · 授权学习数据",
       writes:
@@ -223,6 +224,7 @@ function actionFromAgent(agent: LearningAgentMeta): ActionAgent {
     card: {
       title: agent.name,
       description: agent.description,
+      entry: "derive",
       timing: "用户点击",
       reads: "当前会话 · 授权学习数据",
       writes: "衍生一个新对话上下文并新建会话(不改计数 / 密钥 / 设置)",

@@ -1,9 +1,21 @@
-import { desc, eq } from "drizzle-orm";
+import { and, count, desc, eq, type SQL } from "drizzle-orm";
 import { db } from "./client";
 import { type AgentJob, agentJob } from "./schema";
 
 export type AgentJobStatus = AgentJob["status"];
 export type AgentJobSource = AgentJob["source"];
+
+export interface AgentJobFilter {
+  source?: AgentJobSource;
+  status?: AgentJobStatus;
+}
+
+function whereForFilter(filter: AgentJobFilter): SQL | undefined {
+  const clauses: SQL[] = [];
+  if (filter.source) clauses.push(eq(agentJob.source, filter.source));
+  if (filter.status) clauses.push(eq(agentJob.status, filter.status));
+  return clauses.length ? and(...clauses) : undefined;
+}
 
 function payloadJson(payload: unknown): string | null {
   if (payload == null) return null;
@@ -69,6 +81,33 @@ export async function listAgentJobs(limit = 50): Promise<AgentJob[]> {
     .from(agentJob)
     .orderBy(desc(agentJob.updatedAt))
     .limit(limit);
+}
+
+// 设置·日志页:按来源/状态筛选 + 分页(Drizzle limit/offset)。listAgentJobs 仍给
+// 旧的「最近 N 条」用法;分页查询和计数另立两个函数,避免改动现有签名。
+export async function listAgentJobsPage(opts: {
+  limit: number;
+  offset: number;
+  source?: AgentJobSource;
+  status?: AgentJobStatus;
+}): Promise<AgentJob[]> {
+  return db
+    .select()
+    .from(agentJob)
+    .where(whereForFilter(opts))
+    .orderBy(desc(agentJob.updatedAt))
+    .limit(opts.limit)
+    .offset(opts.offset);
+}
+
+export async function countAgentJobs(
+  filter: AgentJobFilter = {},
+): Promise<number> {
+  const [row] = await db
+    .select({ value: count() })
+    .from(agentJob)
+    .where(whereForFilter(filter));
+  return row?.value ?? 0;
 }
 
 export async function getAgentJob(id: string): Promise<AgentJob | null> {

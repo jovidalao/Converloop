@@ -85,7 +85,12 @@ import {
   startLearningSession,
   suggestReply,
 } from "../orchestrator";
-import { beginAction, getActions, isAgentEnabled } from "../runtime";
+import {
+  beginAction,
+  getActions,
+  isAgentEnabled,
+  isAgentHidden,
+} from "../runtime";
 import { loadTtsConfig } from "../tts/config";
 import { stopSpeech } from "../tts/playback";
 import { createReplySpeaker } from "../tts/stream";
@@ -672,6 +677,11 @@ function PartnerReply({
     resetKey: `${turnId}:${text}`,
     onLayoutChange,
   });
+  // 转换能力被「删除」(隐藏)后,对应触发按钮也不出现。
+  const bilingualHidden = isAgentHidden("builtin:transformer:bilingual");
+  const suggestionHidden = isAgentHidden(
+    "builtin:transformer:reply_suggestion",
+  );
 
   // 回复被「重新生成」替换后,旧的双语对照不再对应,收起重置(首次挂载不动,避免和 autoOpen 打架)。
   useEffect(() => {
@@ -715,12 +725,12 @@ function PartnerReply({
   // 设置里开了「自动开启双语阅读」时,新回复挂载即展开并生成一次。
   // biome-ignore lint/correctness/useExhaustiveDependencies: run once when autoOpen flips, guarded by didAutoOpen ref; adding generate would re-fire every render
   useEffect(() => {
-    if (autoOpen && !didAutoOpen.current) {
+    if (autoOpen && !didAutoOpen.current && !bilingualHidden) {
       didAutoOpen.current = true;
       setOpen(true);
       void generate();
     }
-  }, [autoOpen]);
+  }, [autoOpen, bilingualHidden]);
 
   useEffect(() => {
     if (open || loading || view || error) onLayoutChange?.();
@@ -739,9 +749,11 @@ function PartnerReply({
         </div>
         <div className="-ml-1 flex items-center gap-0.5">
           <CopyButton text={text} />
-          {!offRecord && <ReplySuggestionButton suggestion={replySuggestion} />}
+          {!offRecord && !suggestionHidden && (
+            <ReplySuggestionButton suggestion={replySuggestion} />
+          )}
         </div>
-        {!offRecord && (
+        {!offRecord && !suggestionHidden && (
           <ReplySuggestionPanel
             suggestion={replySuggestion}
             onUse={onUseSuggestion}
@@ -811,13 +823,13 @@ function PartnerReply({
                 {regenerating ? <Spinner /> : <RefreshCwIcon size={16} />}
               </Button>
             )}
-            {!offRecord && (
+            {!offRecord && !suggestionHidden && (
               <ReplySuggestionButton suggestion={replySuggestion} />
             )}
           </>
         }
         extraPanels={
-          offRecord ? null : (
+          offRecord || suggestionHidden ? null : (
             <ReplySuggestionPanel
               suggestion={replySuggestion}
               onUse={onUseSuggestion}
@@ -825,25 +837,27 @@ function PartnerReply({
           )
         }
         trailingActions={
-          <Button
-            type="button"
-            variant="action"
-            size="action"
-            data-active={!!showBilingual}
-            onClick={toggle}
-            disabled={loading}
-            aria-pressed={!!showBilingual}
-            title="目标语言/母语逐句对照"
-          >
-            <span className="inline-flex size-4 shrink-0 items-center justify-center">
-              {loading ? (
-                <Spinner className="size-3.5 border-transparent border-t-current" />
-              ) : (
-                <LanguagesIcon className="size-4" />
-              )}
-            </span>
-            <span>双语阅读</span>
-          </Button>
+          bilingualHidden ? null : (
+            <Button
+              type="button"
+              variant="action"
+              size="action"
+              data-active={!!showBilingual}
+              onClick={toggle}
+              disabled={loading}
+              aria-pressed={!!showBilingual}
+              title="目标语言/母语逐句对照"
+            >
+              <span className="inline-flex size-4 shrink-0 items-center justify-center">
+                {loading ? (
+                  <Spinner className="size-3.5 border-transparent border-t-current" />
+                ) : (
+                  <LanguagesIcon className="size-4" />
+                )}
+              </span>
+              <span>双语阅读</span>
+            </Button>
+          )
         }
       />
     </div>

@@ -8,6 +8,7 @@ import {
   ListChecksIcon,
   PencilIcon,
   PlusIcon,
+  ScrollTextIcon,
   SettingsIcon,
   SlidersHorizontalIcon,
   SparklesIcon,
@@ -43,6 +44,7 @@ export type MainView =
   | "mastery"
   | "learning"
   | "agents"
+  | "settings-logs"
   | "settings-general"
   | "settings-llm"
   | "settings-tts";
@@ -467,6 +469,11 @@ export function Sidebar({
                 "agents",
                 <BlocksIcon className="size-4" />,
                 "能力库",
+              )}
+              {renderSettingsItem(
+                "settings-logs",
+                <ScrollTextIcon className="size-4" />,
+                "日志",
               )}
               {renderSettingsItem(
                 "profile",

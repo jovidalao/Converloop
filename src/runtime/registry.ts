@@ -11,13 +11,14 @@ import {
   parseAgentModifiers,
 } from "../db/conversations";
 import { logError } from "../lib/log";
-import { getBuiltinActionOverride } from "./builtin-overrides";
+import { getBuiltinAgentOverride } from "./builtin-overrides";
 import { isAgentEnabled } from "./enablement";
 import {
   type ActionAgent,
   type ActionContext,
   type ActionResult,
   type ActionScope,
+  type AgentCard,
   type AgentCatalogEntry,
   type ConversationContext,
   type ConversationKind,
@@ -29,6 +30,7 @@ import {
   type ReplyProducer,
   type TransformerInfo,
 } from "./types";
+import { isAgentHidden } from "./visibility";
 
 const replyProducers = new Map<ConversationKind, ReplyProducer>();
 const observers: Observer[] = [];
@@ -51,22 +53,32 @@ export function registerTransformer(transformer: TransformerInfo): void {
   transformers.push(transformer);
 }
 
-// 把内置动作的用户改写(名称/说明)合并进去,让动作条与能力库展示一致。
-// deriveContext / run 各自在执行时读改写应用 prompt,这里只覆盖展示字段。
+// 把内置 Agent 的用户改写(名称/说明)合并进展示卡片,让动作条与能力库展示一致。
+// 补充指令(instructions)由各能力在执行时自行读取追加,这里只覆盖展示字段。
+function applyCardOverride(
+  id: string,
+  card?: AgentCard,
+): AgentCard | undefined {
+  if (!card) return card;
+  const ov = getBuiltinAgentOverride(id);
+  if (!ov || (ov.label === undefined && ov.description === undefined))
+    return card;
+  return {
+    ...card,
+    title: ov.label ?? card.title,
+    description: ov.description ?? card.description,
+  };
+}
+
+// 动作在菜单里按 label/description 渲染,故也要把改写合进动作本身(不只是卡片)。
 function withActionOverride(a: ActionAgent): ActionAgent {
-  const ov = getBuiltinActionOverride(a.id);
+  const ov = getBuiltinAgentOverride(a.id);
   if (!ov || (ov.label === undefined && ov.description === undefined)) return a;
   return {
     ...a,
     label: ov.label ?? a.label,
     description: ov.description ?? a.description,
-    card: a.card
-      ? {
-          ...a.card,
-          title: ov.label ?? a.card.title,
-          description: ov.description ?? a.card.description,
-        }
-      : a.card,
+    card: applyCardOverride(a.id, a.card),
   };
 }
 
@@ -94,9 +106,12 @@ export function getObservers(): readonly Observer[] {
   return observers;
 }
 
+// 隐藏的动作(用户在能力库「删除」)不进任何菜单。隐藏无恢复入口,故直接从派发源滤掉。
 export function getActions(scope?: ActionScope): readonly ActionAgent[] {
-  const list = scope ? actions.filter((a) => a.scope === scope) : actions;
-  return list.map(withActionOverride);
+  const list = (scope ? actions.filter((a) => a.scope === scope) : actions)
+    .filter((a) => !isAgentHidden(a.id))
+    .map(withActionOverride);
+  return list;
 }
 
 export function getTransformers(): readonly TransformerInfo[] {
@@ -111,33 +126,32 @@ export function listAgentCatalog(): AgentCatalogEntry[] {
       id: p.id,
       kind: p.kind,
       enabled: isAgentEnabled(p.id),
-      card: p.card,
+      card: applyCardOverride(p.id, p.card),
     });
   for (const o of observers)
     entries.push({
       id: o.id,
       kind: o.kind,
       enabled: isAgentEnabled(o.id),
-      card: o.card,
+      card: applyCardOverride(o.id, o.card),
     });
-  for (const raw of actions) {
-    const a = withActionOverride(raw);
+  for (const a of actions)
     entries.push({
       id: a.id,
       kind: a.kind,
       enabled: isAgentEnabled(a.id),
       scope: a.scope,
-      card: a.card,
+      card: applyCardOverride(a.id, a.card),
     });
-  }
   for (const t of transformers)
     entries.push({
       id: t.id,
       kind: "transformer",
       enabled: true,
-      card: t.card,
+      card: applyCardOverride(t.id, t.card),
     });
-  return entries;
+  // 隐藏(永久删除)的能力不在能力库出现,也不可恢复。
+  return entries.filter((e) => !isAgentHidden(e.id));
 }
 
 // 把一次 Agent 运行包成「跑完后异步落一条日志」。日志在完成后 fire-and-forget 写入,
@@ -310,6 +324,9 @@ export async function runTransformer<T>(
   const transformer = transformers.find((t) => t.id === transformerId);
   if (!transformer)
     throw new Error(`没有注册 id=${transformerId} 的转换 Agent`);
+  // 兜底:即使触发按钮已被隐藏,入口也拒绝运行被删除的能力。
+  if (isAgentHidden(transformerId))
+    throw new Error(`能力 ${transformerId} 已被删除`);
   return runLogged(
     {
       agentId: transformer.id,

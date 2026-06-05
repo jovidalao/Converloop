@@ -1,4 +1,5 @@
 import type { ChatMessage, ModelProvider } from "../providers/types";
+import { appendUserInstructions } from "./custom-instructions";
 
 export interface LearningAgentContext {
   nativeLanguage: string;
@@ -12,10 +13,11 @@ export interface LearningAgentContext {
   history: string;
   userInput: string;
   kickoff: boolean;
+  customInstructions?: string; // 用户在能力库追加的补充指令(专项课老师)
 }
 
 function systemPrompt(ctx: LearningAgentContext): string {
-  return `You are a dedicated teacher for a customized language-learning session called "${ctx.agentName}".
+  const base = `You are a dedicated teacher for a customized language-learning session called "${ctx.agentName}".
 The learner is a ${ctx.nativeLanguage} speaker learning ${ctx.targetLanguage} at roughly ${ctx.level} level.
 
 BASE RULES
@@ -40,6 +42,7 @@ ${ctx.agentPrompt}
 
 === AVAILABLE LEARNER DATA ===
 ${ctx.dataContext || "(no learner data available yet)"}`;
+  return appendUserInstructions(base, ctx.customInstructions);
 }
 
 function userPrompt(ctx: LearningAgentContext): string {

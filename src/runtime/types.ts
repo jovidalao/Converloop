@@ -34,10 +34,19 @@ export type AgentKind =
   | "action"
   | "background";
 
+// 能力库按「入口」分组:用户在哪触发它 / 它何时出现,而不是技术 kind。
+export type AgentEntry =
+  | "auto_turn" // 每轮自动(对话伙伴 / 批改导师 / 自定义 observer)
+  | "selection" // 选中文字时(划词解析)
+  | "reply_action" // 回复操作按钮(讲解 / 双语 / 推荐回复)
+  | "derive" // 衍生新对话(对话衍生动作 / 自定义 action)
+  | "lesson"; // 专项课(专项课老师)
+
 // 能力库展示用的元信息(普通用户看「这个能力做什么/何时跑/读写什么」,而非 hook/schema)。
 export interface AgentCard {
   title: string;
   description: string;
+  entry: AgentEntry; // 入口分组(怎么用 / 何时出现)
   timing: string; // 什么时候运行
   reads: string; // 能读什么数据
   writes: string; // 是否会提出写入学习记忆

@@ -1,17 +1,19 @@
 import type { ChatMessage, ModelProvider } from "../providers/types";
+import { appendUserInstructions } from "./custom-instructions";
 
 export interface BilingualContext {
   nativeLanguage: string;
   targetLanguage: string;
   experiencePreferences: string;
   reply: string; // 要做双语对照的对话回复
+  customInstructions?: string; // 用户在能力库追加的补充指令
 }
 
 // 双语阅读:把一条回复重排成 Markdown——原文逐句保留(含其自带格式),
 // 每句后内联母语译文,译文用 ⟦…⟧ 标记。⟦⟧ 不是 Markdown 语法,会原样留在文本里,
 // 渲染端(remark-bilingual)再把它转成译文样式,避免 *星号* 在 CJK 旁断裂。
 function systemPrompt(ctx: BilingualContext): string {
-  return `You produce an interlinear bilingual reading view of a ${ctx.targetLanguage}
+  const base = `You produce an interlinear bilingual reading view of a ${ctx.targetLanguage}
 message for a ${ctx.nativeLanguage} speaker learning ${ctx.targetLanguage}.
 
 Reproduce the message in Markdown, KEEPING its original formatting and paragraph layout
@@ -35,6 +37,7 @@ RULES
 
 === LEARNER EXPERIENCE PREFERENCES ===
 ${ctx.experiencePreferences || "(none)"}`;
+  return appendUserInstructions(base, ctx.customInstructions);
 }
 
 function userPrompt(ctx: BilingualContext): string {

@@ -1,4 +1,5 @@
 import type { ChatMessage, ModelProvider } from "../providers/types";
+import { appendUserInstructions } from "./custom-instructions";
 
 export interface TranslateContext {
   nativeLanguage: string;
@@ -6,12 +7,13 @@ export interface TranslateContext {
   experiencePreferences: string;
   selection: string; // 用户选中的词/短语/句子
   context: string; // 选中文字所在的整句/整段(给 LLM 判断语境)
+  customInstructions?: string; // 用户在能力库追加的补充指令
 }
 
 // 划词翻译/解析:在对话里选中一段文字,按需给出母语解析。
 // 选中的是词/短语 → 结合当前语境讲它的意思和用法;选中的是整句 → 给自然译文。
 function systemPrompt(ctx: TranslateContext): string {
-  return `You help a ${ctx.nativeLanguage} speaker learning ${ctx.targetLanguage}
+  const base = `You help a ${ctx.nativeLanguage} speaker learning ${ctx.targetLanguage}
 understand a fragment they selected inside a message they are reading.
 
 You are given the SELECTION (the exact text they highlighted) and the CONTEXT
@@ -34,6 +36,7 @@ RULES
 
 === LEARNER EXPERIENCE PREFERENCES ===
 ${ctx.experiencePreferences || "(none)"}`;
+  return appendUserInstructions(base, ctx.customInstructions);
 }
 
 function userPrompt(ctx: TranslateContext): string {

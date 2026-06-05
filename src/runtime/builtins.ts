@@ -3,6 +3,7 @@
 // 从 ./index 的副作用 import 触发注册。
 
 import { converse } from "../agents/conversation";
+import { appendUserInstructions } from "../agents/custom-instructions";
 import { runLearningAgent } from "../agents/learning";
 import { generateLearningAgentDraft } from "../agents/learning-agent-builder";
 import { analyze } from "../agents/tutor";
@@ -20,7 +21,7 @@ import { recordAnalysis } from "../db/mastery";
 import { formatTurns, getTurnsAfterId, updateTurnAnalysis } from "../db/turns";
 import { logError } from "../lib/log";
 import { maybeRunMaintainer } from "../profile/maintainer-runner";
-import { getBuiltinActionOverride } from "./builtin-overrides";
+import { getBuiltinAgentOverride } from "./builtin-overrides";
 import { generateDerivedConversation } from "./derive-conversation";
 import {
   registerAction,
@@ -112,6 +113,7 @@ const conversationReply: ReplyProducer = {
   card: {
     title: "对话伙伴",
     description: "用目标语言自然回复、延续对话,不纠错(纠错交给导师)。",
+    entry: "auto_turn",
     timing: "每轮 · 热路径 · 流式",
     reads: "MD 档案切片 · 已掌握脚手架 · 复习候选 · 难度校准 · 会话调节",
     writes: "无(只产出回复文本)",
@@ -133,6 +135,8 @@ const conversationReply: ReplyProducer = {
         history: ctx.history,
         userInput: ctx.userInput,
         openingInstruction: ctx.openingInstruction,
+        customInstructions: getBuiltinAgentOverride("builtin:conversation")
+          ?.instructions,
       },
       onDelta,
     );
@@ -147,6 +151,7 @@ const learningReply: ReplyProducer = {
   card: {
     title: "专项课老师",
     description: "按课程 prompt 和有界学习数据,上老师型专项课。",
+    entry: "lesson",
     timing: "专项课每轮 · 流式",
     reads: "授权的学习数据 scope · 课程 prompt",
     writes: "无",
@@ -166,6 +171,8 @@ const learningReply: ReplyProducer = {
         history: ctx.history,
         userInput: ctx.userInput,
         kickoff: l.kickoff,
+        customInstructions:
+          getBuiltinAgentOverride("builtin:learning")?.instructions,
       },
       onDelta,
     );
@@ -180,6 +187,7 @@ const tutorObserver: Observer = {
   card: {
     title: "批改导师",
     description: "并行批改每句:纠错、更自然说法、表达缺口,信号交给代码记账。",
+    entry: "auto_turn",
     timing: "每轮 · 热路径 · 与回复并行",
     reads: "SQLite 薄弱表 · 当前输入",
     writes: "error/correct/introduced/gap 信号 → 代码记账(LLM 不碰计数)",
@@ -197,6 +205,8 @@ const tutorObserver: Observer = {
         keyHints: ctx.keyHints,
         history: ctx.tutorHistory,
         userInput: ctx.userInput,
+        customInstructions:
+          getBuiltinAgentOverride("builtin:tutor")?.instructions,
       },
     );
 
@@ -247,6 +257,7 @@ const transformers: TransformerInfo[] = [
     card: {
       title: "回复讲解",
       description: "按需用母语解释对话回复里可能卡住的结构、习语和地道用法。",
+      entry: "reply_action",
       timing: "用户点「讲解」",
       reads: "当前回复 · MD 档案切片 · 阅读偏好",
       writes: "无(只产出讲解文本)",
@@ -258,6 +269,7 @@ const transformers: TransformerInfo[] = [
     card: {
       title: "双语阅读",
       description: "把一条回复重排成目标语言/母语逐句对照,方便读懂长回复。",
+      entry: "reply_action",
       timing: "用户点「双语」",
       reads: "当前回复 · 阅读偏好",
       writes: "无(只产出双语 Markdown)",
@@ -269,6 +281,7 @@ const transformers: TransformerInfo[] = [
     card: {
       title: "划词解析",
       description: "结合上下文解释用户选中的词、短语或句子。",
+      entry: "selection",
       timing: "用户划选文本",
       reads: "选中文本 · 所在上下文 · 阅读偏好",
       writes: "无(只产出解析文本)",
@@ -280,6 +293,7 @@ const transformers: TransformerInfo[] = [
     card: {
       title: "推荐回复",
       description: "按需基于某条消息和上下文生成学习者可以发送的地道回复。",
+      entry: "reply_action",
       timing: "用户点「推荐回复」",
       reads: "当前消息 · 会话上下文 · MD 档案切片 · 表达偏好",
       writes: "无(只产出建议文本)",
@@ -314,17 +328,18 @@ function makeDerivationAction(spec: DerivationSpec): ActionAgent {
     card: {
       title: spec.label,
       description: spec.description,
+      entry: "derive",
       timing: "用户点击",
       reads: spec.scope === "turn" ? "当前会话 + 选中的这一轮" : "当前会话",
       writes: "衍生一个新对话上下文并新建会话(不改计数 / 密钥 / 设置)",
       canDisable: true,
     },
-    // label/objective 在点击时实时读改写,用户在能力库改过 prompt 就立即生效。
+    // 名称改写 + 在官方 objective 之后追加补充指令(不替换基础 prompt),点击时实时读取。
     deriveContext: (ctx) => {
-      const ov = getBuiltinActionOverride(spec.id);
+      const ov = getBuiltinAgentOverride(spec.id);
       return deriveConversationContext(ctx, {
         label: ov?.label ?? spec.label,
-        objective: ov?.objective ?? spec.objective,
+        objective: appendUserInstructions(spec.objective, ov?.instructions),
       });
     },
   };
@@ -417,6 +432,7 @@ const lessonFromConversation: ActionAgent = {
   card: {
     title: LESSON_FROM_CONVERSATION_DEFAULTS.label,
     description: LESSON_FROM_CONVERSATION_DEFAULTS.description,
+    entry: "derive",
     timing: "用户点击",
     reads: "当前会话历史 · 语言配置",
     writes: "创建一个专项课 Agent + 一个专项课会话",
@@ -428,9 +444,10 @@ const lessonFromConversation: ActionAgent = {
     const config = loadConfig();
     const turns = await getTurnsAfterId(ctx.conversationId, null);
     const history = formatTurns(turns);
-    const instruction =
-      getBuiltinActionOverride(LESSON_FROM_CONVERSATION_ID)?.objective ??
-      LESSON_FROM_CONVERSATION_DEFAULTS.objective;
+    const instruction = appendUserInstructions(
+      LESSON_FROM_CONVERSATION_DEFAULTS.objective,
+      getBuiltinAgentOverride(LESSON_FROM_CONVERSATION_ID)?.instructions,
+    );
     const draft = await generateLearningAgentDraft(
       provider,
       `${instruction}\n\n=== CONVERSATION ===\n${history || "(empty)"}`,

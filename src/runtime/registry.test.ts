@@ -21,6 +21,7 @@ import type {
   TransformerInfo,
 } from "./types";
 import { HOOKS } from "./types";
+import { hideAgent } from "./visibility";
 
 // 本测试只验证注册表/派发机制,故直接 import ./registry(不经 ./index,内置 Agent 不会自注册)。
 // 运行日志写入走 DB,在 vitest 里会被 fire-and-forget 的 .catch 吞掉,不影响断言。
@@ -99,12 +100,32 @@ describe("agent runtime registry", () => {
     expect(result.navigateTo).toBe("new-conv-id");
   });
 
+  it("隐藏的 action 从 getActions 与能力目录过滤掉(删除=永久隐藏)", () => {
+    const action: ActionAgent = {
+      id: "test:hidden-action",
+      kind: "action",
+      scope: "session",
+      label: "会被隐藏的动作",
+      run: async () => ({}),
+    };
+    registerAction(action);
+    expect(
+      getActions("session").some((a) => a.id === "test:hidden-action"),
+    ).toBe(true);
+
+    hideAgent("test:hidden-action");
+    expect(
+      getActions("session").some((a) => a.id === "test:hidden-action"),
+    ).toBe(false);
+  });
+
   it("新注册的 transformer 进入能力目录,runTransformer 调用按需任务", async () => {
     const transformer: TransformerInfo = {
       id: "test:transformer",
       card: {
         title: "测试转换",
         description: "测试用",
+        entry: "reply_action",
         timing: "按需",
         reads: "测试输入",
         writes: "无",

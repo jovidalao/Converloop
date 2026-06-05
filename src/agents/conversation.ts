@@ -1,5 +1,6 @@
 import type { ComfortableItem, ReviewItem } from "../db/mastery";
 import type { ChatMessage, ModelProvider } from "../providers/types";
+import { appendUserInstructions } from "./custom-instructions";
 
 export interface ConversationContext {
   nativeLanguage: string;
@@ -15,6 +16,7 @@ export interface ConversationContext {
   history: string;
   userInput: string;
   openingInstruction?: string; // App 触发的隐藏开场指令(对话衍生)
+  customInstructions?: string; // 用户在能力库追加的补充指令
 }
 
 // 折叠空白并截到 max 字符,防止过长 example 撑大热路径 prompt(与 learning-data 一致)。
@@ -61,7 +63,7 @@ function systemPrompt(ctx: ConversationContext): string {
   const adjustmentsBlock = ctx.sessionAdjustments
     ? `\n\n=== SESSION ADJUSTMENTS (apply on top of everything above) ===\n${ctx.sessionAdjustments}`
     : "";
-  return `You are a warm, natural conversation partner for a ${ctx.nativeLanguage} speaker
+  const base = `You are a warm, natural conversation partner for a ${ctx.nativeLanguage} speaker
 learning ${ctx.targetLanguage} at roughly ${ctx.level} level. Your only job here is to
 keep the conversation flowing — another agent handles correction and feedback.
 
@@ -111,6 +113,7 @@ ${formatComfortableItems(ctx.comfortableItems)}
 
 === DUE FOR REVIEW (weave in at most one, only if it fits) ===
 ${formatReviewItems(ctx.reviewItems)}`;
+  return appendUserInstructions(base, ctx.customInstructions);
 }
 
 function userPrompt(ctx: ConversationContext): string {

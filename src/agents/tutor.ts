@@ -1,5 +1,6 @@
 import { recordTutorOutcome } from "../lib/tutor-stats";
 import type { ChatMessage, ModelProvider } from "../providers/types";
+import { appendUserInstructions } from "./custom-instructions";
 import {
   formatZodError,
   normalizeTutorPayload,
@@ -35,6 +36,7 @@ export interface TutorContext {
   keyHints?: MasteryKeyHint[];
   history: string; // 最近几轮对话,纯文本
   userInput: string;
+  customInstructions?: string; // 用户在能力库追加的补充指令
 }
 
 export interface AnalyzeResult {
@@ -86,7 +88,7 @@ function formatKeyHints(items: MasteryKeyHint[] | undefined): string {
 
 // 见 docs/tutor-agent.md#system-prompt
 function systemPrompt(ctx: TutorContext): string {
-  return `You are a precise language tutor analyzing a single message from a
+  const base = `You are a precise language tutor analyzing a single message from a
 ${ctx.nativeLanguage} speaker learning ${ctx.targetLanguage} at ${ctx.level} level. You give
 structured feedback only — a separate conversation agent handles the chat.
 
@@ -159,6 +161,7 @@ ${formatWeakList(ctx.weakList)}
 
 === RECENT MASTERY KEY HINTS (reuse instead of making duplicates) ===
 ${formatKeyHints(ctx.keyHints)}`;
+  return appendUserInstructions(base, ctx.customInstructions);
 }
 
 function userPrompt(ctx: TutorContext): string {
@@ -171,7 +174,7 @@ ${ctx.userInput}`;
 
 // 第二套:不依赖 JSON schema,固定版式纯文本,供 UI 直接渲染。
 function proseSystemPrompt(ctx: TutorContext): string {
-  return `You are a precise language tutor. A separate agent handles chat;
+  const base = `You are a precise language tutor. A separate agent handles chat;
 you only analyze the user's latest message in ${ctx.targetLanguage}.
 
 Reply in ${ctx.nativeLanguage} using EXACTLY this plain-text template (no JSON, no markdown code fences, no reasoning):
@@ -199,6 +202,7 @@ ${formatWeakList(ctx.weakList)}
 
 === RECENT MASTERY KEY HINTS ===
 ${formatKeyHints(ctx.keyHints)}`;
+  return appendUserInstructions(base, ctx.customInstructions);
 }
 
 function normalizeIgnoredText(

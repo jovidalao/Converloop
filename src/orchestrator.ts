@@ -66,6 +66,7 @@ import {
   derivePendingAction,
   dispatchObservers,
   dispatchReply,
+  getBuiltinAgentOverride,
   HOOKS,
   type LearningContext,
   type PracticeContext,
@@ -775,6 +776,8 @@ export async function regenerateReply(
       summary: summaryData.summary ?? "",
       history,
       userInput: target.userInput,
+      customInstructions: getBuiltinAgentOverride("builtin:conversation")
+        ?.instructions,
     },
     cb.onReplyDelta,
   );
@@ -814,6 +817,9 @@ export async function explainReply(
           experiencePreferences,
           profileSlice,
           reply,
+          customInstructions: getBuiltinAgentOverride(
+            "builtin:transformer:explain",
+          )?.instructions,
         },
         onDelta,
       ),
@@ -841,6 +847,9 @@ export async function bilingualReply(reply: string): Promise<string> {
         targetLanguage: config.targetLanguage,
         experiencePreferences,
         reply,
+        customInstructions: getBuiltinAgentOverride(
+          "builtin:transformer:bilingual",
+        )?.instructions,
       }),
     (text) => ({ chars: text.length }),
   );
@@ -893,6 +902,9 @@ export async function suggestReply(
           source,
           userMessage: source === "user_message" ? target.userInput : undefined,
           partnerReply: source === "partner_reply" ? target.reply : undefined,
+          customInstructions: getBuiltinAgentOverride(
+            "builtin:transformer:reply_suggestion",
+          )?.instructions,
         },
         onDelta,
       ),
@@ -931,6 +943,9 @@ export async function translateSelection(
           experiencePreferences,
           selection,
           context,
+          customInstructions: getBuiltinAgentOverride(
+            "builtin:transformer:translate",
+          )?.instructions,
         },
         onDelta,
       ),
