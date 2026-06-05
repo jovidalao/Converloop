@@ -11,6 +11,14 @@ import {
   WaypointsIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
+import { useEffect } from "react";
+import {
+  DATA_SCOPE_LABELS,
+  LEARNING_DATA_SCOPES,
+  type LearningDataScope,
+} from "../db/learning-agents";
+
+export const APP_DESIGN_DATA_SCOPES_HASH = "design-data-scopes";
 
 type OverviewItem = {
   title: string;
@@ -118,6 +126,52 @@ const CUSTOMIZATION_ITEMS: OverviewItem[] = [
   },
 ];
 
+const DATA_SCOPE_DETAILS: Record<
+  LearningDataScope,
+  { source: string; use: string; caution: string }
+> = {
+  profile: {
+    source: "维护 agent 写入的学习者 MD 档案。",
+    use: "适合让能力知道你的兴趣、偏好、长期目标和最近练习方向。",
+    caution: "它是叙述层,不适合拿来判断准确计数或排序。",
+  },
+  comfortable: {
+    source: "代码从 SQLite 已掌握项里选出的稳定脚手架。",
+    use: "适合让老师复用你已经会的表达,把新内容接到旧能力上。",
+    caution: "不要把它当成全部已学内容,这里只给少量高价值候选。",
+  },
+  weak_all: {
+    source: "SQLite 中仍未掌握的词汇、语法、搭配、错误模式和表达缺口。",
+    use: "适合通用观察 Agent、综合复习课和需要定向补弱的能力。",
+    caution: "范围最大,如果任务只关心语法或表达缺口,优先选更窄的 scope。",
+  },
+  weak_grammar: {
+    source: "SQLite 中最近仍薄弱的语法和错误模式。",
+    use: "适合语法专项、错误模式归纳、面试前语言体检。",
+    caution: "它不包含普通词汇和表达缺口,不要用它做全量学习报告。",
+  },
+  expression_gaps: {
+    source: "Tutor 从母语/混说输入里识别出的“想说但说不出”。",
+    use: "适合做场景表达训练、可复用句型课、真实意图改写。",
+    caution: "这是意图层数据,不要把每个 gap 都当成用户已经学会的表达。",
+  },
+  today_turns: {
+    source: "最近 24 小时或当天的对话、回复和批改摘要。",
+    use: "适合今日复盘、课后总结和根据刚练过内容继续出题。",
+    caution: "它偏近期,不代表长期薄弱排序。",
+  },
+  due_review: {
+    source: "代码按薄弱程度和久未出现程度选出的复习候选。",
+    use: "适合复习课、热身题和对话里自然插入旧知识。",
+    caution: "这是候选列表,Agent 应该自然使用,不要机械逐条念完。",
+  },
+  proficiency: {
+    source: "代码根据最近表现推断的难度校准。",
+    use: "适合控制题目难度、语速、解释深度和目标语言比例。",
+    caution: "它是粗粒度读数,不能替代具体 mastery item。",
+  },
+};
+
 const DESIGN_RULES = [
   "先写清楚入口:每轮自动、选中文字、回复按钮、衍生新对话,还是专项课。",
   "再定义读取范围:profile、薄弱项、表达缺口、今日对话、复习候选或熟练项。",
@@ -145,14 +199,16 @@ function InfoCard({ item }: { item: OverviewItem }) {
 function Section({
   title,
   intro,
+  id,
   children,
 }: {
   title: string;
   intro?: string;
+  id?: string;
   children: ReactNode;
 }) {
   return (
-    <section className="border-t py-5">
+    <section id={id} className="scroll-mt-16 border-t py-5">
       <h3 className="m-0 text-ui-body font-semibold">{title}</h3>
       {intro && (
         <p className="mt-1 mb-3 max-w-3xl text-ui-body leading-relaxed text-ui-muted">
@@ -165,6 +221,20 @@ function Section({
 }
 
 export function AppDesignView() {
+  useEffect(() => {
+    if (window.location.hash !== `#${APP_DESIGN_DATA_SCOPES_HASH}`) return;
+    requestAnimationFrame(() => {
+      document
+        .getElementById(APP_DESIGN_DATA_SCOPES_HASH)
+        ?.scrollIntoView({ block: "start" });
+      window.history.replaceState(
+        null,
+        "",
+        `${window.location.pathname}${window.location.search}`,
+      );
+    });
+  }, []);
+
   return (
     <div className="flex h-full max-w-5xl flex-col overflow-y-auto px-6 pt-14 pb-6">
       <div className="mb-5 flex items-start gap-3">
@@ -226,6 +296,52 @@ export function AppDesignView() {
           {STORAGE_ITEMS.map((item) => (
             <InfoCard key={item.title} item={item} />
           ))}
+        </div>
+      </Section>
+
+      <Section
+        id={APP_DESIGN_DATA_SCOPES_HASH}
+        title="可读数据范围"
+        intro="创建自定义 Agent 时选择的“可读数据”,决定它能看到哪些学习上下文。范围越窄越容易稳定;范围越宽越适合综合总结。"
+      >
+        <p className="mt-0 mb-3 rounded-md bg-muted px-3 py-2 text-ui-caption leading-relaxed text-ui-muted">
+          此外,自定义 Agent 始终能看到当前输入和必要的近期上下文;下面这些 scope
+          是额外注入的学习数据。
+        </p>
+        <div className="grid gap-3 md:grid-cols-2">
+          {LEARNING_DATA_SCOPES.map((scope) => {
+            const label = DATA_SCOPE_LABELS[scope];
+            const name = label.split(":")[0];
+            const desc = label.replace(`${name}:`, "").trim();
+            const detail = DATA_SCOPE_DETAILS[scope];
+            return (
+              <div key={scope} className="rounded-lg border bg-card p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-medium text-ui-body">{name}</span>
+                  <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-ui-caption text-ui-muted">
+                    {scope}
+                  </span>
+                </div>
+                <p className="mt-1 mb-2 text-ui-body leading-relaxed text-ui-muted">
+                  {desc}
+                </p>
+                <dl className="m-0 grid gap-1 text-ui-caption leading-relaxed">
+                  <div>
+                    <dt className="inline text-ui-muted">来源: </dt>
+                    <dd className="inline text-foreground">{detail.source}</dd>
+                  </div>
+                  <div>
+                    <dt className="inline text-ui-muted">适合: </dt>
+                    <dd className="inline text-foreground">{detail.use}</dd>
+                  </div>
+                  <div>
+                    <dt className="inline text-ui-muted">注意: </dt>
+                    <dd className="inline text-foreground">{detail.caution}</dd>
+                  </div>
+                </dl>
+              </div>
+            );
+          })}
         </div>
       </Section>
 

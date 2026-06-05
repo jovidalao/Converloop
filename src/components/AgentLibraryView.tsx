@@ -38,6 +38,7 @@ import {
   setAgentEnabled,
   setBuiltinAgentOverride,
 } from "../runtime";
+import { APP_DESIGN_DATA_SCOPES_HASH } from "./AppDesignView";
 import { useConfirm } from "./confirm";
 import type { MainView } from "./Sidebar";
 import { Button } from "./ui/button";
@@ -400,7 +401,6 @@ export function AgentLibraryView({
     useState<LearningAgentWritebackPolicy>("none");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [tuneId, setTuneId] = useState<string | null>(null);
-  const [scopeHelpOpen, setScopeHelpOpen] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [packageText, setPackageText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -436,6 +436,11 @@ export function AgentLibraryView({
     setPrompt("");
     setScopes(["profile", "weak_all"]);
     setWritebackPolicy("none");
+  }
+
+  function openDataScopeGuide() {
+    window.location.hash = APP_DESIGN_DATA_SCOPES_HASH;
+    onOpenView?.("design");
   }
 
   async function startEdit(entryId: string) {
@@ -671,30 +676,11 @@ export function AgentLibraryView({
             </div>
             <button
               type="button"
-              className="flex items-center gap-1 self-start text-ui-caption text-ui-muted hover:text-foreground"
-              onClick={() => setScopeHelpOpen((v) => !v)}
+              className="self-start text-ui-caption text-ui-muted hover:text-foreground"
+              onClick={openDataScopeGuide}
             >
-              <ChevronDownIcon
-                size={13}
-                className={cn(
-                  "transition-transform",
-                  scopeHelpOpen && "rotate-180",
-                )}
-              />
-              这些数据是什么
+              数据范围怎么选？
             </button>
-            {scopeHelpOpen && (
-              <dl className="m-0 grid grid-cols-1 gap-1 rounded-md bg-muted px-2.5 py-2 text-ui-caption">
-                {scopes.map((scope) => (
-                  <div key={scope} className="text-ui-muted">
-                    {DATA_SCOPE_LABELS[scope]}
-                  </div>
-                ))}
-                <div className="mt-1 text-ui-muted">
-                  此外始终可读:当前输入 · 近期对话。
-                </div>
-              </dl>
-            )}
           </FormSection>
 
           {kind === "observer" && (
