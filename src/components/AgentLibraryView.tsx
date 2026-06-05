@@ -562,9 +562,14 @@ export function AgentLibraryView({
     setError(null);
     setMessage(null);
     try {
-      await importAgentPackage(packageText);
+      const result = await importAgentPackage(packageText, {
+        enableRuntimeAgents: true,
+        enableLessons: true,
+      });
       await refreshCatalog();
-      setMessage("包已导入并启用。");
+      setMessage(
+        `包已导入: ${result.runtimeSkillCount} 个技能、${result.lessonCount} 个专项课。`,
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -786,21 +791,22 @@ export function AgentLibraryView({
             size={15}
             className={cn("transition-transform", advancedOpen && "rotate-180")}
           />
-          高级 · Agent Package 导入导出
+          高级 · 分享包导入导出
         </button>
         {advancedOpen && (
           <div className="border-t px-3.5 py-3">
             <Textarea
               value={packageText}
               onChange={(e) => setPackageText(e.target.value)}
-              placeholder="粘贴 lang-agent.agent-package JSON;导出包也会出现在这里。"
+              placeholder="粘贴 lang-agent.package JSON;旧的 lang-agent.agent-package 也兼容。导出包会出现在这里。"
               className="min-h-32 resize-y font-mono text-ui-caption leading-relaxed"
             />
             {packageReview && (
               <div className="mt-2 rounded-md bg-muted px-2.5 py-2 text-ui-caption leading-relaxed">
                 <div className="font-medium">{packageReview.name}</div>
                 <div className="text-ui-muted">
-                  读取: {packageReview.reads} · 写入: {packageReview.writes}
+                  {packageReview.itemSummary} · 读取: {packageReview.reads} ·
+                  写入: {packageReview.writes}
                 </div>
               </div>
             )}

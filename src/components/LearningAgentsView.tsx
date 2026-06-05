@@ -1,9 +1,22 @@
-import { ListChecksIcon, WandSparklesIcon } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import {
+  ChevronDownIcon,
+  DownloadIcon,
+  ListChecksIcon,
+  UploadIcon,
+  WandSparklesIcon,
+} from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  exportAgentPackage,
+  importAgentPackage,
+  reviewAgentPackage,
+} from "../agent-package";
 import {
   DATA_SCOPE_LABELS,
   LEARNING_DATA_SCOPES,
+  type LearningAgentMeta,
   type LearningDataScope,
+  listLearningAgents,
 } from "../db/learning-agents";
 import {
   type LearningProject,
@@ -31,17 +44,27 @@ export function LearningAgentsView({ onRefresh }: LearningAgentsViewProps) {
   const [projectRequest, setProjectRequest] = useState("");
   const [projectBusy, setProjectBusy] = useState(false);
   const [projects, setProjects] = useState<LearningProject[]>([]);
+  const [lessons, setLessons] = useState<LearningAgentMeta[]>([]);
+  const [packageText, setPackageText] = useState("");
+  const [packageBusy, setPackageBusy] = useState(false);
+  const [packageOpen, setPackageOpen] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const refreshProjects = useCallback(
-    () => listLearningProjects().then(setProjects),
+  const refreshLocalItems = useCallback(
+    () =>
+      Promise.all([listLearningProjects(), listLearningAgents()]).then(
+        ([projectRows, lessonRows]) => {
+          setProjects(projectRows);
+          setLessons(lessonRows);
+        },
+      ),
     [],
   );
 
   useEffect(() => {
-    void refreshProjects();
-  }, [refreshProjects]);
+    void refreshLocalItems();
+  }, [refreshLocalItems]);
 
   function reportError(e: unknown) {
     setError(
@@ -62,7 +85,7 @@ export function LearningAgentsView({ onRefresh }: LearningAgentsViewProps) {
     try {
       const result = await createLearningProjectFromGoal(text);
       setProjectRequest("");
-      await refreshProjects();
+      await refreshLocalItems();
       await onRefresh();
       setMessage(
         `已创建学习项目,并生成 ${result.createdLearningAgentIds.length} 个专项课。`,
@@ -83,6 +106,7 @@ export function LearningAgentsView({ onRefresh }: LearningAgentsViewProps) {
     try {
       await createCustomLearningAgentFromDescription(text);
       setLessonRequest("");
+      await refreshLocalItems();
       await onRefresh();
       setMessage(
         "已创建专项课。它已加入左侧「定制化学习」,可直接开始或在那里编辑。",
@@ -93,6 +117,52 @@ export function LearningAgentsView({ onRefresh }: LearningAgentsViewProps) {
       setLessonBusy(false);
     }
   }
+
+  async function exportLessonPackage(agentId: string) {
+    setError(null);
+    setMessage(null);
+    try {
+      const text = await exportAgentPackage(agentId);
+      setPackageText(text);
+      setPackageOpen(true);
+      setMessage("已导出到下方「导入/导出」里的包文本框。");
+    } catch (e) {
+      reportError(e);
+    }
+  }
+
+  async function importPackage() {
+    if (!packageText.trim() || packageBusy) return;
+    setPackageBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const result = await importAgentPackage(packageText, {
+        enableRuntimeAgents: true,
+        enableLessons: true,
+      });
+      await refreshLocalItems();
+      await onRefresh();
+      setMessage(
+        `包已导入: ${result.lessonCount} 个专项课、${result.runtimeSkillCount} 个技能。`,
+      );
+    } catch (e) {
+      reportError(e);
+    } finally {
+      setPackageBusy(false);
+    }
+  }
+
+  const packageReview = useMemo(() => {
+    if (!packageText.trim()) return null;
+    try {
+      return reviewAgentPackage(packageText);
+    } catch {
+      return null;
+    }
+  }, [packageText]);
+
+  const customLessons = lessons.filter((lesson) => !lesson.builtIn);
 
   return (
     <div className="flex h-full max-w-4xl flex-col overflow-y-auto px-6 pt-14 pb-6">
@@ -158,6 +228,82 @@ export function LearningAgentsView({ onRefresh }: LearningAgentsViewProps) {
           </div>
         </div>
       )}
+
+      <section className="mt-4 rounded-lg border bg-card">
+        <button
+          type="button"
+          className="flex w-full items-center gap-2 px-3.5 py-3 text-ui-body font-semibold"
+          onClick={() => setPackageOpen((v) => !v)}
+        >
+          <ChevronDownIcon
+            size={15}
+            className={packageOpen ? "rotate-180 transition-transform" : ""}
+          />
+          专项课导入/导出
+        </button>
+        {packageOpen && (
+          <div className="border-t px-3.5 py-3">
+            <div className="mb-2 text-ui-caption text-ui-muted">
+              分享包只包含
+              prompt、权限和课程结构,不包含你的学习数据、对话历史或密钥。
+            </div>
+            {customLessons.length > 0 && (
+              <div className="mb-3 grid gap-1.5">
+                {customLessons.map((lesson) => (
+                  <div
+                    key={lesson.id}
+                    className="flex items-center justify-between gap-2 rounded-md border bg-background px-2.5 py-2"
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate text-ui-body font-medium">
+                        {lesson.name}
+                      </div>
+                      <div className="truncate text-ui-caption text-ui-muted">
+                        {lesson.description}
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => void exportLessonPackage(lesson.id)}
+                    >
+                      <DownloadIcon size={14} />
+                      导出
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <Textarea
+              value={packageText}
+              onChange={(e) => setPackageText(e.target.value)}
+              placeholder="粘贴 lang-agent.package JSON。导出包也会出现在这里。"
+              className="min-h-32 resize-y font-mono text-ui-caption leading-relaxed"
+            />
+            {packageReview && (
+              <div className="mt-2 rounded-md bg-muted px-2.5 py-2 text-ui-caption leading-relaxed">
+                <div className="font-medium">{packageReview.name}</div>
+                <div className="text-ui-muted">
+                  {packageReview.itemSummary} · 读取: {packageReview.reads} ·
+                  写入: {packageReview.writes}
+                </div>
+              </div>
+            )}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="mt-2"
+              onClick={() => void importPackage()}
+              disabled={packageBusy || !packageText.trim() || !packageReview}
+            >
+              <UploadIcon size={14} />
+              {packageBusy ? "导入中…" : "导入包"}
+            </Button>
+          </div>
+        )}
+      </section>
 
       <div className="mt-4 rounded-lg border bg-card p-3">
         <div className="mb-2 text-ui-body font-semibold">自然语言创建</div>

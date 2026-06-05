@@ -72,4 +72,67 @@ describe("agent package", () => {
 
     expect(() => reviewAgentPackage(raw)).toThrow();
   });
+
+  it("validates and summarizes store-ready packages", () => {
+    const raw = JSON.stringify({
+      format: "lang-agent.package",
+      version: 1,
+      package: {
+        id: "com.example.interview-b1",
+        version: "0.1.0",
+        name: "B1 Interview Pack",
+        description: "Practice interview answers and follow-up lessons.",
+        tags: ["interview", "b1"],
+      },
+      items: [
+        {
+          type: "skill",
+          id: "answer-observer",
+          kind: "observer",
+          hook: "conversation.observe",
+          name: "Answer observer",
+          description: "Finds vague answers.",
+          prompt: "Watch for vague answers and suggest concrete rewrites.",
+          dataScopes: ["profile", "weak_all"],
+          allowedTools: ["read_learning_data"],
+          writebackPolicy: "propose_review_signals",
+        },
+        {
+          type: "lesson",
+          id: "star-lesson",
+          name: "STAR answer drill",
+          description: "Practice STAR answers.",
+          prompt: "Teach STAR interview answers through short drills.",
+          dataScopes: ["profile", "weak_all"],
+          allowedTools: ["read_learning_data"],
+          writebackPolicy: "none",
+        },
+        {
+          type: "course",
+          id: "interview-course",
+          title: "Interview course",
+          goal: "Prepare for frontend interviews.",
+          planMarkdown: "## Plan\nPractice answers, follow-ups, and questions.",
+          lessons: [
+            {
+              id: "follow-up-lesson",
+              name: "Follow-up questions",
+              description: "Practice concise follow-ups.",
+              prompt: "Run a follow-up question lesson.",
+              dataScopes: ["profile"],
+              allowedTools: ["read_learning_data"],
+              writebackPolicy: "none",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(reviewAgentPackage(raw)).toMatchObject({
+      name: "B1 Interview Pack",
+      kind: "package",
+      itemSummary: "1 个技能 · 2 个专项课 · 1 个课程项目",
+      writes: "可提出学习数据写入建议(需确认)",
+    });
+  });
 });

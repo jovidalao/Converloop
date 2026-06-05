@@ -100,6 +100,7 @@ export const learningAgent = sqliteTable("learning_agent", {
     .notNull()
     .default("none"),
   outputSchemaJson: text("output_schema_json"),
+  packageMetaJson: text("package_meta_json"),
   builtIn: integer("built_in").notNull().default(0),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),

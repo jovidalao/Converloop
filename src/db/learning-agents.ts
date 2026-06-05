@@ -54,6 +54,17 @@ export interface LearningAgentDraft {
   allowedTools?: LearningAgentTool[];
   writebackPolicy?: LearningAgentWritebackPolicy;
   outputSchema?: Record<string, unknown> | null;
+  packageMeta?: LearningAgentPackageMeta | null;
+}
+
+export interface LearningAgentPackageMeta {
+  format: string;
+  packageId: string;
+  packageVersion: string;
+  packageItemId: string;
+  sourceUrl?: string | null;
+  contentHash?: string | null;
+  installedAt: number;
 }
 
 export interface LearningAgentMeta extends LearningAgent {
@@ -64,6 +75,7 @@ export interface LearningAgentMeta extends LearningAgent {
   allowedTools: LearningAgentTool[];
   writebackPolicy: LearningAgentWritebackPolicy;
   outputSchema: Record<string, unknown> | null;
+  packageMeta: LearningAgentPackageMeta | null;
 }
 
 export const DATA_SCOPE_LABELS: Record<LearningDataScope, string> = {
@@ -301,6 +313,45 @@ function serializeOutputSchema(
   return schema ? JSON.stringify(schema) : null;
 }
 
+function parsePackageMeta(
+  json: string | null,
+): LearningAgentPackageMeta | null {
+  if (!json) return null;
+  try {
+    const raw = JSON.parse(json) as unknown;
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+    const meta = raw as Record<string, unknown>;
+    if (
+      typeof meta.format !== "string" ||
+      typeof meta.packageId !== "string" ||
+      typeof meta.packageVersion !== "string" ||
+      typeof meta.packageItemId !== "string" ||
+      typeof meta.installedAt !== "number"
+    ) {
+      return null;
+    }
+    return {
+      format: meta.format,
+      packageId: meta.packageId,
+      packageVersion: meta.packageVersion,
+      packageItemId: meta.packageItemId,
+      sourceUrl:
+        typeof meta.sourceUrl === "string" ? meta.sourceUrl : undefined,
+      contentHash:
+        typeof meta.contentHash === "string" ? meta.contentHash : undefined,
+      installedAt: meta.installedAt,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function serializePackageMeta(
+  meta: LearningAgentPackageMeta | null | undefined,
+): string | null {
+  return meta ? JSON.stringify(meta) : null;
+}
+
 function hydrate(row: LearningAgent): LearningAgentMeta {
   const kind = normalizeKind(row.kind);
   return {
@@ -311,6 +362,7 @@ function hydrate(row: LearningAgent): LearningAgentMeta {
     allowedTools: parseTools(row.allowedToolsJson),
     writebackPolicy: normalizeWritebackPolicy(row.writebackPolicy),
     outputSchema: parseOutputSchema(row.outputSchemaJson),
+    packageMeta: parsePackageMeta(row.packageMetaJson),
   };
 }
 
@@ -425,6 +477,7 @@ export async function createLearningAgent(
     allowedToolsJson: serializeTools(draft.allowedTools),
     writebackPolicy: normalizeWritebackPolicy(draft.writebackPolicy),
     outputSchemaJson: serializeOutputSchema(draft.outputSchema),
+    packageMetaJson: serializePackageMeta(draft.packageMeta),
     builtIn: 0,
     createdAt: now,
     updatedAt: now,
@@ -460,6 +513,8 @@ export async function updateLearningAgent(
     updates.writebackPolicy = normalizeWritebackPolicy(patch.writebackPolicy);
   if (patch.outputSchema !== undefined)
     updates.outputSchemaJson = serializeOutputSchema(patch.outputSchema);
+  if (patch.packageMeta !== undefined)
+    updates.packageMetaJson = serializePackageMeta(patch.packageMeta);
 
   await db.update(learningAgent).set(updates).where(eq(learningAgent.id, id));
 }

@@ -133,6 +133,9 @@ const ADD_LEARNING_AGENT_HOOK: &str =
 const ADD_LEARNING_AGENT_ENABLED: &str =
     "ALTER TABLE learning_agent ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1;";
 
+const ADD_LEARNING_AGENT_PACKAGE_META_JSON: &str =
+    "ALTER TABLE learning_agent ADD COLUMN package_meta_json TEXT;";
+
 const CREATE_AGENT_JOB: &str = "\
 CREATE TABLE IF NOT EXISTS agent_job (
     id          TEXT PRIMARY KEY NOT NULL,
@@ -462,6 +465,12 @@ pub fn run() {
             version: 32,
             description: "add_turn_exclude_from_context",
             sql: ADD_TURN_EXCLUDE_FROM_CONTEXT,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 33,
+            description: "add_learning_agent_package_meta_json",
+            sql: ADD_LEARNING_AGENT_PACKAGE_META_JSON,
             kind: MigrationKind::Up,
         },
     ];

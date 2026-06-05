@@ -2,23 +2,28 @@ import { z } from "zod";
 import {
   createLearningAgent,
   DATA_SCOPE_LABELS,
-  getLearningAgent,
   LEARNING_AGENT_TOOL_VALUES,
   LEARNING_AGENT_WRITEBACK_POLICY_VALUES,
   LEARNING_DATA_SCOPE_VALUES,
   type LearningAgentDraft,
   type LearningAgentKind,
   type LearningAgentMeta,
+  type LearningAgentPackageMeta,
   RUNTIME_AGENT_HOOK_VALUES,
 } from "./db/learning-agents";
+import { createLearningProject } from "./db/learning-projects";
 
-const FORMAT = "lang-agent.agent-package";
-const VERSION = 1;
+const LEGACY_FORMAT = "lang-agent.agent-package";
+const PACKAGE_FORMAT = "lang-agent.package";
+const FORMAT_VERSION = 1;
+const PACKAGE_SCHEMA_VERSION = 1;
 const PACKAGE_AGENT_KIND_VALUES = ["observer", "action"] as const;
 
-const AgentPackageSchema = z.object({
-  format: z.literal(FORMAT),
-  version: z.literal(VERSION),
+const PackageId = z.string().min(1).max(160);
+
+const LegacyAgentPackageSchema = z.object({
+  format: z.literal(LEGACY_FORMAT),
+  version: z.literal(FORMAT_VERSION),
   agent: z.object({
     name: z.string().min(1),
     description: z.string().min(1),
@@ -37,12 +42,180 @@ const AgentPackageSchema = z.object({
   }),
 });
 
-export type AgentPackage = z.infer<typeof AgentPackageSchema>;
+const PackageBaseItem = z.object({
+  id: PackageId,
+  name: z.string().min(1).max(80),
+  description: z.string().min(1).max(240),
+  prompt: z.string().min(1),
+  dataScopes: z.array(z.enum(LEARNING_DATA_SCOPE_VALUES)).default([]),
+  allowedTools: z.array(z.enum(LEARNING_AGENT_TOOL_VALUES)).default([]),
+  writebackPolicy: z
+    .enum(LEARNING_AGENT_WRITEBACK_POLICY_VALUES)
+    .default("none"),
+  outputSchema: z.record(z.unknown()).nullable().optional(),
+  examples: z.array(z.unknown()).default([]),
+});
+
+const SkillPackageItemSchema = PackageBaseItem.extend({
+  type: z.literal("skill"),
+  kind: z.enum(PACKAGE_AGENT_KIND_VALUES),
+  hook: z.enum(RUNTIME_AGENT_HOOK_VALUES).nullable().optional(),
+});
+
+const LessonPackageItemSchema = PackageBaseItem.extend({
+  type: z.literal("lesson"),
+});
+
+const CourseLessonSchema = PackageBaseItem.omit({ id: true }).extend({
+  id: PackageId,
+});
+
+const CoursePackageItemSchema = z.object({
+  type: z.literal("course"),
+  id: PackageId,
+  title: z.string().min(1).max(120),
+  goal: z.string().min(1).max(500),
+  description: z.string().max(500).optional(),
+  planMarkdown: z.string().min(1),
+  notesMarkdown: z.string().optional(),
+  lessons: z.array(CourseLessonSchema).min(1).max(20),
+});
+
+const SharePackageItemSchema = z.discriminatedUnion("type", [
+  SkillPackageItemSchema,
+  LessonPackageItemSchema,
+  CoursePackageItemSchema,
+]);
+
+const SharePackageSchema = z.object({
+  format: z.literal(PACKAGE_FORMAT),
+  version: z.literal(FORMAT_VERSION),
+  package: z.object({
+    id: PackageId,
+    version: z.string().min(1).max(40).default("0.1.0"),
+    name: z.string().min(1).max(120),
+    description: z.string().min(1).max(500),
+    author: z.string().max(120).optional(),
+    license: z.string().max(80).optional(),
+    homepage: z.string().max(300).optional(),
+    tags: z.array(z.string().min(1).max(40)).default([]),
+    targetLanguages: z.array(z.string().min(1).max(40)).default([]),
+    nativeLanguages: z.array(z.string().min(1).max(40)).default([]),
+    levels: z.array(z.string().min(1).max(20)).default([]),
+  }),
+  compatibility: z
+    .object({
+      schemaVersion: z
+        .literal(PACKAGE_SCHEMA_VERSION)
+        .default(PACKAGE_SCHEMA_VERSION),
+      minAppVersion: z.string().max(40).optional(),
+    })
+    .default({ schemaVersion: PACKAGE_SCHEMA_VERSION }),
+  items: z.array(SharePackageItemSchema).min(1).max(50),
+});
+
+export type AgentPackage = z.infer<typeof LegacyAgentPackageSchema>;
+export type ShareAgentPackage = z.infer<typeof SharePackageSchema>;
+export type SharePackageItem = ShareAgentPackage["items"][number];
+
+export interface AgentPackageReview {
+  name: string;
+  kind: LearningAgentKind | "package";
+  reads: string;
+  writes: string;
+  itemSummary: string;
+  runtimeSkillCount: number;
+  lessonCount: number;
+  courseCount: number;
+}
+
+export interface ImportAgentPackageOptions {
+  enableRuntimeAgents?: boolean;
+  enableLessons?: boolean;
+  sourceUrl?: string | null;
+}
+
+export interface ImportAgentPackageResult {
+  createdAgentIds: string[];
+  createdProjectIds: string[];
+  runtimeSkillCount: number;
+  lessonCount: number;
+  courseCount: number;
+}
 
 function hookForKind(kind: LearningAgentKind): AgentPackage["agent"]["hook"] {
   if (kind === "observer") return "conversation.observe";
   if (kind === "action") return "conversation.action";
   return null;
+}
+
+function slug(input: string): string {
+  const clean = input
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return clean || "package";
+}
+
+async function sha256Hex(input: string): Promise<string | null> {
+  const subtle = globalThis.crypto?.subtle;
+  if (!subtle) return null;
+  const bytes = new TextEncoder().encode(input);
+  const digest = await subtle.digest("SHA-256", bytes);
+  return [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+function scopeLabels(scopes: readonly string[]): string {
+  const labels = scopes
+    .filter(
+      (scope): scope is keyof typeof DATA_SCOPE_LABELS =>
+        scope in DATA_SCOPE_LABELS,
+    )
+    .map((scope) => DATA_SCOPE_LABELS[scope].split(":")[0]);
+  return [...new Set(labels)].join(" / ") || "无学习数据";
+}
+
+function writePolicyLabel(policies: readonly string[]): string {
+  return policies.includes("propose_review_signals")
+    ? "可提出学习数据写入建议(需确认)"
+    : "不写学习数据";
+}
+
+function itemCounts(items: readonly SharePackageItem[]) {
+  let runtimeSkillCount = 0;
+  let lessonCount = 0;
+  let courseCount = 0;
+  for (const item of items) {
+    if (item.type === "skill") runtimeSkillCount += 1;
+    if (item.type === "lesson") lessonCount += 1;
+    if (item.type === "course") {
+      courseCount += 1;
+      lessonCount += item.lessons.length;
+    }
+  }
+  return { runtimeSkillCount, lessonCount, courseCount };
+}
+
+function packageMeta(input: {
+  format: string;
+  packageId: string;
+  packageVersion: string;
+  packageItemId: string;
+  sourceUrl?: string | null;
+  contentHash?: string | null;
+}): LearningAgentPackageMeta {
+  return {
+    format: input.format,
+    packageId: input.packageId,
+    packageVersion: input.packageVersion,
+    packageItemId: input.packageItemId,
+    sourceUrl: input.sourceUrl ?? null,
+    contentHash: input.contentHash ?? null,
+    installedAt: Date.now(),
+  };
 }
 
 export function defaultAgentOutputSchema(
@@ -113,70 +286,309 @@ export function defaultAgentOutputSchema(
   return null;
 }
 
-function packageFromAgent(agent: LearningAgentMeta): AgentPackage {
-  if (agent.kind === "lesson") throw new Error("专项课暂不支持从能力库导出包");
-  const kind = agent.kind;
+function itemFromAgent(agent: LearningAgentMeta): SharePackageItem {
+  const base = {
+    id: agent.packageMeta?.packageItemId ?? slug(agent.name),
+    name: agent.name,
+    description: agent.description,
+    prompt: agent.prompt,
+    dataScopes: agent.dataScopes,
+    allowedTools: agent.allowedTools,
+    writebackPolicy: agent.writebackPolicy,
+    outputSchema: agent.outputSchema ?? defaultAgentOutputSchema(agent.kind),
+    examples: [],
+  };
+  if (agent.kind === "lesson") {
+    return { ...base, type: "lesson" };
+  }
   return {
-    format: FORMAT,
-    version: VERSION,
-    agent: {
+    ...base,
+    type: "skill",
+    kind: agent.kind,
+    hook: agent.hook ?? hookForKind(agent.kind),
+  };
+}
+
+function packageFromAgent(agent: LearningAgentMeta): ShareAgentPackage {
+  const packageId =
+    agent.packageMeta?.packageId ?? `local.${slug(agent.name)}.${agent.id}`;
+  const packageVersion = agent.packageMeta?.packageVersion ?? "0.1.0";
+  return {
+    format: PACKAGE_FORMAT,
+    version: FORMAT_VERSION,
+    package: {
+      id: packageId,
+      version: packageVersion,
       name: agent.name,
       description: agent.description,
-      kind,
-      hook: agent.hook ?? hookForKind(kind),
-      dataScopes: agent.dataScopes,
-      allowedTools: agent.allowedTools,
-      writebackPolicy: agent.writebackPolicy,
+      tags: agent.kind === "lesson" ? ["lesson"] : ["skill", agent.kind],
+      targetLanguages: [],
+      nativeLanguages: [],
+      levels: [],
     },
-    files: {
-      "prompt.md": agent.prompt,
-      "schema.json": agent.outputSchema ?? defaultAgentOutputSchema(kind),
-      "examples.json": [],
-    },
+    compatibility: { schemaVersion: PACKAGE_SCHEMA_VERSION },
+    items: [itemFromAgent(agent)],
   };
 }
 
 export async function exportAgentPackage(agentId: string): Promise<string> {
+  const { getLearningAgent } = await import("./db/learning-agents");
   const agent = await getLearningAgent(agentId);
   if (!agent) throw new Error("找不到这个 Agent");
   return JSON.stringify(packageFromAgent(agent), null, 2);
 }
 
-export function reviewAgentPackage(raw: string): {
-  name: string;
-  kind: LearningAgentKind;
-  reads: string;
-  writes: string;
-} {
-  const parsed = AgentPackageSchema.parse(JSON.parse(raw));
+function reviewLegacy(raw: string): AgentPackageReview {
+  const parsed = LegacyAgentPackageSchema.parse(JSON.parse(raw));
   return {
     name: parsed.agent.name,
     kind: parsed.agent.kind,
-    reads:
-      parsed.agent.dataScopes
-        .map((scope) => DATA_SCOPE_LABELS[scope].split(":")[0])
-        .join(" / ") || "无学习数据",
-    writes:
-      parsed.agent.writebackPolicy === "propose_review_signals"
-        ? "可提出学习数据写入建议(需确认)"
-        : "不写学习数据",
+    reads: scopeLabels(parsed.agent.dataScopes),
+    writes: writePolicyLabel([parsed.agent.writebackPolicy]),
+    itemSummary: "1 个技能",
+    runtimeSkillCount: 1,
+    lessonCount: 0,
+    courseCount: 0,
   };
 }
 
-export async function importAgentPackage(raw: string): Promise<string> {
-  const parsed = AgentPackageSchema.parse(JSON.parse(raw));
-  const kind = parsed.agent.kind;
-  const draft: LearningAgentDraft = {
-    name: parsed.agent.name,
-    description: parsed.agent.description,
-    prompt: parsed.files["prompt.md"],
-    kind,
-    hook: parsed.agent.hook ?? hookForKind(kind),
-    dataScopes: parsed.agent.dataScopes,
-    allowedTools: parsed.agent.allowedTools,
-    writebackPolicy: parsed.agent.writebackPolicy,
-    outputSchema: parsed.files["schema.json"] ?? null,
-    enabled: true,
+function reviewShare(raw: string): AgentPackageReview {
+  const parsed = SharePackageSchema.parse(JSON.parse(raw));
+  const counts = itemCounts(parsed.items);
+  const scopes: string[] = [];
+  const policies: string[] = [];
+  for (const item of parsed.items) {
+    if (item.type === "course") {
+      for (const lesson of item.lessons) {
+        scopes.push(...lesson.dataScopes);
+        policies.push(lesson.writebackPolicy);
+      }
+      continue;
+    }
+    scopes.push(...item.dataScopes);
+    policies.push(item.writebackPolicy);
+  }
+  const parts = [
+    counts.runtimeSkillCount ? `${counts.runtimeSkillCount} 个技能` : null,
+    counts.lessonCount ? `${counts.lessonCount} 个专项课` : null,
+    counts.courseCount ? `${counts.courseCount} 个课程项目` : null,
+  ].filter(Boolean);
+  return {
+    name: parsed.package.name,
+    kind: "package",
+    reads: scopeLabels(scopes),
+    writes: writePolicyLabel(policies),
+    itemSummary: parts.join(" · ") || "空包",
+    ...counts,
   };
-  return createLearningAgent(draft);
+}
+
+export function reviewAgentPackage(raw: string): AgentPackageReview {
+  const json = JSON.parse(raw) as unknown;
+  const format =
+    json && typeof json === "object" && !Array.isArray(json)
+      ? (json as Record<string, unknown>).format
+      : null;
+  if (format === LEGACY_FORMAT) return reviewLegacy(raw);
+  return reviewShare(raw);
+}
+
+function draftFromSkill(
+  item: z.infer<typeof SkillPackageItemSchema>,
+  opts: {
+    enabled: boolean;
+    packageMeta: LearningAgentPackageMeta;
+  },
+): LearningAgentDraft {
+  return {
+    name: item.name,
+    description: item.description,
+    prompt: item.prompt,
+    kind: item.kind,
+    hook: item.hook ?? hookForKind(item.kind),
+    dataScopes: item.dataScopes,
+    allowedTools: item.allowedTools,
+    writebackPolicy: item.kind === "observer" ? item.writebackPolicy : "none",
+    outputSchema:
+      item.outputSchema ?? defaultAgentOutputSchema(item.kind) ?? null,
+    enabled: opts.enabled,
+    packageMeta: opts.packageMeta,
+  };
+}
+
+function draftFromLesson(
+  item:
+    | z.infer<typeof LessonPackageItemSchema>
+    | z.infer<typeof CourseLessonSchema>,
+  opts: {
+    enabled: boolean;
+    packageMeta: LearningAgentPackageMeta;
+  },
+): LearningAgentDraft {
+  return {
+    name: item.name,
+    description: item.description,
+    prompt: item.prompt,
+    kind: "lesson",
+    hook: null,
+    dataScopes: item.dataScopes,
+    allowedTools: item.allowedTools,
+    writebackPolicy: item.writebackPolicy,
+    outputSchema: item.outputSchema ?? null,
+    enabled: opts.enabled,
+    packageMeta: opts.packageMeta,
+  };
+}
+
+async function importLegacyPackage(
+  raw: string,
+  opts: ImportAgentPackageOptions,
+): Promise<ImportAgentPackageResult> {
+  const parsed = LegacyAgentPackageSchema.parse(JSON.parse(raw));
+  const contentHash = await sha256Hex(raw);
+  const packageId = `legacy.${slug(parsed.agent.name)}`;
+  const agentId = await createLearningAgent(
+    draftFromSkill(
+      {
+        type: "skill",
+        id: "agent",
+        name: parsed.agent.name,
+        description: parsed.agent.description,
+        prompt: parsed.files["prompt.md"],
+        kind: parsed.agent.kind,
+        hook: parsed.agent.hook,
+        dataScopes: parsed.agent.dataScopes,
+        allowedTools: parsed.agent.allowedTools,
+        writebackPolicy: parsed.agent.writebackPolicy,
+        outputSchema: parsed.files["schema.json"] ?? null,
+        examples: parsed.files["examples.json"],
+      },
+      {
+        enabled: opts.enableRuntimeAgents ?? true,
+        packageMeta: packageMeta({
+          format: LEGACY_FORMAT,
+          packageId,
+          packageVersion: String(parsed.version),
+          packageItemId: "agent",
+          sourceUrl: opts.sourceUrl,
+          contentHash,
+        }),
+      },
+    ),
+  );
+  return {
+    createdAgentIds: [agentId],
+    createdProjectIds: [],
+    runtimeSkillCount: 1,
+    lessonCount: 0,
+    courseCount: 0,
+  };
+}
+
+async function importSharePackage(
+  raw: string,
+  opts: ImportAgentPackageOptions,
+): Promise<ImportAgentPackageResult> {
+  const parsed = SharePackageSchema.parse(JSON.parse(raw));
+  const contentHash = await sha256Hex(raw);
+  const createdAgentIds: string[] = [];
+  const createdProjectIds: string[] = [];
+  let runtimeSkillCount = 0;
+  let lessonCount = 0;
+  let courseCount = 0;
+  const sourceUrl = opts.sourceUrl ?? parsed.package.homepage ?? null;
+
+  for (const item of parsed.items) {
+    if (item.type === "skill") {
+      const id = await createLearningAgent(
+        draftFromSkill(item, {
+          enabled: opts.enableRuntimeAgents ?? false,
+          packageMeta: packageMeta({
+            format: PACKAGE_FORMAT,
+            packageId: parsed.package.id,
+            packageVersion: parsed.package.version,
+            packageItemId: item.id,
+            sourceUrl,
+            contentHash,
+          }),
+        }),
+      );
+      createdAgentIds.push(id);
+      runtimeSkillCount += 1;
+      continue;
+    }
+
+    if (item.type === "lesson") {
+      const id = await createLearningAgent(
+        draftFromLesson(item, {
+          enabled: opts.enableLessons ?? true,
+          packageMeta: packageMeta({
+            format: PACKAGE_FORMAT,
+            packageId: parsed.package.id,
+            packageVersion: parsed.package.version,
+            packageItemId: item.id,
+            sourceUrl,
+            contentHash,
+          }),
+        }),
+      );
+      createdAgentIds.push(id);
+      lessonCount += 1;
+      continue;
+    }
+
+    const projectId = await createLearningProject({
+      title: item.title,
+      goal: item.goal,
+      planMd: item.planMarkdown,
+      notesMd: item.notesMarkdown ?? null,
+      sourcePrompt: `Imported package ${parsed.package.id}@${parsed.package.version}`,
+      taskPlan: {
+        packageId: parsed.package.id,
+        packageVersion: parsed.package.version,
+        packageItemId: item.id,
+      },
+    });
+    createdProjectIds.push(projectId);
+    courseCount += 1;
+
+    for (const lesson of item.lessons) {
+      const id = await createLearningAgent(
+        draftFromLesson(lesson, {
+          enabled: opts.enableLessons ?? true,
+          packageMeta: packageMeta({
+            format: PACKAGE_FORMAT,
+            packageId: parsed.package.id,
+            packageVersion: parsed.package.version,
+            packageItemId: `${item.id}/${lesson.id}`,
+            sourceUrl,
+            contentHash,
+          }),
+        }),
+      );
+      createdAgentIds.push(id);
+      lessonCount += 1;
+    }
+  }
+
+  return {
+    createdAgentIds,
+    createdProjectIds,
+    runtimeSkillCount,
+    lessonCount,
+    courseCount,
+  };
+}
+
+export async function importAgentPackage(
+  raw: string,
+  opts: ImportAgentPackageOptions = {},
+): Promise<ImportAgentPackageResult> {
+  const json = JSON.parse(raw) as unknown;
+  const format =
+    json && typeof json === "object" && !Array.isArray(json)
+      ? (json as Record<string, unknown>).format
+      : null;
+  if (format === LEGACY_FORMAT) return importLegacyPackage(raw, opts);
+  return importSharePackage(raw, opts);
 }
