@@ -59,20 +59,12 @@ import {
   touchConversation,
   truncateConversationFrom,
 } from "../db/conversations";
-import { getWeakList } from "../db/mastery";
 import {
   type ChatTurn,
   incrementBilingualCount,
   incrementExplainCount,
   loadChatHistory,
 } from "../db/turns";
-import {
-  applyMention,
-  filterMentions,
-  type MentionItem,
-  mentionQueryAt,
-  toMentionItem,
-} from "../lib/mentions";
 import { estimatePromptTokens } from "../lib/tokens";
 import { deriveTurnActivities, type TurnActivity } from "../lib/turn-activity";
 import {
@@ -98,7 +90,6 @@ import { AnnotationIsland } from "./AnnotationIsland";
 import { useConfirm } from "./confirm";
 import { InlineCorrection, UserSentence } from "./InlineCorrection";
 import { Markdown } from "./Markdown";
-import { MentionMenu } from "./MentionMenu";
 import { ReplyExplanation } from "./ReplyExplanation";
 import { remarkBilingual } from "./remark-bilingual";
 import { SlashMenu } from "./SlashMenu";
@@ -1245,55 +1236,6 @@ export function ChatView({
     setSlashSelected((s) => (s < slashCommands.length ? s : 0));
   }, [slashCommands.length]);
 
-  // 对话栏 @ 上下文:输入 @ 时弹出学习数据(弱项 / 表达缺口)菜单,选中把词条插回输入框。
-  // 纯输入层自动完成,不走隐藏上下文通道、不动 orchestrator。键盘导航同样在 textarea 拦截。
-  const [mentionItems, setMentionItems] = useState<MentionItem[] | null>(null);
-  const [mentionSelected, setMentionSelected] = useState(0);
-  const [mentionDismissed, setMentionDismissed] = useState(false);
-  const mentionQuery = useMemo(
-    () => mentionQueryAt(input, input.length),
-    [input],
-  );
-  // 首次出现 @ 时拉取弱项列表(只取一次,之后客户端过滤)。空列表也缓存,避免重复查询。
-  useEffect(() => {
-    if (mentionQuery !== null && mentionItems === null) {
-      void getWeakList(30).then((rows) =>
-        setMentionItems(rows.map(toMentionItem)),
-      );
-    }
-  }, [mentionQuery, mentionItems]);
-  const mentionMatches = useMemo(
-    () =>
-      mentionQuery !== null && !mentionDismissed && mentionItems
-        ? filterMentions(mentionItems, mentionQuery.token)
-        : [],
-    [mentionQuery, mentionDismissed, mentionItems],
-  );
-  const mentionOpen = mentionMatches.length > 0;
-
-  // 退出 @ 语境(无 token)后清掉「Esc 关闭」标记,下次再输入 @ 可重新弹出。
-  useEffect(() => {
-    if (mentionQuery === null && mentionDismissed) setMentionDismissed(false);
-  }, [mentionQuery, mentionDismissed]);
-
-  // 过滤结果变化后选中项夹回 0。
-  useEffect(() => {
-    setMentionSelected((s) => (s < mentionMatches.length ? s : 0));
-  }, [mentionMatches.length]);
-
-  // 选中 @ 条目:替换光标前的 @token 为词条文本(末尾补空格),光标落到其后。
-  function activateMention(item: MentionItem) {
-    const result = applyMention(input, input.length, item);
-    if (!result) return;
-    setInput(result.value);
-    requestAnimationFrame(() => {
-      const el = inputRef.current;
-      if (!el) return;
-      el.focus();
-      el.setSelectionRange(result.caret, result.caret);
-    });
-  }
-
   // 输入框随内容增高,最多三行,超过后内部滚动。
   // biome-ignore lint/correctness/useExhaustiveDependencies: input is the intentional trigger; the effect reads inputRef after it changes, not input directly
   useEffect(() => {
@@ -1961,14 +1903,6 @@ export function ChatView({
               onActivate={activateSlashCommand}
             />
           )}
-          {mentionOpen && (
-            <MentionMenu
-              items={mentionMatches}
-              selected={mentionSelected}
-              onHover={setMentionSelected}
-              onActivate={activateMention}
-            />
-          )}
           <div className="overflow-hidden rounded-[var(--radius-panel)] border bg-card shadow-minimal transition-colors">
             <form
               className="flex flex-col"
@@ -2016,36 +1950,6 @@ export function ChatView({
                       return;
                     }
                   }
-                  if (mentionOpen && !e.nativeEvent.isComposing) {
-                    if (e.key === "ArrowDown") {
-                      e.preventDefault();
-                      setMentionSelected(
-                        (s) => (s + 1) % mentionMatches.length,
-                      );
-                      return;
-                    }
-                    if (e.key === "ArrowUp") {
-                      e.preventDefault();
-                      setMentionSelected(
-                        (s) =>
-                          (s - 1 + mentionMatches.length) %
-                          mentionMatches.length,
-                      );
-                      return;
-                    }
-                    if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey)) {
-                      e.preventDefault();
-                      const it = mentionMatches[mentionSelected];
-                      if (it) activateMention(it);
-                      return;
-                    }
-                    if (e.key === "Escape") {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setMentionDismissed(true);
-                      return;
-                    }
-                  }
                   if (
                     e.key === "Enter" &&
                     !e.shiftKey &&
@@ -2059,7 +1963,7 @@ export function ChatView({
                 placeholder={
                   learningMode
                     ? "问老师、回答练习，母语/目标语言都可以…"
-                    : "用目标语言输入一句话…（/ 命令 · @ 引用学习点）"
+                    : "用目标语言输入一句话…（/ 命令）"
                 }
                 disabled={replyBusy}
                 className="max-h-[6.5rem] min-h-14 min-w-0 resize-none border-none bg-transparent px-4 pt-3 pb-2 text-ui-chat outline-none placeholder:text-muted-foreground"

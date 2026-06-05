@@ -8,7 +8,6 @@ export type AppActionId =
   | "focus-coach"
   | "shortcuts"
   | "slash-command"
-  | "mention-menu"
   | "dismiss";
 
 export interface AppAction {
@@ -81,7 +80,6 @@ export const APP_ACTIONS: AppAction[] = [
     ariaKeyshortcuts: "Meta+/",
   },
   { id: "slash-command", label: "输入命令", keys: ["/"] },
-  { id: "mention-menu", label: "引用学习上下文", keys: ["@"] },
   { id: "dismiss", label: "关闭菜单或弹窗", keys: ["Esc"] },
 ];
 

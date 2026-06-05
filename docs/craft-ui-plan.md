@@ -20,7 +20,7 @@
 - Phase 1:Craft 式 6 色语义 token、混合层级、shadow / z-index / panel radius。
 - Phase 2:`EntityRow` / `EntitySection` 与丝滑 Sidebar。
 - Phase 3:`TurnCard`、`lib/turn-activity.ts`、活动折叠行、思考指示与滚动渐变遮罩。
-- Phase 4:输入区控制台、active option badges、`@` 学习上下文菜单与 `/` 菜单统一。
+- Phase 4:输入区控制台、active option badges 与 `/` 命令菜单。
 - Phase 5:`AnnotationIsland` 选区浮岛,支持解析、朗读、加入生词,并保留选区。
 - Phase 6:Coach Inspector tab 化,对齐本轮反馈、学习记忆、自定义观察、待确认记忆。
 - Phase 7:全局快捷键元数据、`Cmd+1/2/3` 聚焦 panel、快捷键弹窗、带耗时的 processing indicator。
@@ -188,15 +188,15 @@ craft 的输入区不是普通 textarea,而是一个带工具条的控制台:权
 要迁移到 lang-agent:
 
 - 输入框上方显示 active option badges:当前模式、难度、角色、专项课、复习上下文。
-- `@` 唤起上下文菜单:弱项、今日复习、表达缺口、专项课、学习项目、能力。
-- `/` 继续承接 slash commands,但视觉上与 `@` 菜单统一。
+- 学习上下文优先通过 active option badges、选区浮岛和专项课入口承接。
+- `/` 继续承接 slash commands。
 - 会话调节如难度、角色、场景不只藏在顶栏「衍生新对话」里,也能成为输入区 badge。
 - structured prompt 用输入区内嵌状态承接,少用突兀 modal。
 
 验收:
 
 - 用户一眼知道本轮输入会带哪些学习上下文。
-- `@` 和 `/` 的菜单可键盘操作。
+- `/` 菜单可键盘操作。
 - 输入区高度变化有动画,不会挤压聊天造成跳动。
 
 ### 8. 选区浮岛
@@ -320,14 +320,14 @@ craft 的精致感来自很多一致的小动作:
 改动:
 
 - 输入区上方加 active option badges。
-- `@` 菜单接学习上下文、专项课、能力。
-- `/` 菜单视觉统一。
+- 学习上下文通过 active option badges、选区浮岛和专项课入口承接。
+- `/` 菜单保持键盘优先。
 - 将难度、角色、场景、复习上下文做成可见 badge。
 - 输入区 height transition 和 structured state 统一。
 
 验证:
 
-- 用户可以只用键盘选择上下文并发送。
+- 用户可以只用键盘选择命令并发送。
 - 现有 slash 行为不回退。
 
 ### Phase 5 - Annotation Island
