@@ -179,4 +179,22 @@ describe("anthropic REST alignment", () => {
     );
     expect(body.max_tokens).toBe(8192);
   });
+
+  it("keeps temperature for models that support sampling params", () => {
+    const body = buildAnthropicRequestBody(
+      cfg,
+      { messages: [{ role: "user", content: "x" }], temperature: 0.3 },
+      false,
+    );
+    expect(body.temperature).toBe(0.3);
+  });
+
+  it("omits temperature for Claude Opus 4.8", () => {
+    const body = buildAnthropicRequestBody(
+      { ...cfg, model: "claude-opus-4-8", oauth: true },
+      { messages: [{ role: "user", content: "x" }], temperature: 0.3 },
+      false,
+    );
+    expect(body.temperature).toBeUndefined();
+  });
 });

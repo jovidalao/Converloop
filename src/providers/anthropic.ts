@@ -67,6 +67,14 @@ export function toAnthropicMessages(messages: ChatMessage[]): {
 
 type Body = Record<string, unknown>;
 
+function modelRejectsSamplingParams(model: string): boolean {
+  const match = model
+    .toLowerCase()
+    .trim()
+    .match(/^claude-opus-4-(\d+)(?:\b|-)/);
+  return match ? Number.parseInt(match[1], 10) >= 7 : false;
+}
+
 /** 与官方 POST /v1/messages 请求体一致;供适配器与单测共用。 */
 export function buildAnthropicRequestBody(
   cfg: AnthropicConfig,
@@ -89,7 +97,12 @@ export function buildAnthropicRequestBody(
   } else if (system) {
     body.system = system;
   }
-  if (opts.temperature !== undefined) body.temperature = opts.temperature;
+  if (
+    opts.temperature !== undefined &&
+    !modelRejectsSamplingParams(cfg.model)
+  ) {
+    body.temperature = opts.temperature;
+  }
 
   if (opts.jsonSchema) {
     body.tools = [
