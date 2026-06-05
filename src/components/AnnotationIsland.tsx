@@ -6,19 +6,19 @@ import {
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 import {
   addSelectionToLearningData,
-  MissingApiKeyError,
   translateSelection,
 } from "../orchestrator";
 import { playSpeech, stopSpeech } from "../tts/playback";
-import { MissingTtsApiKeyError, speakText } from "../tts/speak";
+import { speakText } from "../tts/speak";
 import { Markdown } from "./Markdown";
 import { Spinner } from "./ui/spinner";
 
 interface Anchor {
-  left: number;
+  left: number; // 视口坐标:选区末尾
   top: number;
 }
 
@@ -26,14 +26,21 @@ interface Pick {
   selection: string;
   context: string;
   anchor: Anchor;
-  range: Range;
 }
 
-type IslandMode = "menu" | "analysis";
+type View = "actions" | "analysis";
+type Busy = "analysis" | "speak" | "save";
+type Status = { tone: "success" | "error"; text: string };
 
-const CARD_WIDTH = 360;
-const MENU_WIDTH = 292;
+const ISLAND_WIDTH = 320;
 
+function errText(e: unknown) {
+  return e instanceof Error ? e.message : String(e);
+}
+
+// 从当前选区取出:选中文字 + 所在「可解析块」整段文本 + 末尾视口坐标。
+// 选区必须落在 container 内、且祖先带 data-selectable-context(消息正文)才算数。
+// 只快照字符串,不持有 Range —— 动作都基于快照,无需回写 DOM 选区。
 function readPick(container: HTMLElement): Pick | null {
   const sel = window.getSelection();
   if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return null;
@@ -59,15 +66,7 @@ function readPick(container: HTMLElement): Pick | null {
     selection: text,
     context: (ctxEl.textContent || text).trim(),
     anchor: { left: last.right, top: last.bottom },
-    range: range.cloneRange(),
   };
-}
-
-function restoreSelection(range: Range) {
-  const sel = window.getSelection();
-  if (!sel) return;
-  sel.removeAllRanges();
-  sel.addRange(range);
 }
 
 function clampPosition(anchor: Anchor, width: number) {
@@ -96,10 +95,12 @@ function IslandButton({
     <button
       type="button"
       className={cn(
-        "inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-ui-caption font-medium transition-colors",
+        "inline-flex h-8 select-none items-center gap-1.5 rounded-md px-2.5 text-ui-caption font-medium transition-colors",
+        "focus-visible:outline-none focus-visible:ring-[1.5px] focus-visible:ring-ring",
+        "disabled:pointer-events-none disabled:opacity-40",
         active
           ? "bg-primary/10 text-primary"
-          : "text-ui-muted hover:bg-accent hover:text-foreground",
+          : "text-ui-muted hover:bg-accent hover:text-foreground active:bg-foreground-10",
       )}
       disabled={disabled}
       onMouseDown={(e) => e.preventDefault()}
@@ -111,44 +112,51 @@ function IslandButton({
   );
 }
 
-// Craft-style annotation island: select text in a message, then choose a
-// learning action without losing the selection. It deliberately shows observable
-// actions (analysis / read aloud / add to learning data), not model internals.
+// 划词浮动岛:在消息区选中词/句 → 浮出学习动作(解析 / 朗读 / 加入)。
+// 不暴露模型内部,只给可观察动作。挂在 ChatView 消息滚动区上,portal 到 body。
 export function AnnotationIsland({
   containerRef,
 }: {
   containerRef: RefObject<HTMLElement | null>;
 }) {
   const [pick, setPick] = useState<Pick | null>(null);
-  const [mode, setMode] = useState<IslandMode>("menu");
+  const [view, setView] = useState<View>("actions");
   const [result, setResult] = useState("");
-  const [message, setMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState<"analysis" | "speak" | "save" | null>(
-    null,
-  );
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [busy, setBusy] = useState<Busy | null>(null);
+  const [status, setStatus] = useState<Status | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
-  const genRef = useRef(0);
+  const genRef = useRef(0); // 作废在途的流式解析
 
   const dismiss = useCallback(() => {
     setPick(null);
-    setMode("menu");
+    setView("actions");
     setResult("");
-    setMessage(null);
-    setError(null);
-    setLoading(null);
+    setAnalysisError(null);
+    setStatus(null);
+    setBusy(null);
     genRef.current++;
-  }, []);
+    // 清掉残留高亮,否则点空白处虽 mousedown 已关闭,紧跟的 mouseup 又会把它当成
+    // 有效选区重开浮岛(需点两次)。但只清「消息区内」的选区 —— 绝不碰输入框等容器
+    // 外的选区/光标,否则会破坏 textarea 的输入与划选。
+    const sel = window.getSelection();
+    const container = containerRef.current;
+    const anchor = sel?.rangeCount
+      ? sel.getRangeAt(0).commonAncestorContainer
+      : null;
+    if (sel && anchor && container?.contains(anchor)) {
+      sel.removeAllRanges();
+    }
+  }, [containerRef]);
 
   const startAnalysis = useCallback(async () => {
     if (!pick) return;
-    restoreSelection(pick.range);
     const gen = ++genRef.current;
-    setMode("analysis");
+    setView("analysis");
     setResult("");
-    setMessage(null);
-    setError(null);
-    setLoading("analysis");
+    setAnalysisError(null);
+    setStatus(null);
+    setBusy("analysis");
     let acc = "";
     try {
       const text = await translateSelection(
@@ -162,63 +170,46 @@ export function AnnotationIsland({
       );
       if (genRef.current === gen) setResult(text);
     } catch (e) {
-      if (genRef.current !== gen) return;
-      setError(
-        e instanceof MissingApiKeyError
-          ? e.message
-          : e instanceof Error
-            ? e.message
-            : String(e),
-      );
+      if (genRef.current === gen) setAnalysisError(errText(e));
     } finally {
-      if (genRef.current === gen) setLoading(null);
+      if (genRef.current === gen) setBusy(null);
     }
   }, [pick]);
 
   async function speakSelection() {
-    if (!pick || loading) return;
-    restoreSelection(pick.range);
-    setMessage(null);
-    setError(null);
-    setLoading("speak");
+    if (!pick || busy) return;
+    setStatus(null);
+    setBusy("speak");
     try {
       stopSpeech();
       const audio = await speakText(pick.selection);
       await playSpeech(audio, pick.selection);
-      setMessage("正在朗读选中文本。");
+      setStatus({ tone: "success", text: "正在朗读选中文本" });
     } catch (e) {
-      setError(
-        e instanceof MissingTtsApiKeyError
-          ? e.message
-          : e instanceof Error
-            ? e.message
-            : String(e),
-      );
+      setStatus({ tone: "error", text: errText(e) });
     } finally {
-      setLoading(null);
+      setBusy(null);
     }
   }
 
   async function addToLearningData() {
-    if (!pick || loading) return;
-    restoreSelection(pick.range);
-    setMessage(null);
-    setError(null);
-    setLoading("save");
+    if (!pick || busy) return;
+    setStatus(null);
+    if (!pick.selection.trim()) {
+      setStatus({ tone: "error", text: "请选择包含文字或数字的内容" });
+      return;
+    }
+    setBusy("save");
     try {
-      if (!pick.selection.trim()) {
-        setError("请选择包含文字或数字的内容。");
-        return;
-      }
       const item = await addSelectionToLearningData(
         pick.selection,
         pick.context,
       );
-      setMessage(`已加入学习数据:${item.label}`);
+      setStatus({ tone: "success", text: `已加入学习数据:${item.label}` });
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setStatus({ tone: "error", text: errText(e) });
     } finally {
-      setLoading(null);
+      setBusy(null);
     }
   }
 
@@ -226,6 +217,7 @@ export function AnnotationIsland({
     const container = containerRef.current;
     if (!container) return;
 
+    // 选区结束:浮岛外的 mouseup 才重算选区。有有效新选区→以 actions 视图打开。
     function onMouseUp(e: MouseEvent) {
       if (rootRef.current?.contains(e.target as Node)) return;
       const next = container ? readPick(container) : null;
@@ -234,13 +226,15 @@ export function AnnotationIsland({
         return;
       }
       setPick(next);
-      setMode("menu");
+      setView("actions");
       setResult("");
-      setMessage(null);
-      setError(null);
-      setLoading(null);
+      setAnalysisError(null);
+      setStatus(null);
+      setBusy(null);
+      genRef.current++;
     }
 
+    // 浮岛外的 mousedown 立即关闭(含开始新一次选择)。岛内点击交给按钮处理。
     function onMouseDown(e: MouseEvent) {
       if (rootRef.current?.contains(e.target as Node)) return;
       dismiss();
@@ -266,105 +260,102 @@ export function AnnotationIsland({
 
   if (!pick) return null;
 
-  const width = mode === "analysis" ? CARD_WIDTH : MENU_WIDTH;
-  const position = clampPosition(pick.anchor, width);
+  const position = clampPosition(pick.anchor, ISLAND_WIDTH);
 
-  return (
+  // position: fixed 坐标取自 getClientRects() 的视口坐标。portal 到 body 让 fixed
+  // 相对视口定位 —— 否则祖先 .codex-main 的 backdrop-filter 会建立包含块,使浮岛偏移。
+  // 不做入场动画:opacity 渐入期间 WebKit 会临时停用 backdrop-filter,毛玻璃在深色
+  // 模式下会「先深后浅」闪一下;直接出现,材质从首帧即稳定。
+  return createPortal(
     <div
       ref={rootRef}
       role="dialog"
       aria-label="选区学习动作"
-      className="fixed z-50 animate-in fade-in-0 zoom-in-95 duration-150"
-      style={{ left: position.left, top: position.top, width }}
+      className="fixed z-[400]"
+      style={{ left: position.left, top: position.top, width: ISLAND_WIDTH }}
       onMouseDown={(e) => e.preventDefault()}
     >
-      <div className="overflow-hidden rounded-xl border bg-card shadow-modal-small">
-        <div className="flex items-center gap-1 border-b px-1.5 py-1.5">
+      {/* 半透明毛玻璃材质 + 柔和投影,贴近 macOS NSPopover 观感 */}
+      <div className="overflow-hidden rounded-xl border border-border/60 bg-popover/85 shadow-modal-small backdrop-blur-2xl backdrop-saturate-150 supports-[backdrop-filter]:bg-popover/75">
+        <div className="flex items-center gap-1 border-b border-border/60 px-1.5 py-1.5">
           <IslandButton
-            icon={
-              loading === "analysis" ? (
-                <Spinner className="size-3" />
-              ) : (
-                <LanguagesIcon size={14} />
-              )
-            }
+            icon={<LanguagesIcon size={14} />}
             label="解析"
-            active={mode === "analysis"}
-            disabled={loading !== null && loading !== "analysis"}
+            active={view === "analysis"}
+            disabled={busy !== null && busy !== "analysis"}
             onClick={() => void startAnalysis()}
           />
           <IslandButton
             icon={
-              loading === "speak" ? (
+              busy === "speak" ? (
                 <Spinner className="size-3" />
               ) : (
                 <Volume2Icon size={14} />
               )
             }
             label="朗读"
-            disabled={loading !== null && loading !== "speak"}
+            disabled={busy !== null && busy !== "speak"}
             onClick={() => void speakSelection()}
           />
           <IslandButton
             icon={
-              loading === "save" ? (
+              busy === "save" ? (
                 <Spinner className="size-3" />
               ) : (
                 <BookPlusIcon size={14} />
               )
             }
             label="加入"
-            disabled={loading !== null && loading !== "save"}
+            disabled={busy !== null && busy !== "save"}
             onClick={() => void addToLearningData()}
           />
           <button
             type="button"
-            className="ml-auto inline-flex size-7 items-center justify-center rounded-md text-ui-muted transition-colors hover:bg-accent hover:text-foreground"
+            className="ml-auto inline-flex size-7 select-none items-center justify-center rounded-md text-ui-muted transition-colors hover:bg-accent hover:text-foreground active:bg-foreground-10 focus-visible:outline-none focus-visible:ring-[1.5px] focus-visible:ring-ring"
             aria-label="关闭"
+            onMouseDown={(e) => e.preventDefault()}
             onClick={dismiss}
           >
             <XIcon size={14} />
           </button>
         </div>
 
-        <div className="px-3 py-2">
-          <div className="mb-1 truncate text-ui-caption font-medium text-ui-muted">
+        <div className="px-3 py-2.5">
+          <div className="select-none truncate text-ui-caption font-medium text-ui-muted">
             {pick.selection}
           </div>
-          {mode === "analysis" && (
-            <div className="max-h-[50vh] overflow-y-auto text-ui-body leading-relaxed text-foreground">
-              {error ? (
-                <p className="m-0 text-destructive" role="alert">
-                  {error}
+          {view === "analysis" && (
+            <div className="mt-2 max-h-[50vh] overflow-y-auto text-ui-body leading-relaxed text-foreground">
+              {analysisError ? (
+                <p className="m-0 text-destructive-text" role="alert">
+                  {analysisError}
                 </p>
               ) : result ? (
                 <Markdown>{result}</Markdown>
               ) : (
                 <span className="inline-flex items-center gap-2 text-ui-muted">
-                  <Spinner />
-                  正在解析…
+                  <Spinner className="size-3.5" />
+                  解析中…
                 </span>
               )}
             </div>
           )}
-          {mode === "menu" && (
-            <p className="m-0 text-ui-caption leading-snug text-ui-muted">
-              选择一个学习动作。浮岛关闭前会保留当前选区。
-            </p>
-          )}
-          {message && (
-            <p className="mt-2 mb-0 text-ui-caption text-success">{message}</p>
-          )}
-          {mode !== "analysis" && error && (
+          {status && (
             <p
-              className="mt-2 mb-0 text-ui-caption text-destructive"
-              role="alert"
+              className={cn(
+                "mt-2 mb-0 text-ui-caption",
+                status.tone === "success"
+                  ? "text-success-text"
+                  : "text-destructive-text",
+              )}
+              role={status.tone === "error" ? "alert" : undefined}
             >
-              {error}
+              {status.text}
             </p>
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
