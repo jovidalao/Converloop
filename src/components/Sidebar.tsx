@@ -443,20 +443,6 @@ export function Sidebar({
             className="codex-sidebar-pane"
             inert={!settingsMode || undefined}
           >
-            <div className="codex-sidebar-actions">
-              <button
-                type="button"
-                className="codex-sidebar-action"
-                onClick={onExitSettings}
-                aria-label="返回"
-              >
-                <span className="codex-sidebar-leading-icon">
-                  <ArrowLeftIcon className="size-4" />
-                </span>
-                <span>返回</span>
-              </button>
-            </div>
-
             <nav className="codex-sidebar-scroll">
               <div className="codex-section-label">设置内容</div>
               {renderSettingsItem(
@@ -492,6 +478,20 @@ export function Sidebar({
                 "档案",
               )}
             </nav>
+
+            <div className="codex-sidebar-footer">
+              <button
+                type="button"
+                className="codex-sidebar-action group"
+                onClick={onExitSettings}
+                aria-label="返回"
+              >
+                <span className="codex-sidebar-leading-icon">
+                  <ArrowLeftIcon className="size-4 text-ui-muted transition-transform group-hover:-translate-x-0.5" />
+                </span>
+                <span>返回</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
