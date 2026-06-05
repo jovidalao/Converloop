@@ -22,7 +22,7 @@ export const CATEGORY_LABEL: Record<Issue["category"], string> = {
 };
 
 export const SEVERITY_COLOR: Record<Issue["severity"], string> = {
-  minor: "text-muted-foreground",
+  minor: "text-ui-muted",
   moderate: "text-warning",
   major: "text-destructive",
 };
@@ -110,7 +110,7 @@ export function UserSentence({
     return (
       <span className="align-middle">
         <span
-          className="mr-1.5 inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-accent px-1.5 py-0.5 align-middle text-xs font-semibold leading-none text-primary"
+          className="mr-1.5 inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-accent px-1.5 py-0.5 align-middle text-ui-caption font-semibold leading-none text-primary"
           title="用母语/混说输入"
         >
           <LanguagesIcon size={12} />
@@ -183,7 +183,7 @@ export function InlineCorrection({
         {leading}
         {showPending && (
           <span
-            className="inline-flex items-center gap-1.5 px-0.5 py-0.5 text-sm text-muted-foreground"
+            className="inline-flex items-center gap-1.5 px-0.5 py-0.5 text-ui-body text-ui-muted"
             aria-live="polite"
           >
             <Spinner />
@@ -191,7 +191,7 @@ export function InlineCorrection({
           </span>
         )}
         {allCorrect && (
-          <span className="inline-flex items-center gap-1 px-1.5 py-1 text-xs text-success">
+          <span className="inline-flex items-center gap-1 px-1.5 py-1 text-ui-caption text-success">
             <CheckIcon size={14} />
             表达正确
           </span>
@@ -233,28 +233,28 @@ export function InlineCorrection({
           >
             <BookOpenIcon size={15} />
             语法详解
-            <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-background px-1 text-xs font-bold text-muted-foreground">
+            <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-background px-1 text-ui-caption font-bold text-ui-muted">
               {analysis?.issues.length ?? 0}
             </span>
           </Button>
         )}
         {compact && (gap || hasIssues || showProse) && (
-          <span className="px-1.5 py-1 text-xs text-muted-foreground">
+          <span className="px-1.5 py-1 text-ui-caption text-ui-muted">
             详见教练面板 →
           </span>
         )}
       </div>
 
       {gap && gapOpen && !compact && (
-        <div className="flex w-full animate-in flex-col gap-2.5 rounded-lg border bg-card p-3 text-sm leading-normal shadow-sm fade-in-0 slide-in-from-bottom-1 duration-200">
+        <div className="flex w-full animate-in flex-col gap-2.5 rounded-lg border bg-card p-3 text-ui-body leading-normal shadow-sm fade-in-0 slide-in-from-bottom-1 duration-200">
           <div className="flex flex-col gap-1">
-            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <span className="text-ui-caption font-semibold uppercase tracking-wide text-ui-muted">
               地道表达
             </span>
             <SpeakableText text={gap.target_expression} />
           </div>
           <div className="flex flex-col gap-1">
-            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <span className="text-ui-caption font-semibold uppercase tracking-wide text-ui-muted">
               讲解
             </span>
             <p className="m-0 leading-relaxed text-foreground">
@@ -263,7 +263,7 @@ export function InlineCorrection({
           </div>
           {gap.key_items.length > 0 && (
             <div className="flex flex-col gap-1">
-              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <span className="text-ui-caption font-semibold uppercase tracking-wide text-ui-muted">
                 关键词 / 句式
               </span>
               <div className="flex flex-wrap gap-1.5">
@@ -276,7 +276,7 @@ export function InlineCorrection({
                     <span className="font-semibold text-foreground">
                       {it.text}
                     </span>
-                    <span className="text-xs text-muted-foreground">
+                    <span className="text-ui-caption text-ui-muted">
                       {it.gloss}
                     </span>
                   </span>
@@ -285,7 +285,7 @@ export function InlineCorrection({
             </div>
           )}
           {gap.usage_note?.trim() && (
-            <p className="m-0 text-sm leading-snug text-muted-foreground">
+            <p className="m-0 text-ui-body leading-snug text-ui-muted">
               {gap.usage_note.trim()}
             </p>
           )}
@@ -293,7 +293,7 @@ export function InlineCorrection({
       )}
 
       {hasIssues && grammarOpen && analysis && !compact && (
-        <div className="w-full animate-in rounded-lg border bg-card p-3 text-sm shadow-sm fade-in-0 slide-in-from-bottom-1 duration-200">
+        <div className="w-full animate-in rounded-lg border bg-card p-3 text-ui-body shadow-sm fade-in-0 slide-in-from-bottom-1 duration-200">
           <ul className="m-0 flex list-none flex-col p-0">
             {analysis.issues.map((iss, i) => (
               <li
@@ -301,24 +301,24 @@ export function InlineCorrection({
                 className="border-t py-2.5 first:border-t-0 first:pt-0 last:pb-0"
               >
                 <div className="mb-1.5 flex items-center gap-1.5">
-                  <span className="rounded bg-accent px-1.5 py-0.5 text-xs font-semibold uppercase tracking-wide text-primary">
+                  <span className="rounded bg-accent px-1.5 py-0.5 text-ui-caption font-semibold uppercase tracking-wide text-primary">
                     {CATEGORY_LABEL[iss.category]}
                   </span>
                   <span
                     className={cn(
-                      "text-xs uppercase",
+                      "text-ui-caption uppercase",
                       SEVERITY_COLOR[iss.severity],
                     )}
                   >
                     {SEVERITY_LABEL[iss.severity]}
                   </span>
                 </div>
-                <p className="m-0 text-sm">
+                <p className="m-0 text-ui-body">
                   <del className="text-destructive line-through decoration-destructive">
                     {iss.span_original}
                   </del>
                   <span
-                    className="mx-1.5 text-xs text-muted-foreground"
+                    className="mx-1.5 text-ui-caption text-ui-muted"
                     aria-hidden
                   >
                     →
@@ -327,7 +327,7 @@ export function InlineCorrection({
                     {iss.span_corrected}
                   </ins>
                 </p>
-                <p className="mt-1.5 mb-0 text-sm leading-snug text-muted-foreground">
+                <p className="mt-1.5 mb-0 text-ui-body leading-snug text-ui-muted">
                   {iss.explanation}
                 </p>
               </li>
@@ -337,7 +337,7 @@ export function InlineCorrection({
       )}
 
       {showProse && !compact && (
-        <div className="w-full animate-in rounded-lg border bg-card p-3 text-sm shadow-sm fade-in-0 slide-in-from-bottom-1 duration-200">
+        <div className="w-full animate-in rounded-lg border bg-card p-3 text-ui-body shadow-sm fade-in-0 slide-in-from-bottom-1 duration-200">
           <pre className="m-0 whitespace-pre-wrap break-words font-sans text-foreground">
             {proseFeedback!.trim()}
           </pre>
@@ -346,7 +346,7 @@ export function InlineCorrection({
 
       {error && (
         <pre
-          className="m-0 max-w-full whitespace-pre-wrap break-words font-sans text-sm leading-snug text-destructive"
+          className="m-0 max-w-full whitespace-pre-wrap break-words font-sans text-ui-body leading-snug text-destructive"
           role="alert"
         >
           {error}

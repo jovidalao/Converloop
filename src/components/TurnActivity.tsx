@@ -41,7 +41,7 @@ export function ThinkingIndicator({
   return (
     <div
       className={cn(
-        "flex items-center gap-2 text-sm text-muted-foreground",
+        "flex items-center gap-2 text-ui-body text-ui-muted",
         className,
       )}
       role="status"
@@ -54,7 +54,7 @@ export function ThinkingIndicator({
       </span>
       <span className="animate-pulse">{message}</span>
       {elapsed >= 2 && (
-        <span className="rounded-full bg-foreground-10 px-1.5 py-0.5 text-[11px] tabular-nums text-muted-foreground/80">
+        <span className="rounded-full bg-foreground-10 px-1.5 py-0.5 text-ui-caption tabular-nums text-ui-muted">
           {elapsed}s
         </span>
       )}
@@ -86,7 +86,7 @@ export function TurnActivityRow({
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="-ml-1 flex w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-xs text-muted-foreground transition-colors hover:text-foreground"
+        className="-ml-1 flex w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-ui-caption text-ui-muted transition-colors hover:text-foreground"
       >
         <ChevronRightIcon
           className={cn(
@@ -101,7 +101,7 @@ export function TurnActivityRow({
           {activities.map((a, i) => (
             <li
               key={`${a.kind}:${i}`}
-              className="flex items-start gap-2 text-xs leading-snug"
+              className="flex items-start gap-2 text-ui-caption leading-snug"
             >
               <span
                 className={cn(
@@ -112,9 +112,7 @@ export function TurnActivityRow({
               <span className="min-w-0 flex-1">
                 <span className="font-medium text-foreground">{a.label}</span>
                 {a.preview && (
-                  <span className="ml-1.5 text-muted-foreground">
-                    {a.preview}
-                  </span>
+                  <span className="ml-1.5 text-ui-muted">{a.preview}</span>
                 )}
               </span>
             </li>

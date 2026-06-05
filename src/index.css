@@ -16,8 +16,7 @@
      destructive        错误 / 失败 / 删除 (red)
 
    shadcn-compat mapping onto this codebase's existing conventions:
-     --primary = brand  → drives bg-primary buttons, text-primary
-                          highlights, border-primary selected states.
+     --primary = brand  → drives primary buttons and semantic brand highlights.
      --accent  = neutral hover / selected surface (foreground-mix);
                  keeps shadcn's hover:bg-accent role, stays neutral.
    Derived layers use color-mix:
@@ -26,6 +25,14 @@
    ============================================================ */
 :root {
   --radius: 0.625rem;
+
+  /* === typography scale (Craft-style compact desktop UI) === */
+  --font-size-micro: 10px;
+  --font-size-caption: 11px;
+  --font-size-meta: 12px;
+  --font-size-body: 13px;
+  --font-size-chat: 15px;
+  --font-size-title: 16px;
 
   /* === 6 base colors === */
   --background: oklch(0.985 0.0025 286);
@@ -80,9 +87,9 @@
   --popover-foreground: var(--foreground);
   --border: var(--foreground-10);
   --input: var(--foreground-10);
-  /* 键盘焦点环跟随系统强调色(controlAccentColor),而非硬编码品牌色——原生 app 的焦点环
-     用的是用户在系统里选的强调色。品牌紫仍保留给主按钮等主动作。 */
-  --ring: AccentColor;
+  --ring: color-mix(in srgb, var(--foreground) 26%, transparent);
+  --ring-width: 1px;
+  --ring-offset: 0px;
 
   /* === shadows === */
   --shadow-border-opacity: 0.08;
@@ -171,7 +178,9 @@
   --popover-foreground: var(--foreground);
   --border: color-mix(in srgb, var(--foreground) 12%, transparent);
   --input: color-mix(in srgb, var(--foreground) 15%, transparent);
-  --ring: AccentColor;
+  --ring: color-mix(in srgb, var(--foreground) 30%, transparent);
+  --ring-width: 1px;
+  --ring-offset: 0px;
 
   /* === shadows (stronger in dark) === */
   --shadow-border-opacity: 0.15;
@@ -256,11 +265,45 @@
     /* 透明到底,露出 NSVisualEffect 毛玻璃(实际填充由各面板自己负责;主区不透明)。 */
     background: transparent;
   }
+  html {
+    font-size: 15px;
+  }
   body {
     @apply text-foreground;
     font-family: var(--font-sans);
-    /* 复选框/单选/进度条等原生控件跟随系统强调色(System Settings 里用户选的颜色)。 */
-    accent-color: auto;
+    accent-color: var(--foreground);
+  }
+  ::selection {
+    background: var(--foreground-20);
+    color: var(--foreground);
+  }
+  *:focus-visible {
+    outline: none;
+    --tw-ring-offset-width: var(--ring-offset);
+    --tw-ring-width: var(--ring-width);
+    --tw-ring-color: var(--ring);
+  }
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--foreground) 18%, transparent)
+      transparent;
+  }
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--foreground) 12%, transparent);
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in srgb, var(--foreground) 22%, transparent);
+    background-clip: padding-box;
   }
 }
 
@@ -293,6 +336,66 @@
     box-shadow:
       rgba(var(--shadow-color), calc(var(--shadow-border-opacity) * 3)) 0 0 0 1px;
   }
+
+  .text-ui-micro {
+    font-size: var(--font-size-micro);
+    line-height: 1.2;
+  }
+  .text-ui-caption {
+    font-size: var(--font-size-caption);
+    line-height: 1.25;
+  }
+  .text-ui-meta {
+    font-size: var(--font-size-meta);
+    line-height: 1.35;
+  }
+  .text-ui-body {
+    font-size: var(--font-size-body);
+    line-height: 1.45;
+  }
+  .text-ui-chat {
+    font-size: var(--font-size-chat);
+    line-height: 1.5;
+  }
+  .text-ui-title {
+    font-size: var(--font-size-title);
+    line-height: 1.35;
+  }
+  .text-ui-subtle {
+    color: var(--foreground-60);
+  }
+  .text-ui-muted {
+    color: var(--foreground-70);
+  }
+  .text-ui-secondary {
+    color: var(--foreground-80);
+  }
+  .ring-1,
+  .ring-2,
+  .ring-\[3px\],
+  .ring-4 {
+    --tw-ring-offset-shadow: var(--tw-ring-inset) 0 0 0
+      var(--tw-ring-offset-width) var(--tw-ring-offset-color);
+    --tw-ring-shadow: var(--tw-ring-inset) 0 0 0
+      calc(var(--ring-width) + var(--tw-ring-offset-width))
+      var(--tw-ring-color);
+    box-shadow:
+      var(--tw-ring-offset-shadow), var(--tw-ring-shadow),
+      var(--tw-shadow, 0 0 #0000);
+  }
+  .scrollbar-hover::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+  .scrollbar-hover::-webkit-scrollbar-thumb {
+    background: transparent;
+  }
+  .group:hover .scrollbar-hover::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--foreground) 14%, transparent);
+  }
+  .group:hover .scrollbar-hover::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in srgb, var(--foreground) 22%, transparent);
+  }
 }
 
 /* Tauri window-drag region (recommended attrs); interactive children opt out. */
@@ -316,32 +419,40 @@
 .codex-shell {
   --codex-topbar-h: 46px;
   --codex-sidebar-width-current: var(--sidebar-width);
-  --codex-coach-width: 340px;
+  --codex-coach-width: var(--coach-width, 360px);
   --codex-coach-width-current: 0px;
   --codex-main-bg: var(--background);
   --codex-main-material: color-mix(
     in srgb,
-    var(--codex-main-bg) 82%,
+    var(--codex-main-bg) 84%,
     transparent
   );
-  --codex-topbar-bg: oklch(0.985 0 0);
-  --codex-sidebar-bg: oklch(0.975 0 0);
-  --codex-sidebar-fg: oklch(0.22 0 0);
-  --codex-sidebar-muted: oklch(0.52 0 0);
-  --codex-sidebar-hover: oklch(0 0 0 / 5%);
-  --codex-sidebar-active: oklch(0 0 0 / 8%);
-  --codex-sidebar-active-fg: oklch(0.12 0 0);
-  --codex-border: oklch(0 0 0 / 10%);
-  --codex-titlebar-fg: oklch(0.2 0 0);
-  --codex-chrome-fg: oklch(0.52 0 0);
-  --codex-chrome-hover-fg: oklch(0.2 0 0);
-  --codex-chrome-hover-bg: oklch(0 0 0 / 6%);
-  --codex-row-meta-fg: oklch(0.52 0 0 / 72%);
-  --codex-row-action-hover-bg: oklch(0 0 0 / 6%);
-  --codex-sidebar-edit-border: oklch(0 0 0 / 12%);
-  --codex-sidebar-edit-bg: oklch(1 0 0);
-  --codex-sidebar-footer-border: oklch(0 0 0 / 8%);
-  --codex-sidebar-resizer-hover: oklch(0 0 0 / 6%);
+  --codex-topbar-bg: var(--background);
+  --codex-sidebar-bg: var(--background);
+  --codex-sidebar-fg: var(--foreground);
+  --codex-sidebar-muted: var(--foreground-80);
+  --codex-sidebar-hover: color-mix(in srgb, var(--foreground) 4%, transparent);
+  --codex-sidebar-active: color-mix(in srgb, var(--foreground) 7%, transparent);
+  --codex-sidebar-active-fg: var(--foreground);
+  --codex-border: var(--border);
+  --codex-titlebar-fg: var(--foreground);
+  --codex-chrome-fg: var(--foreground);
+  --codex-chrome-hover-fg: var(--foreground);
+  --codex-chrome-hover-bg: color-mix(in srgb, var(--foreground) 6%, transparent);
+  --codex-row-meta-fg: var(--foreground-70);
+  --codex-row-action-hover-bg: color-mix(
+    in srgb,
+    var(--foreground) 6%,
+    transparent
+  );
+  --codex-sidebar-edit-border: var(--foreground-20);
+  --codex-sidebar-edit-bg: color-mix(in srgb, var(--background) 70%, transparent);
+  --codex-sidebar-footer-border: var(--foreground-10);
+  --codex-sidebar-resizer-hover: color-mix(
+    in srgb,
+    var(--foreground) 6%,
+    transparent
+  );
 
   position: relative;
   display: grid;
@@ -358,48 +469,13 @@
   transition: grid-template-columns 0.22s cubic-bezier(0.2, 0, 0, 1);
 }
 .dark .codex-shell {
-  --codex-main-bg: oklch(0.145 0 0);
   --codex-main-material: color-mix(
     in srgb,
-    var(--codex-main-bg) 76%,
+    var(--codex-main-bg) 78%,
     transparent
   );
-  --codex-topbar-bg: oklch(0.15 0 0);
-  --codex-sidebar-bg: var(--codex-main-bg);
-  --codex-sidebar-fg: oklch(0.88 0 0);
-  --codex-sidebar-muted: oklch(0.72 0 0);
-  --codex-sidebar-hover: oklch(1 0 0 / 8%);
-  --codex-sidebar-active: oklch(1 0 0 / 13%);
-  --codex-sidebar-active-fg: oklch(0.96 0 0);
-  --codex-border: oklch(1 0 0 / 12%);
-  --codex-titlebar-fg: oklch(0.9 0 0);
-  --codex-chrome-fg: oklch(0.72 0 0);
-  --codex-chrome-hover-fg: oklch(0.9 0 0);
-  --codex-chrome-hover-bg: oklch(1 0 0 / 8%);
-  --codex-row-meta-fg: oklch(0.72 0 0 / 72%);
-  --codex-row-action-hover-bg: oklch(1 0 0 / 10%);
-  --codex-sidebar-edit-border: oklch(1 0 0 / 16%);
-  --codex-sidebar-edit-bg: oklch(0 0 0 / 18%);
-  --codex-sidebar-footer-border: oklch(1 0 0 / 10%);
-  --codex-sidebar-resizer-hover: oklch(1 0 0 / 10%);
-
-  --background: var(--codex-main-bg);
-  --foreground: oklch(0.92 0 0);
-  --card: oklch(0.19 0 0);
-  --card-foreground: oklch(0.92 0 0);
-  --popover: oklch(0.22 0 0);
-  --popover-foreground: oklch(0.92 0 0);
-  --primary: var(--brand);
-  --primary-foreground: var(--brand-foreground);
-  --secondary: oklch(0.24 0 0);
-  --secondary-foreground: oklch(0.9 0 0);
-  --muted: oklch(0.23 0 0);
-  --muted-foreground: oklch(0.67 0 0);
-  --accent: oklch(0.28 0 0);
-  --accent-foreground: oklch(0.95 0 0);
-  --border: var(--codex-border);
-  --input: oklch(1 0 0 / 14%);
-  --ring: AccentColor;
+  --codex-sidebar-active: color-mix(in srgb, var(--foreground) 10%, transparent);
+  --codex-sidebar-edit-bg: color-mix(in srgb, var(--foreground) 4%, transparent);
 }
 .codex-shell[data-sidebar-collapsed="true"] {
   --codex-sidebar-width-current: 0px;
@@ -407,7 +483,8 @@
 .codex-shell[data-coach-open="true"] {
   --codex-coach-width-current: var(--codex-coach-width);
 }
-.codex-shell[data-sidebar-resizing="true"] {
+.codex-shell[data-sidebar-resizing="true"],
+.codex-shell[data-coach-resizing="true"] {
   transition: none;
 }
 .codex-topbar {
@@ -448,7 +525,7 @@
   justify-content: center;
   padding: 0 136px;
   color: var(--codex-titlebar-fg);
-  font-size: 14px;
+  font-size: var(--font-size-body);
   font-weight: 650;
   pointer-events: none;
 }
@@ -458,16 +535,16 @@
 .codex-chrome-button {
   width: 30px;
   height: 30px;
-  border-radius: 8px;
+  border-radius: 6px;
   color: var(--codex-chrome-fg);
   background: transparent;
 }
 .codex-chrome-button:hover {
-  color: var(--codex-chrome-hover-fg);
   background: var(--codex-chrome-hover-bg);
+  color: var(--codex-chrome-hover-fg);
 }
 .codex-chrome-button:disabled {
-  opacity: 0.42;
+  opacity: 0.3;
 }
 .codex-sidebar {
   grid-column: 1;
@@ -511,6 +588,7 @@
 .codex-coach {
   grid-column: 3;
   grid-row: 2;
+  position: relative;
   min-width: 0;
   overflow: hidden;
   /* 透明:教练栏与侧栏同款半透明,透出毛玻璃。 */
@@ -536,7 +614,7 @@
   align-items: center;
   gap: 10px;
   border: 0;
-  border-radius: 9px;
+  border-radius: 6px;
   background: transparent;
   color: var(--codex-sidebar-fg);
   font: inherit;
@@ -545,7 +623,7 @@
 .codex-sidebar-action {
   height: 34px;
   padding: 0 10px;
-  font-size: 14px;
+  font-size: var(--font-size-body);
 }
 .codex-sidebar-leading-icon {
   display: flex;
@@ -559,7 +637,7 @@
 .codex-sidebar-row:hover,
 .codex-sidebar-row[data-active="true"] {
   background: var(--codex-sidebar-active);
-  color: var(--codex-sidebar-active-fg);
+  color: var(--codex-sidebar-fg);
 }
 .codex-sidebar-scroll {
   display: flex;
@@ -579,6 +657,21 @@
   display: grid;
   gap: 2px;
   padding-bottom: 12px;
+}
+.codex-sidebar-child-row {
+  position: relative;
+  width: calc(100% - 22px);
+  margin-left: 22px;
+}
+.codex-sidebar-child-row::before {
+  position: absolute;
+  top: 7px;
+  bottom: 7px;
+  left: -9px;
+  width: 1px;
+  border-radius: 999px;
+  background: var(--foreground-20);
+  content: "";
 }
 /* Collapsible group body: animate height via grid-template-rows 1fr↔0fr
    (no JS measuring) plus an opacity fade. Used by EntitySection. */
@@ -611,13 +704,13 @@
   height: 34px;
   padding: 0 10px;
   color: var(--codex-sidebar-fg);
-  font-size: 14px;
+  font-size: var(--font-size-body);
 }
 .codex-section-label {
   height: 28px;
   padding: 0 10px;
-  color: var(--codex-sidebar-muted);
-  font-size: 12px;
+  color: var(--codex-sidebar-fg);
+  font-size: var(--font-size-caption);
   font-weight: 650;
 }
 .codex-section-label {
@@ -628,8 +721,8 @@
 .codex-sidebar-row {
   min-height: 32px;
   padding: 6px 10px;
-  color: var(--codex-sidebar-muted);
-  font-size: 14px;
+  color: var(--codex-sidebar-fg);
+  font-size: var(--font-size-body);
   line-height: 1.2;
 }
 .codex-sidebar-row[data-active="true"] {
@@ -657,20 +750,19 @@
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: var(--codex-sidebar-muted);
+  color: var(--codex-sidebar-fg);
 }
 .codex-row-actions button:hover {
   background: var(--codex-row-action-hover-bg);
-  color: var(--codex-sidebar-fg);
 }
 .codex-sidebar-edit {
   margin: 1px 0;
   border: 1px solid var(--codex-sidebar-edit-border);
-  border-radius: 9px;
+  border-radius: 6px;
   background: var(--codex-sidebar-edit-bg);
   padding: 7px 10px;
   color: var(--codex-sidebar-fg);
-  font-size: 14px;
+  font-size: var(--font-size-body);
   outline: none;
 }
 .codex-sidebar-footer {
@@ -682,10 +774,40 @@
   position: absolute;
   inset: 0 0 0 auto;
   z-index: 2;
-  width: 5px;
+  width: 8px;
   cursor: col-resize;
 }
-.codex-sidebar-resizer:hover {
+.codex-sidebar-resizer::after {
+  position: absolute;
+  top: 10px;
+  right: 0;
+  bottom: 10px;
+  width: 1px;
+  border-radius: 999px;
+  background: transparent;
+  content: "";
+}
+.codex-sidebar-resizer:hover::after {
+  background: var(--codex-sidebar-resizer-hover);
+}
+.codex-coach-resizer {
+  position: absolute;
+  inset: 0 auto 0 0;
+  z-index: 3;
+  width: 8px;
+  cursor: col-resize;
+}
+.codex-coach-resizer::after {
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  left: 0;
+  width: 1px;
+  border-radius: 999px;
+  background: transparent;
+  content: "";
+}
+.codex-coach-resizer:hover::after {
   background: var(--codex-sidebar-resizer-hover);
 }
 

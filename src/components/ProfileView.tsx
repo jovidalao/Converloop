@@ -42,8 +42,8 @@ const SECTION_META: Record<string, { zh: string; owner: Owner }> = {
 
 const BADGE: Record<Owner, { text: string; cls: string }> = {
   user: { text: "你的笔记 · AI 永不改动", cls: "bg-primary/10 text-primary" },
-  shared: { text: "你和 AI 共同维护", cls: "bg-muted text-muted-foreground" },
-  ai: { text: "AI 自动维护", cls: "bg-muted text-muted-foreground" },
+  shared: { text: "你和 AI 共同维护", cls: "bg-muted text-ui-muted" },
+  ai: { text: "AI 自动维护", cls: "bg-muted text-ui-muted" },
 };
 
 function ownerOf(title: string): Owner {
@@ -114,12 +114,12 @@ function PreferencesPanel({
     <section className="mt-3 rounded-lg border bg-card p-3">
       <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
         <div>
-          <h3 className="m-0 text-sm font-semibold">AI 自定义</h3>
-          <p className="m-0 mt-1 text-sm leading-snug text-muted-foreground">
+          <h3 className="m-0 text-ui-body font-semibold">AI 自定义</h3>
+          <p className="m-0 mt-1 text-ui-body leading-snug text-ui-muted">
             用自然语言描述偏好,系统会把它写进档案并分发到对应模块。
           </p>
         </div>
-        <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[0.7rem] text-primary">
+        <span className="rounded bg-primary/10 px-1.5 py-0.5 text-ui-caption text-primary">
           你的设置 · AI 维护档案时保留
         </span>
       </div>
@@ -127,7 +127,7 @@ function PreferencesPanel({
       <div className="flex flex-col gap-2">
         <Textarea
           aria-label="一句话描述 AI 自定义"
-          className="min-h-24 resize-y text-sm leading-normal"
+          className="min-h-24 resize-y text-ui-body leading-normal"
           value={smartDraft}
           onChange={(e) => onSmartDraftChange(e.target.value)}
           placeholder="例如: 对话用澳大利亚日常英语; 我经常用语音输入,批改时不要纠结大小写和标点; 讲解时多用中文类比。"
@@ -145,18 +145,18 @@ function PreferencesPanel({
       </div>
 
       <details className="mt-3">
-        <summary className="text-sm font-medium text-muted-foreground">
+        <summary className="text-ui-body font-medium text-ui-muted">
           按模块微调
         </summary>
         <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
           {PREFERENCE_FIELDS.map((field) => (
             <div key={field.scope} className="flex flex-col gap-1.5">
-              <span className="text-sm text-muted-foreground">
+              <span className="text-ui-body text-ui-muted">
                 {PREFERENCE_SCOPE_LABEL[field.scope]}
               </span>
               <Textarea
                 aria-label={PREFERENCE_SCOPE_LABEL[field.scope]}
-                className="min-h-28 resize-y text-sm leading-normal"
+                className="min-h-28 resize-y text-ui-body leading-normal"
                 value={preferences[field.scope]}
                 onChange={(e) => onScopeChange(field.scope, e.target.value)}
                 onBlur={onScopeBlur}
@@ -186,26 +186,26 @@ function SectionCard({
 
   const header = (
     <div className="mb-2 flex items-center justify-between gap-2">
-      <span className="flex items-center gap-1.5 text-sm font-medium">
+      <span className="flex items-center gap-1.5 text-ui-body font-medium">
         {zhOf(section.title)}
         {editable && (
           <PencilIcon
             size={13}
-            className="text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100"
+            className="text-ui-muted opacity-0 transition-opacity group-hover:opacity-100"
           />
         )}
       </span>
-      <span className={`rounded px-1.5 py-0.5 text-[0.7rem] ${badge.cls}`}>
+      <span className={`rounded px-1.5 py-0.5 text-ui-caption ${badge.cls}`}>
         {badge.text}
       </span>
     </div>
   );
   const content = body ? (
-    <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+    <p className="whitespace-pre-wrap text-ui-body leading-relaxed text-foreground">
       {body}
     </p>
   ) : (
-    <p className="text-sm text-muted-foreground">
+    <p className="text-ui-body text-ui-muted">
       {editable ? "点击添加…" : "暂无"}
     </p>
   );
@@ -296,7 +296,7 @@ function EditOverlay({
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="mb-3 flex items-center justify-between gap-2">
-          <h3 className="text-base font-semibold">{zhOf(section.title)}</h3>
+          <h3 className="text-ui-title font-semibold">{zhOf(section.title)}</h3>
           <Button
             variant="ghost"
             size="icon"
@@ -310,7 +310,7 @@ function EditOverlay({
         <Textarea
           autoFocus
           aria-label={zhOf(section.title)}
-          className="min-h-48 flex-1 resize-none font-mono text-sm leading-normal"
+          className="min-h-48 flex-1 resize-none font-mono text-ui-body leading-normal"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           placeholder={
@@ -570,25 +570,25 @@ export function ProfileView() {
 
   return (
     <div className="flex h-full max-w-5xl flex-col overflow-y-auto px-6 pt-14 pb-6">
-      <h2 className="mt-0 mb-1 text-lg font-semibold tracking-tight">
+      <h2 className="mt-0 mb-1 text-ui-title font-semibold tracking-tight">
         学习者档案
       </h2>
-      <p className="text-sm leading-snug text-muted-foreground">
+      <p className="text-ui-body leading-snug text-ui-muted">
         对话 AI 会读这份档案做个性化回复。你可以在这里写自定义体验;AI
         自动维护的学习状态为只读。
       </p>
       {header && (
-        <p className="mt-2 truncate font-mono text-xs text-muted-foreground">
+        <p className="mt-2 truncate font-mono text-ui-caption text-ui-muted">
           {header}
         </p>
       )}
 
       {!loaded ? (
-        <p className="mt-4 text-sm text-muted-foreground">加载档案…</p>
+        <p className="mt-4 text-ui-body text-ui-muted">加载档案…</p>
       ) : raw ? (
         <Textarea
           aria-label="原始 Markdown"
-          className="mt-3 min-h-96 max-w-2xl resize-none font-mono text-sm leading-normal"
+          className="mt-3 min-h-96 max-w-2xl resize-none font-mono text-ui-body leading-normal"
           value={rawText}
           onChange={(e) => setRawText(e.target.value)}
           onBlur={() => void saveIfDirty()}
@@ -656,7 +656,7 @@ export function ProfileView() {
       </div>
       {status && (
         <p
-          className={`mt-2 break-words text-sm ${
+          className={`mt-2 break-words text-ui-body ${
             status.startsWith("✓") ? "text-primary" : "text-warning"
           }`}
         >

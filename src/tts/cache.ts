@@ -31,10 +31,14 @@ export async function buildTtsCacheKey(
 ): Promise<string> {
   const payload = JSON.stringify({
     text,
+    provider: cfg.ttsProvider,
     voice: cfg.voice,
     model: cfg.model,
     stylePrompt: cfg.stylePrompt,
     baseUrl: cfg.baseUrl,
+    edgeVoice: cfg.edgeVoice,
+    edgeRate: cfg.edgeRate,
+    edgePitch: cfg.edgePitch,
   });
   const digest = await crypto.subtle.digest(
     "SHA-256",

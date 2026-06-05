@@ -151,7 +151,7 @@ export function CommandPalette({
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-2 border-b px-3">
-          <SearchIcon className="size-4 shrink-0 text-muted-foreground" />
+          <SearchIcon className="size-4 shrink-0 text-ui-muted" />
           <input
             // biome-ignore lint/a11y/noAutofocus: 命令面板打开即应聚焦输入框
             autoFocus
@@ -160,20 +160,20 @@ export function CommandPalette({
             onKeyDown={onKeyDown}
             placeholder="搜索对话、专项课…"
             spellCheck={false}
-            className="h-12 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+            className="h-12 flex-1 bg-transparent text-ui-body outline-none placeholder:text-muted-foreground"
           />
         </div>
 
         <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto py-1">
           {flat.length === 0 && (
-            <div className="px-3 py-6 text-center text-sm text-muted-foreground">
+            <div className="px-3 py-6 text-center text-ui-body text-ui-muted">
               没有匹配的结果
             </div>
           )}
           {groups.map((group) => (
             <div key={group.label ?? "__default"}>
               {group.label && (
-                <div className="px-3 pt-2 pb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                <div className="px-3 pt-2 pb-1 text-ui-caption font-medium uppercase tracking-wide text-ui-muted">
                   {group.label}
                 </div>
               )}
@@ -189,7 +189,7 @@ export function CommandPalette({
                     role="option"
                     aria-selected={isSelected}
                     data-selected={isSelected}
-                    className="mx-1 flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm data-[selected=true]:bg-accent"
+                    className="mx-1 flex items-center gap-2.5 rounded-md px-2.5 py-2 text-ui-body data-[selected=true]:bg-accent"
                     onMouseMove={() => setSelected(idx)}
                     onClick={() => activate(item)}
                   >
@@ -209,9 +209,9 @@ function PaletteRow({ item }: { item: PaletteItem }) {
   if (item.kind === "new-chat") {
     return (
       <>
-        <SquarePenIcon className="size-4 shrink-0 text-muted-foreground" />
+        <SquarePenIcon className="size-4 shrink-0 text-ui-muted" />
         <span className="min-w-0 flex-1 truncate">新对话</span>
-        <kbd className="rounded border border-border/60 bg-muted px-1.5 py-0.5 font-sans text-[11px] text-muted-foreground/80">
+        <kbd className="rounded border border-border/60 bg-muted px-1.5 py-0.5 font-sans text-ui-caption text-ui-muted">
           {actionShortcutLabel("new-chat")}
         </kbd>
       </>
@@ -220,9 +220,9 @@ function PaletteRow({ item }: { item: PaletteItem }) {
   if (item.kind === "start-agent") {
     return (
       <>
-        <GraduationCapIcon className="size-4 shrink-0 text-muted-foreground" />
+        <GraduationCapIcon className="size-4 shrink-0 text-ui-muted" />
         <span className="min-w-0 flex-1 truncate">{item.agent.name}</span>
-        <span className="shrink-0 text-xs text-muted-foreground">
+        <span className="shrink-0 text-ui-caption text-ui-muted">
           开启新一节
         </span>
       </>
@@ -231,12 +231,12 @@ function PaletteRow({ item }: { item: PaletteItem }) {
   return (
     <>
       {item.conv.kind === "learning_agent" ? (
-        <BookOpenCheckIcon className="size-4 shrink-0 text-muted-foreground" />
+        <BookOpenCheckIcon className="size-4 shrink-0 text-ui-muted" />
       ) : (
-        <MessageSquareIcon className="size-4 shrink-0 text-muted-foreground" />
+        <MessageSquareIcon className="size-4 shrink-0 text-ui-muted" />
       )}
       <span className="min-w-0 flex-1 truncate">{item.conv.title}</span>
-      <span className="shrink-0 text-xs text-muted-foreground">
+      <span className="shrink-0 text-ui-caption text-ui-muted">
         {formatRelativeTime(item.conv.updatedAt)}
       </span>
     </>

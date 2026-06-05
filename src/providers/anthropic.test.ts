@@ -3,6 +3,7 @@ import { tutorJsonSchema } from "../agents/schema";
 import {
   type AnthropicConfig,
   anthropicMessagesUrl,
+  authHeaders,
   buildAnthropicRequestBody,
   extractAnthropicContent,
   toAnthropicMessages,
@@ -136,6 +137,38 @@ describe("anthropic REST alignment", () => {
         ],
       }),
     ).toBe('{"is_correct":true}');
+  });
+
+  it("oauth mode prepends the Claude Code identity system block", () => {
+    const body = buildAnthropicRequestBody(
+      { ...cfg, oauth: true },
+      {
+        messages: [
+          { role: "system", content: "Analyze." },
+          { role: "user", content: "Hi" },
+        ],
+      },
+      false,
+    );
+    const system = body.system as { type: string; text: string }[];
+    expect(system[0]).toEqual({
+      type: "text",
+      text: "You are Claude Code, Anthropic's official CLI for Claude.",
+    });
+    expect(system[1].text).toBe("Analyze.");
+  });
+
+  it("oauth mode uses Bearer auth + oauth beta, drops x-api-key", () => {
+    const headers = authHeaders({ ...cfg, oauth: true });
+    expect(headers.Authorization).toBe("Bearer test-key");
+    expect(headers["x-api-key"]).toBeUndefined();
+    expect(headers["anthropic-beta"]).toContain("oauth-2025-04-20");
+  });
+
+  it("api-key mode keeps x-api-key and no Authorization header", () => {
+    const headers = authHeaders(cfg);
+    expect(headers["x-api-key"]).toBe("test-key");
+    expect(headers.Authorization).toBeUndefined();
   });
 
   it("generate options maxTokens overrides config default", () => {

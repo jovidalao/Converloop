@@ -247,6 +247,7 @@ export function Sidebar({
   const renderAgentRow = (agent: LearningAgentMeta) => (
     <EntityRow
       key={agent.id}
+      className="codex-sidebar-child-row"
       icon={<BookOpenCheckIcon className="size-3.5 shrink-0" />}
       title={agent.name}
       tooltip={agent.description}
@@ -292,7 +293,7 @@ export function Sidebar({
               <SquarePenIcon className="size-4" />
             </span>
             <span>新对话</span>
-            <kbd className="ml-auto rounded border border-border/60 bg-muted px-1.5 py-0.5 font-sans text-[11px] text-muted-foreground/80 opacity-0 transition-opacity group-hover:opacity-100">
+            <kbd className="ml-auto rounded border border-border/60 bg-muted px-1.5 py-0.5 font-sans text-ui-caption text-ui-muted opacity-0 transition-opacity group-hover:opacity-100">
               {actionShortcutLabel("new-chat")}
             </kbd>
           </button>
@@ -310,6 +311,7 @@ export function Sidebar({
           >
             {restLearningAgents.map(renderAgentRow)}
             <EntityRow
+              className="codex-sidebar-child-row"
               icon={<PlusIcon className="size-3.5 shrink-0" />}
               title="创建专项课"
               onSelect={() => onOpenView("learning")}
@@ -388,7 +390,7 @@ export function Sidebar({
             );
           })}
           {conversations.length === 0 && (
-            <div className="px-3 py-2 text-sm text-[color:var(--codex-sidebar-muted)]">
+            <div className="px-3 py-2 text-ui-body text-[color:var(--codex-sidebar-muted)]">
               还没有对话
             </div>
           )}
@@ -430,7 +432,7 @@ export function Sidebar({
               <DropdownMenuItem onSelect={() => onOpenView("settings")}>
                 <SettingsIcon size={16} />
                 设置
-                <kbd className="ml-auto rounded border border-border/60 bg-muted px-1.5 py-0.5 font-sans text-[11px] text-muted-foreground/80">
+                <kbd className="ml-auto rounded border border-border/60 bg-muted px-1.5 py-0.5 font-sans text-ui-caption text-ui-muted">
                   {actionShortcutLabel("settings")}
                 </kbd>
               </DropdownMenuItem>
@@ -468,7 +470,7 @@ export function Sidebar({
           role="menu"
           onContextMenu={(e) => e.preventDefault()}
         >
-          <div className="flex shrink-0 items-center gap-2 px-2 py-1.5 text-xs font-medium text-muted-foreground">
+          <div className="flex shrink-0 items-center gap-2 px-2 py-1.5 text-ui-caption font-medium text-ui-muted">
             <SparklesIcon size={13} />
             衍生新对话
           </div>
@@ -478,7 +480,7 @@ export function Sidebar({
                 key={action.id}
                 type="button"
                 role="menuitem"
-                className="flex w-full items-start gap-2.5 rounded-sm px-2 py-1.5 text-left text-sm outline-none hover:bg-accent hover:text-accent-foreground"
+                className="flex w-full items-start gap-2.5 rounded-sm px-2 py-1.5 text-left text-ui-body outline-none hover:bg-accent hover:text-accent-foreground"
                 onClick={() => {
                   onDeriveConversation(conversationMenu.conv.id, action.id);
                   setConversationMenu(null);
@@ -490,7 +492,7 @@ export function Sidebar({
                     {action.label}
                   </span>
                   {action.description && (
-                    <span className="block truncate text-xs text-muted-foreground">
+                    <span className="block truncate text-ui-caption text-ui-muted">
                       {action.description}
                     </span>
                   )}

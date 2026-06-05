@@ -102,10 +102,10 @@ function IslandButton({
     <button
       type="button"
       className={cn(
-        "inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors",
+        "inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-ui-caption font-medium transition-colors",
         active
           ? "bg-primary/10 text-primary"
-          : "text-muted-foreground hover:bg-accent hover:text-foreground",
+          : "text-ui-muted hover:bg-accent hover:text-foreground",
       )}
       disabled={disabled}
       onMouseDown={(e) => e.preventDefault()}
@@ -331,7 +331,7 @@ export function AnnotationIsland({
           />
           <button
             type="button"
-            className="ml-auto inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            className="ml-auto inline-flex size-7 items-center justify-center rounded-md text-ui-muted transition-colors hover:bg-accent hover:text-foreground"
             aria-label="关闭"
             onClick={dismiss}
           >
@@ -340,11 +340,11 @@ export function AnnotationIsland({
         </div>
 
         <div className="px-3 py-2">
-          <div className="mb-1 truncate text-xs font-medium text-muted-foreground">
+          <div className="mb-1 truncate text-ui-caption font-medium text-ui-muted">
             {pick.selection}
           </div>
           {mode === "analysis" && (
-            <div className="max-h-[50vh] overflow-y-auto text-sm leading-relaxed text-foreground">
+            <div className="max-h-[50vh] overflow-y-auto text-ui-body leading-relaxed text-foreground">
               {error ? (
                 <p className="m-0 text-destructive" role="alert">
                   {error}
@@ -352,7 +352,7 @@ export function AnnotationIsland({
               ) : result ? (
                 <Markdown>{result}</Markdown>
               ) : (
-                <span className="inline-flex items-center gap-2 text-muted-foreground">
+                <span className="inline-flex items-center gap-2 text-ui-muted">
                   <Spinner />
                   正在解析…
                 </span>
@@ -360,15 +360,18 @@ export function AnnotationIsland({
             </div>
           )}
           {mode === "menu" && (
-            <p className="m-0 text-xs leading-snug text-muted-foreground">
+            <p className="m-0 text-ui-caption leading-snug text-ui-muted">
               选择一个学习动作。浮岛关闭前会保留当前选区。
             </p>
           )}
           {message && (
-            <p className="mt-2 mb-0 text-xs text-success">{message}</p>
+            <p className="mt-2 mb-0 text-ui-caption text-success">{message}</p>
           )}
           {mode !== "analysis" && error && (
-            <p className="mt-2 mb-0 text-xs text-destructive" role="alert">
+            <p
+              className="mt-2 mb-0 text-ui-caption text-destructive"
+              role="alert"
+            >
               {error}
             </p>
           )}

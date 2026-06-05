@@ -49,7 +49,7 @@ export function MentionMenu({
             role="option"
             aria-selected={isSelected}
             data-selected={isSelected}
-            className="mx-1 flex items-baseline gap-2.5 rounded-md px-2.5 py-1.5 text-sm data-[selected=true]:bg-accent"
+            className="mx-1 flex items-baseline gap-2.5 rounded-md px-2.5 py-1.5 text-ui-body data-[selected=true]:bg-accent"
             onMouseMove={() => onHover(idx)}
             onMouseDown={(e) => {
               // 不让输入框失焦;在 mousedown 即激活(常见自动完成范式)。
@@ -60,10 +60,10 @@ export function MentionMenu({
             <span className="min-w-0 shrink truncate font-medium text-foreground">
               {item.label}
             </span>
-            <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
+            <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-ui-caption text-ui-muted">
               {TYPE_LABEL[item.type] ?? item.type}
             </span>
-            <span className="min-w-0 flex-1 truncate text-right text-xs text-muted-foreground/70">
+            <span className="min-w-0 flex-1 truncate text-right text-ui-meta text-ui-subtle">
               {item.insertText}
             </span>
           </div>

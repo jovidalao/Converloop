@@ -110,7 +110,7 @@ export function ReplyExplanation({
           {error ? (
             <div className="flex items-center gap-3">
               <span
-                className="min-w-0 flex-1 text-sm leading-snug text-destructive"
+                className="min-w-0 flex-1 text-ui-body leading-snug text-destructive"
                 role="alert"
               >
                 {error}
@@ -128,7 +128,7 @@ export function ReplyExplanation({
               </Button>
             </div>
           ) : (
-            <div className="text-sm leading-normal text-foreground">
+            <div className="text-ui-body leading-normal text-foreground">
               <Markdown>{explanation}</Markdown>
             </div>
           )}

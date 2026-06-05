@@ -38,6 +38,9 @@ machine-uid = "0.5"
 # LLM HTTP:走 Rust 发请求,绕过 webview CORS;reqwest 的 bytes_stream 做真流式。
 reqwest = { version = "0.12", features = ["json", "stream"] }
 futures-util = "0.3"
+# 免费 Edge TTS 走 WebSocket(webview 无法改写 Origin 头,必须在 Rust 连);
+# native-tls 复用 reqwest 已引入的同一 TLS 栈,macOS 上即系统 Security 框架,无新系统依赖。
+tokio-tungstenite = { version = "0.24", features = ["native-tls"] }
 
 # macOS: 自己在原生 resize 通知里同步重定位交通灯(绘制前),消除复位闪烁。
 [target.'cfg(target_os = "macos")'.dependencies]

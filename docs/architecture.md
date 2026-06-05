@@ -270,6 +270,15 @@ LIMIT 15;
 
 provider 解析全在 TS;**LLM HTTP 走 Rust**(`src-tauri/src/llm.rs` 的 `llm_request` / `llm_stream`,reqwest),绕过 webview CORS;流式用 reqwest `bytes_stream` + tauri `Channel` 推到前端,前端解析 SSE。config(非密)存 localStorage(`src/config.ts`),每个 provider 的 key 单独存,切换不丢。
 
+### 订阅登录 provider(OAuth:Claude Code / Codex)
+
+除填 API key 外,还支持用 **Claude Pro/Max** 与 **ChatGPT** 订阅经浏览器 OAuth 登录(provider 类型 `claude-oauth` / `codex-oauth`,实现参照 [openclaw](https://github.com/openclaw/openclaw))。常量与来源逐一核对自 openclaw `main`,记在各 `src/oauth/*.ts` 顶部。
+
+- **流程**(`src/oauth/{pkce,store,anthropic,openai}.ts`):PKCE → `openUrl` 打开授权页 → Rust 一次性 loopback 回调服务捕获 `code`(`src-tauri/src/oauth.rs` 的 `oauth_listen`,监听 `127.0.0.1:53692`(Claude)/ `:1455`(Codex))→ 换 token。令牌 `{access,refresh,expires,accountId?}` 走同一加密通道存(account `${type}_oauth`)。`getProvider` 在热路径上检查过期并**单飞刷新**(`ensureFreshTokens`,避免对话 ∥ 导师并发各刷一次)。
+- **Claude(`claude-oauth`)**:复用 anthropic 适配器的 `oauth` 模式——`Authorization: Bearer`(去 x-api-key)+ `anthropic-beta: claude-code-20250219,oauth-2025-04-20`,且首个 system 块固定为 `"You are Claude Code, Anthropic's official CLI for Claude."`(服务端强制)。直连 `https://api.anthropic.com/v1`。
+- **Codex(`codex-oauth`)**:新增 Responses API 适配器(`providers/openai-responses.ts`),走 `https://chatgpt.com/backend-api/codex/responses`(非 chat/completions),body 用 `instructions`+`input`、`store:false`,header 带 `chatgpt-account-id`(从 access JWT 解出);SSE 解析 `response.output_text.delta` / `response.completed`。OpenAI token endpoint 要表单编码,故 token 交换/刷新走 `oauth_token_post`(Rust,`reqwest .form`),而非发 JSON 的 `llm_request`。
+- ⚠️ 第三方使用订阅令牌可能违反对应服务条款、有账号被标记风险;设置页登录处有提示。Codex 一侧的 Responses 线格式无法离线联调,需真账号验证。
+
 ## 用户体验偏好
 
 长期体验偏好写在 MD 档案的 `## AI preferences` 段,不放设置页开关。
@@ -297,7 +306,10 @@ provider 解析全在 TS;**LLM HTTP 走 Rust**(`src-tauri/src/llm.rs` 的 `llm_r
 
 ## 朗读(TTS)
 
-`src/tts/*` + `components/SpeakButton.tsx`。当前接 **MiMo TTS**(OpenAI 风格 `chat/completions` + `audio` 字段,`tts/mimo.ts`),HTTP 同样走 Rust。本地缓存合成结果(`tts/cache.ts`,按文本 + 配置哈希)+ 单飞去重 + Web Audio 播放(`tts/playback.ts`)。voice / 风格 prompt / baseUrl 在设置页可配(`tts/config.ts`),key 单独加密存。
+`src/tts/*` + `components/SpeakButton.tsx`。**可切换引擎**(`tts/config.ts` 的 `ttsProvider`),`tts/speak.ts` 按引擎把「如何合成」收敛成一个 thunk,缓存(`tts/cache.ts`,按文本 + 配置哈希)/ 单飞去重 / Web Audio 播放(`tts/playback.ts`)两引擎共用:
+
+- **MiMo TTS**(`tts/mimo.ts`):OpenAI 风格 `chat/completions` + `audio` 字段,HTTP 走 Rust,需单独加密存的 key;voice / 风格 prompt / baseUrl 在设置页可配。
+- **微软 Edge「朗读」**(`tts/edge.ts` → Rust `edge_tts.rs` 的 `edge_tts_synthesize`):**免费、无需 key**。Edge read-aloud 是 WebSocket 服务,且校验 `Origin` 头(webview 无法改写),故合成走 Rust(`tokio-tungstenite`):生成 `Sec-MS-GEC` DRM 令牌(SHA-256,复刻 edge-tts 的 f64 取整)→ 连 WSS → 发 speech.config + SSML → 收二进制帧拼 MP3 → base64 回传。输出用 `audio-24khz-48kbitrate-mono-mp3`(readaloud 端点只接受 mp3,RIFF/WAV 会返 0 音频);`playback.ts` 按内容嗅探 MIME,mp3/wav 都能放。voice / 语速 / 音高在设置页可配。
 
 ## 缓存与延迟
 

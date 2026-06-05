@@ -1,7 +1,8 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
-  ArrowLeftIcon,
   ChevronDownIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
   PanelLeftIcon,
   PanelRightIcon,
   SearchIcon,
@@ -12,6 +13,7 @@ import {
 import {
   type CSSProperties,
   type MouseEvent,
+  type PointerEvent as ReactPointerEvent,
   useCallback,
   useEffect,
   useState,
@@ -67,6 +69,17 @@ import {
 
 const SIDEBAR_MIN = 200;
 const SIDEBAR_MAX = 420;
+const COACH_MIN = 300;
+const COACH_MAX = 560;
+
+type AppLocation = {
+  view: MainView;
+  activeId: string;
+};
+
+function sameLocation(a: AppLocation, b: AppLocation): boolean {
+  return a.view === b.view && a.activeId === b.activeId;
+}
 
 function App() {
   const [conversations, setConversations] = useState<ConversationMeta[]>([]);
@@ -85,14 +98,25 @@ function App() {
   const [derivationBusy, setDerivationBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [resizingSidebar, setResizingSidebar] = useState(false);
+  const [resizingCoach, setResizingCoach] = useState(false);
+  const [backStack, setBackStack] = useState<AppLocation[]>([]);
+  const [forwardStack, setForwardStack] = useState<AppLocation[]>([]);
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     const saved = Number(localStorage.getItem("sidebarWidth"));
     return saved >= SIDEBAR_MIN && saved <= SIDEBAR_MAX ? saved : 248;
+  });
+  const [coachWidth, setCoachWidth] = useState(() => {
+    const saved = Number(localStorage.getItem("coachWidth"));
+    return saved >= COACH_MIN && saved <= COACH_MAX ? saved : 360;
   });
 
   useEffect(() => {
     localStorage.setItem("sidebarWidth", String(sidebarWidth));
   }, [sidebarWidth]);
+
+  useEffect(() => {
+    localStorage.setItem("coachWidth", String(coachWidth));
+  }, [coachWidth]);
 
   useEffect(() => {
     localStorage.setItem("coachOpen", String(coachOpen));
@@ -119,38 +143,94 @@ function App() {
     setCoachOpen((c) => !c);
   }, []);
 
+  const applyLocation = useCallback(
+    (loc: AppLocation) => {
+      if (
+        loc.view === "chat" &&
+        loc.activeId !== draftId &&
+        conversations.some((c) => c.id === loc.activeId)
+      ) {
+        setActiveConversationId(loc.activeId);
+      }
+      withViewTransition(() => {
+        setActiveId(loc.activeId);
+        setView(loc.view);
+      });
+    },
+    [conversations, draftId],
+  );
+
+  const navigateTo = useCallback(
+    (loc: AppLocation) => {
+      if (!activeId) {
+        applyLocation(loc);
+        return;
+      }
+      const current = { view, activeId };
+      if (sameLocation(current, loc)) return;
+      setBackStack((stack) => [...stack, current].slice(-50));
+      setForwardStack([]);
+      applyLocation(loc);
+    },
+    [activeId, applyLocation, view],
+  );
+
+  const goBack = useCallback(() => {
+    if (!activeId) return;
+    const current = { view, activeId };
+    setBackStack((stack) => {
+      const next = stack[stack.length - 1];
+      if (!next) return stack;
+      setForwardStack((forward) => [...forward, current].slice(-50));
+      applyLocation(next);
+      return stack.slice(0, -1);
+    });
+  }, [activeId, applyLocation, view]);
+
+  const goForward = useCallback(() => {
+    if (!activeId) return;
+    const current = { view, activeId };
+    setForwardStack((stack) => {
+      const next = stack[stack.length - 1];
+      if (!next) return stack;
+      setBackStack((back) => [...back, current].slice(-50));
+      applyLocation(next);
+      return stack.slice(0, -1);
+    });
+  }, [activeId, applyLocation, view]);
+
   const openDraftConversation = useCallback(() => {
     const id = crypto.randomUUID();
     setDraftId(id);
-    withViewTransition(() => {
-      setActiveId(id);
-      setView("chat");
-    });
-  }, []);
+    navigateTo({ view: "chat", activeId: id });
+  }, [navigateTo]);
 
-  const focusPanel = useCallback((panel: "sidebar" | "chat" | "coach") => {
-    if (panel === "sidebar") {
-      setCollapsed(false);
+  const focusPanel = useCallback(
+    (panel: "sidebar" | "chat" | "coach") => {
+      if (panel === "sidebar") {
+        setCollapsed(false);
+        requestAnimationFrame(() => {
+          document.querySelector<HTMLElement>(".codex-sidebar")?.focus();
+        });
+        return;
+      }
+      if (panel === "chat") {
+        if (activeId) navigateTo({ view: "chat", activeId });
+        requestAnimationFrame(() => {
+          const input = document.querySelector<HTMLTextAreaElement>(
+            ".codex-main textarea",
+          );
+          input?.focus();
+        });
+        return;
+      }
+      setCoachOpen(true);
       requestAnimationFrame(() => {
-        document.querySelector<HTMLElement>(".codex-sidebar")?.focus();
+        document.querySelector<HTMLElement>(".codex-coach")?.focus();
       });
-      return;
-    }
-    if (panel === "chat") {
-      withViewTransition(() => setView("chat"));
-      requestAnimationFrame(() => {
-        const input = document.querySelector<HTMLTextAreaElement>(
-          ".codex-main textarea",
-        );
-        input?.focus();
-      });
-      return;
-    }
-    setCoachOpen(true);
-    requestAnimationFrame(() => {
-      document.querySelector<HTMLElement>(".codex-coach")?.focus();
-    });
-  }, []);
+    },
+    [activeId, navigateTo],
+  );
 
   // ⌘, 设置 · ⌘B 侧栏 · ⌘N 新对话 · ⌘1/2/3 聚焦三栏 · ⌘/ 快捷键。
   useEffect(() => {
@@ -160,7 +240,7 @@ function App() {
         !!e.target.closest("input, textarea, select, [contenteditable]");
       if (matchesActionShortcut(e, "settings")) {
         e.preventDefault();
-        withViewTransition(() => setView("settings"));
+        if (activeId) navigateTo({ view: "settings", activeId });
         return;
       }
       if (matchesActionShortcut(e, "command-palette")) {
@@ -200,7 +280,7 @@ function App() {
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [toggleSidebar, openDraftConversation, focusPanel]);
+  }, [activeId, navigateTo, toggleSidebar, openDraftConversation, focusPanel]);
 
   const refresh = useCallback(
     () => listConversations().then(setConversations),
@@ -226,10 +306,7 @@ function App() {
 
   function selectConversation(id: string) {
     setActiveConversationId(id); // 持久化,不进过渡
-    withViewTransition(() => {
-      setActiveId(id);
-      setView("chat");
-    });
+    navigateTo({ view: "chat", activeId: id });
   }
 
   async function materializeDraftConversation(id: string) {
@@ -302,9 +379,48 @@ function App() {
     void getCurrentWindow().startDragging();
   }
 
+  function startCoachResize(e: ReactPointerEvent) {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = coachWidth;
+    let frame = 0;
+    let nextWidth = startWidth;
+
+    function flushResize() {
+      frame = 0;
+      setCoachWidth(Math.min(COACH_MAX, Math.max(COACH_MIN, nextWidth)));
+    }
+
+    function onMove(ev: PointerEvent) {
+      nextWidth = startWidth - (ev.clientX - startX);
+      if (!frame) frame = requestAnimationFrame(flushResize);
+    }
+
+    function finishResize() {
+      if (frame) {
+        cancelAnimationFrame(frame);
+        frame = 0;
+        setCoachWidth(Math.min(COACH_MAX, Math.max(COACH_MIN, nextWidth)));
+      }
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", finishResize);
+      window.removeEventListener("pointercancel", finishResize);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      setResizingCoach(false);
+    }
+
+    setResizingCoach(true);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", finishResize);
+    window.addEventListener("pointercancel", finishResize);
+  }
+
   if (!ready || !activeId)
     return (
-      <div className="flex h-full min-h-screen items-center justify-center text-muted-foreground">
+      <div className="flex h-full min-h-screen items-center justify-center text-ui-muted">
         加载中…
       </div>
     );
@@ -347,7 +463,13 @@ function App() {
       data-sidebar-collapsed={collapsed}
       data-coach-open={coachVisible}
       data-sidebar-resizing={resizingSidebar}
-      style={{ "--sidebar-width": `${sidebarWidth}px` } as CSSProperties}
+      data-coach-resizing={resizingCoach}
+      style={
+        {
+          "--sidebar-width": `${sidebarWidth}px`,
+          "--coach-width": `${coachWidth}px`,
+        } as CSSProperties
+      }
     >
       {/* biome-ignore lint/a11y/noStaticElementInteractions: custom Tauri chrome drag region */}
       <header
@@ -376,30 +498,47 @@ function App() {
                 className="flex items-center gap-2"
               >
                 <span>{collapsed ? "展开侧栏" : "收起侧栏"}</span>
-                <kbd className="rounded border border-border/60 bg-muted px-1.5 py-0.5 font-sans text-[11px] text-muted-foreground/80">
+                <kbd className="rounded border border-border/60 bg-muted px-1.5 py-0.5 font-sans text-ui-caption text-ui-muted">
                   {actionShortcutLabel("toggle-sidebar")}
                 </kbd>
               </TooltipContent>
             </Tooltip>
-            {view !== "chat" && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="codex-chrome-button"
-                    onClick={() => withViewTransition(() => setView("chat"))}
-                    aria-label="返回对话"
-                  >
-                    <ArrowLeftIcon />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" align="start">
-                  <span>返回对话</span>
-                </TooltipContent>
-              </Tooltip>
-            )}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="codex-chrome-button"
+                  onClick={goBack}
+                  disabled={backStack.length === 0}
+                  aria-label="后退"
+                >
+                  <ChevronLeftIcon />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" align="start">
+                <span>后退</span>
+              </TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="codex-chrome-button"
+                  onClick={goForward}
+                  disabled={forwardStack.length === 0}
+                  aria-label="前进"
+                >
+                  <ChevronRightIcon />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" align="start">
+                <span>前进</span>
+              </TooltipContent>
+            </Tooltip>
           </TooltipProvider>
         </div>
         <div className="codex-titlebar">
@@ -427,7 +566,7 @@ function App() {
                   className="flex items-center gap-2"
                 >
                   <span>新对话</span>
-                  <kbd className="rounded border border-border/60 bg-muted px-1.5 py-0.5 font-sans text-[11px] text-muted-foreground/80">
+                  <kbd className="rounded border border-border/60 bg-muted px-1.5 py-0.5 font-sans text-ui-caption text-ui-muted">
                     {actionShortcutLabel("new-chat")}
                   </kbd>
                 </TooltipContent>
@@ -452,7 +591,7 @@ function App() {
                 className="flex items-center gap-2"
               >
                 <span>搜索</span>
-                <kbd className="rounded border border-border/60 bg-muted px-1.5 py-0.5 font-sans text-[11px] text-muted-foreground/80">
+                <kbd className="rounded border border-border/60 bg-muted px-1.5 py-0.5 font-sans text-ui-caption text-ui-muted">
                   {actionShortcutLabel("command-palette")}
                 </kbd>
               </TooltipContent>
@@ -464,7 +603,7 @@ function App() {
                     type="button"
                     variant="ghost"
                     size="sm"
-                    className="h-8 gap-1.5 px-2.5 text-xs"
+                    className="h-8 gap-1.5 px-2.5 text-ui-caption"
                     disabled={derivationBusy}
                     title="基于当前对话生成新的对话上下文"
                     data-no-window-drag
@@ -495,7 +634,7 @@ function App() {
                           {action.label}
                         </span>
                         {action.description && (
-                          <span className="max-w-64 truncate text-xs text-muted-foreground">
+                          <span className="max-w-64 truncate text-ui-caption text-ui-muted">
                             {action.description}
                           </span>
                         )}
@@ -546,7 +685,7 @@ function App() {
           }
           onRename={(id, t) => void rename(id, t)}
           onDelete={(id) => void remove(id)}
-          onOpenView={(v) => withViewTransition(() => setView(v))}
+          onOpenView={(v) => navigateTo({ view: v, activeId })}
           width={sidebarWidth}
           onResize={(w) =>
             setSidebarWidth(Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, w)))
@@ -584,9 +723,14 @@ function App() {
 
       {coachVisible && (
         <aside className="codex-coach" tabIndex={-1}>
+          <div
+            className="codex-coach-resizer"
+            onPointerDown={startCoachResize}
+            title="拖动调整宽度"
+          />
           <CoachPanel
             turn={coachTurn}
-            onOpenView={(v) => withViewTransition(() => setView(v))}
+            onOpenView={(v) => navigateTo({ view: v, activeId })}
           />
         </aside>
       )}
@@ -607,11 +751,11 @@ function App() {
       />
 
       {toast && (
-        <div className="-translate-x-1/2 fixed bottom-6 left-1/2 z-50 flex max-w-[min(90vw,30rem)] items-center gap-3 rounded-lg border border-destructive/30 bg-card px-4 py-3 text-sm text-foreground shadow-lg">
+        <div className="-translate-x-1/2 fixed bottom-6 left-1/2 z-50 flex max-w-[min(90vw,30rem)] items-center gap-3 rounded-lg border border-destructive/30 bg-card px-4 py-3 text-ui-body text-foreground shadow-lg">
           <span className="min-w-0 flex-1">{toast}</span>
           <button
             type="button"
-            className="shrink-0 text-muted-foreground transition-colors hover:text-foreground"
+            className="shrink-0 text-ui-muted transition-colors hover:text-foreground"
             onClick={() => setToast(null)}
             aria-label="关闭"
           >

@@ -23,8 +23,10 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, State> {
     return (
       <div className="flex h-full min-h-screen flex-col items-center justify-center gap-4 p-8 text-center">
         <div className="space-y-1">
-          <p className="text-base font-semibold text-foreground">出了点问题</p>
-          <p className="max-w-md text-sm text-muted-foreground">
+          <p className="text-ui-title font-semibold text-foreground">
+            出了点问题
+          </p>
+          <p className="max-w-md text-ui-body text-ui-muted">
             {this.state.error.message}
           </p>
         </div>

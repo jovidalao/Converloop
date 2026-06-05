@@ -5,19 +5,32 @@ import {
   apiKeyAccount,
   getContextLimit,
   getProvider,
+  isOAuthProvider,
   loadConfig,
+  oauthAccount,
   PROVIDER_PRESETS,
   type ProviderType,
   saveConfig,
 } from "../config";
 import { deleteSecret, getSecret, setSecret } from "../keychain";
+import { loginAnthropic } from "../oauth/anthropic";
+import { loginOpenAICodex } from "../oauth/openai";
 import {
+  clearTokens,
+  getTokens,
+  type OAuthTokens,
+  setTokens,
+} from "../oauth/store";
+import {
+  EDGE_VOICES,
   loadTtsConfig,
   MIMO_TTS_KEY_ACCOUNT,
   MIMO_VOICES,
   saveTtsConfig,
   type TtsConfig,
+  type TtsProvider,
 } from "../tts/config";
+import { synthesizeEdge } from "../tts/edge";
 import { synthesizeMimo } from "../tts/mimo";
 import { clearTtsCache, getTtsCacheCount } from "../tts/speak";
 import { type Theme, useTheme } from "./theme-provider";
@@ -45,7 +58,7 @@ function Field({
 }) {
   return (
     <div className={cn("mb-3.5 flex flex-col gap-1.5", className)}>
-      <span className="text-sm text-muted-foreground">{label}</span>
+      <span className="text-ui-body text-ui-muted">{label}</span>
       {children}
     </div>
   );
@@ -61,7 +74,7 @@ function ToggleField({
   children: ReactNode;
 }) {
   return (
-    <label className="mb-3.5 flex items-center gap-2.5 text-sm">
+    <label className="mb-3.5 flex items-center gap-2.5 text-ui-body">
       <Switch checked={checked} onCheckedChange={onChange} />
       <span>{children}</span>
     </label>
@@ -84,10 +97,10 @@ function ThemeToggle() {
           type="button"
           onClick={() => setTheme(t.value)}
           className={cn(
-            "rounded-sm px-3 py-1 text-sm transition-colors",
+            "rounded-sm px-3 py-1 text-ui-body transition-colors",
             theme === t.value
               ? "bg-accent text-foreground"
-              : "text-muted-foreground hover:text-foreground",
+              : "text-ui-muted hover:text-foreground",
           )}
         >
           {t.label}
@@ -102,6 +115,8 @@ export function SettingsView() {
   const [ttsCfg, setTtsCfg] = useState<TtsConfig>(loadTtsConfig());
   const [hasKey, setHasKey] = useState(false);
   const [hasTtsKey, setHasTtsKey] = useState(false);
+  const [oauthTokens, setOauthTokens] = useState<OAuthTokens | null>(null);
+  const [loggingIn, setLoggingIn] = useState(false);
   const [keyInput, setKeyInput] = useState("");
   const [ttsKeyInput, setTtsKeyInput] = useState("");
   const [status, setStatus] = useState<string | null>(null);
@@ -113,23 +128,33 @@ export function SettingsView() {
 
   const keyAccount = apiKeyAccount(cfg.providerType);
   const preset = PROVIDER_PRESETS[cfg.providerType];
+  const isOAuth = isOAuthProvider(cfg.providerType);
 
   const baseUrlLabels: Record<ProviderType, string> = {
     openai: "Base URL (OpenAI 兼容)",
     gemini: "Base URL (Gemini 原生 API)",
     anthropic: "Base URL (Anthropic)",
+    "claude-oauth": "Base URL (Anthropic 官方)",
+    "codex-oauth": "Base URL (ChatGPT Codex 后端)",
   };
 
   const keyPlaceholders: Record<ProviderType, string> = {
     openai: "sk-…",
     gemini: "AIza…",
     anthropic: "sk-ant-…",
+    "claude-oauth": "",
+    "codex-oauth": "",
   };
 
   useEffect(() => {
     getSecret(apiKeyAccount(cfg.providerType)).then((k) => setHasKey(!!k));
     getSecret(MIMO_TTS_KEY_ACCOUNT).then((k) => setHasTtsKey(!!k));
     void getTtsCacheCount().then(setTtsCacheCount);
+    if (isOAuthProvider(cfg.providerType)) {
+      void getTokens(oauthAccount(cfg.providerType)).then(setOauthTokens);
+    } else {
+      setOauthTokens(null);
+    }
   }, [cfg.providerType]);
 
   function update<K extends keyof AppConfig>(k: K, v: AppConfig[K]) {
@@ -164,6 +189,34 @@ export function SettingsView() {
     setStatus("API key 已从本地清除。");
   }
 
+  // 订阅登录按 provider 分发。
+  function loginForProvider(type: ProviderType): Promise<OAuthTokens> {
+    if (type === "claude-oauth") return loginAnthropic();
+    if (type === "codex-oauth") return loginOpenAICodex();
+    throw new Error("该 provider 暂不支持订阅登录");
+  }
+
+  async function handleOauthLogin() {
+    setLoggingIn(true);
+    setStatus(null);
+    try {
+      const tokens = await loginForProvider(cfg.providerType);
+      await setTokens(oauthAccount(cfg.providerType), tokens);
+      setOauthTokens(tokens);
+      setStatus("✓ 登录成功,令牌已加密保存到本地。");
+    } catch (e) {
+      setStatus(`✗ 登录失败:${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setLoggingIn(false);
+    }
+  }
+
+  async function handleOauthLogout() {
+    await clearTokens(oauthAccount(cfg.providerType));
+    setOauthTokens(null);
+    setStatus("已退出登录,令牌已清除。");
+  }
+
   function updateTts<K extends keyof TtsConfig>(k: K, v: TtsConfig[K]) {
     const next = { ...ttsCfg, [k]: v };
     setTtsCfg(next);
@@ -188,19 +241,29 @@ export function SettingsView() {
     setTestingTts(true);
     setTtsStatus(null);
     try {
-      const apiKey = await getSecret(MIMO_TTS_KEY_ACCOUNT);
-      if (!apiKey) {
-        setTtsStatus("还没有 MiMo TTS API key。");
-        return;
+      let audio: ArrayBuffer;
+      if (ttsCfg.ttsProvider === "edge") {
+        audio = await synthesizeEdge({
+          text: "Hello, this is a test.",
+          voice: ttsCfg.edgeVoice,
+          rate: ttsCfg.edgeRate,
+          pitch: ttsCfg.edgePitch,
+        });
+      } else {
+        const apiKey = await getSecret(MIMO_TTS_KEY_ACCOUNT);
+        if (!apiKey) {
+          setTtsStatus("还没有 MiMo TTS API key。");
+          return;
+        }
+        audio = await synthesizeMimo({
+          apiKey,
+          baseUrl: ttsCfg.baseUrl,
+          model: ttsCfg.model,
+          voice: ttsCfg.voice,
+          stylePrompt: ttsCfg.stylePrompt,
+          text: "Hello, this is a test.",
+        });
       }
-      const audio = await synthesizeMimo({
-        apiKey,
-        baseUrl: ttsCfg.baseUrl,
-        model: ttsCfg.model,
-        voice: ttsCfg.voice,
-        stylePrompt: ttsCfg.stylePrompt,
-        text: "Hello, this is a test.",
-      });
       setTtsStatus(`✓ TTS 正常 — 收到 ${audio.byteLength} 字节音频`);
     } catch (e) {
       setTtsStatus(`✗ 失败:${e instanceof Error ? e.message : String(e)}`);
@@ -262,7 +325,7 @@ export function SettingsView() {
       {/* 宽窗口两列并排、窄窗口堆叠;items-start 避免短区块被拉高。 */}
       <div className="grid max-w-5xl grid-cols-1 items-start gap-x-10 gap-y-8 lg:grid-cols-2">
         <section>
-          <h2 className="mb-4 mt-0 text-lg font-semibold tracking-tight">
+          <h2 className="mb-4 mt-0 text-ui-title font-semibold tracking-tight">
             模型与语言
           </h2>
 
@@ -337,29 +400,67 @@ export function SettingsView() {
             </Field>
           </div>
 
-          <Field
-            label={`API key ${hasKey ? "(已保存 · 留空不改)" : "(未设置)"}`}
-          >
-            <div className="flex flex-wrap items-end gap-2">
-              <Input
-                type="password"
-                className="flex-1"
-                value={keyInput}
-                onChange={(e) => setKeyInput(e.target.value)}
-                placeholder={
-                  hasKey ? "••••••••" : keyPlaceholders[cfg.providerType]
-                }
-              />
-              <Button onClick={saveKey} disabled={!keyInput.trim()}>
-                保存 key
-              </Button>
-              {hasKey && (
-                <Button variant="secondary" onClick={clearKey}>
-                  清除
+          {isOAuth ? (
+            <div className="mb-3.5 flex flex-col gap-2">
+              <span className="text-ui-body text-ui-muted">
+                订阅登录 {oauthTokens ? "· 已登录" : "· 未登录"}
+              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  onClick={() => void handleOauthLogin()}
+                  disabled={loggingIn}
+                >
+                  {loggingIn
+                    ? "等待浏览器授权…"
+                    : oauthTokens
+                      ? "重新登录"
+                      : "用浏览器登录"}
                 </Button>
+                {oauthTokens && (
+                  <Button
+                    variant="secondary"
+                    onClick={() => void handleOauthLogout()}
+                  >
+                    退出登录
+                  </Button>
+                )}
+              </div>
+              {oauthTokens && (
+                <span className="text-ui-caption text-ui-muted">
+                  访问令牌将于 {new Date(oauthTokens.expires).toLocaleString()}{" "}
+                  前自动刷新。
+                </span>
               )}
+              <span className="text-ui-caption leading-snug text-ui-muted">
+                ⚠️ 第三方应用使用订阅令牌(claude.ai / ChatGPT)可能违反对应
+                服务条款、存在账号被标记风险;为你自有账号、请知悉后自担。
+              </span>
             </div>
-          </Field>
+          ) : (
+            <Field
+              label={`API key ${hasKey ? "(已保存 · 留空不改)" : "(未设置)"}`}
+            >
+              <div className="flex flex-wrap items-end gap-2">
+                <Input
+                  type="password"
+                  className="flex-1"
+                  value={keyInput}
+                  onChange={(e) => setKeyInput(e.target.value)}
+                  placeholder={
+                    hasKey ? "••••••••" : keyPlaceholders[cfg.providerType]
+                  }
+                />
+                <Button onClick={saveKey} disabled={!keyInput.trim()}>
+                  保存 key
+                </Button>
+                {hasKey && (
+                  <Button variant="secondary" onClick={clearKey}>
+                    清除
+                  </Button>
+                )}
+              </div>
+            </Field>
+          )}
 
           <ToggleField
             checked={cfg.autoBilingual}
@@ -377,19 +478,36 @@ export function SettingsView() {
           </Button>
 
           {status && (
-            <p className="mt-2 break-words text-sm text-primary">{status}</p>
+            <p className="mt-2 break-words text-ui-body text-primary">
+              {status}
+            </p>
           )}
         </section>
 
         <section>
-          <h2 className="mb-2 mt-0 text-lg font-semibold tracking-tight">
-            朗读 (MiMo TTS)
+          <h2 className="mb-2 mt-0 text-ui-title font-semibold tracking-tight">
+            朗读
           </h2>
-          <p className="-mt-1 mb-4 text-sm leading-snug text-muted-foreground">
-            聊天中 AI 回复、改正和更地道句子旁的小喇叭会调用 MiMo
-            语音合成。相同句子会缓存音频,避免重复请求。
+          <p className="-mt-1 mb-4 text-ui-body leading-snug text-ui-muted">
+            聊天中 AI
+            回复、改正和更地道句子旁的小喇叭会调用语音合成。相同句子会缓存音频,避免重复请求。
             {ttsCacheCount !== null && ` 当前缓存 ${ttsCacheCount} 条。`}
           </p>
+
+          <Field label="朗读引擎">
+            <Select
+              value={ttsCfg.ttsProvider}
+              onValueChange={(v) => updateTts("ttsProvider", v as TtsProvider)}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="mimo">MiMo(需 API key)</SelectItem>
+                <SelectItem value="edge">微软 Edge(免费 · 无需 key)</SelectItem>
+              </SelectContent>
+            </Select>
+          </Field>
 
           <ToggleField
             checked={ttsCfg.autoSpeak}
@@ -398,73 +516,120 @@ export function SettingsView() {
             AI 回复自动朗读(关掉后仍可点小喇叭手动朗读)
           </ToggleField>
 
-          <Field
-            label={`MiMo API key ${hasTtsKey ? "(已保存 · 留空不改)" : "(未设置)"}`}
-          >
-            <div className="flex flex-wrap items-end gap-2">
-              <Input
-                type="password"
-                className="flex-1"
-                value={ttsKeyInput}
-                onChange={(e) => setTtsKeyInput(e.target.value)}
-                placeholder={hasTtsKey ? "••••••••" : "MiMo API key…"}
-              />
-              <Button
-                onClick={() => void saveTtsKey()}
-                disabled={!ttsKeyInput.trim()}
+          {ttsCfg.ttsProvider === "edge" ? (
+            <>
+              <p className="mb-3.5 text-ui-body leading-snug text-ui-muted">
+                使用微软 Edge 在线神经语音,免费、无需 API key(合成走本地后端
+                WebSocket)。
+              </p>
+              <div className="mb-3.5 flex flex-wrap items-end gap-2">
+                <Field label="音色" className="mb-0 min-w-40 flex-1">
+                  <Select
+                    value={ttsCfg.edgeVoice}
+                    onValueChange={(v) => updateTts("edgeVoice", v)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {EDGE_VOICES.map((v) => (
+                        <SelectItem key={v.id} value={v.id}>
+                          {v.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Field>
+                <Field label="语速" className="mb-0 min-w-24 flex-1">
+                  <Input
+                    value={ttsCfg.edgeRate}
+                    onChange={(e) => updateTts("edgeRate", e.target.value)}
+                    placeholder="+0%"
+                  />
+                </Field>
+                <Field label="音高" className="mb-0 min-w-24 flex-1">
+                  <Input
+                    value={ttsCfg.edgePitch}
+                    onChange={(e) => updateTts("edgePitch", e.target.value)}
+                    placeholder="+0Hz"
+                  />
+                </Field>
+              </div>
+            </>
+          ) : (
+            <>
+              <Field
+                label={`MiMo API key ${hasTtsKey ? "(已保存 · 留空不改)" : "(未设置)"}`}
               >
-                保存 key
-              </Button>
-              {hasTtsKey && (
-                <Button variant="secondary" onClick={() => void clearTtsKey()}>
-                  清除
-                </Button>
-              )}
-            </div>
-          </Field>
+                <div className="flex flex-wrap items-end gap-2">
+                  <Input
+                    type="password"
+                    className="flex-1"
+                    value={ttsKeyInput}
+                    onChange={(e) => setTtsKeyInput(e.target.value)}
+                    placeholder={hasTtsKey ? "••••••••" : "MiMo API key…"}
+                  />
+                  <Button
+                    onClick={() => void saveTtsKey()}
+                    disabled={!ttsKeyInput.trim()}
+                  >
+                    保存 key
+                  </Button>
+                  {hasTtsKey && (
+                    <Button
+                      variant="secondary"
+                      onClick={() => void clearTtsKey()}
+                    >
+                      清除
+                    </Button>
+                  )}
+                </div>
+              </Field>
 
-          <Field label="朗读风格 prompt (user 消息)">
-            <Textarea
-              className="min-h-18 resize-y leading-snug"
-              value={ttsCfg.stylePrompt}
-              onChange={(e) => updateTts("stylePrompt", e.target.value)}
-              rows={3}
-              placeholder="描述朗读的语气、语速、情感…"
-            />
-          </Field>
+              <Field label="朗读风格 prompt (user 消息)">
+                <Textarea
+                  className="min-h-18 resize-y leading-snug"
+                  value={ttsCfg.stylePrompt}
+                  onChange={(e) => updateTts("stylePrompt", e.target.value)}
+                  rows={3}
+                  placeholder="描述朗读的语气、语速、情感…"
+                />
+              </Field>
 
-          <div className="mb-3.5 flex flex-wrap items-end gap-2">
-            <Field label="音色" className="mb-0 min-w-28 flex-1">
-              <Select
-                value={ttsCfg.voice}
-                onValueChange={(v) => updateTts("voice", v)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {MIMO_VOICES.map((v) => (
-                    <SelectItem key={v.id} value={v.id}>
-                      {v.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-            <Field label="模型" className="mb-0 min-w-28 flex-1">
-              <Input
-                value={ttsCfg.model}
-                onChange={(e) => updateTts("model", e.target.value)}
-              />
-            </Field>
-          </div>
+              <div className="mb-3.5 flex flex-wrap items-end gap-2">
+                <Field label="音色" className="mb-0 min-w-28 flex-1">
+                  <Select
+                    value={ttsCfg.voice}
+                    onValueChange={(v) => updateTts("voice", v)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {MIMO_VOICES.map((v) => (
+                        <SelectItem key={v.id} value={v.id}>
+                          {v.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Field>
+                <Field label="模型" className="mb-0 min-w-28 flex-1">
+                  <Input
+                    value={ttsCfg.model}
+                    onChange={(e) => updateTts("model", e.target.value)}
+                  />
+                </Field>
+              </div>
 
-          <Field label="Base URL">
-            <Input
-              value={ttsCfg.baseUrl}
-              onChange={(e) => updateTts("baseUrl", e.target.value)}
-            />
-          </Field>
+              <Field label="Base URL">
+                <Input
+                  value={ttsCfg.baseUrl}
+                  onChange={(e) => updateTts("baseUrl", e.target.value)}
+                />
+              </Field>
+            </>
+          )}
 
           <div className="flex flex-wrap items-center gap-2">
             <Button
@@ -484,7 +649,9 @@ export function SettingsView() {
           </div>
 
           {ttsStatus && (
-            <p className="mt-2 break-words text-sm text-primary">{ttsStatus}</p>
+            <p className="mt-2 break-words text-ui-body text-primary">
+              {ttsStatus}
+            </p>
           )}
         </section>
       </div>

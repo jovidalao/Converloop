@@ -62,11 +62,11 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
         <AlertDialog.Portal>
           <AlertDialog.Overlay className="fixed inset-0 z-50 bg-black/40 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
           <AlertDialog.Content className="fixed left-1/2 top-1/2 z-50 w-[min(28rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 rounded-2xl border bg-card p-5 shadow-lg data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95">
-            <AlertDialog.Title className="text-base font-semibold">
+            <AlertDialog.Title className="text-ui-title font-semibold">
               {options?.title}
             </AlertDialog.Title>
             {options?.description && (
-              <AlertDialog.Description className="mt-1.5 text-sm text-muted-foreground">
+              <AlertDialog.Description className="mt-1.5 text-ui-body text-ui-muted">
                 {options.description}
               </AlertDialog.Description>
             )}

@@ -44,7 +44,7 @@ export function SlashMenu({
             role="option"
             aria-selected={isSelected}
             data-selected={isSelected}
-            className="mx-1 flex items-baseline gap-2.5 rounded-md px-2.5 py-1.5 text-sm data-[selected=true]:bg-accent"
+            className="mx-1 flex items-baseline gap-2.5 rounded-md px-2.5 py-1.5 text-ui-body data-[selected=true]:bg-accent"
             onMouseMove={() => onHover(idx)}
             onMouseDown={(e) => {
               // 不让输入框失焦;在 mousedown 即激活(常见自动完成范式)。
@@ -56,11 +56,11 @@ export function SlashMenu({
               /{command.name}
             </span>
             {command.argsHint && (
-              <span className="shrink-0 text-xs text-muted-foreground/70">
+              <span className="shrink-0 text-ui-meta text-ui-subtle">
                 {command.argsHint}
               </span>
             )}
-            <span className="min-w-0 flex-1 truncate text-right text-xs text-muted-foreground">
+            <span className="min-w-0 flex-1 truncate text-right text-ui-caption text-ui-muted">
               {command.description}
             </span>
           </div>

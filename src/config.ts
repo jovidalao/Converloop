@@ -1,17 +1,33 @@
 import { useSyncExternalStore } from "react";
 import { z } from "zod";
 import { getSecret } from "./keychain";
+import { refreshAnthropic } from "./oauth/anthropic";
+import { refreshOpenAICodex } from "./oauth/openai";
+import { getTokens, type OAuthTokens, setTokens } from "./oauth/store";
 import { createAnthropicProvider } from "./providers/anthropic";
 import { createGeminiProvider } from "./providers/gemini";
 import { createOpenAIProvider } from "./providers/openai";
+import { createOpenAICodexProvider } from "./providers/openai-responses";
 import { defaultPlugins, withPlugins } from "./providers/plugins";
 import type { ModelProvider } from "./providers/types";
 
-export type ProviderType = "openai" | "gemini" | "anthropic";
+// claude-oauth / codex-oauth:用订阅(Claude Pro/Max、ChatGPT)浏览器登录,而非 API key。
+export type ProviderType =
+  | "openai"
+  | "gemini"
+  | "anthropic"
+  | "claude-oauth"
+  | "codex-oauth";
 
 // 非密配置存 localStorage;API key 走设备绑定加密文件(见 keychain.ts → Rust secrets.rs)。
 const AppConfigSchema = z.object({
-  providerType: z.enum(["openai", "gemini", "anthropic"]),
+  providerType: z.enum([
+    "openai",
+    "gemini",
+    "anthropic",
+    "claude-oauth",
+    "codex-oauth",
+  ]),
   baseUrl: z.string(),
   model: z.string(),
   nativeLanguage: z.string(),
@@ -56,6 +72,18 @@ export function apiKeyAccount(type: ProviderType): string {
   return `${type}_api_key`;
 }
 
+// 订阅登录 provider 的令牌 account(JSON {access,refresh,expires}),与 API key 分开存。
+export function oauthAccount(type: ProviderType): string {
+  return `${type}_oauth`;
+}
+
+const OAUTH_PROVIDERS = new Set<ProviderType>(["claude-oauth", "codex-oauth"]);
+
+// 是否走订阅 OAuth 登录(而非填 API key)。SettingsView 据此切换登录 UI。
+export function isOAuthProvider(type: ProviderType): boolean {
+  return OAUTH_PROVIDERS.has(type);
+}
+
 // 切换 provider 时给设置页用的预设(baseUrl + 示例模型)。
 export const PROVIDER_PRESETS: Record<
   ProviderType,
@@ -75,6 +103,18 @@ export const PROVIDER_PRESETS: Record<
     label: "Anthropic (Claude)",
     baseUrl: "http://192.168.31.154:8045/v1",
     model: "claude-sonnet-4-20250514",
+  },
+  // 订阅登录:令牌直连 Anthropic 官方 API(非代理),模型可在设置里改成订阅可用的型号。
+  "claude-oauth": {
+    label: "Claude (Pro/Max 登录)",
+    baseUrl: "https://api.anthropic.com/v1",
+    model: "claude-sonnet-4-5",
+  },
+  // Codex 订阅登录:走 ChatGPT 后端 Responses API,模型用 codex 系列。
+  "codex-oauth": {
+    label: "ChatGPT (Codex 登录)",
+    baseUrl: "https://chatgpt.com/backend-api",
+    model: "gpt-5-codex",
   },
 };
 
@@ -132,9 +172,62 @@ export function useConfig(): AppConfig {
   return useSyncExternalStore(subscribeConfig, loadConfig);
 }
 
-// 从配置 + keychain 组装 provider。无 key 时返回 null,调用方据此提示去设置页填 key。
+// OAuth provider 的令牌刷新单飞:热路径上对话 ∥ 导师几乎同时取 provider,
+// 不去重会把同一次刷新打两遍(其中一个换来的 refresh token 随即失效)。
+const refreshInFlight = new Map<ProviderType, Promise<OAuthTokens>>();
+
+// 取当前令牌;过期则刷新并回写。无令牌(未登录)返回 null。
+async function ensureFreshTokens(
+  type: ProviderType,
+  refreshFn: (refresh: string) => Promise<OAuthTokens>,
+): Promise<OAuthTokens | null> {
+  const tokens = await getTokens(oauthAccount(type));
+  if (!tokens) return null;
+  if (Date.now() < tokens.expires) return tokens;
+
+  let inflight = refreshInFlight.get(type);
+  if (!inflight) {
+    inflight = refreshFn(tokens.refresh)
+      .then(async (fresh) => {
+        // 刷新响应若没带回某些字段(如 Codex accountId),沿用旧值。
+        const merged: OAuthTokens = { ...tokens, ...fresh };
+        await setTokens(oauthAccount(type), merged);
+        return merged;
+      })
+      .finally(() => refreshInFlight.delete(type));
+    refreshInFlight.set(type, inflight);
+  }
+  return inflight;
+}
+
+// 从配置 + keychain 组装 provider。无 key / 未登录时返回 null,调用方据此提示去设置页。
 export async function getProvider(): Promise<ModelProvider | null> {
   const config = loadConfig();
+
+  if (config.providerType === "claude-oauth") {
+    const tokens = await ensureFreshTokens("claude-oauth", refreshAnthropic);
+    if (!tokens) return null;
+    const provider = createAnthropicProvider({
+      baseUrl: config.baseUrl,
+      apiKey: tokens.access,
+      model: config.model,
+      oauth: true,
+    });
+    return withPlugins(provider, defaultPlugins());
+  }
+
+  if (config.providerType === "codex-oauth") {
+    const tokens = await ensureFreshTokens("codex-oauth", refreshOpenAICodex);
+    if (!tokens) return null;
+    const provider = createOpenAICodexProvider({
+      baseUrl: config.baseUrl,
+      apiKey: tokens.access,
+      model: config.model,
+      accountId: tokens.accountId,
+    });
+    return withPlugins(provider, defaultPlugins());
+  }
+
   const apiKey = await getSecret(apiKeyAccount(config.providerType));
   if (!apiKey) return null;
   const base = { baseUrl: config.baseUrl, apiKey, model: config.model };

@@ -69,7 +69,9 @@ function Badge({
   className?: string;
 }) {
   return (
-    <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${className}`}>
+    <span
+      className={`rounded px-1.5 py-0.5 text-ui-caption font-medium ${className}`}
+    >
       {children}
     </span>
   );
@@ -119,17 +121,19 @@ function MasteryRow({
             <Input
               value={label}
               onChange={(e) => setLabel(e.target.value)}
-              className="h-8 text-sm font-medium"
+              className="h-8 text-ui-body font-medium"
             />
           ) : (
-            <div className="truncate text-sm font-medium">{item.label}</div>
+            <div className="truncate text-ui-body font-medium">
+              {item.label}
+            </div>
           )}
-          <div className="mt-1 truncate font-mono text-xs text-muted-foreground">
+          <div className="mt-1 truncate font-mono text-ui-caption text-ui-muted">
             {item.key}
           </div>
         </div>
         <div className="flex shrink-0 flex-wrap justify-end gap-1">
-          <Badge className="bg-muted text-muted-foreground">
+          <Badge className="bg-muted text-ui-muted">
             {TYPE_LABEL[item.type] ?? item.type}
           </Badge>
           <Badge className={STATUS_CLASS[item.status] ?? "bg-muted"}>
@@ -138,7 +142,7 @@ function MasteryRow({
         </div>
       </div>
 
-      <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+      <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-ui-caption text-ui-muted">
         <span>错误/产出 {ratio(item)}</span>
         <span>最近 {dateLabel(item.lastSeenAt)}</span>
       </div>
@@ -148,25 +152,25 @@ function MasteryRow({
           <Textarea
             value={example}
             onChange={(e) => setExample(e.target.value)}
-            className="min-h-16 resize-none text-sm"
+            className="min-h-16 resize-none text-ui-body"
             placeholder="例句 / 原始表达"
           />
           <Textarea
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            className="min-h-16 resize-none text-sm"
+            className="min-h-16 resize-none text-ui-body"
             placeholder="笔记 / 目标表达"
           />
         </div>
       ) : (
-        <div className="mt-2 grid gap-1.5 text-sm leading-relaxed">
+        <div className="mt-2 grid gap-1.5 text-ui-body leading-relaxed">
           {item.example && (
             <p className="m-0 whitespace-pre-wrap text-foreground">
               {item.example}
             </p>
           )}
           {item.notes && (
-            <p className="m-0 whitespace-pre-wrap text-muted-foreground">
+            <p className="m-0 whitespace-pre-wrap text-ui-muted">
               {item.notes}
             </p>
           )}
@@ -304,25 +308,25 @@ export function MasteryView() {
 
   return (
     <div className="flex h-full max-w-5xl flex-col overflow-y-auto px-6 pt-14 pb-6">
-      <h2 className="mt-0 mb-3 text-lg font-semibold tracking-tight">
+      <h2 className="mt-0 mb-3 text-ui-title font-semibold tracking-tight">
         学习数据
       </h2>
 
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex min-w-64 flex-1 items-center gap-2 rounded-md border bg-card px-2.5">
-          <SearchIcon size={15} className="text-muted-foreground" />
+          <SearchIcon size={15} className="text-ui-muted" />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="搜索 key、标签、例句"
             spellCheck={false}
-            className="min-w-0 flex-1 border-none bg-transparent py-2 text-sm outline-none placeholder:text-muted-foreground"
+            className="min-w-0 flex-1 border-none bg-transparent py-2 text-ui-body outline-none placeholder:text-muted-foreground"
           />
         </div>
         <select
           value={status}
           onChange={(e) => setStatus(e.target.value)}
-          className="h-9 rounded-md border bg-card px-2 text-sm outline-none focus-visible:border-ring"
+          className="h-9 rounded-md border bg-card px-2 text-ui-body outline-none focus-visible:border-ring"
         >
           <option value="all">全部状态</option>
           <option value="struggling">薄弱</option>
@@ -332,7 +336,7 @@ export function MasteryView() {
         <select
           value={type}
           onChange={(e) => setType(e.target.value)}
-          className="h-9 rounded-md border bg-card px-2 text-sm outline-none focus-visible:border-ring"
+          className="h-9 rounded-md border bg-card px-2 text-ui-body outline-none focus-visible:border-ring"
         >
           <option value="all">全部类型</option>
           {types.map((t) => (
@@ -352,14 +356,16 @@ export function MasteryView() {
           />
         ))}
         {filtered.length === 0 && (
-          <div className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">
+          <div className="rounded-lg border bg-card p-4 text-ui-body text-ui-muted">
             暂无匹配的学习项
           </div>
         )}
       </div>
 
       <div className="mt-5 rounded-lg border bg-card p-3">
-        <div className="mb-2 text-sm font-semibold">用自然语言修改数据</div>
+        <div className="mb-2 text-ui-body font-semibold">
+          用自然语言修改数据
+        </div>
         <Textarea
           value={editText}
           onChange={(e) => setEditText(e.target.value)}
@@ -367,7 +373,7 @@ export function MasteryView() {
           className="min-h-24 resize-none"
         />
         <div className="mt-2 flex items-center justify-between gap-2">
-          <p className="m-0 text-xs leading-snug text-muted-foreground">
+          <p className="m-0 text-ui-caption leading-snug text-ui-muted">
             系统会先把请求转换成有限的数据操作,再由代码执行;不会直接修改计数。
           </p>
           <Button
@@ -380,12 +386,12 @@ export function MasteryView() {
           </Button>
         </div>
         {editResult && (
-          <div className="mt-2 rounded-md bg-primary/10 px-3 py-2 text-sm text-primary">
+          <div className="mt-2 rounded-md bg-primary/10 px-3 py-2 text-ui-body text-primary">
             {editResult}
           </div>
         )}
         {editError && (
-          <div className="mt-2 rounded-md bg-destructive/15 px-3 py-2 text-sm text-destructive">
+          <div className="mt-2 rounded-md bg-destructive/15 px-3 py-2 text-ui-body text-destructive">
             {editError}
           </div>
         )}

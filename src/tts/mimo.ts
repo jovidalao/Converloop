@@ -1,11 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-
-function base64ToArrayBuffer(b64: string): ArrayBuffer {
-  const binary = atob(b64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return bytes.buffer;
-}
+import { base64ToArrayBuffer } from "./audio";
 
 export async function synthesizeMimo(opts: {
   apiKey: string;

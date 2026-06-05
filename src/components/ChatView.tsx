@@ -116,6 +116,8 @@ const MODEL_PROVIDER_LABEL: Record<ProviderType, string> = {
   openai: "OpenAI",
   gemini: "Gemini",
   anthropic: "Claude",
+  "claude-oauth": "Claude (Pro/Max)",
+  "codex-oauth": "ChatGPT (Codex)",
 };
 
 const MODEL_PROVIDERS = Object.keys(PROVIDER_PRESETS) as ProviderType[];
@@ -140,14 +142,14 @@ function modelBrand(model: string): ModelBrand {
     return {
       name: lower.includes("anthropic") ? "Anthropic" : "Claude",
       svg: lower.includes("anthropic") ? anthropicLogo : claudeLogo,
-      className: "text-[#D97757]",
+      className: "text-info",
     };
   }
   if (lower.includes("gemini") || lower.includes("google")) {
     return {
       name: "Google Gemini",
       svg: geminiLogo,
-      className: "text-[#8E75FF]",
+      className: "text-brand",
     };
   }
   if (
@@ -166,28 +168,28 @@ function modelBrand(model: string): ModelBrand {
     return {
       name: "DeepSeek",
       svg: deepSeekLogo,
-      className: "text-[#4D6BFE]",
+      className: "text-brand",
     };
   }
   if (lower.includes("qwen") || lower.includes("dashscope")) {
     return {
       name: "Qwen",
       svg: qwenLogo,
-      className: "text-[#615CED]",
+      className: "text-brand",
     };
   }
   if (lower.includes("llama") || lower.includes("meta")) {
     return {
       name: "Meta Llama",
       svg: metaLogo,
-      className: "text-[#1D65C1]",
+      className: "text-ui-secondary",
     };
   }
   if (lower.includes("mistral") || lower.includes("mixtral")) {
     return {
       name: "Mistral",
       svg: mistralLogo,
-      className: "text-[#FA520F]",
+      className: "text-info",
     };
   }
   if (
@@ -205,26 +207,26 @@ function modelBrand(model: string): ModelBrand {
     return {
       name: "Groq",
       svg: groqLogo,
-      className: "text-[#F55036]",
+      className: "text-destructive",
     };
   }
   if (lower.includes("perplexity") || lower.includes("pplx")) {
     return {
       name: "Perplexity",
       svg: perplexityLogo,
-      className: "text-[#22B8CD]",
+      className: "text-info",
     };
   }
   if (lower.includes("cohere") || lower.includes("command-r")) {
     return {
       name: "Cohere",
       svg: cohereLogo,
-      className: "text-[#39594D]",
+      className: "text-success",
     };
   }
   return {
     name: modelShortName(model),
-    className: "text-muted-foreground",
+    className: "text-ui-muted",
   };
 }
 
@@ -436,7 +438,7 @@ function ReplySuggestionPanel({
       {suggestion.error ? (
         <div className="flex items-center gap-3">
           <span
-            className="min-w-0 flex-1 text-sm leading-snug text-destructive"
+            className="min-w-0 flex-1 text-ui-body leading-snug text-destructive"
             role="alert"
           >
             {suggestion.error}
@@ -457,12 +459,12 @@ function ReplySuggestionPanel({
         <div className="flex items-start gap-2">
           <div className="min-w-0 flex-1 space-y-2">
             {suggestion.warning && (
-              <p className="m-0 rounded-md bg-warning/10 px-2 py-1.5 text-xs leading-snug text-warning">
+              <p className="m-0 rounded-md bg-warning/10 px-2 py-1.5 text-ui-caption leading-snug text-warning">
                 {suggestion.warning}
               </p>
             )}
             <div
-              className="text-sm leading-normal text-foreground"
+              className="text-ui-body leading-normal text-foreground"
               data-selectable-context
             >
               <Markdown>{suggestion.text}</Markdown>
@@ -482,7 +484,7 @@ function ReplySuggestionPanel({
           </Button>
         </div>
       ) : (
-        <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
+        <span className="inline-flex items-center gap-1.5 text-ui-body text-ui-muted">
           <Spinner />
           正在生成推荐回复…
         </span>
@@ -652,7 +654,7 @@ function PartnerReply({
         {showBilingual && error ? (
           <div className="flex items-center gap-3">
             <span
-              className="min-w-0 flex-1 text-sm leading-snug text-destructive"
+              className="min-w-0 flex-1 text-ui-body leading-snug text-destructive"
               role="alert"
             >
               {error}
@@ -836,13 +838,13 @@ function UserTurn({
     return (
       <div className="flex max-w-[min(88%,520px)] flex-col items-end gap-1 self-end">
         <div
-          className="whitespace-pre-wrap rounded-2xl rounded-br-sm border border-dashed bg-secondary/50 px-3.5 py-2.5 text-base leading-normal text-foreground"
+          className="whitespace-pre-wrap rounded-2xl rounded-br-sm border border-dashed bg-secondary/50 px-3.5 py-2.5 text-ui-chat text-foreground"
           data-selectable-context
         >
           {turn.userText}
         </div>
         <div className="-mr-1 flex items-center gap-1.5 pr-1">
-          <span className="text-[11px] text-muted-foreground/70">
+          <span className="text-ui-caption text-ui-subtle">
             顺便一问 · 不计入上下文
           </span>
           <CopyButton text={turn.userText} />
@@ -854,7 +856,7 @@ function UserTurn({
     return (
       <div className="flex max-w-[min(88%,520px)] flex-col items-end gap-1.5 self-end">
         <div
-          className="whitespace-pre-wrap rounded-2xl rounded-br-sm border bg-secondary px-3.5 py-2.5 text-base leading-normal text-foreground shadow-sm"
+          className="whitespace-pre-wrap rounded-2xl rounded-br-sm border bg-secondary px-3.5 py-2.5 text-ui-chat text-foreground shadow-sm"
           data-selectable-context
         >
           {turn.userText}
@@ -873,14 +875,14 @@ function UserTurn({
   }
   return (
     <div className="flex max-w-[min(88%,520px)] flex-col items-end gap-1.5 self-end">
-      <div className="whitespace-pre-wrap rounded-2xl rounded-br-sm border bg-secondary px-3.5 py-2.5 text-base leading-normal text-foreground shadow-sm">
+      <div className="whitespace-pre-wrap rounded-2xl rounded-br-sm border bg-secondary px-3.5 py-2.5 text-ui-chat text-foreground shadow-sm">
         <UserSentence
           text={turn.userText}
           analysis={turn.analysis}
           nativeLanguage={nativeLanguage}
         />
         {idiomatic && naturalOpen && !coachVisible && (
-          <div className="mt-2 flex items-start gap-1.5 border-t pt-2 text-sm leading-normal text-muted-foreground">
+          <div className="mt-2 flex items-start gap-1.5 border-t pt-2 text-ui-body text-ui-muted">
             <span
               className="mt-0.5 inline-flex shrink-0 text-primary"
               aria-hidden
@@ -978,12 +980,12 @@ function DerivedContextBanner({
     ["约束", context.constraints.join(" / ")],
   ];
   return (
-    <div className="rounded-lg border bg-muted/40 text-sm">
+    <div className="rounded-lg border bg-muted/40 text-ui-body">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left text-muted-foreground transition-colors hover:text-foreground"
+        className="flex w-full items-center gap-2 px-3 py-2 text-left text-ui-muted transition-colors hover:text-foreground"
       >
         <span className="shrink-0" aria-hidden>
           {open ? (
@@ -1005,7 +1007,7 @@ function DerivedContextBanner({
             .filter(([, value]) => value.trim())
             .map(([key, value]) => (
               <div key={key} className="flex gap-2.5">
-                <dt className="w-14 shrink-0 text-muted-foreground">{key}</dt>
+                <dt className="w-14 shrink-0 text-ui-muted">{key}</dt>
                 <dd className="min-w-0 flex-1 leading-snug">{value}</dd>
               </div>
             ))}
@@ -1722,7 +1724,7 @@ export function ChatView({
           />
         )}
         {turns.length === 0 && !streaming && (
-          <div className="m-auto text-center text-sm leading-relaxed text-muted-foreground">
+          <div className="m-auto text-center text-ui-body leading-relaxed text-ui-muted">
             {learningMode
               ? "正在准备专项课…"
               : "用目标语言说点什么,开始对话吧。"}
@@ -1783,7 +1785,7 @@ export function ChatView({
           </TurnCard>
         ))}
         {derivationPreparing && (
-          <div className="m-auto flex flex-col items-center gap-2 text-center text-sm leading-relaxed text-muted-foreground">
+          <div className="m-auto flex flex-col items-center gap-2 text-center text-ui-body leading-relaxed text-ui-muted">
             <Spinner />
             <span>正在生成新的对话上下文…</span>
           </div>
@@ -1792,7 +1794,7 @@ export function ChatView({
           <ThinkingIndicator className="self-stretch py-0.5" />
         )}
         {streaming.trim().length >= 2 && (
-          <div className="self-stretch py-0.5 text-foreground opacity-70">
+          <div className="self-stretch py-0.5 text-ui-secondary">
             <Markdown>{streaming}</Markdown>
           </div>
         )}
@@ -1800,7 +1802,7 @@ export function ChatView({
       </div>
       <AnnotationIsland containerRef={messagesRef} />
       {error && (
-        <div className="mx-4 flex items-center gap-3 rounded-md bg-destructive/15 px-3 py-2 text-sm text-destructive">
+        <div className="mx-4 flex items-center gap-3 rounded-md bg-destructive/15 px-3 py-2 text-ui-body text-destructive">
           <span className="min-w-0 flex-1">{error}</span>
           {retry && !replyBusy && (
             <Button
@@ -1927,7 +1929,7 @@ export function ChatView({
                     : "用目标语言输入一句话…（/ 命令 · @ 引用学习点）"
                 }
                 disabled={replyBusy}
-                className="max-h-24 min-h-[3.25rem] min-w-0 resize-none border-none bg-transparent px-4 pt-3 pb-1.5 text-base leading-snug outline-none placeholder:text-muted-foreground"
+                className="max-h-24 min-h-[3.25rem] min-w-0 resize-none border-none bg-transparent px-4 pt-3 pb-1.5 text-ui-chat outline-none placeholder:text-muted-foreground"
               />
               <div className="flex min-h-11 items-center gap-2 px-2 py-1.5">
                 <div
@@ -1937,10 +1939,10 @@ export function ChatView({
                   {optionBadges.map((b) => (
                     <span
                       key={b.label}
-                      className={`inline-flex max-w-32 items-center truncate rounded-md px-1.5 py-0.5 text-[11px] font-medium ${
+                      className={`inline-flex max-w-32 items-center truncate rounded-md px-1.5 py-0.5 text-ui-caption font-medium ${
                         b.tone === "info"
                           ? "bg-primary/10 text-primary"
-                          : "bg-muted text-muted-foreground"
+                          : "bg-muted text-ui-muted"
                       }`}
                     >
                       {b.label}
@@ -1953,7 +1955,7 @@ export function ChatView({
                   disabled={replyBusy}
                 >
                   <SelectTrigger
-                    className="h-8 w-auto max-w-[13rem] min-w-0 gap-2.5 border-0 bg-transparent px-2 text-xs text-muted-foreground shadow-none hover:bg-accent hover:text-foreground focus-visible:ring-1"
+                    className="h-7 w-auto max-w-[9.5rem] min-w-0 gap-1.5 border-0 bg-transparent px-1.5 text-ui-caption text-foreground shadow-none hover:bg-accent focus-visible:ring-1"
                     aria-label="选择模型"
                   >
                     <ModelLogo model={config.model} />
@@ -1966,9 +1968,7 @@ export function ChatView({
                       <SelectItem value="current">
                         <span className="flex items-center gap-2.5">
                           <ModelLogo model={config.model} />
-                          <span>
-                            当前 · {modelShortName(config.model)}
-                          </span>
+                          <span>当前 · {modelShortName(config.model)}</span>
                         </span>
                       </SelectItem>
                     )}

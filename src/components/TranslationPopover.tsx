@@ -157,7 +157,7 @@ export function TranslationPopover({
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="flex items-center gap-1.5 rounded-lg border bg-card px-2.5 py-1.5 text-xs font-medium text-foreground shadow-md transition-colors hover:bg-accent"
+          className="flex items-center gap-1.5 rounded-lg border bg-card px-2.5 py-1.5 text-ui-caption font-medium text-foreground shadow-md transition-colors hover:bg-accent"
         >
           <LanguagesIcon size={14} />
           <span>解析</span>
@@ -169,17 +169,17 @@ export function TranslationPopover({
         >
           {error ? (
             <span
-              className="text-sm leading-snug text-destructive"
+              className="text-ui-body leading-snug text-destructive"
               role="alert"
             >
               {error}
             </span>
           ) : (
-            <div className="max-h-[50vh] overflow-y-auto text-sm leading-normal text-foreground">
+            <div className="max-h-[50vh] overflow-y-auto text-ui-body leading-normal text-foreground">
               {result ? (
                 <Markdown>{result}</Markdown>
               ) : (
-                <span className="flex items-center gap-2 text-muted-foreground">
+                <span className="flex items-center gap-2 text-ui-muted">
                   <Spinner /> 解析中…
                 </span>
               )}

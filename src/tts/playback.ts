@@ -1,3 +1,13 @@
+// 按内容嗅探音频 MIME:MiMo 回传 WAV(RIFF 头),Edge 回传 MP3。给 Blob 正确的 type 更稳妥。
+function sniffAudioMime(bytes: ArrayBuffer): string {
+  const b = new Uint8Array(bytes.slice(0, 4));
+  // "RIFF" → WAV
+  if (b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46) {
+    return "audio/wav";
+  }
+  return "audio/mpeg";
+}
+
 let currentAudio: HTMLAudioElement | null = null;
 let currentObjectUrl: string | null = null;
 // 当前正在播放的文本(用作每个朗读按钮的"是不是我在响"判定);空闲为 null。
@@ -66,7 +76,7 @@ function playBuffer(audioBytes: ArrayBuffer, token: number): Promise<void> {
       return;
     }
     if (currentObjectUrl) URL.revokeObjectURL(currentObjectUrl);
-    const blob = new Blob([audioBytes], { type: "audio/wav" });
+    const blob = new Blob([audioBytes], { type: sniffAudioMime(audioBytes) });
     currentObjectUrl = URL.createObjectURL(blob);
     currentAudio = new Audio(currentObjectUrl);
     currentSettle = resolve;

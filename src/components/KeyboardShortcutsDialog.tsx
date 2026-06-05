@@ -5,7 +5,7 @@ import { Button } from "./ui/button";
 
 function KeyCap({ children }: { children: string }) {
   return (
-    <kbd className="inline-flex min-w-6 items-center justify-center rounded border border-border/70 bg-muted px-1.5 py-0.5 font-sans text-[11px] text-muted-foreground shadow-minimal-flat">
+    <kbd className="inline-flex min-w-6 items-center justify-center rounded border border-border/70 bg-muted px-1.5 py-0.5 font-sans text-ui-caption text-ui-muted shadow-minimal-flat">
       {children}
     </kbd>
   );
@@ -43,8 +43,8 @@ export function KeyboardShortcutsDialog({
       >
         <div className="flex items-center gap-3 border-b px-4 py-3">
           <div className="min-w-0 flex-1">
-            <h2 className="m-0 text-sm font-semibold">键盘快捷键</h2>
-            <p className="mt-0.5 mb-0 text-xs text-muted-foreground">
+            <h2 className="m-0 text-ui-body font-semibold">键盘快捷键</h2>
+            <p className="mt-0.5 mb-0 text-ui-caption text-ui-muted">
               常用操作都可以从键盘完成。
             </p>
           </div>
@@ -63,7 +63,7 @@ export function KeyboardShortcutsDialog({
           {APP_ACTIONS.map((shortcut) => (
             <div
               key={`${shortcut.keys.join("+")}:${shortcut.label}`}
-              className="flex items-center gap-3 rounded-lg px-2 py-2 text-sm"
+              className="flex items-center gap-3 rounded-lg px-2 py-2 text-ui-body"
             >
               <span className="min-w-0 flex-1 text-foreground">
                 {shortcut.label}

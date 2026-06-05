@@ -46,7 +46,7 @@ const SIGNAL_LABEL: Record<SignalKind, string> = {
 const SIGNAL_TONE: Record<SignalKind, string> = {
   error: "bg-destructive/10 text-destructive",
   correct: "bg-success/10 text-success",
-  introduced: "bg-muted text-muted-foreground",
+  introduced: "bg-muted text-ui-muted",
   gap: "bg-accent text-primary",
 };
 
@@ -66,8 +66,8 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <section className="flex flex-col gap-2">
-      <h3 className="m-0 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+    <section className="flex flex-col gap-2.5">
+      <h3 className="m-0 text-ui-body font-semibold text-foreground">
         {title}
       </h3>
       {children}
@@ -77,91 +77,125 @@ function Section({
 
 type InspectorPanel = "feedback" | "memory" | "observations" | "proposals";
 
-const ACTIVITY_TONE: Record<TurnActivity["status"], string> = {
-  pending: "bg-muted text-muted-foreground",
-  ok: "bg-success/10 text-success",
-  info: "bg-primary/10 text-primary",
-  error: "bg-destructive/10 text-destructive",
+const STATUS_DOT: Record<TurnActivity["status"], string> = {
+  pending: "bg-foreground-40",
+  ok: "bg-success",
+  info: "bg-foreground",
+  error: "bg-destructive",
 };
 
-function ActivityChips({
+function CoachOverview({
   activities,
-  onSelect,
-}: {
-  activities: TurnActivity[];
-  onSelect: (panel: InspectorPanel) => void;
-}) {
-  if (activities.length === 0) return null;
-  return (
-    <div className="flex flex-col gap-2">
-      <h3 className="m-0 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        本轮活动
-      </h3>
-      <div className="flex flex-wrap gap-1.5">
-        {activities.map((activity, index) => (
-          <button
-            key={`${activity.kind}:${index}`}
-            type="button"
-            className={cn(
-              "inline-flex max-w-full items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-colors hover:bg-accent hover:text-foreground",
-              ACTIVITY_TONE[activity.status],
-            )}
-            onClick={() =>
-              onSelect(activity.kind === "memory" ? "memory" : "feedback")
-            }
-            title={activity.preview}
-          >
-            {activity.status === "pending" && (
-              <Spinner className="size-3 shrink-0" />
-            )}
-            <span className="min-w-0 truncate">{activity.label}</span>
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function InspectorTabs({
   active,
   memoryCount,
   annotationCount,
   proposalCount,
   onChange,
 }: {
+  activities: TurnActivity[];
   active: InspectorPanel;
   memoryCount: number;
   annotationCount: number;
   proposalCount: number;
   onChange: (panel: InspectorPanel) => void;
 }) {
-  const tabs: { id: InspectorPanel; label: string; count?: number }[] = [
-    { id: "feedback", label: "反馈" },
-    { id: "memory", label: "记忆", count: memoryCount },
-    { id: "observations", label: "观察", count: annotationCount },
-    { id: "proposals", label: "待确认", count: proposalCount },
+  const feedback = activities.find((a) => a.kind === "tutor");
+  const items: {
+    id: InspectorPanel;
+    label: string;
+    value: string;
+    status?: TurnActivity["status"];
+  }[] = [
+    {
+      id: "feedback",
+      label: "反馈",
+      value: feedback?.label ?? "暂无反馈",
+      status: feedback?.status,
+    },
+    {
+      id: "memory",
+      label: "记忆",
+      value: memoryCount > 0 ? `${memoryCount} 项` : "本轮无新增",
+      status: memoryCount > 0 ? "info" : undefined,
+    },
+    {
+      id: "observations",
+      label: "观察",
+      value: annotationCount > 0 ? `${annotationCount} 条` : "无观察",
+      status: annotationCount > 0 ? "info" : undefined,
+    },
+    {
+      id: "proposals",
+      label: "待确认",
+      value: proposalCount > 0 ? `${proposalCount} 条` : "无待确认",
+      status: proposalCount > 0 ? "info" : undefined,
+    },
   ];
   return (
-    <div className="grid grid-cols-4 gap-1 rounded-lg bg-muted p-1">
-      {tabs.map((tab) => (
+    <div className="grid grid-cols-2 gap-2">
+      {items.map((item) => (
         <button
-          key={tab.id}
+          key={item.id}
           type="button"
+          aria-pressed={active === item.id}
           className={cn(
-            "flex min-w-0 items-center justify-center gap-1 rounded-md px-1.5 py-1.5 text-xs font-medium transition-colors",
-            active === tab.id
-              ? "bg-background text-foreground shadow-minimal-flat"
-              : "text-muted-foreground hover:text-foreground",
+            "flex min-h-16 min-w-0 flex-col items-start justify-between rounded-lg border px-3 py-2 text-left transition-colors",
+            active === item.id
+              ? "border-border bg-background shadow-minimal-flat"
+              : "border-transparent bg-foreground-3 hover:bg-foreground-5",
           )}
-          onClick={() => onChange(tab.id)}
+          onClick={() => onChange(item.id)}
         >
-          <span className="truncate">{tab.label}</span>
-          {tab.count !== undefined && tab.count > 0 && (
-            <span className="rounded-full bg-foreground-10 px-1.5 py-0.5 text-[10px] tabular-nums">
-              {tab.count}
-            </span>
-          )}
+          <span className="flex w-full min-w-0 items-center gap-1.5 text-ui-caption font-medium text-foreground-80">
+            {item.status && (
+              <span
+                className={cn(
+                  "size-1.5 shrink-0 rounded-full",
+                  STATUS_DOT[item.status],
+                )}
+              />
+            )}
+            <span className="truncate">{item.label}</span>
+          </span>
+          <span className="mt-1 max-w-full truncate text-ui-body font-semibold text-foreground">
+            {item.value}
+          </span>
         </button>
+      ))}
+    </div>
+  );
+}
+
+function ActivitySummary({ activities }: { activities: TurnActivity[] }) {
+  if (activities.length === 0) return null;
+  return (
+    <div className="flex flex-col gap-1.5">
+      {activities.map((activity, index) => (
+        <div
+          key={`${activity.kind}:${index}`}
+          className="flex min-w-0 items-start gap-2 rounded-md bg-foreground-3 px-2.5 py-2"
+          title={activity.preview}
+        >
+          <span
+            className={cn(
+              "mt-1.5 size-1.5 shrink-0 rounded-full",
+              STATUS_DOT[activity.status],
+            )}
+          />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-ui-body font-medium text-foreground">
+              {activity.label}
+            </span>
+            {activity.preview && (
+              <span className="mt-0.5 block truncate text-ui-caption text-foreground-80">
+                {activity.preview}
+              </span>
+            )}
+          </span>
+          {activity.status === "pending" && (
+            <Spinner className="mt-0.5 size-3.5 shrink-0" />
+          )}
+        </div>
       ))}
     </div>
   );
@@ -179,7 +213,7 @@ function TurnFeedback({
 
   if (turn.analysisPending && !analysis && !turn.analysisProse) {
     return (
-      <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
+      <span className="inline-flex items-center gap-1.5 text-ui-body text-ui-muted">
         <Spinner />
         正在批改本轮…
       </span>
@@ -188,7 +222,7 @@ function TurnFeedback({
 
   if (!analysis && turn.analysisProse?.trim()) {
     return (
-      <pre className="m-0 whitespace-pre-wrap break-words rounded-lg border bg-card p-3 font-sans text-sm leading-relaxed text-foreground">
+      <pre className="m-0 whitespace-pre-wrap break-words rounded-lg border bg-card p-3 font-sans text-ui-body leading-relaxed text-foreground">
         {turn.analysisProse.trim()}
       </pre>
     );
@@ -196,7 +230,7 @@ function TurnFeedback({
 
   if (!analysis) {
     return (
-      <p className="m-0 text-sm text-muted-foreground">
+      <p className="m-0 text-ui-body text-ui-muted">
         {turn.analysisError ?? "本轮暂无批改。"}
       </p>
     );
@@ -206,11 +240,11 @@ function TurnFeedback({
   const gap = analysis.expression_gap;
   if (gap) {
     return (
-      <div className="flex flex-col gap-2.5 rounded-lg border bg-card p-3 text-sm leading-normal shadow-sm">
+      <div className="flex flex-col gap-2.5 rounded-lg border bg-card p-3 text-ui-body leading-normal shadow-sm">
         <FieldLabel icon={<LanguagesIcon size={12} />}>
           {nativeLanguage.trim() || "母语"}原句
         </FieldLabel>
-        <p className="m-0 text-muted-foreground">{gap.original}</p>
+        <p className="m-0 text-ui-muted">{gap.original}</p>
         <FieldLabel>地道表达</FieldLabel>
         <SpeakableText text={gap.target_expression} />
         <FieldLabel>讲解</FieldLabel>
@@ -228,7 +262,7 @@ function TurnFeedback({
                   <span className="font-semibold text-foreground">
                     {it.text}
                   </span>
-                  <span className="text-xs text-muted-foreground">
+                  <span className="text-ui-caption text-ui-muted">
                     {it.gloss}
                   </span>
                 </span>
@@ -237,7 +271,7 @@ function TurnFeedback({
           </>
         )}
         {gap.usage_note?.trim() && (
-          <p className="m-0 text-sm leading-snug text-muted-foreground">
+          <p className="m-0 text-ui-body leading-snug text-ui-muted">
             {gap.usage_note.trim()}
           </p>
         )}
@@ -253,7 +287,7 @@ function TurnFeedback({
 
   if (!hasIssues && !showCorrected && !showNatural) {
     return (
-      <span className="inline-flex items-center gap-1.5 text-sm text-success">
+      <span className="inline-flex items-center gap-1.5 text-ui-body text-success">
         <CheckIcon size={15} />
         表达准确,无需修改。
       </span>
@@ -261,7 +295,7 @@ function TurnFeedback({
   }
 
   return (
-    <div className="flex flex-col gap-3 rounded-lg border bg-card p-3 text-sm leading-normal shadow-sm">
+    <div className="flex flex-col gap-3 rounded-lg border bg-card p-3 text-ui-body leading-normal shadow-sm">
       {showCorrected && (
         <div className="flex flex-col gap-1">
           <FieldLabel>修改后</FieldLabel>
@@ -282,12 +316,12 @@ function TurnFeedback({
               className="border-t py-2.5 first:border-t-0 first:pt-0 last:pb-0"
             >
               <div className="mb-1.5 flex items-center gap-1.5">
-                <span className="rounded bg-accent px-1.5 py-0.5 text-xs font-semibold uppercase tracking-wide text-primary">
+                <span className="rounded bg-accent px-1.5 py-0.5 text-ui-caption font-semibold uppercase tracking-wide text-primary">
                   {CATEGORY_LABEL[iss.category]}
                 </span>
                 <span
                   className={cn(
-                    "text-xs uppercase",
+                    "text-ui-caption uppercase",
                     SEVERITY_COLOR[iss.severity],
                   )}
                 >
@@ -299,7 +333,7 @@ function TurnFeedback({
                   {iss.span_original}
                 </del>
                 <span
-                  className="mx-1.5 text-xs text-muted-foreground"
+                  className="mx-1.5 text-ui-caption text-ui-muted"
                   aria-hidden
                 >
                   →
@@ -308,7 +342,7 @@ function TurnFeedback({
                   {iss.span_corrected}
                 </ins>
               </p>
-              <p className="mt-1.5 mb-0 text-sm leading-snug text-muted-foreground">
+              <p className="mt-1.5 mb-0 text-ui-body leading-snug text-ui-muted">
                 {iss.explanation}
               </p>
             </li>
@@ -327,7 +361,7 @@ function FieldLabel({
   icon?: React.ReactNode;
 }) {
   return (
-    <span className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+    <span className="inline-flex items-center gap-1 text-ui-caption font-semibold uppercase tracking-wide text-foreground-80">
       {icon}
       {children}
     </span>
@@ -339,7 +373,7 @@ function FieldLabel({
 function TurnMemory({ turn }: { turn: ChatTurn }) {
   if (!turn.analysis) {
     return (
-      <p className="m-0 text-sm text-muted-foreground">
+      <p className="m-0 text-ui-body text-ui-muted">
         批改完成后,这里会显示本轮写入学习数据的内容。
       </p>
     );
@@ -347,9 +381,7 @@ function TurnMemory({ turn }: { turn: ChatTurn }) {
   const signals = deriveSignals(turn.analysis);
   if (signals.length === 0) {
     return (
-      <p className="m-0 text-sm text-muted-foreground">
-        本轮没有新增学习记录。
-      </p>
+      <p className="m-0 text-ui-body text-ui-muted">本轮没有新增学习记录。</p>
     );
   }
   return (
@@ -360,7 +392,7 @@ function TurnMemory({ turn }: { turn: ChatTurn }) {
           className="flex flex-col gap-1 rounded-md border bg-card px-2.5 py-2"
         >
           <div className="flex items-center gap-1.5">
-            <span className="rounded bg-background px-1.5 py-0.5 text-xs font-medium text-muted-foreground">
+            <span className="rounded bg-background px-1.5 py-0.5 text-ui-caption font-medium text-ui-muted">
               {TYPE_LABEL[s.type]}
             </span>
             <span className="min-w-0 flex-1 truncate font-medium text-foreground">
@@ -368,7 +400,7 @@ function TurnMemory({ turn }: { turn: ChatTurn }) {
             </span>
             <span
               className={cn(
-                "shrink-0 rounded-full px-1.5 py-0.5 text-xs font-semibold",
+                "shrink-0 rounded-full px-1.5 py-0.5 text-ui-caption font-semibold",
                 SIGNAL_TONE[s.kind],
               )}
             >
@@ -377,7 +409,7 @@ function TurnMemory({ turn }: { turn: ChatTurn }) {
           </div>
           {s.example?.trim() && (
             <p
-              className="m-0 truncate text-xs text-muted-foreground"
+              className="m-0 truncate text-ui-caption text-ui-muted"
               title={s.example}
             >
               {s.example.trim()}
@@ -392,15 +424,20 @@ function TurnMemory({ turn }: { turn: ChatTurn }) {
 function CustomObservations({ items }: { items: TurnAnnotation[] }) {
   if (items.length === 0) {
     return (
-      <p className="m-0 text-sm text-muted-foreground">本轮暂无自定义观察。</p>
+      <p className="m-0 text-ui-body text-ui-muted">本轮暂无自定义观察。</p>
     );
   }
   return (
     <ul className="m-0 flex list-none flex-col gap-2 p-0">
       {items.map((item) => (
-        <li key={item.id} className="rounded-lg border bg-card p-3 text-sm">
+        <li
+          key={item.id}
+          className="rounded-lg border bg-card p-3 text-ui-body"
+        >
           <div className="mb-1.5 font-semibold">{item.title}</div>
-          <Markdown className="text-sm leading-relaxed">{item.bodyMd}</Markdown>
+          <Markdown className="text-ui-body leading-relaxed">
+            {item.bodyMd}
+          </Markdown>
         </li>
       ))}
     </ul>
@@ -449,9 +486,7 @@ function MemoryProposals({
 
   if (items.length === 0) {
     return (
-      <p className="m-0 text-sm text-muted-foreground">
-        没有待确认的写入建议。
-      </p>
+      <p className="m-0 text-ui-body text-ui-muted">没有待确认的写入建议。</p>
     );
   }
 
@@ -460,9 +495,12 @@ function MemoryProposals({
       {items.map((item) => {
         const ops = memoryProposalOperations(item);
         return (
-          <div key={item.id} className="rounded-lg border bg-card p-3 text-sm">
+          <div
+            key={item.id}
+            className="rounded-lg border bg-card p-3 text-ui-body"
+          >
             <div className="font-semibold">{item.summary}</div>
-            <ul className="my-2 flex list-none flex-col gap-1 p-0 text-xs text-muted-foreground">
+            <ul className="my-2 flex list-none flex-col gap-1 p-0 text-ui-caption text-ui-muted">
               {ops.map((op, i) => (
                 <li key={`${op.action}:${op.key}:${i}`}>
                   {op.action} · {op.key}
@@ -474,7 +512,7 @@ function MemoryProposals({
               <Button
                 type="button"
                 size="sm"
-                className="h-7 px-2 text-xs"
+                className="h-7 px-2 text-ui-caption"
                 disabled={busyId === item.id}
                 onClick={() => void apply(item.id)}
               >
@@ -484,7 +522,7 @@ function MemoryProposals({
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="h-7 px-2 text-xs"
+                className="h-7 px-2 text-ui-caption"
                 disabled={busyId === item.id}
                 onClick={() => void dismiss(item.id)}
               >
@@ -494,8 +532,8 @@ function MemoryProposals({
           </div>
         );
       })}
-      {message && <p className="m-0 text-xs text-success">{message}</p>}
-      {error && <p className="m-0 text-xs text-destructive">{error}</p>}
+      {message && <p className="m-0 text-ui-caption text-success">{message}</p>}
+      {error && <p className="m-0 text-ui-caption text-destructive">{error}</p>}
     </div>
   );
 }
@@ -558,29 +596,34 @@ export function CoachPanel({
   }, [turn?.id, turn?.analysisPending, refreshExtras]);
 
   return (
-    <div className="codex-coach-content flex h-full min-h-0 flex-col">
-      <div className="flex shrink-0 items-center gap-1.5 border-b px-4 py-3">
-        <BrainIcon size={15} className="text-muted-foreground" />
-        <span className="text-sm font-semibold">学习教练</span>
+    <div className="codex-coach-content group flex h-full min-h-0 flex-col">
+      <div className="flex shrink-0 items-center gap-2 border-b px-4 py-3">
+        <BrainIcon size={16} className="text-foreground" />
+        <div className="min-w-0">
+          <div className="truncate text-ui-title font-semibold text-foreground">
+            学习教练
+          </div>
+          <div className="truncate text-ui-caption text-foreground-80">
+            {turn ? "当前轮次" : "等待输入"}
+          </div>
+        </div>
       </div>
-      <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-4 py-4">
+      <div className="scrollbar-hover flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-4">
         {!turn ? (
-          <p className="m-auto max-w-[34ch] text-center text-sm leading-relaxed text-muted-foreground">
+          <p className="m-auto max-w-[34ch] text-center text-ui-body leading-relaxed text-foreground-80">
             发送一句话后,这里会显示本轮批改,以及系统为你记下的学习内容。
           </p>
         ) : (
           <>
-            <ActivityChips
+            <CoachOverview
               activities={activities}
-              onSelect={(panel) => setActivePanel(panel)}
-            />
-            <InspectorTabs
               active={activePanel}
               memoryCount={memoryCount}
               annotationCount={annotations.length}
               proposalCount={proposals.length}
               onChange={setActivePanel}
             />
+            <ActivitySummary activities={activities} />
             {activePanel === "feedback" && (
               <Section title="本轮反馈">
                 <TurnFeedback turn={turn} nativeLanguage={nativeLanguage} />
@@ -591,7 +634,7 @@ export function CoachPanel({
                 <TurnMemory turn={turn} />
                 <button
                   type="button"
-                  className="mt-1 inline-flex items-center gap-1 self-start text-xs text-muted-foreground transition-colors hover:text-foreground"
+                  className="mt-1 inline-flex items-center gap-1 self-start text-ui-caption text-foreground transition-colors hover:bg-accent"
                   onClick={() => onOpenView?.("mastery")}
                 >
                   查看全部学习数据

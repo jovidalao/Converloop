@@ -96,21 +96,21 @@ export function LearningAgentsView({ onRefresh }: LearningAgentsViewProps) {
 
   return (
     <div className="flex h-full max-w-4xl flex-col overflow-y-auto px-6 pt-14 pb-6">
-      <h2 className="mt-0 mb-2 text-lg font-semibold tracking-tight">
+      <h2 className="mt-0 mb-2 text-ui-title font-semibold tracking-tight">
         创建专项课
       </h2>
-      <p className="mt-0 mb-3 max-w-3xl text-sm leading-relaxed text-muted-foreground">
+      <p className="mt-0 mb-3 max-w-3xl text-ui-body leading-relaxed text-ui-muted">
         「专项课」会新开一个对话,使用老师型 system prompt,可以用母语讲解,
         也可以用目标语言出练习。创建后会出现在左侧「定制化学习」里,在那里开始或编辑。
       </p>
 
       <div className="grid gap-2 border-y py-3 md:grid-cols-2">
         {LEARNING_DATA_SCOPES.map((scope) => (
-          <div key={scope} className="text-sm leading-snug">
+          <div key={scope} className="text-ui-body leading-snug">
             <span className="font-medium text-foreground">
               {scopeName(scope)}
             </span>
-            <span className="text-muted-foreground">
+            <span className="text-ui-muted">
               {" "}
               {DATA_SCOPE_LABELS[scope].replace(`${scopeName(scope)}:`, "")}
             </span>
@@ -119,7 +119,7 @@ export function LearningAgentsView({ onRefresh }: LearningAgentsViewProps) {
       </div>
 
       <div className="mt-4 rounded-lg border bg-card p-3">
-        <div className="mb-2 text-sm font-semibold">学习项目</div>
+        <div className="mb-2 text-ui-body font-semibold">学习项目</div>
         <Textarea
           value={projectRequest}
           onChange={(e) => setProjectRequest(e.target.value)}
@@ -140,19 +140,19 @@ export function LearningAgentsView({ onRefresh }: LearningAgentsViewProps) {
 
       {projects.length > 0 && (
         <div className="mt-4 border-y py-3">
-          <div className="mb-2 text-sm font-semibold">已有学习项目</div>
+          <div className="mb-2 text-ui-body font-semibold">已有学习项目</div>
           <div className="grid gap-2">
             {projects.map((project) => (
-              <div key={project.id} className="text-sm leading-snug">
+              <div key={project.id} className="text-ui-body leading-snug">
                 <div className="flex items-center gap-2">
                   <span className="font-medium text-foreground">
                     {project.title}
                   </span>
-                  <span className="rounded border px-1.5 py-0.5 text-[11px] text-muted-foreground">
+                  <span className="rounded border px-1.5 py-0.5 text-ui-caption text-ui-muted">
                     {project.status}
                   </span>
                 </div>
-                <div className="mt-1 text-muted-foreground">{project.goal}</div>
+                <div className="mt-1 text-ui-muted">{project.goal}</div>
               </div>
             ))}
           </div>
@@ -160,7 +160,7 @@ export function LearningAgentsView({ onRefresh }: LearningAgentsViewProps) {
       )}
 
       <div className="mt-4 rounded-lg border bg-card p-3">
-        <div className="mb-2 text-sm font-semibold">自然语言创建</div>
+        <div className="mb-2 text-ui-body font-semibold">自然语言创建</div>
         <Textarea
           value={lessonRequest}
           onChange={(e) => setLessonRequest(e.target.value)}
@@ -180,12 +180,12 @@ export function LearningAgentsView({ onRefresh }: LearningAgentsViewProps) {
       </div>
 
       {message && (
-        <div className="mt-3 rounded-md bg-primary/10 px-3 py-2 text-sm text-primary">
+        <div className="mt-3 rounded-md bg-primary/10 px-3 py-2 text-ui-body text-primary">
           {message}
         </div>
       )}
       {error && (
-        <div className="mt-3 rounded-md bg-destructive/15 px-3 py-2 text-sm text-destructive">
+        <div className="mt-3 rounded-md bg-destructive/15 px-3 py-2 text-ui-body text-destructive">
           {error}
         </div>
       )}

@@ -12,9 +12,16 @@ export interface AnthropicConfig {
   apiKey: string;
   model: string;
   maxTokens?: number;
+  /** 订阅登录(Claude Pro/Max)模式:apiKey 是 sk-ant-oat… 访问令牌,走 Bearer + Claude Code 身份头。 */
+  oauth?: boolean;
 }
 
 export const ANTHROPIC_API_VERSION = "2023-06-01";
+
+// OAuth 令牌要求请求「看起来像 Claude Code」:首个 system 块是这句身份声明,且带这套头(核对自 openclaw)。
+const OAUTH_SYSTEM_IDENTITY =
+  "You are Claude Code, Anthropic's official CLI for Claude.";
+const CLAUDE_CODE_USER_AGENT = "claude-cli/2.1.75";
 
 interface SystemBlock {
   type: "text";
@@ -73,7 +80,15 @@ export function buildAnthropicRequestBody(
     messages,
     stream,
   };
-  if (system) body.system = system;
+  if (cfg.oauth) {
+    // 订阅令牌要求首个 system 块为 Claude Code 身份声明,否则被服务端拒绝。
+    body.system = [
+      { type: "text", text: OAUTH_SYSTEM_IDENTITY },
+      ...(system ?? []),
+    ];
+  } else if (system) {
+    body.system = system;
+  }
   if (opts.temperature !== undefined) body.temperature = opts.temperature;
 
   if (opts.jsonSchema) {
@@ -107,7 +122,17 @@ export function anthropicMessagesUrl(cfg: AnthropicConfig): string {
   return `${cfg.baseUrl.replace(/\/+$/, "")}/messages`;
 }
 
-function authHeaders(cfg: AnthropicConfig): Record<string, string> {
+export function authHeaders(cfg: AnthropicConfig): Record<string, string> {
+  if (cfg.oauth) {
+    // 订阅令牌:Bearer 鉴权 + Claude Code 身份头,不发 x-api-key。
+    return {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${cfg.apiKey}`,
+      "anthropic-version": ANTHROPIC_API_VERSION,
+      "anthropic-beta": "claude-code-20250219,oauth-2025-04-20",
+      "User-Agent": CLAUDE_CODE_USER_AGENT,
+    };
+  }
   return {
     "Content-Type": "application/json",
     "x-api-key": cfg.apiKey,

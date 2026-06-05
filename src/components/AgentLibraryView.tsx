@@ -79,7 +79,7 @@ const JOB_STATUS_CLASS: Record<string, string> = {
   succeeded: "bg-success/10 text-success",
   failed: "bg-destructive/10 text-destructive",
   running: "bg-warning/10 text-warning",
-  pending: "bg-muted text-muted-foreground",
+  pending: "bg-muted text-ui-muted",
 };
 
 function agentIdOf(job: AgentJob): string | null {
@@ -135,24 +135,24 @@ function BuiltinActionEditor({
   return (
     <div className="mt-1 flex flex-col gap-2 rounded-md border bg-background p-3">
       <div className="flex flex-col gap-1">
-        <span className="text-xs text-muted-foreground">名称</span>
+        <span className="text-ui-caption text-ui-muted">名称</span>
         <Input value={label} onChange={(e) => setLabel(e.target.value)} />
       </div>
       <div className="flex flex-col gap-1">
-        <span className="text-xs text-muted-foreground">说明</span>
+        <span className="text-ui-caption text-ui-muted">说明</span>
         <Input
           value={description}
           onChange={(e) => setDescription(e.target.value)}
         />
       </div>
       <div className="flex flex-col gap-1">
-        <span className="text-xs text-muted-foreground">
+        <span className="text-ui-caption text-ui-muted">
           Prompt(给衍生 Agent 的目标指令)
         </span>
         <Textarea
           value={objective}
           onChange={(e) => setObjective(e.target.value)}
-          className="min-h-28 resize-y font-mono text-xs leading-relaxed"
+          className="min-h-28 resize-y font-mono text-ui-caption leading-relaxed"
         />
       </div>
       <div className="flex flex-wrap gap-2">
@@ -172,7 +172,7 @@ function BuiltinActionEditor({
             type="button"
             variant="ghost"
             size="sm"
-            className="ml-auto text-muted-foreground"
+            className="ml-auto text-ui-muted"
             onClick={reset}
           >
             恢复默认
@@ -209,15 +209,15 @@ function AgentRow({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-semibold">{card?.title ?? entry.id}</span>
-            <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+            <span className="rounded bg-muted px-1.5 py-0.5 text-ui-caption text-ui-muted">
               {KIND_LABEL[entry.kind]}
             </span>
             {!card?.canDisable && (
-              <span className="text-xs text-muted-foreground">常驻</span>
+              <span className="text-ui-caption text-ui-muted">常驻</span>
             )}
           </div>
           {card?.description && (
-            <p className="mt-1 mb-0 text-sm leading-snug text-muted-foreground">
+            <p className="mt-1 mb-0 text-ui-body leading-snug text-ui-muted">
               {card.description}
             </p>
           )}
@@ -231,12 +231,12 @@ function AgentRow({
         )}
       </div>
       {card && (
-        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
-          <dt className="text-muted-foreground">运行时机</dt>
+        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-ui-caption">
+          <dt className="text-ui-muted">运行时机</dt>
           <dd className="m-0 text-foreground">{card.timing}</dd>
-          <dt className="text-muted-foreground">读取</dt>
+          <dt className="text-ui-muted">读取</dt>
           <dd className="m-0 text-foreground">{card.reads}</dd>
-          <dt className="text-muted-foreground">写入</dt>
+          <dt className="text-ui-muted">写入</dt>
           <dd className="m-0 text-foreground">{card.writes}</dd>
         </dl>
       )}
@@ -467,15 +467,15 @@ export function AgentLibraryView() {
 
   return (
     <div className="flex h-full max-w-5xl flex-col overflow-y-auto px-6 pt-14 pb-6">
-      <h2 className="mt-0 mb-1 text-lg font-semibold">能力库</h2>
-      <p className="mt-0 mb-5 text-sm text-muted-foreground">
+      <h2 className="mt-0 mb-1 text-ui-title font-semibold">能力库</h2>
+      <p className="mt-0 mb-5 text-ui-body text-ui-muted">
         系统内置的 Agent
         能力。可以看到每个能力做什么、什么时候运行、读写什么,并启用或禁用。
         关闭一个能力只影响它自己,不会改动你的学习数据。
       </p>
 
       <section ref={formRef} className="mb-6 rounded-lg border bg-card p-3.5">
-        <h3 className="m-0 mb-2 text-sm font-semibold">
+        <h3 className="m-0 mb-2 text-ui-body font-semibold">
           {editingId ? "编辑自定义 Agent" : "创建自定义 Agent"}
         </h3>
         <div className="grid gap-2 md:grid-cols-2">
@@ -525,10 +525,10 @@ export function AgentLibraryView() {
               key={scope}
               type="button"
               className={cn(
-                "rounded-md border px-2 py-1 text-xs",
+                "rounded-md border px-2 py-1 text-ui-caption",
                 scopes.includes(scope)
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "bg-background text-muted-foreground",
+                  ? "border-border bg-accent text-foreground"
+                  : "bg-background text-foreground-80",
               )}
               onClick={() => toggleScope(scope)}
               title={DATA_SCOPE_LABELS[scope]}
@@ -545,7 +545,7 @@ export function AgentLibraryView() {
               ? "6. Prompt: 说明每轮要观察什么、如何反馈、何时提出 memory_proposals。"
               : "6. Prompt: 说明点击按钮后要如何基于当前对话生成新的对话上下文。"
           }
-          className="mt-2 min-h-28 resize-y font-mono text-xs leading-relaxed"
+          className="mt-2 min-h-28 resize-y font-mono text-ui-caption leading-relaxed"
         />
         <div className="mt-2 flex gap-2">
           <Button
@@ -574,7 +574,7 @@ export function AgentLibraryView() {
       <div className="flex flex-col gap-5">
         {grouped.map((group) => (
           <section key={group.kind} className="flex flex-col gap-2">
-            <h3 className="m-0 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <h3 className="m-0 text-ui-caption font-semibold uppercase tracking-wide text-ui-muted">
               {KIND_LABEL[group.kind]}
             </h3>
             {group.items.map((entry) => (
@@ -600,17 +600,17 @@ export function AgentLibraryView() {
       </div>
 
       <section className="mt-6 rounded-lg border bg-card p-3.5">
-        <h3 className="m-0 mb-2 text-sm font-semibold">Agent Package</h3>
+        <h3 className="m-0 mb-2 text-ui-body font-semibold">Agent Package</h3>
         <Textarea
           value={packageText}
           onChange={(e) => setPackageText(e.target.value)}
           placeholder="粘贴 lang-agent.agent-package JSON;导出包也会出现在这里。"
-          className="min-h-32 resize-y font-mono text-xs leading-relaxed"
+          className="min-h-32 resize-y font-mono text-ui-caption leading-relaxed"
         />
         {packageReview && (
-          <div className="mt-2 rounded-md bg-muted px-2.5 py-2 text-xs leading-relaxed">
+          <div className="mt-2 rounded-md bg-muted px-2.5 py-2 text-ui-caption leading-relaxed">
             <div className="font-medium">{packageReview.name}</div>
-            <div className="text-muted-foreground">
+            <div className="text-ui-muted">
               读取: {packageReview.reads} · 写入: {packageReview.writes}
             </div>
           </div>
@@ -629,25 +629,25 @@ export function AgentLibraryView() {
       </section>
 
       {message && (
-        <div className="mt-3 rounded-md bg-primary/10 px-3 py-2 text-sm text-primary">
+        <div className="mt-3 rounded-md bg-primary/10 px-3 py-2 text-ui-body text-primary">
           {message}
         </div>
       )}
       {error && (
-        <div className="mt-3 rounded-md bg-destructive/15 px-3 py-2 text-sm text-destructive">
+        <div className="mt-3 rounded-md bg-destructive/15 px-3 py-2 text-ui-body text-destructive">
           {error}
         </div>
       )}
 
       <div className="mt-8 mb-2 flex items-center gap-2">
-        <h3 className="m-0 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        <h3 className="m-0 text-ui-caption font-semibold uppercase tracking-wide text-ui-muted">
           运行日志
         </h3>
         <Button
           type="button"
           variant="ghost"
           size="sm"
-          className="ml-auto h-7 gap-1.5 px-2 text-xs"
+          className="ml-auto h-7 gap-1.5 px-2 text-ui-caption"
           onClick={refreshJobs}
         >
           <RefreshCwIcon size={13} />
@@ -655,19 +655,18 @@ export function AgentLibraryView() {
         </Button>
       </div>
       {jobs.length === 0 ? (
-        <p className="m-0 text-sm text-muted-foreground">还没有运行记录。</p>
+        <p className="m-0 text-ui-body text-ui-muted">还没有运行记录。</p>
       ) : (
         <ul className="m-0 flex list-none flex-col gap-1 p-0">
           {jobs.map((job) => (
             <li
               key={job.id}
-              className="flex flex-wrap items-center gap-2 rounded-md border bg-card px-2.5 py-1.5 text-xs"
+              className="flex flex-wrap items-center gap-2 rounded-md border bg-card px-2.5 py-1.5 text-ui-caption"
             >
               <span
                 className={cn(
                   "rounded-full px-1.5 py-0.5 font-medium",
-                  JOB_STATUS_CLASS[job.status] ??
-                    "bg-muted text-muted-foreground",
+                  JOB_STATUS_CLASS[job.status] ?? "bg-muted text-ui-muted",
                 )}
               >
                 {job.status}
@@ -675,13 +674,11 @@ export function AgentLibraryView() {
               <span className="font-medium text-foreground">
                 {agentIdOf(job) ?? job.kind}
               </span>
-              <span className="text-muted-foreground">
+              <span className="text-ui-muted">
                 {SOURCE_LABEL[job.source] ?? job.source}
               </span>
-              <span className="text-muted-foreground">
-                {durationLabel(job)}
-              </span>
-              <span className="ml-auto text-muted-foreground/80">
+              <span className="text-ui-muted">{durationLabel(job)}</span>
+              <span className="ml-auto text-ui-muted">
                 {timeLabel(job.updatedAt)}
               </span>
               {job.error && (

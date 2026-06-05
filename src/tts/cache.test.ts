@@ -3,10 +3,14 @@ import { buildTtsCacheKey } from "./cache";
 import type { TtsConfig } from "./config";
 
 const cfg: TtsConfig = {
+  ttsProvider: "mimo",
   baseUrl: "http://example/v1",
   model: "mimo-v2.5-tts",
   voice: "Chloe",
   stylePrompt: "Clear tone.",
+  edgeVoice: "en-US-EmmaMultilingualNeural",
+  edgeRate: "+0%",
+  edgePitch: "+0Hz",
   autoSpeak: true,
 };
 

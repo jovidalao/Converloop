@@ -1,4 +1,6 @@
+mod edge_tts;
 mod llm;
+mod oauth;
 mod profile;
 mod secrets;
 
@@ -488,6 +490,9 @@ pub fn run() {
             secrets::delete_secret,
             llm::llm_request,
             llm::llm_stream,
+            edge_tts::edge_tts_synthesize,
+            oauth::oauth_listen,
+            oauth::oauth_token_post,
             profile::read_profile,
             profile::write_profile,
             profile::snapshot_profile,

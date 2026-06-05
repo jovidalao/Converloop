@@ -22,11 +22,46 @@ export const MIMO_VOICES: { id: string; label: string }[] = [
   { id: "Dean", label: "Dean (English · Male)" },
 ];
 
+// 免费微软 Edge「朗读」:无 API key,合成走 Rust WebSocket(edge_tts_synthesize)。
+export const EDGE_TTS_DEFAULTS = {
+  voice: "en-US-EmmaMultilingualNeural",
+  rate: "+0%",
+  pitch: "+0Hz",
+};
+
+export const EDGE_VOICES: { id: string; label: string }[] = [
+  { id: "en-US-EmmaMultilingualNeural", label: "Emma (English · 多语女)" },
+  { id: "en-US-AvaMultilingualNeural", label: "Ava (English · 多语女)" },
+  { id: "en-US-AndrewMultilingualNeural", label: "Andrew (English · 多语男)" },
+  { id: "en-US-BrianMultilingualNeural", label: "Brian (English · 多语男)" },
+  { id: "en-US-AriaNeural", label: "Aria (English · 美式女)" },
+  { id: "en-US-GuyNeural", label: "Guy (English · 美式男)" },
+  { id: "en-GB-SoniaNeural", label: "Sonia (English · 英式女)" },
+  { id: "en-GB-RyanNeural", label: "Ryan (English · 英式男)" },
+  { id: "en-AU-NatashaNeural", label: "Natasha (English · 澳式女)" },
+  { id: "zh-CN-XiaoxiaoNeural", label: "晓晓 (中文 · 女)" },
+  { id: "zh-CN-YunxiNeural", label: "云希 (中文 · 男)" },
+  { id: "zh-CN-YunyangNeural", label: "云扬 (中文 · 男)" },
+  { id: "ja-JP-NanamiNeural", label: "Nanami (日本語 · 女)" },
+  { id: "ko-KR-SunHiNeural", label: "SunHi (한국어 · 女)" },
+];
+
+export type TtsProvider = "mimo" | "edge";
+
 export interface TtsConfig {
+  /** 朗读引擎:mimo(需 key)/ edge(免费,无 key)。 */
+  ttsProvider: TtsProvider;
+  // —— MiMo ——
   baseUrl: string;
   model: string;
   voice: string;
   stylePrompt: string;
+  // —— Edge(免费)——
+  edgeVoice: string;
+  /** 语速,如 "+0%" / "-20%" / "+25%"。 */
+  edgeRate: string;
+  /** 音高,如 "+0Hz" / "-5Hz"。 */
+  edgePitch: string;
   /** 新 AI 回复边收流边自动分句朗读。 */
   autoSpeak: boolean;
 }
@@ -34,10 +69,14 @@ export interface TtsConfig {
 const STORAGE_KEY = "lang-agent.tts";
 
 const DEFAULT_TTS_CONFIG: TtsConfig = {
+  ttsProvider: "mimo",
   baseUrl: MIMO_TTS_DEFAULTS.baseUrl,
   model: MIMO_TTS_DEFAULTS.model,
   voice: MIMO_TTS_DEFAULTS.voice,
   stylePrompt: MIMO_TTS_DEFAULTS.stylePrompt,
+  edgeVoice: EDGE_TTS_DEFAULTS.voice,
+  edgeRate: EDGE_TTS_DEFAULTS.rate,
+  edgePitch: EDGE_TTS_DEFAULTS.pitch,
   autoSpeak: true,
 };
 

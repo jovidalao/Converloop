@@ -59,8 +59,8 @@ export function LearningAgentEditDialog({
       >
         <div className="mb-3 flex items-center justify-between gap-2">
           <div>
-            <h3 className="text-base font-semibold">编辑专项课</h3>
-            <div className="text-xs text-muted-foreground">
+            <h3 className="text-ui-title font-semibold">编辑专项课</h3>
+            <div className="text-ui-caption text-ui-muted">
               {agent.builtIn ? "内置专项课" : "自定义专项课"}
             </div>
           </div>
@@ -86,10 +86,10 @@ export function LearningAgentEditDialog({
               <button
                 key={scope}
                 type="button"
-                className={`rounded-md border px-2 py-1 text-xs ${
+                className={`rounded-md border px-2 py-1 text-ui-caption ${
                   scopes.includes(scope)
-                    ? "border-primary bg-primary/10 text-primary"
-                    : "bg-background text-muted-foreground"
+                    ? "border-border bg-accent text-foreground"
+                    : "bg-background text-foreground-80"
                 }`}
                 onClick={() => toggleScope(scope)}
                 title={DATA_SCOPE_LABELS[scope]}
@@ -101,7 +101,7 @@ export function LearningAgentEditDialog({
           <Textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            className="min-h-72 resize-y font-mono text-xs leading-relaxed"
+            className="min-h-72 resize-y font-mono text-ui-caption leading-relaxed"
           />
         </div>
 
