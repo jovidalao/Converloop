@@ -12,31 +12,41 @@ import { defaultPlugins, withPlugins } from "./providers/plugins";
 import type { ModelProvider } from "./providers/types";
 
 // claude-oauth / codex-oauth:用订阅(Claude Pro/Max、ChatGPT)浏览器登录,而非 API key。
-export type ProviderType =
-  | "openai"
-  | "gemini"
-  | "anthropic"
-  | "claude-oauth"
-  | "codex-oauth";
+export const PROVIDER_TYPES = [
+  "openai",
+  "gemini",
+  "anthropic",
+  "claude-oauth",
+  "codex-oauth",
+] as const;
+export type ProviderType = (typeof PROVIDER_TYPES)[number];
+
+// 单个 provider 的连接配置:每个 provider 各存一份,切换时互不覆盖。
+const ProviderSettingsSchema = z.object({
+  baseUrl: z.string(),
+  model: z.string(),
+  /** 手动覆盖模型上下文窗口(token)。留空则按 model 名查表猜测(见 inferContextLimit)。 */
+  contextTokens: z.number().int().positive().optional(),
+});
+
+export type ProviderSettings = z.infer<typeof ProviderSettingsSchema>;
 
 // 非密配置存 localStorage;API key 走设备绑定加密文件(见 keychain.ts → Rust secrets.rs)。
 const AppConfigSchema = z.object({
-  providerType: z.enum([
-    "openai",
-    "gemini",
-    "anthropic",
-    "claude-oauth",
-    "codex-oauth",
-  ]),
-  baseUrl: z.string(),
-  model: z.string(),
+  providerType: z.enum(PROVIDER_TYPES),
+  /** 每个 provider 的 baseUrl/模型/上下文,按 provider 分别持久化。 */
+  providers: z.object({
+    openai: ProviderSettingsSchema,
+    gemini: ProviderSettingsSchema,
+    anthropic: ProviderSettingsSchema,
+    "claude-oauth": ProviderSettingsSchema,
+    "codex-oauth": ProviderSettingsSchema,
+  }),
   nativeLanguage: z.string(),
   targetLanguage: z.string(),
   level: z.string(),
   /** 新 AI 回复自动展开双语对照。 */
   autoBilingual: z.boolean(),
-  /** 手动覆盖模型上下文窗口(token)。留空则按 model 名查表猜测(见 getContextLimit)。 */
-  contextTokens: z.number().int().positive().optional(),
 });
 
 export type AppConfig = z.infer<typeof AppConfigSchema>;
@@ -67,12 +77,17 @@ const CONTEXT_WINDOW_TABLE: { prefix: string; tokens: number }[] = [
   { prefix: "o3", tokens: 200_000 },
 ];
 
-// 当前模型的上下文上限(token)。优先用户手填的 contextTokens,否则查表猜测,再回退默认。
-export function getContextLimit(config: AppConfig): number {
-  if (config.contextTokens) return config.contextTokens;
-  const model = config.model.toLowerCase().trim();
-  const hit = CONTEXT_WINDOW_TABLE.find((e) => model.startsWith(e.prefix));
+// 按模型名猜测上下文上限(token);命中不了回退默认。
+export function inferContextLimit(model: string): number {
+  const m = model.toLowerCase().trim();
+  const hit = CONTEXT_WINDOW_TABLE.find((e) => m.startsWith(e.prefix));
   return hit?.tokens ?? DEFAULT_CONTEXT_TOKENS;
+}
+
+// 当前 provider 的上下文上限(token)。优先用户手填的 contextTokens,否则按模型名猜测。
+export function getContextLimit(config: AppConfig): number {
+  const active = config.providers[config.providerType];
+  return active.contextTokens ?? inferContextLimit(active.model);
 }
 
 // 每个 provider 的 key 单独存,切换不丢另一个。
@@ -187,33 +202,107 @@ export function providerModelLabel(type: ProviderType, model: string): string {
 
 const STORAGE_KEY = "lang-agent.config";
 
+// 用 provider 预设填某个 provider 的初始连接配置。
+function presetSettings(type: ProviderType): ProviderSettings {
+  const p = PROVIDER_PRESETS[type];
+  return { baseUrl: p.baseUrl, model: p.model };
+}
+
+function defaultProviders(): Record<ProviderType, ProviderSettings> {
+  return {
+    openai: presetSettings("openai"),
+    gemini: presetSettings("gemini"),
+    anthropic: presetSettings("anthropic"),
+    "claude-oauth": presetSettings("claude-oauth"),
+    "codex-oauth": presetSettings("codex-oauth"),
+  };
+}
+
+// 当前激活 provider 的连接配置。
+export function activeProvider(config: AppConfig): ProviderSettings {
+  return config.providers[config.providerType];
+}
+
+// 选模型:切到该 provider 并设其模型(保留该 provider 已存的 baseUrl/上下文覆盖)。
+export function withActiveModel(
+  config: AppConfig,
+  providerType: ProviderType,
+  model: string,
+): AppConfig {
+  return {
+    ...config,
+    providerType,
+    providers: {
+      ...config.providers,
+      [providerType]: { ...config.providers[providerType], model },
+    },
+  };
+}
+
 const DEFAULT_CONFIG: AppConfig = {
   providerType: "openai",
-  baseUrl: PROVIDER_PRESETS.openai.baseUrl,
-  model: PROVIDER_PRESETS.openai.model,
+  providers: defaultProviders(),
   nativeLanguage: "Chinese",
   targetLanguage: "English",
   level: "B1",
   autoBilingual: false,
 };
 
+function freshDefault(): AppConfig {
+  return { ...DEFAULT_CONFIG, providers: defaultProviders() };
+}
+
 // 缓存当前配置(useSyncExternalStore 要求 getSnapshot 返回稳定引用),
 // 仅在 saveConfig 时替换并通知订阅者。
 let cached: AppConfig | null = null;
 const listeners = new Set<() => void>();
 
+// 把存储里的 providers 还原成完整映射;旧版扁平配置(顶层 baseUrl/model/contextTokens)
+// 迁移到当时激活 provider 那一项。
+function migrateProviders(
+  obj: Record<string, unknown>,
+): Record<ProviderType, ProviderSettings> {
+  const providers = defaultProviders();
+  const stored = obj.providers;
+  if (stored && typeof stored === "object") {
+    for (const type of PROVIDER_TYPES) {
+      const parsed = ProviderSettingsSchema.safeParse(
+        (stored as Record<string, unknown>)[type],
+      );
+      if (parsed.success) providers[type] = parsed.data;
+    }
+    return providers;
+  }
+  if (typeof obj.baseUrl === "string") {
+    const type =
+      typeof obj.providerType === "string" &&
+      (PROVIDER_TYPES as readonly string[]).includes(obj.providerType)
+        ? (obj.providerType as ProviderType)
+        : DEFAULT_CONFIG.providerType;
+    providers[type] = {
+      baseUrl: obj.baseUrl,
+      model: typeof obj.model === "string" ? obj.model : providers[type].model,
+      contextTokens:
+        typeof obj.contextTokens === "number" ? obj.contextTokens : undefined,
+    };
+  }
+  return providers;
+}
+
 function readFromStorage(): AppConfig {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { ...DEFAULT_CONFIG };
+    if (!raw) return freshDefault();
+    const obj = JSON.parse(raw) as Record<string, unknown>;
     // 脏数据(版本迁移 / 手改)校验失败时回落默认,不把非法值带进运行时。
     const parsed = AppConfigSchema.safeParse({
       ...DEFAULT_CONFIG,
-      ...(JSON.parse(raw) as object),
+      ...obj,
+      providers: migrateProviders(obj),
     });
-    return parsed.success ? parsed.data : { ...DEFAULT_CONFIG };
+    return parsed.success ? parsed.data : freshDefault();
   } catch {
-    return { ...DEFAULT_CONFIG };
+    return freshDefault();
   }
 }
 
@@ -267,44 +356,60 @@ async function ensureFreshTokens(
   return inflight;
 }
 
-// 从配置 + keychain 组装 provider。无 key / 未登录时返回 null,调用方据此提示去设置页。
-export async function getProvider(): Promise<ModelProvider | null> {
-  const config = loadConfig();
+// 用指定 provider 的配置 + keychain 组装 provider。无 key / 未登录时返回 null。
+async function buildProviderFor(
+  config: AppConfig,
+  type: ProviderType,
+): Promise<ModelProvider | null> {
+  const entry = config.providers[type];
 
-  if (config.providerType === "claude-oauth") {
+  if (type === "claude-oauth") {
     const tokens = await ensureFreshTokens("claude-oauth", refreshAnthropic);
     if (!tokens) return null;
     const provider = createAnthropicProvider({
-      baseUrl: config.baseUrl,
+      baseUrl: entry.baseUrl,
       apiKey: tokens.access,
-      model: config.model,
+      model: entry.model,
       oauth: true,
     });
     return withPlugins(provider, defaultPlugins());
   }
 
-  if (config.providerType === "codex-oauth") {
+  if (type === "codex-oauth") {
     const tokens = await ensureFreshTokens("codex-oauth", refreshOpenAICodex);
     if (!tokens) return null;
     const provider = createOpenAICodexProvider({
-      baseUrl: config.baseUrl,
+      baseUrl: entry.baseUrl,
       apiKey: tokens.access,
-      model: config.model,
+      model: entry.model,
       accountId: tokens.accountId,
     });
     return withPlugins(provider, defaultPlugins());
   }
 
-  const apiKey = await getSecret(apiKeyAccount(config.providerType));
+  const apiKey = await getSecret(apiKeyAccount(type));
   if (!apiKey) return null;
-  const base = { baseUrl: config.baseUrl, apiKey, model: config.model };
+  const base = { baseUrl: entry.baseUrl, apiKey, model: entry.model };
   let provider: ModelProvider;
-  if (config.providerType === "gemini") {
+  if (type === "gemini") {
     provider = createGeminiProvider(base);
-  } else if (config.providerType === "anthropic") {
+  } else if (type === "anthropic") {
     provider = createAnthropicProvider(base);
   } else {
     provider = createOpenAIProvider(base);
   }
   return withPlugins(provider, defaultPlugins());
+}
+
+// 从配置 + keychain 组装当前激活 provider。无 key / 未登录时返回 null,调用方据此提示去设置页。
+export async function getProvider(): Promise<ModelProvider | null> {
+  const config = loadConfig();
+  return buildProviderFor(config, config.providerType);
+}
+
+// 设置页用:构建指定 provider(可能不是当前激活的)以测试其连接。
+export function getProviderFor(
+  type: ProviderType,
+): Promise<ModelProvider | null> {
+  return buildProviderFor(loadConfig(), type);
 }

@@ -41,6 +41,7 @@ import {
   slashMenuToken,
 } from "../commands";
 import {
+  activeProvider,
   findProviderModelOption,
   getContextLimit,
   PROVIDER_PRESETS,
@@ -48,6 +49,7 @@ import {
   providerModelLabel,
   saveConfig,
   useConfig,
+  withActiveModel,
 } from "../config";
 import {
   getConversation,
@@ -1801,17 +1803,18 @@ export function ChatView({
     if (diff && diff.length <= 16)
       optionBadges.push({ label: `难度·${diff}`, tone: "muted" });
   }
+  const active = activeProvider(config);
   const currentPreset = PROVIDER_PRESETS[config.providerType];
   const currentModelOption = findProviderModelOption(
     config.providerType,
-    config.model,
+    active.model,
   );
-  const usingPresetEndpoint = config.baseUrl.trim() === currentPreset.baseUrl;
+  const usingPresetEndpoint = active.baseUrl.trim() === currentPreset.baseUrl;
   const currentProviderModelLabel = providerModelLabel(
     config.providerType,
-    config.model,
+    active.model,
   );
-  const currentModelButtonLabel = modelShortName(config.model);
+  const currentModelButtonLabel = modelShortName(active.model);
   const selectedModelValue =
     usingPresetEndpoint && currentModelOption
       ? modelSelectValue(config.providerType, currentModelOption.model)
@@ -1822,14 +1825,7 @@ export function ChatView({
     if (value === CURRENT_MODEL_VALUE) return;
     const selected = parseModelSelectValue(value);
     if (!selected) return;
-    const { providerType, model } = selected;
-    const preset = PROVIDER_PRESETS[providerType];
-    saveConfig({
-      ...config,
-      providerType,
-      baseUrl: preset.baseUrl,
-      model,
-    });
+    saveConfig(withActiveModel(config, selected.providerType, selected.model));
   }
 
   return (
@@ -2082,7 +2078,7 @@ export function ChatView({
                     aria-label="选择模型"
                     title={currentProviderModelLabel}
                   >
-                    <ModelLogo model={config.model} compact />
+                    <ModelLogo model={active.model} compact />
                     <span className="min-w-0 truncate text-ui-meta">
                       {currentModelButtonLabel}
                     </span>
@@ -2096,7 +2092,7 @@ export function ChatView({
                     {selectedModelValue === CURRENT_MODEL_VALUE && (
                       <SelectItem value={CURRENT_MODEL_VALUE}>
                         <span className="flex min-w-0 items-center gap-2.5">
-                          <ModelLogo model={config.model} />
+                          <ModelLogo model={active.model} />
                           <span className="flex min-w-0 flex-col">
                             <span className="truncate">
                               {currentModelOption?.label ||
@@ -2104,7 +2100,7 @@ export function ChatView({
                             </span>
                             <span className="truncate text-ui-caption text-ui-muted">
                               {currentPreset.shortLabel} ·{" "}
-                              {config.model.trim() || "未填写模型 ID"}
+                              {active.model.trim() || "未填写模型 ID"}
                             </span>
                           </span>
                         </span>
