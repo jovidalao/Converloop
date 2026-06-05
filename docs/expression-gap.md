@@ -14,7 +14,7 @@
 
 **与本文设计稿的差异(有意收窄):**
 
-- 当前 `ExpressionGap` 字段为 `original / target_expression / explanation / key_items / usage_note`(去掉了 `intended_meaning`、`template`——`template` 等做复习页时再加)。
+- 当前 `ExpressionGap` 字段为 `original / target_expression / template / explanation / key_items / usage_note`(仍去掉了 `intended_meaning`)。
 - §5 的独立「每日复习页 + `review_day` 缓存」设计没有照原样实现;当前由 **专项课 / Learning Agent** 承接显式复习:内置「今日复盘」「语法专项复习」「表达缺口训练」,新开老师型学习会话。
 
 ## 0. 场景
@@ -52,12 +52,13 @@ const KeyItem = z.object({
   mastery_type: MasteryType, // vocab | collocation | grammar(不在这里用 expression_gap)
 });
 
-// 实际实现版(见顶部"实现状态");template/intended_meaning 留到复习页再加。
+// 实际实现版(见顶部"实现状态");intended_meaning 暂不落库。
 const ExpressionGap = z.object({
   mastery_key: z.string(),       // 情景/意图稳定键,如 "gap:decline_request_politely"
   mastery_label: z.string(),     // 人类可读:"委婉拒绝请求"
   original: z.string(),          // 用户原句(母语/混说)—— 最重要的练习记录
   target_expression: z.string(), // 地道的目标语整句  ← headline,也用于延续对话
+  template: z.string().optional(), // 可复用句式模板
   explanation: z.string(),       // 讲解:怎么构成这句话的思路 + 句式(母语)
   key_items: z.array(KeyItem),   // 1–3 个关键词/搭配/句式
   usage_note: z.string().optional(), // 什么场景、怎么套用(母语)
@@ -222,8 +223,8 @@ const ReviewSet = z.object({ cards: z.array(ReviewCard) });
 | D | 纠正 UI:气泡角标 + 专属面板(§4) | ✅ 已实现 |
 | E | 显式复习入口 | ✅ 已由专项课 / Learning Agent 承接 |
 | F | 复习生成 agent | ✅ 已收敛为内置专项课 prompt,不单独做 `reviewGenerator` |
-| G | 复习记账闭环:「会了」→ correct 信号 | ⏳ 未实现(路线图) |
-| H | maintainer:MD 新增「想说但说不出的情景」区块 | ⏳ 未实现(路线图) |
+| G | 复习记账闭环:专项课里用户确认「这句算掌握」→ review/correct 信号 | ✅ 已实现 |
+| H | maintainer:MD 新增「Expression gaps / 想说但说不出」区块 | ✅ 已实现 |
 
 ---
 

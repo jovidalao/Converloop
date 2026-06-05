@@ -17,6 +17,13 @@ export interface WeakItem {
   notes?: string | null;
 }
 
+export interface MasteryKeyHint {
+  label: string;
+  key: string;
+  type: string;
+  status: string;
+}
+
 export interface TutorContext {
   nativeLanguage: string;
   targetLanguage: string;
@@ -25,6 +32,7 @@ export interface TutorContext {
   ignoreCapitalizationIssues: boolean;
   ignorePunctuationIssues: boolean;
   weakList: WeakItem[];
+  keyHints?: MasteryKeyHint[];
   history: string; // 最近几轮对话,纯文本
   userInput: string;
 }
@@ -69,6 +77,13 @@ function formatWeakList(items: WeakItem[]): string {
     .join("\n");
 }
 
+function formatKeyHints(items: MasteryKeyHint[] | undefined): string {
+  if (!items || items.length === 0) return "(none yet)";
+  return items
+    .map((w) => `- [${w.type}/${w.status}] ${w.label} (${w.key})`)
+    .join("\n");
+}
+
 // 见 docs/tutor-agent.md#system-prompt
 function systemPrompt(ctx: TutorContext): string {
   return `You are a precise language tutor analyzing a single message from a
@@ -92,6 +107,9 @@ A) ERRORS — the user DID produce ${ctx.targetLanguage} but got it wrong.
 - Use a consistent lowercase snake_case mastery_key per recurring problem type
   (e.g. "grammar:article_usage"). Same problem ⇒ same key, every time. Reuse the
   keys already present in the weak list below whenever they apply.
+- Before inventing a new mastery_key, check the recent mastery key hints below.
+  If one is the same underlying problem, use that exact key even if the current
+  wording is different.
 - If the message is fully correct: is_correct=true, issues=[].
 - "natural" = a more idiomatic rendering (may equal "corrected").
 
@@ -101,6 +119,8 @@ B) EXPRESSION GAP — the message is wholly or partly in ${ctx.nativeLanguage}, 
    (leave it null otherwise) with:
    - original: the user's message verbatim (the thing they couldn't say).
    - target_expression: the full idiomatic ${ctx.targetLanguage} sentence they wanted.
+   - template: a reusable ${ctx.targetLanguage} pattern with ___ slots when the
+     expression can be generalized.
    - explanation: IN ${ctx.nativeLanguage}, the THINKING for building this sentence —
      which sentence patterns/structures to use and why, how the pieces fit.
    - key_items: 1–3 key words/collocations/structures, each with a ${ctx.nativeLanguage}
@@ -135,7 +155,10 @@ OUTPUT CONTRACT
 ${ctx.experiencePreferences || "(none)"}
 
 === KNOWN WEAK POINTS (reuse these mastery_key values) ===
-${formatWeakList(ctx.weakList)}`;
+${formatWeakList(ctx.weakList)}
+
+=== RECENT MASTERY KEY HINTS (reuse instead of making duplicates) ===
+${formatKeyHints(ctx.keyHints)}`;
 }
 
 function userPrompt(ctx: TutorContext): string {
@@ -172,7 +195,10 @@ ${ctx.experiencePreferences || "(none)"}
 - Output only the filled template, nothing else.
 
 === KNOWN WEAK POINTS ===
-${formatWeakList(ctx.weakList)}`;
+${formatWeakList(ctx.weakList)}
+
+=== RECENT MASTERY KEY HINTS ===
+${formatKeyHints(ctx.keyHints)}`;
 }
 
 function normalizeIgnoredText(
@@ -329,6 +355,9 @@ ${badOutput.slice(0, 6000)}
 
 === KNOWN WEAK POINTS ===
 ${formatWeakList(ctx.weakList)}
+
+=== RECENT MASTERY KEY HINTS ===
+${formatKeyHints(ctx.keyHints)}
 
 === LEARNER EXPERIENCE PREFERENCES ===
 ${ctx.experiencePreferences || "(none)"}

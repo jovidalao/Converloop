@@ -43,6 +43,9 @@ const md = `# Learner Profile · Chinese → English · B1 · updated 2026-06-01
 ## Recently introduced
 -
 
+## Expression gaps
+-
+
 ## My notes
 - 下周一有面试
 `;

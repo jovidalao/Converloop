@@ -6,6 +6,7 @@ import {
   deleteMasteryItem,
   getAllMastery,
   markMasteryKnown,
+  mergeMasteryItems,
   setMasteryStatus,
   updateMasteryItem,
 } from "./db/mastery";
@@ -46,6 +47,25 @@ export async function applyDataEditOperations(
   const skipped: string[] = [];
 
   for (const op of operations) {
+    if (op.action === "merge") {
+      if (!op.target_key) {
+        skipped.push(`合并 ${op.key} 缺少 target_key`);
+        continue;
+      }
+      if (!existingKeys.has(op.key)) {
+        skipped.push(`找不到 ${op.key}`);
+        continue;
+      }
+      if (!existingKeys.has(op.target_key)) {
+        skipped.push(`找不到 ${op.target_key}`);
+        continue;
+      }
+      await mergeMasteryItems(op.key, op.target_key);
+      applied++;
+      existingKeys.delete(op.key);
+      continue;
+    }
+
     if (op.action === "delete") {
       if (!existingKeys.has(op.key)) {
         skipped.push(`找不到 ${op.key}`);

@@ -9,6 +9,7 @@ export const REQUIRED_SECTIONS = [
   "## Avoids / rarely attempts",
   "## Interests",
   "## Recently introduced",
+  "## Expression gaps",
   "## My notes",
 ] as const;
 

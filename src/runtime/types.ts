@@ -2,7 +2,7 @@
 // 运行时现状见 docs/architecture.md;这里只定义类型与 hook 名,不含运行逻辑。
 
 import type { TutorAnalysis } from "../agents/schema";
-import type { WeakItem } from "../agents/tutor";
+import type { MasteryKeyHint, WeakItem } from "../agents/tutor";
 import type {
   AgentModifiers,
   BranchKind,
@@ -105,6 +105,7 @@ export interface PracticeContext extends BaseContext {
   /** 导师只看直近几轮;对话看全部水位后原文。 */
   tutorHistory: string;
   weakList: WeakItem[];
+  keyHints: MasteryKeyHint[];
   reviewItems: ReviewItem[];
   proficiency: ProficiencySnapshot;
   /** 会话级调节(分支带来的难度/角色/第二天等);普通会话为空对象。 */

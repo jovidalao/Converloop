@@ -15,9 +15,11 @@
 ```
 1. SQLite 薄弱表 top N:label / mastery_key / type / status
    (给精确的 mastery_key,是为了让它打标签时复用同一个 key、不重复造)
-2. 最近几轮对话(理解语境)
-3. 用户本轮输入
-4. config:native / target / level
+2. 最近 mastery key hints:最近见过的 key / label / type / status,含已掌握项,
+   用来减少语义重复 key
+3. 最近几轮对话(理解语境)
+4. 用户本轮输入
+5. config:native / target / level
 ```
 
 它**不看**对话 agent 的回复——只分析用户输入,所以可完全并行。
@@ -107,6 +109,8 @@ FEEDBACK
 - Use a consistent lowercase snake_case mastery_key per recurring problem type
   (e.g. "grammar:article_usage"). Same problem ⇒ same key, every time. Reuse the
   keys already present in the weak list below whenever they apply.
+- Before inventing a new mastery_key, check recent mastery key hints. If one is
+  the same underlying problem, use that exact key.
 - If the message is fully correct: is_correct=true, issues=[].
 - "natural" = a more idiomatic rendering (may equal "corrected").
 
@@ -126,6 +130,9 @@ Use [] for empty arrays and expression_gap:null when there is no gap.
 
 === KNOWN WEAK POINTS (reuse these mastery_key values) ===
 {weak_list}
+
+=== RECENT MASTERY KEY HINTS (reuse instead of making duplicates) ===
+{key_hints}
 ```
 
 User message:

@@ -25,8 +25,9 @@ import type {
 } from "./types";
 
 const DataEditOperation = z.object({
-  action: z.enum(["update", "delete", "create"]),
+  action: z.enum(["update", "delete", "create", "merge"]),
   key: z.string().min(1),
+  target_key: z.string().optional(),
   label: z.string().optional(),
   type: z
     .enum([
@@ -120,7 +121,9 @@ Follow the user's custom agent instructions exactly, but stay inside the output 
 Rules:
 - Return JSON only.
 - Do not claim you changed learning memory directly.
-- If you suggest memory writes, put them in memory_proposals using only create/update/delete operations.
+- If you suggest memory writes, put them in memory_proposals using only
+  create/update/delete/merge operations. For merge, key is the duplicate/source
+  key and target_key is the canonical/target key.
 - Use the learner's native language for explanations unless the custom instructions say otherwise.
 
 === CUSTOM AGENT INSTRUCTIONS ===

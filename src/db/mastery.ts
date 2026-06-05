@@ -9,6 +9,7 @@ import {
   type MasteryType,
   normalizeKey,
   type Signal,
+  statusFromCounts,
 } from "./mastery-logic";
 import { type MasteryItem, masteryEvent, masteryItem } from "./schema";
 
@@ -17,11 +18,13 @@ function payloadJson(payload: unknown): string | null {
   return JSON.stringify(payload);
 }
 
+type MasteryEventSource = "tutor" | "review" | "manual";
+
 async function insertMasteryEvent(
   sig: Signal,
   now: number,
   turnId?: string,
-  source: "tutor" | "review" | "manual" = "tutor",
+  source: MasteryEventSource = "tutor",
 ): Promise<void> {
   await db.insert(masteryEvent).values({
     id: crypto.randomUUID(),
@@ -91,9 +94,18 @@ async function recordAnalysisInner(
   turnId?: string,
 ): Promise<void> {
   const now = Date.now();
-  for (const sig of deriveSignals(analysis)) {
+  await recordSignalsInner(deriveSignals(analysis), turnId, "tutor", now);
+}
+
+async function recordSignalsInner(
+  signals: Signal[],
+  turnId: string | undefined,
+  source: MasteryEventSource,
+  now: number = Date.now(),
+): Promise<void> {
+  for (const sig of signals) {
     await upsertSignal(sig, now);
-    await insertMasteryEvent(sig, now, turnId);
+    await insertMasteryEvent(sig, now, turnId, source);
   }
 }
 
@@ -108,6 +120,22 @@ export function recordAnalysis(
 ): Promise<void> {
   const next = recordQueue.then(() => recordAnalysisInner(analysis, turnId));
   // 链本身不能因某轮抛错而断(否则后续记账永远卡住);调用方仍拿到真实结果。
+  recordQueue = next.catch(() => {});
+  return next;
+}
+
+export function recordSignals(
+  signals: Signal[],
+  turnId?: string,
+  source: MasteryEventSource = "review",
+): Promise<void> {
+  const normalized = signals.map((sig) => ({
+    ...sig,
+    key: normalizeKey(sig.key),
+  }));
+  const next = recordQueue.then(() =>
+    recordSignalsInner(normalized, turnId, source),
+  );
   recordQueue = next.catch(() => {});
   return next;
 }
@@ -133,6 +161,28 @@ export async function getWeakList(limit = 15): Promise<WeakItem[]> {
     )
     .limit(limit);
   return rows;
+}
+
+export interface MasteryKeyHint {
+  key: string;
+  label: string;
+  type: string;
+  status: string;
+}
+
+export async function getMasteryKeyHints(
+  limit = 40,
+): Promise<MasteryKeyHint[]> {
+  return db
+    .select({
+      key: masteryItem.key,
+      label: masteryItem.label,
+      type: masteryItem.type,
+      status: masteryItem.status,
+    })
+    .from(masteryItem)
+    .orderBy(desc(masteryItem.lastSeenAt))
+    .limit(limit);
 }
 
 export async function getAllMastery(): Promise<MasteryItem[]> {
@@ -244,6 +294,65 @@ export async function deleteMasteryItem(key: string): Promise<void> {
   await db.delete(masteryItem).where(eq(masteryItem.key, key));
 }
 
+export async function mergeMasteryItems(
+  sourceKeyRaw: string,
+  targetKeyRaw: string,
+): Promise<void> {
+  const sourceKey = normalizeKey(sourceKeyRaw);
+  const targetKey = normalizeKey(targetKeyRaw);
+  if (!sourceKey || !targetKey || sourceKey === targetKey) return;
+
+  const [source, target] = await Promise.all([
+    db
+      .select()
+      .from(masteryItem)
+      .where(eq(masteryItem.key, sourceKey))
+      .limit(1),
+    db
+      .select()
+      .from(masteryItem)
+      .where(eq(masteryItem.key, targetKey))
+      .limit(1),
+  ]);
+  const from = source[0];
+  const to = target[0];
+  if (!from || !to) return;
+
+  const seenCount = to.seenCount + from.seenCount;
+  const errorCount = to.errorCount + from.errorCount;
+  const now = Date.now();
+  await db
+    .update(masteryItem)
+    .set({
+      seenCount,
+      errorCount,
+      status: statusFromCounts(seenCount, errorCount),
+      lastSeenAt: Math.max(to.lastSeenAt, from.lastSeenAt, now),
+      example: to.example ?? from.example,
+      notes: to.notes?.trim() ? to.notes : from.notes,
+    })
+    .where(eq(masteryItem.key, targetKey));
+
+  await db
+    .update(masteryEvent)
+    .set({ key: targetKey, label: to.label, type: to.type })
+    .where(eq(masteryEvent.key, sourceKey));
+  await db.delete(masteryItem).where(eq(masteryItem.key, sourceKey));
+  await insertMasteryEvent(
+    {
+      key: targetKey,
+      label: to.label,
+      type: to.type,
+      kind: "introduced",
+      example: `Merged ${sourceKey} into ${targetKey}`,
+      payload: { manual_action: "merge_mastery_items", sourceKey, targetKey },
+    },
+    now,
+    undefined,
+    "manual",
+  );
+}
+
 export async function markMasteryKnown(key: string): Promise<void> {
   const [existing] = await db
     .select()
@@ -283,6 +392,7 @@ export async function markMasteryKnown(key: string): Promise<void> {
 // 这里给「学过 / 练过但最久没重温」的非 known 项——最适合在闲聊里 interleave 一两个。
 // 这把「复习靠被动复用」从「指望维护 agent 写进 prose」变成代码可控的定向选取(L1)。
 export interface ReviewItem {
+  key: string;
   label: string;
   type: string;
   example: string | null;
@@ -292,6 +402,7 @@ export interface ReviewItem {
 export async function getReviewDueList(limit = 5): Promise<ReviewItem[]> {
   return db
     .select({
+      key: masteryItem.key,
       label: masteryItem.label,
       type: masteryItem.type,
       example: masteryItem.example,

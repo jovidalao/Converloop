@@ -37,6 +37,7 @@ const SECTION_META: Record<string, { zh: string; owner: Owner }> = {
   "Avoids / rarely attempts": { zh: "回避 / 很少尝试", owner: "ai" },
   Interests: { zh: "兴趣", owner: "ai" },
   "Recently introduced": { zh: "最近学到", owner: "ai" },
+  "Expression gaps": { zh: "想说但说不出", owner: "ai" },
   "My notes": { zh: "我的笔记", owner: "user" },
 };
 

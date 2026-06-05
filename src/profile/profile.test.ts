@@ -22,6 +22,9 @@ const md = `# Learner Profile · Chinese → English · B1 · updated 2026-05-31
 ## Working on
 - 冠词 a/an/the
 
+## Expression gaps
+- 委婉拒绝请求
+
 ## My notes
 <!-- 用户手写区,agent 永不改动 -->
 - 下周一有面试,多练自我介绍

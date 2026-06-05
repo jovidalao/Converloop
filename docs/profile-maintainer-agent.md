@@ -25,7 +25,7 @@
 | 触发 | 说明 |
 |---|---|
 | 每 N 轮 | 默认 `N = 10`。计数器到了就排一次后台任务。 |
-| 会话结束 | 关闭 app / 切走 / 空闲超过 ~10 分钟。 |
+| 会话结束 / 空闲 | 切换会话、页面隐藏 / 关闭前 best-effort 刷新;有新学习数据后空闲 ~10 分钟自动刷新。 |
 | 显著变化 | SQLite 出现"新 struggling 项"或"某项升到 known"时,标记 dirty,下次触发时一并刷新。 |
 | 手动 | 用户在档案页点"刷新档案"。 |
 
@@ -89,6 +89,7 @@ OUTPUT
     ## Avoids / rarely attempts
     ## Interests
     ## Recently introduced
+    ## Expression gaps
     ## My notes
 - No commentary, no explanation, no code fences. Just the document.
 ```
@@ -156,6 +157,9 @@ MD 是 prose,没法 schema 校验,但要做轻量 sanity check,**任何一项不
 
 ## Recently introduced
 - "look forward to", "pay attention to"
+
+## Expression gaps
+- 委婉拒绝请求 → "I'd rather not take this on right now."
 
 ## My notes
 <!-- 用户手写区,agent 永不改动 -->

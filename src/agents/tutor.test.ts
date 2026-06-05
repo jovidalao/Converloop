@@ -100,6 +100,30 @@ describe("analyze", () => {
     expect(system).toContain("punctuation-only differences");
   });
 
+  it("把 recent mastery key hints 放进结构化导师 prompt", async () => {
+    const calls: GenerateOptions[] = [];
+    const provider = stubProvider((opts) => {
+      calls.push(opts);
+      return validAnalysis;
+    });
+
+    await analyze(provider, {
+      ...ctx,
+      keyHints: [
+        {
+          key: "grammar:past_tense",
+          label: "一般过去时",
+          type: "grammar",
+          status: "learning",
+        },
+      ],
+    });
+
+    const system = calls[0].messages[0]?.content;
+    expect(system).toContain("RECENT MASTERY KEY HINTS");
+    expect(system).toContain("grammar:past_tense");
+  });
+
   it("中文/混合枚举不导致真实纠错退到纯文本", async () => {
     const provider = stubProvider(() =>
       JSON.stringify({

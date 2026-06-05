@@ -43,6 +43,9 @@ const oldMd = `# Learner Profile · Chinese → English · B1 · updated 2026-05
 ## Recently introduced
 - "look forward to", "pay attention to", "make sense", "by the way", "in the long run"
 
+## Expression gaps
+- 委婉拒绝请求 → I'd rather not take this on right now.
+
 ## My notes
 我自己记的:多练时态,周末复习介词搭配。
 `;
@@ -82,6 +85,9 @@ ${working}
 
 ## Recently introduced
 - "pay attention to"
+
+## Expression gaps
+- 委婉拒绝请求
 
 ## My notes
 ${myNotes}`;
@@ -132,6 +138,7 @@ ${extractSectionBlock(oldMd, "AI preferences")}## Working on
 ## Avoids / rarely attempts
 ## Interests
 ## Recently introduced
+## Expression gaps
 ## My notes
 ${MY_NOTES}`;
     const longOld = oldMd.replace(
@@ -171,6 +178,9 @@ describe("applyPreservedMyNotes", () => {
 -
 
 ## Recently introduced
+-
+
+## Expression gaps
 -
 `;
     const fixed = applyPreservedMyNotes(oldMd, without);

@@ -2,6 +2,10 @@ import { bilingual } from "./agents/bilingual";
 import { converse } from "./agents/conversation";
 import { explain } from "./agents/explain";
 import { generateLearningAgentDraft } from "./agents/learning-agent-builder";
+import {
+  analyzeLessonWriteback,
+  toLessonWritebackCandidate,
+} from "./agents/lesson-writeback";
 import { classifyProfilePreferenceInstruction } from "./agents/profile-preferences";
 import {
   type ReplySuggestionResult,
@@ -9,6 +13,10 @@ import {
   suggestReplyText,
 } from "./agents/reply-suggestion";
 import type { TutorAnalysis } from "./agents/schema";
+import {
+  fallbackSelectionLearningItem,
+  generateSelectionLearningItem,
+} from "./agents/selection-learning-item";
 import { planLearningProject } from "./agents/task-agent";
 import { translate } from "./agents/translate";
 import { getProvider, loadConfig } from "./config";
@@ -24,15 +32,25 @@ import {
 } from "./db/conversations";
 import { createLearningAgent, getLearningAgent } from "./db/learning-agents";
 import { createLearningProject } from "./db/learning-projects";
-import { getReviewDueList, getWeakList } from "./db/mastery";
+import {
+  createManualMasteryItem,
+  getAllMastery,
+  getMasteryKeyHints,
+  getReviewDueList,
+  getWeakList,
+  recordSignals,
+} from "./db/mastery";
+import { normalizeKey } from "./db/mastery-logic";
 import { getProficiencySnapshot } from "./db/proficiency";
 import {
   formatTurns,
+  getTurn,
   getTurnsAfterId,
   persistTurn,
   updateTurnReply,
 } from "./db/turns";
 import { buildLearningDataContext } from "./learning-data";
+import { rankMasteryItemsForInput } from "./lib/mastery-relevance";
 import { estimateTokens } from "./lib/tokens";
 import {
   appendClassifiedPreferences,
@@ -164,6 +182,89 @@ export async function editLearningDataWithInstruction(
   return applyDataEditInstruction(provider, instruction, loadConfig());
 }
 
+export async function confirmLearningTurnMastery(
+  conversationId: string,
+  turnId: string,
+): Promise<{ summary: string; applied: number }> {
+  const provider = await getProvider();
+  if (!provider) throw new MissingApiKeyError();
+
+  const conversation = await getConversation(conversationId);
+  if (conversation?.kind !== "learning_agent") {
+    throw new Error("只有专项课会话可以确认课堂掌握信号");
+  }
+  const agentId = conversation.learningAgentId;
+  if (!agentId) throw new Error("这个专项课没有绑定学习 Agent");
+  const agent = await getLearningAgent(agentId);
+  if (!agent) throw new Error("找不到这个学习 Agent");
+  const turn = await getTurn(turnId);
+  if (!turn || turn.conversationId !== conversationId) {
+    throw new Error("找不到这条专项课轮次");
+  }
+  if (!turn.userInput.trim()) {
+    return { summary: "这一轮不是学习者产出,没有写入。", applied: 0 };
+  }
+
+  const config = loadConfig();
+  const [allItems, lessonTurns] = await Promise.all([
+    getAllMastery(),
+    getTurnsAfterId(conversationId, null),
+  ]);
+  const candidates = rankMasteryItemsForInput(
+    allItems.filter((item) => item.status !== "known"),
+    turn.userInput,
+    turn.reply,
+  )
+    .slice(0, 40)
+    .map(toLessonWritebackCandidate);
+  if (candidates.length === 0) {
+    return { summary: "没有可回写的学习项。", applied: 0 };
+  }
+  const idx = lessonTurns.findIndex((item) => item.id === turnId);
+  const history = formatTurns(
+    idx >= 0
+      ? lessonTurns.slice(Math.max(0, idx - 6), idx)
+      : lessonTurns.slice(-6),
+  );
+  const result = await analyzeLessonWriteback(provider, {
+    nativeLanguage: config.nativeLanguage,
+    targetLanguage: config.targetLanguage,
+    level: config.level,
+    lessonName: agent.name,
+    candidates,
+    history,
+    userInput: turn.userInput,
+    partnerReply: turn.reply,
+  });
+  const byKey = new Map(
+    candidates.map((item) => [normalizeKey(item.key), item]),
+  );
+  const signals = result.signals.flatMap((signal) => {
+    const item = byKey.get(normalizeKey(signal.key));
+    if (!item) return [];
+    return [
+      {
+        key: item.key,
+        label: item.label,
+        type: item.type,
+        kind: "correct" as const,
+        example: signal.evidence?.trim() || turn.userInput,
+        payload: {
+          lesson_writeback: {
+            lessonAgentId: agent.id,
+            lessonName: agent.name,
+            summary: result.summary,
+          },
+        },
+      },
+    ];
+  });
+  if (signals.length > 0) {
+    await recordSignals(signals, turnId, "review");
+  }
+  return { summary: result.summary, applied: signals.length };
+}
+
 export async function applyProfilePreferenceInstruction(
   instruction: string,
   currentProfileMd: string,
@@ -176,6 +277,24 @@ export async function applyProfilePreferenceInstruction(
     preferencesFromProfile(currentProfileMd),
   );
   return appendClassifiedPreferences(currentProfileMd, items);
+}
+
+export async function addSelectionToLearningData(
+  selection: string,
+  context: string,
+): Promise<{ key: string; label: string; type: string }> {
+  const config = loadConfig();
+  const provider = await getProvider();
+  const draft = provider
+    ? await generateSelectionLearningItem(provider, {
+        nativeLanguage: config.nativeLanguage,
+        targetLanguage: config.targetLanguage,
+        selection,
+        context,
+      })
+    : fallbackSelectionLearningItem(selection, context);
+  await createManualMasteryItem(draft);
+  return { key: draft.key, label: draft.label, type: draft.type };
 }
 
 // 端到端一轮:对话 ∥ 导师并行 → 对话流式秒回、批改稍后到 → 记账 + 持久化。
@@ -214,14 +333,21 @@ export async function runTurn(
   // 共享上下文(两个 agent 都读),先查好再喂。彼此独立,并行取以免叠加延迟、拖慢首 token。
   // 历史按当前会话隔离(话题不串);weakList / reviewItems / proficiency 走全局掌握表。
   // 自动压缩:对话上下文 = 滚动摘要(较早内容)+ 水位之后的全部原文。摘要为 NULL 时退化为纯原文。
-  const [summaryData, weakList, profileMd, reviewItems, proficiency] =
-    await Promise.all([
-      getSummary(conversationId),
-      getWeakList(),
-      readProfile(config),
-      getReviewDueList(),
-      getProficiencySnapshot(),
-    ]);
+  const [
+    summaryData,
+    weakListRaw,
+    profileMd,
+    reviewItemsRaw,
+    proficiency,
+    keyHints,
+  ] = await Promise.all([
+    getSummary(conversationId),
+    getWeakList(),
+    readProfile(config),
+    getReviewDueList(),
+    getProficiencySnapshot(),
+    getMasteryKeyHints(),
+  ]);
   const verbatimTurns = await getTurnsAfterId(
     conversationId,
     summaryData.throughId,
@@ -229,6 +355,16 @@ export async function runTurn(
   const history = formatTurns(verbatimTurns);
   // 导师拿直近几轮即可,别把水位后的全部原文喂进结构化分析(省 token、缩短输入)。
   const tutorHistory = formatTurns(verbatimTurns.slice(-TUTOR_HISTORY_TURNS));
+  const weakList = rankMasteryItemsForInput(
+    weakListRaw,
+    userInput,
+    tutorHistory,
+  );
+  const reviewItems = rankMasteryItemsForInput(
+    reviewItemsRaw,
+    userInput,
+    history,
+  );
   const profileSlice = profileSliceForConversation(profileMd);
   const conversationPreferences = formatExperiencePreferences(
     profileMd,
@@ -268,6 +404,7 @@ export async function runTurn(
     history,
     tutorHistory,
     weakList,
+    keyHints,
     reviewItems,
     proficiency,
     agentModifiers,
@@ -346,20 +483,38 @@ export async function startDerivedConversation(
     level: config.level,
   };
 
-  const [summaryData, weakList, profileMd, reviewItems, proficiency, conv] =
-    await Promise.all([
-      getSummary(conversationId),
-      getWeakList(),
-      readProfile(config),
-      getReviewDueList(),
-      getProficiencySnapshot(),
-      getConversation(conversationId),
-    ]);
+  const [
+    summaryData,
+    weakListRaw,
+    profileMd,
+    reviewItemsRaw,
+    proficiency,
+    conv,
+    keyHints,
+  ] = await Promise.all([
+    getSummary(conversationId),
+    getWeakList(),
+    readProfile(config),
+    getReviewDueList(),
+    getProficiencySnapshot(),
+    getConversation(conversationId),
+    getMasteryKeyHints(),
+  ]);
   const verbatimTurns = await getTurnsAfterId(
     conversationId,
     summaryData.throughId,
   );
   const history = formatTurns(verbatimTurns);
+  const weakList = rankMasteryItemsForInput(
+    weakListRaw,
+    openingInstruction,
+    history,
+  );
+  const reviewItems = rankMasteryItemsForInput(
+    reviewItemsRaw,
+    openingInstruction,
+    history,
+  );
   const profileSlice = profileSliceForConversation(profileMd);
   const conversationPreferences = formatExperiencePreferences(
     profileMd,
@@ -387,6 +542,7 @@ export async function startDerivedConversation(
     history,
     tutorHistory: "",
     weakList,
+    keyHints,
     reviewItems,
     proficiency,
     agentModifiers: parseAgentModifiers(conv?.agentModifiersJson ?? null),
@@ -508,7 +664,7 @@ export async function regenerateReply(
 
   const config = loadConfig();
   // 上下文构成与 runTurn 的对话侧一致:摘要 + 水位后原文,叠加 profile / 复习 / 校准 / 会话调节。
-  const [summaryData, profileMd, reviewItems, proficiency, conv] =
+  const [summaryData, profileMd, reviewItemsRaw, proficiency, conv] =
     await Promise.all([
       getSummary(conversationId),
       readProfile(config),
@@ -525,6 +681,11 @@ export async function regenerateReply(
   const target = verbatimTurns[idx];
   // 历史只取「该轮之前」的原文:把被重生成的这轮及其之后排除,避免把旧回复喂回去。
   const history = formatTurns(verbatimTurns.slice(0, idx));
+  const reviewItems = rankMasteryItemsForInput(
+    reviewItemsRaw,
+    target.userInput,
+    history,
+  );
   const experiencePreferences = formatExperiencePreferences(
     profileMd,
     "conversation",

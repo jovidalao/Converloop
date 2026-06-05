@@ -6,8 +6,9 @@ import { db } from "./client";
 import { type MemoryProposal, memoryProposal } from "./schema";
 
 const DataEditOperationSchema = z.object({
-  action: z.enum(["update", "delete", "create"]),
+  action: z.enum(["update", "delete", "create", "merge"]),
   key: z.string().min(1),
+  target_key: z.string().optional(),
   label: z.string().optional(),
   type: z
     .enum([

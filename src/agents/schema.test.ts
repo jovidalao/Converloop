@@ -68,6 +68,24 @@ describe("TutorAnalysis schema", () => {
     });
     expect(r.success).toBe(true);
   });
+
+  it("expression_gap 可带可复用 template", () => {
+    const r = TutorAnalysis.safeParse({
+      ...sampleAnalysis,
+      issues: [],
+      mastery_updates: [],
+      expression_gap: {
+        mastery_key: "gap:decline_request_politely",
+        mastery_label: "委婉拒绝请求",
+        original: "我想委婉拒绝这个请求",
+        target_expression: "I'd rather not take this on right now.",
+        template: "I'd rather not ___ right now.",
+        explanation: "用 I'd rather not 表达委婉拒绝。",
+        key_items: [],
+      },
+    });
+    expect(r.success).toBe(true);
+  });
 });
 
 describe("tutorJsonSchema", () => {

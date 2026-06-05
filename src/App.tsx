@@ -60,6 +60,7 @@ import {
 import type { ChatTurn } from "./db/turns";
 import { actionShortcutLabel, matchesActionShortcut } from "./lib/app-actions";
 import { withViewTransition } from "./lib/view-transition";
+import { flushMaintainerSoon } from "./profile/maintainer-runner";
 import {
   beginAction,
   getActions,
@@ -134,6 +135,26 @@ function App() {
   useEffect(() => {
     setCoachTurn(null);
   }, [activeId]);
+
+  useEffect(() => {
+    if (!activeId) return;
+    flushMaintainerSoon();
+  }, [activeId]);
+
+  useEffect(() => {
+    function onVisibilityChange() {
+      if (document.hidden) flushMaintainerSoon();
+    }
+    function onBeforeUnload() {
+      flushMaintainerSoon();
+    }
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("beforeunload", onBeforeUnload);
+    };
+  }, []);
 
   const toggleSidebar = useCallback(() => {
     setCollapsed((c) => !c);

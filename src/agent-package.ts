@@ -62,8 +62,9 @@ export function defaultAgentOutputSchema(
             type: "object",
             required: ["action", "key"],
             properties: {
-              action: { enum: ["update", "delete", "create"] },
+              action: { enum: ["update", "delete", "create", "merge"] },
               key: { type: "string" },
+              target_key: { type: "string" },
               label: { type: "string" },
               type: {
                 enum: [

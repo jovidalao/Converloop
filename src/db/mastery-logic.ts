@@ -41,7 +41,7 @@ export function normalizeKey(key: string): string {
     .replace(/^_|_$/g, "");
 }
 
-function statusFromCounts(
+export function statusFromCounts(
   seenCount: number,
   errorCount: number,
 ): MasteryStatus {

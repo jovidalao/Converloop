@@ -48,6 +48,9 @@ export function defaultProfile(config: AppConfig): string {
 ## Recently introduced
 -
 
+## Expression gaps
+-
+
 ## My notes
 <!-- 用户手写区,agent 永不改动 -->
 `;

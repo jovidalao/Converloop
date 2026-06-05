@@ -39,6 +39,9 @@ const md = `# Learner Profile · Chinese → English · B1 · updated 2026-05-31
 ## Recently introduced
 - "look forward to"
 
+## Expression gaps
+- 委婉拒绝请求
+
 ## My notes
 - 下周一有面试
 `;

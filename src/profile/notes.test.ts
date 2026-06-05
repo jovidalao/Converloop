@@ -22,6 +22,9 @@ const base = `# Learner Profile · Chinese → English · B1 · updated 2026-05-
 ## Recently introduced
 - "look forward to"
 
+## Expression gaps
+-
+
 ## My notes
 <!-- 用户手写区,agent 永不改动 -->
 `;

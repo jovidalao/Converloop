@@ -444,6 +444,9 @@ export function normalizeTutorPayload(json: unknown): unknown {
           g.target_expression,
         ),
       ),
+      template: coerceString(
+        readAliasOr(g, ["template", "pattern"], g.template),
+      ),
       explanation: coerceString(
         readAliasOr(g, ["explanation", "reason"], g.explanation),
       ),

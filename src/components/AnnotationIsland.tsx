@@ -7,8 +7,11 @@ import {
   useState,
 } from "react";
 import { cn } from "@/lib/utils";
-import { createManualMasteryItem } from "../db/mastery";
-import { MissingApiKeyError, translateSelection } from "../orchestrator";
+import {
+  addSelectionToLearningData,
+  MissingApiKeyError,
+  translateSelection,
+} from "../orchestrator";
 import { playSpeech, stopSpeech } from "../tts/playback";
 import { MissingTtsApiKeyError, speakText } from "../tts/speak";
 import { Markdown } from "./Markdown";
@@ -30,15 +33,6 @@ type IslandMode = "menu" | "analysis";
 
 const CARD_WIDTH = 360;
 const MENU_WIDTH = 292;
-
-function textKey(text: string): string {
-  return text
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, "_")
-    .replace(/[^\p{L}\p{N}_:-]/gu, "")
-    .slice(0, 80);
-}
 
 function readPick(container: HTMLElement): Pick | null {
   const sel = window.getSelection();
@@ -212,21 +206,15 @@ export function AnnotationIsland({
     setError(null);
     setLoading("save");
     try {
-      const label = pick.selection.trim();
-      const key = textKey(label);
-      if (!key) {
+      if (!pick.selection.trim()) {
         setError("请选择包含文字或数字的内容。");
         return;
       }
-      await createManualMasteryItem({
-        key: `vocab:${key}`,
-        label,
-        type: "vocab",
-        status: "learning",
-        example: pick.context,
-        notes: label,
-      });
-      setMessage("已加入学习数据。");
+      const item = await addSelectionToLearningData(
+        pick.selection,
+        pick.context,
+      );
+      setMessage(`已加入学习数据:${item.label}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {

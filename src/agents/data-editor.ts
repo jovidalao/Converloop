@@ -5,8 +5,9 @@ import type { ChatMessage, ModelProvider } from "../providers/types";
 import { formatZodError, parseLLMJson } from "./parse-llm-json";
 
 const DataEditOperation = z.object({
-  action: z.enum(["update", "delete", "create"]),
+  action: z.enum(["update", "delete", "create", "merge"]),
   key: z.string().min(1),
+  target_key: z.string().optional(),
   label: z.string().optional(),
   type: z
     .enum([
@@ -64,12 +65,16 @@ The data is a mastery table. You may propose ONLY these operations:
 - update: edit label/example/notes/status for an existing key
 - delete: delete one existing key from the active mastery table
 - create: create one new mastery item with key, label, type, status, optional example/notes
+- merge: merge a duplicate existing key into another existing key. Use key as
+  the duplicate/source key and target_key as the canonical/target key.
 
 Rules:
 - Return JSON only.
 - For update/delete, use an existing key exactly as listed.
+- For merge, both key and target_key must be existing keys exactly as listed.
 - Do not modify counts. Do not invent hidden fields.
 - Prefer update over delete when the user asks to correct wording.
+- Prefer merge when the user says two keys are duplicates or should be combined.
 - If the request is ambiguous, return operations=[] and explain what is unclear in summary.
 - Write summary in ${ctx.nativeLanguage}.`;
 }

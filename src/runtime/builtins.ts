@@ -245,6 +245,7 @@ const tutorObserver: Observer = {
         ignoreCapitalizationIssues: ctx.tutorFlags.ignoreCapitalizationIssues,
         ignorePunctuationIssues: ctx.tutorFlags.ignorePunctuationIssues,
         weakList: ctx.weakList,
+        keyHints: ctx.keyHints,
         history: ctx.tutorHistory,
         userInput: ctx.userInput,
       },

@@ -46,10 +46,18 @@ export type AppConfig = z.infer<typeof AppConfigSchema>;
 const DEFAULT_CONTEXT_TOKENS = 128_000;
 const CONTEXT_WINDOW_TABLE: { prefix: string; tokens: number }[] = [
   // 长前缀在前,确保 gpt-4o-mini 不被 gpt-4 之类短前缀抢先。
+  { prefix: "claude-opus-4-8", tokens: 1_000_000 },
+  { prefix: "claude-sonnet-4-6", tokens: 1_000_000 },
+  { prefix: "claude-haiku-4-5", tokens: 200_000 },
   { prefix: "claude", tokens: 200_000 },
   { prefix: "gemini-1.5", tokens: 1_000_000 },
   { prefix: "gemini-2", tokens: 1_000_000 },
   { prefix: "gemini", tokens: 1_000_000 },
+  { prefix: "gpt-5.5", tokens: 1_000_000 },
+  { prefix: "gpt-5.4-mini", tokens: 400_000 },
+  { prefix: "gpt-5.4-nano", tokens: 400_000 },
+  { prefix: "gpt-5.4", tokens: 1_000_000 },
+  { prefix: "gpt-5.3-codex-spark", tokens: 400_000 },
   { prefix: "gpt-4o", tokens: 128_000 },
   { prefix: "gpt-4.1", tokens: 1_000_000 },
   { prefix: "gpt-4-turbo", tokens: 128_000 },
@@ -140,12 +148,11 @@ export const PROVIDER_PRESETS: Record<ProviderType, ProviderPreset> = {
     label: "Claude (Pro/Max 登录)",
     shortLabel: "Claude Code",
     baseUrl: "https://api.anthropic.com/v1",
-    model: "claude-sonnet-4-5",
+    model: "claude-sonnet-4-6",
     models: [
-      { label: "Claude Sonnet 4.5", model: "claude-sonnet-4-5" },
-      { label: "Claude Opus 4.1", model: "claude-opus-4-1-20250805" },
-      { label: "Claude Sonnet 4", model: "claude-sonnet-4-20250514" },
-      { label: "Claude Haiku 3.5", model: "claude-3-5-haiku-20241022" },
+      { label: "Claude Opus 4.8", model: "claude-opus-4-8" },
+      { label: "Claude Sonnet 4.6", model: "claude-sonnet-4-6" },
+      { label: "Claude Haiku 4.5", model: "claude-haiku-4-5-20251001" },
     ],
   },
   // Codex 订阅登录:走 ChatGPT 后端 Responses API,模型用 codex 系列。
@@ -153,8 +160,13 @@ export const PROVIDER_PRESETS: Record<ProviderType, ProviderPreset> = {
     label: "ChatGPT (Codex 登录)",
     shortLabel: "ChatGPT Codex",
     baseUrl: "https://chatgpt.com/backend-api",
-    model: "gpt-5-codex",
-    models: [{ label: "GPT-5 Codex", model: "gpt-5-codex" }],
+    model: "gpt-5.5",
+    models: [
+      { label: "GPT-5.5", model: "gpt-5.5" },
+      { label: "GPT-5.4", model: "gpt-5.4" },
+      { label: "GPT-5.4 mini", model: "gpt-5.4-mini" },
+      { label: "GPT-5.3 Codex Spark", model: "gpt-5.3-codex-spark" },
+    ],
   },
 };
 

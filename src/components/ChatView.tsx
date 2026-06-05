@@ -12,6 +12,7 @@ import perplexityLogo from "@lobehub/icons-static-svg/icons/perplexity-color.svg
 import qwenLogo from "@lobehub/icons-static-svg/icons/qwen-color.svg?raw";
 import {
   ArrowUpIcon,
+  CheckCircle2Icon,
   CheckIcon,
   ChevronDownIcon,
   ChevronRightIcon,
@@ -74,6 +75,7 @@ import { estimatePromptTokens } from "../lib/tokens";
 import { deriveTurnActivities, type TurnActivity } from "../lib/turn-activity";
 import {
   bilingualReply,
+  confirmLearningTurnMastery,
   MissingApiKeyError,
   regenerateReply,
   runTurn,
@@ -225,11 +227,20 @@ function modelBrand(model: string): ModelBrand {
   };
 }
 
-function ModelLogo({ model }: { model: string }) {
+function ModelLogo({
+  model,
+  compact = false,
+}: {
+  model: string;
+  compact?: boolean;
+}) {
   const brand = modelBrand(model);
+  const sizeClass = compact
+    ? "size-2.5 [&_svg]:size-2.5"
+    : "size-4 [&_svg]:size-4";
   return (
     <span
-      className={`inline-flex size-4 shrink-0 items-center justify-center [&_svg]:size-4 ${brand.className}`}
+      className={`inline-flex shrink-0 items-center justify-center ${sizeClass} ${brand.className}`}
       title={brand.name}
       role="img"
       aria-label={brand.name}
@@ -241,7 +252,7 @@ function ModelLogo({ model }: { model: string }) {
           dangerouslySetInnerHTML={{ __html: brand.svg }}
         />
       ) : (
-        <SparklesIcon className="size-3.5" />
+        <SparklesIcon className={compact ? "size-2.5" : "size-3.5"} />
       )}
     </span>
   );
@@ -250,12 +261,30 @@ function ModelLogo({ model }: { model: string }) {
 function modelShortName(model: string): string {
   const raw = model.trim();
   const lower = raw.toLowerCase();
+  const claudeVersion = (family: string) => {
+    const match = lower.match(
+      new RegExp(`${family}[-_ ]?(\\d)(?:[-_.]?(\\d))?`),
+    );
+    if (!match) return "";
+    return `${match[1]}${match[2] ? `.${match[2]}` : ""}`;
+  };
   if (lower.includes("sonnet")) {
-    const version = lower.match(/sonnet[-_ ]?([0-9](?:\.[0-9])?)/)?.[1];
+    const version = claudeVersion("sonnet");
     return version ? `Sonnet ${version}` : "Sonnet";
   }
-  if (lower.includes("haiku")) return "Haiku";
-  if (lower.includes("opus")) return "Opus";
+  if (lower.includes("haiku")) {
+    const version = claudeVersion("haiku");
+    return version ? `Haiku ${version}` : "Haiku";
+  }
+  if (lower.includes("opus")) {
+    const version = claudeVersion("opus");
+    return version ? `Opus ${version}` : "Opus";
+  }
+  if (lower.includes("gpt-5.5")) return "GPT-5.5";
+  if (lower.includes("gpt-5.4-mini")) return "GPT-5.4 mini";
+  if (lower.includes("gpt-5.4-nano")) return "GPT-5.4 nano";
+  if (lower.includes("gpt-5.4")) return "GPT-5.4";
+  if (lower.includes("gpt-5.3-codex-spark")) return "GPT-5.3 Spark";
   if (lower.includes("gpt-4o-mini")) return "GPT-4o mini";
   if (lower.includes("gpt-4o")) return "GPT-4o";
   if (lower.includes("gemini")) {
@@ -526,6 +555,73 @@ function EditFromHereButton({
     >
       <PencilIcon size={16} />
     </Button>
+  );
+}
+
+function LessonMasteryButton({
+  conversationId,
+  turnId,
+  disabled = false,
+  onChanged,
+}: {
+  conversationId: string;
+  turnId: string;
+  disabled?: boolean;
+  onChanged?: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function run() {
+    if (busy || disabled) return;
+    setBusy(true);
+    setMessage(null);
+    setError(null);
+    try {
+      const result = await confirmLearningTurnMastery(conversationId, turnId);
+      setMessage(
+        result.applied > 0
+          ? `已写入 ${result.applied} 条掌握证据。`
+          : result.summary,
+      );
+      onChanged?.();
+    } catch (e) {
+      setError(
+        e instanceof MissingApiKeyError
+          ? e.message
+          : e instanceof Error
+            ? e.message
+            : String(e),
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1">
+      <Button
+        type="button"
+        variant="action"
+        size="action"
+        title="把这句课堂回答记为掌握证据"
+        disabled={disabled || busy}
+        onClick={() => void run()}
+      >
+        {busy ? <Spinner /> : <CheckCircle2Icon size={16} />}
+      </Button>
+      {message && (
+        <span className="max-w-44 truncate text-ui-caption text-success">
+          {message}
+        </span>
+      )}
+      {error && (
+        <span className="max-w-44 truncate text-ui-caption text-destructive">
+          {error}
+        </span>
+      )}
+    </span>
   );
 }
 
@@ -873,6 +969,12 @@ function UserTurn({
         <div className="-mr-1 flex items-center gap-0.5">
           <CopyButton text={turn.userText} />
           <ReplySuggestionButton suggestion={replySuggestion} />
+          <LessonMasteryButton
+            conversationId={conversationId}
+            turnId={turn.id}
+            disabled={editDisabled}
+            onChanged={onLayoutChange}
+          />
           <EditFromHereButton onClick={onEditFrom} disabled={editDisabled} />
         </div>
         <ReplySuggestionPanel
@@ -1709,8 +1811,7 @@ export function ChatView({
     config.providerType,
     config.model,
   );
-  const currentModelButtonLabel =
-    currentModelOption?.label || modelShortName(config.model);
+  const currentModelButtonLabel = modelShortName(config.model);
   const selectedModelValue =
     usingPresetEndpoint && currentModelOption
       ? modelSelectValue(config.providerType, currentModelOption.model)
@@ -1953,7 +2054,7 @@ export function ChatView({
                 disabled={replyBusy}
                 className="max-h-[6.5rem] min-h-14 min-w-0 resize-none border-none bg-transparent px-4 pt-3 pb-2 text-ui-chat outline-none placeholder:text-muted-foreground"
               />
-              <div className="flex min-h-11 items-center gap-2 px-2 py-1.5">
+              <div className="flex min-h-11 items-end gap-2 px-2 pt-1 pb-2">
                 <div
                   className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5"
                   title={contextTitle}
@@ -1977,25 +2078,32 @@ export function ChatView({
                   disabled={replyBusy}
                 >
                   <SelectTrigger
-                    className="h-7 w-[8.75rem] max-w-[42vw] min-w-0 gap-1 border-0 bg-transparent px-1.5 text-ui-caption text-foreground shadow-none hover:bg-accent focus-visible:ring-1 sm:w-[10.75rem] [&>svg]:size-3.5"
+                    className="h-4 w-auto min-w-[5.5rem] max-w-[min(42vw,12rem)] gap-1 rounded-sm border-0 bg-transparent px-1 py-0 text-ui-caption font-medium leading-none text-ui-muted shadow-none hover:bg-accent focus-visible:ring-1 sm:max-w-[14rem] [&>svg]:size-2.5"
                     aria-label="选择模型"
                     title={currentProviderModelLabel}
                   >
-                    <ModelLogo model={config.model} />
+                    <ModelLogo model={config.model} compact />
                     <span className="min-w-0 truncate">
                       {currentModelButtonLabel}
                     </span>
                   </SelectTrigger>
-                  <SelectContent align="start" className="min-w-72">
+                  <SelectContent
+                    side="top"
+                    align="end"
+                    sideOffset={6}
+                    className="w-80 max-w-[min(92vw,24rem)]"
+                  >
                     {selectedModelValue === CURRENT_MODEL_VALUE && (
                       <SelectItem value={CURRENT_MODEL_VALUE}>
                         <span className="flex min-w-0 items-center gap-2.5">
                           <ModelLogo model={config.model} />
                           <span className="flex min-w-0 flex-col">
                             <span className="truncate">
-                              当前 · {currentProviderModelLabel}
+                              {currentModelOption?.label ||
+                                currentModelButtonLabel}
                             </span>
                             <span className="truncate text-ui-caption text-ui-muted">
+                              {currentPreset.shortLabel} ·{" "}
                               {config.model.trim() || "未填写模型 ID"}
                             </span>
                           </span>
@@ -2012,11 +2120,9 @@ export function ChatView({
                           <span className="flex min-w-0 items-center gap-2.5">
                             <ModelLogo model={model.model} />
                             <span className="flex min-w-0 flex-col">
-                              <span className="truncate">
-                                {providerModelLabel(providerType, model.model)}
-                              </span>
+                              <span className="truncate">{model.label}</span>
                               <span className="truncate text-ui-caption text-ui-muted">
-                                {model.model}
+                                {preset.shortLabel} · {model.model}
                               </span>
                             </span>
                           </span>

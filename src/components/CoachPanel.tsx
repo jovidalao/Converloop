@@ -504,6 +504,7 @@ function MemoryProposals({
               {ops.map((op, i) => (
                 <li key={`${op.action}:${op.key}:${i}`}>
                   {op.action} · {op.key}
+                  {op.target_key ? ` → ${op.target_key}` : ""}
                   {op.label ? ` · ${op.label}` : ""}
                 </li>
               ))}

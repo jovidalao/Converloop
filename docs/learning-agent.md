@@ -40,6 +40,8 @@ BASE RULES
 - Follow the learner experience preferences below for language variety, spelling,
   phrasing, tone, and correction strictness.
 - Use the learner data below as grounding. Do not claim access to data that is not shown.
+- When drilling a point from the learner data, anchor the exercise to one specific
+  item or expression from that data. Refer to it by human label/example, not raw key.
 - Start with the most useful next step, then ask the learner to do something small and concrete.
 - Keep the lesson focused and interactive. Avoid long generic lectures.
 
@@ -70,6 +72,9 @@ User message:
 - 内置「今日复盘」「语法专项复习」的首条消息(kickoff)先输出一份结构化的详细报告(今日练习复盘 / 逐条讲解最近的语法问题),再过渡到练习;语法课随后逐个击破。
 - DB:`conversation.kind="learning_agent"` + `conversation.learning_agent_id` 区分专项课会话。
 - Orchestrator:学习会话调用 `runLearningAgent`,不调用普通 Tutor Agent,因此不显示普通批改面板、不写 mastery 计数。
+- 课堂回写:专项课用户消息下的「这句算掌握」动作会运行一次有界 `lesson_writeback`
+  observer,只允许从现有候选 mastery item 中选择 `correct` 信号,再由代码写
+  `mastery_event(source="review")` 与 `mastery_item` 快照。
 - 首次打开空的专项课会话时,ChatView 自动调用 `startLearningSession`,让老师先开场。
 - 自定义创建走 `learning-agent-builder`:LLM 只生成 name / description / prompt / data scopes,代码落库。
 

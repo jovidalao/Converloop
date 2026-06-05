@@ -58,6 +58,7 @@ export const ExpressionGap = z.object({
   mastery_label: z.string(), // 人类可读:"委婉拒绝请求"
   original: z.string(), // 用户原句(母语/混说)—— 最重要的练习记录
   target_expression: z.string(), // 地道的目标语整句
+  template: z.string().optional(), // 可复用句式模板,如 "I'd rather not ___, but ___"
   explanation: z.string(), // 讲解:怎么构成这句话的思路(母语)
   key_items: z.array(GapKeyItem), // 用到的关键词 / 句式
   usage_note: z.string().optional(), // 什么场景、怎么套用(母语)

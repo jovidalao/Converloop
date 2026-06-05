@@ -156,6 +156,11 @@ export async function getTurnsSince(
   return rows.reverse();
 }
 
+export async function getTurn(id: string): Promise<Turn | null> {
+  const [row] = await db.select().from(turn).where(eq(turn.id, id)).limit(1);
+  return row ?? null;
+}
+
 // 某会话内的最近 turns。对话/导师 agent 的上下文按会话隔离,话题不串。
 export async function getRecentTurnsForConversation(
   conversationId: string,

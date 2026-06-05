@@ -197,12 +197,12 @@ migration 定义在 **Rust 侧**(`src-tauri/src/lib.rs`,`tauri_plugin_sql::Build
   agent_id: string
   turn_id?: string
   summary: string
-  operations_json: string // create/update/delete mastery item 的有限操作
+  operations_json: string // create/update/delete/merge mastery item 的有限操作
   result_json?: string
 }
 ```
 
-确认时走 `applyDataEditOperations`:代码校验 key/type/status/action,只允许 create/update/delete/状态修改,不允许 Agent 改计数、密钥或 provider 设置。
+确认时走 `applyDataEditOperations`:代码校验 key/type/status/action,只允许 create/update/delete/merge/状态修改,不允许 Agent 改计数、密钥或 provider 设置。
 
 ### `agent_job` / `learning_project`(Task Agent 任务层)
 
@@ -329,13 +329,13 @@ v1 核心链路已完成并可用:
 
 - ✅ Tauri scaffold · SQLite(Drizzle sqlite-proxy)· 三个 provider 适配器 · 加密密钥存储
 - ✅ 导师链路(结构化 `TutorAnalysis` + 代码记账)· 对话链路(流式)· orchestrator 端到端
-- ✅ MD 档案读写 + 维护 agent(含 sanity check)· `## About me` 个人记忆
+- ✅ MD 档案读写 + 维护 agent(含 sanity check、每 10 轮/空闲/切换会话触发)· `## About me` 个人记忆
 - ✅ 多会话侧边栏 · Markdown 回复 · 按需讲解 · 朗读(TTS)· 母语/混说表达缺口(见 expression-gap)
 - ✅ 理解信号(每条回复的讲解/双语请求数)· 代码定向选取的复习候选(`getReviewDueList`)· 证据驱动的难度校准(`lib/proficiency`,喂对话 agent)
 - ✅ `mastery_event` 事件日志:每条 error/correct/introduced/gap 都保留结构化证据,`introduced` 不再推动掌握毕业
-- ✅ 定制化学习 Agent / 专项课:内置今日复盘、语法专项复习、表达缺口训练;支持自然语言创建和 prompt 微调;专项课会话独立于普通批改热路径
+- ✅ 定制化学习 Agent / 专项课:内置今日复盘、语法专项复习、表达缺口训练;支持自然语言创建和 prompt 微调;专项课会话独立于普通批改热路径;课堂回答可由用户确认后回写 `correct` 复习信号
 - ✅ Task Agent / 学习项目:把开放式学习需求规划成 `learning_project`,并生成有界专项课草案;`agent_job` 记录作业状态
-- ✅ 学习数据页自然语言修改:LLM 只生成有限操作,代码执行 create/update/delete/状态修改,不让 LLM 直接碰计数
+- ✅ 学习数据页自然语言修改:LLM 只生成有限操作,代码执行 create/update/delete/merge/状态修改,不让 LLM 直接碰计数
 - ✅ 最小 UI:聊天 / 批改面板 / 档案查看编辑(含 AI 自定义偏好) / 学习数据管理 / 设置(provider + key + TTS)
 - ✅ 教练面板:右栏常驻 Coach Panel,展示本轮反馈 + 本轮「系统记下了什么」(`deriveSignals` 同源);三栏工作台布局(侧栏 / 对话 / 教练),窄屏降级为抽屉。后续界面打磨见 [craft-ui-plan.md](./craft-ui-plan.md)
 - ✅ 会话动作 + 分支:`conversation.action` action Agent(从此处分支 / 重新开始 / 升降难度 / 调换角色 / 第二天继续)非破坏式派生分支(`createBranch`,`conversation` 加 parent/branch_kind/agent_modifiers 列,migration v23–v26),修饰符经 `SESSION ADJUSTMENTS` 注入对话回复;动作条与按钮由注册表驱动。
@@ -346,8 +346,6 @@ v1 核心链路已完成并可用:
 **下一步(未实现):**
 
 - 按 [craft-ui-plan.md](./craft-ui-plan.md) 重做界面设计体系:✅ Phase 1 Craft 式设计令牌(6 色系统,`primary`=品牌紫 / `accent`=中性面 / `info` / `success` / `destructive` + `foreground-N` 混合层级 + shadow / z-index)、✅ Phase 2 `EntityRow`/`EntitySection` + 丝滑 Sidebar(统一行原语、折叠动画)、✅ Phase 3 `TurnCard` + 活动适配器(`lib/turn-activity.ts`,与 `deriveSignals` 同源)+ 思考指示 + 渐变滚动遮罩、✅ Phase 4 输入台控制台(`@` 学习上下文菜单 `lib/mentions.ts` + active-option badges + `/`·`@` 菜单统一)、✅ Phase 5 选区浮岛(`AnnotationIsland`:解析 / 朗读 / 加入生词)、✅ Phase 6 Coach Inspector tab 化(反馈 / 记忆 / 观察 / 待确认)、✅ Phase 7 微交互 / 快捷键(全局动作元数据、`Cmd+1/2/3` 聚焦、快捷键弹窗、processing elapsed)。
-- 专项课的完成度闭环:课堂练习里用户确认「会了」后,回写 `correct` 复习信号。
-- 维护 agent 的「会话结束 / 空闲超时」触发(目前只有每 10 轮 + 手动)。
 - Anthropic 显式 `cache_control` 缓存断点。
 - ⏳ 人工验证:用真实句子盯 Tutor 的 `mastery_key` 跨句**稳定性**(prompt 改动记得 docs 与 `src/agents/*.ts` 两处同步)。
 
