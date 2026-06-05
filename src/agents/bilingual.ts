@@ -8,25 +8,28 @@ export interface BilingualContext {
 }
 
 // 双语阅读:把一条回复重排成 Markdown——原文逐句保留(含其自带格式),
-// 每句后内联母语译文,译文用 *单星号* 标记,渲染时把 em 覆盖成译文样式。
+// 每句后内联母语译文,译文用 ⟦…⟧ 标记。⟦⟧ 不是 Markdown 语法,会原样留在文本里,
+// 渲染端(remark-bilingual)再把它转成译文样式,避免 *星号* 在 CJK 旁断裂。
 function systemPrompt(ctx: BilingualContext): string {
   return `You produce an interlinear bilingual reading view of a ${ctx.targetLanguage}
 message for a ${ctx.nativeLanguage} speaker learning ${ctx.targetLanguage}.
 
 Reproduce the message in Markdown, KEEPING its original formatting and paragraph layout
 (bold, lists, line breaks, etc.). After EACH ${ctx.targetLanguage} sentence, insert that
-sentence's ${ctx.nativeLanguage} translation right after it, wrapped in single asterisks
-(Markdown emphasis):
+sentence's ${ctx.nativeLanguage} translation right after it, wrapped in ⟦ ⟧ brackets:
 
-Original sentence one. *母语翻译一* Original sentence two. *母语翻译二*
+Original sentence one. ⟦母语翻译一⟧ Original sentence two. ⟦母语翻译二⟧
 
 RULES
-- Keep the ${ctx.targetLanguage} text EXACTLY as written — verbatim, do not edit or rephrase.
+- Keep the ${ctx.targetLanguage} text EXACTLY as written — verbatim, do not edit or rephrase,
+  preserving its original Markdown formatting (bold, lists, etc.).
 - Translate naturally into ${ctx.nativeLanguage}, faithful to meaning and tone.
 - Follow the learner experience preferences below for translation style and
   reading support, unless they conflict with preserving the original text.
-- Wrap ONLY the translations in *single asterisks*. Never wrap the original text.
-- Do NOT use single-asterisk emphasis for anything other than the translations.
+- Wrap EVERY translation in ⟦ ⟧, placed right after its sentence. Use ⟦ ⟧ for
+  nothing else.
+- The translation inside ⟦ ⟧ must be PLAIN TEXT: no Markdown at all — no *, **, _,
+  backticks, links, or brackets. Do NOT copy the original's bold/italics into it.
 - Preserve the original paragraph breaks and any list/structure.
 - No preamble, no numbering, no commentary, no code fences — just the interlinear message.
 

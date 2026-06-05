@@ -93,6 +93,7 @@ import { InlineCorrection, UserSentence } from "./InlineCorrection";
 import { Markdown } from "./Markdown";
 import { MentionMenu } from "./MentionMenu";
 import { ReplyExplanation } from "./ReplyExplanation";
+import { remarkBilingual } from "./remark-bilingual";
 import { SlashMenu } from "./SlashMenu";
 import { SpeakButton } from "./SpeakButton";
 import { ThinkingIndicator, TurnActivityRow } from "./TurnActivity";
@@ -779,6 +780,7 @@ function PartnerReply({
         ) : showBilingual && view ? (
           <Markdown
             className="bilingual"
+            remarkPlugins={[remarkBilingual]}
             components={{
               em: ({ children }) => <span className="bi-tr">{children}</span>,
             }}
