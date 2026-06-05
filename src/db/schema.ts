@@ -74,9 +74,9 @@ export const conversation = sqliteTable("conversation", {
   summary: text("summary"),
   summaryThroughId: text("summary_through_id"),
   // 会话分支(Agent-first Phase 3,migration v23–v26)。分支是非破坏式动作:从原会话派生
-  // 出新会话,原会话不动。parentConversationId 指向来源会话;branchSourceTurnId 是「从此处
-  // 分支」选中的那条 turn;branchKind 标记动作类型;agentModifiersJson 是回复 Agent 要遵循
-  // 的会话级调节(难度 / 调换角色 / 第二天)。普通会话这几列全为 NULL。
+  // 出新会话,原会话不动。parentConversationId 指向来源会话;branchSourceTurnId 保留历史
+  // 来源 turn 水位;branchKind 标记动作类型;agentModifiersJson 是回复 Agent 要遵循的
+  // 会话级调节(难度 / 调换角色 / 第二天)。普通会话这几列全为 NULL。
   parentConversationId: text("parent_conversation_id"),
   branchSourceTurnId: text("branch_source_turn_id"),
   branchKind: text("branch_kind"),

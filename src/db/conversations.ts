@@ -1,13 +1,12 @@
-import { and, asc, count, desc, eq, gte, isNull, lte } from "drizzle-orm";
+import { and, count, desc, eq, gte, isNull } from "drizzle-orm";
 import { db } from "./client";
-import { type Conversation, conversation, type Turn, turn } from "./schema";
+import { type Conversation, conversation, turn } from "./schema";
 
 export type ConversationMeta = Conversation;
 export type ConversationKind = Conversation["kind"];
 
 // 会话分支(Phase 3)。分支是非破坏式动作:从原会话派生新会话,原会话保持不变。
 export type BranchKind =
-  | "branch_from"
   | "restart"
   | "harder"
   | "easier"
@@ -17,7 +16,6 @@ export type BranchKind =
   | "custom_action";
 
 export const BRANCH_KIND_LABEL: Record<BranchKind, string> = {
-  branch_from: "分支",
   restart: "重新开始",
   harder: "更高难度",
   easier: "更简单",
@@ -243,79 +241,6 @@ export async function failDerivedConversation(
       } satisfies AgentModifiers),
     })
     .where(eq(conversation.id, id));
-}
-
-// 从一个已有会话派生分支。原会话不动(非破坏式),区别于 truncateConversationFrom。
-// copyTurns: "all" 复制全部历史 / "none" 空白开始 / {upToTurnId} 复制到该轮(含)。
-// 复制的 turn 拿到新 id 挂到分支下,保留 createdAt/批改,不重新跑导师(不影响 mastery)。
-export async function createBranch(opts: {
-  parentId: string;
-  branchKind: BranchKind;
-  title: string;
-  modifiers?: AgentModifiers;
-  copyTurns: "all" | "none" | { upToTurnId: string };
-  sourceTurnId?: string | null;
-}): Promise<string> {
-  const id = crypto.randomUUID();
-  const now = Date.now();
-  const mods =
-    opts.modifiers && Object.keys(opts.modifiers).length > 0
-      ? opts.modifiers
-      : null;
-  await db.insert(conversation).values({
-    id,
-    title: opts.title.trim() || DEFAULT_CONVERSATION_TITLE,
-    createdAt: now,
-    updatedAt: now,
-    kind: "practice",
-    learningAgentId: null,
-    parentConversationId: opts.parentId,
-    branchSourceTurnId: opts.sourceTurnId ?? null,
-    branchKind: opts.branchKind,
-    agentModifiersJson: mods ? JSON.stringify(mods) : null,
-  });
-
-  if (opts.copyTurns !== "none") {
-    let rows: Turn[];
-    if (opts.copyTurns === "all") {
-      rows = await db
-        .select()
-        .from(turn)
-        .where(eq(turn.conversationId, opts.parentId))
-        .orderBy(asc(turn.createdAt));
-    } else {
-      const [mark] = await db
-        .select({ createdAt: turn.createdAt })
-        .from(turn)
-        .where(eq(turn.id, opts.copyTurns.upToTurnId))
-        .limit(1);
-      rows = mark
-        ? await db
-            .select()
-            .from(turn)
-            .where(
-              and(
-                eq(turn.conversationId, opts.parentId),
-                lte(turn.createdAt, mark.createdAt),
-              ),
-            )
-            .orderBy(asc(turn.createdAt))
-        : [];
-    }
-    for (const r of rows) {
-      await db.insert(turn).values({
-        id: crypto.randomUUID(),
-        createdAt: r.createdAt,
-        userInput: r.userInput,
-        reply: r.reply,
-        analysisJson: r.analysisJson,
-        conversationId: id,
-        explainCount: r.explainCount,
-        bilingualCount: r.bilingualCount,
-      });
-    }
-  }
-  return id;
 }
 
 export async function renameConversation(
