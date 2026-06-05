@@ -1,22 +1,21 @@
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import {
+  MASTERY_STATUS_VALUES,
+  MASTERY_TYPE_VALUES,
+  SIGNAL_KIND_VALUES,
+} from "./mastery-values";
 
 // 镜像 src-tauri 的 migration(create_mastery_item)。两边手动保持一致。
 // 字段语义见 docs/architecture.md#sqlitemastery_item。
 export const masteryItem = sqliteTable("mastery_item", {
   id: text("id").primaryKey(),
   type: text("type", {
-    enum: [
-      "vocab",
-      "grammar",
-      "collocation",
-      "error_pattern",
-      "expression_gap",
-    ],
+    enum: MASTERY_TYPE_VALUES,
   }).notNull(),
   key: text("key").notNull().unique(), // 稳定 upsert 键 = Issue.mastery_key
   label: text("label").notNull(),
   status: text("status", {
-    enum: ["struggling", "learning", "known"],
+    enum: MASTERY_STATUS_VALUES,
   }).notNull(),
   seenCount: integer("seen_count").notNull().default(0),
   errorCount: integer("error_count").notNull().default(0),
@@ -36,16 +35,10 @@ export const masteryEvent = sqliteTable("mastery_event", {
   key: text("key").notNull(),
   label: text("label").notNull(),
   type: text("type", {
-    enum: [
-      "vocab",
-      "grammar",
-      "collocation",
-      "error_pattern",
-      "expression_gap",
-    ],
+    enum: MASTERY_TYPE_VALUES,
   }).notNull(),
   kind: text("kind", {
-    enum: ["error", "correct", "introduced", "gap"],
+    enum: SIGNAL_KIND_VALUES,
   }).notNull(),
   source: text("source", {
     enum: ["tutor", "review", "manual"],
@@ -147,8 +140,8 @@ export const memoryProposal = sqliteTable("memory_proposal", {
 export type MemoryProposal = typeof memoryProposal.$inferSelect;
 export type NewMemoryProposal = typeof memoryProposal.$inferInsert;
 
-// 后台 / 异步 agent 作业日志。v1 只用于 Task Agent 规划学习项目,后续维护、
-// 摘要、回写等也复用这张表做可追踪状态。
+// Agent 作业 / 运行日志。后台作业用它跟踪生命周期;热路径和按需 Agent
+// 也写入已完成运行记录(source="conversation"),供能力库审计。
 export const agentJob = sqliteTable("agent_job", {
   id: text("id").primaryKey(),
   kind: text("kind").notNull(),

@@ -332,6 +332,15 @@ function makeDerivationAction(spec: DerivationSpec): ActionAgent {
 
 const derivationSpecs: DerivationSpec[] = [
   {
+    id: "builtin:action:branch_from",
+    scope: "turn",
+    label: "从此处分支",
+    description: "基于这条之前的上下文,另开一个新对话继续探索。",
+    kind: "branch_from",
+    objective:
+      "Create a fresh continuation based on the selected source turn. Preserve the useful setup before that point, but start the new conversation cleanly without copying visible history.",
+  },
+  {
     id: "builtin:action:restart",
     scope: "session",
     label: "重新开始",

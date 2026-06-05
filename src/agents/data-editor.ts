@@ -1,4 +1,8 @@
 import { z } from "zod";
+import {
+  MASTERY_STATUS_VALUES,
+  MASTERY_TYPE_VALUES,
+} from "../db/mastery-values";
 import type { MasteryItem } from "../db/schema";
 import type { ChatMessage, ModelProvider } from "../providers/types";
 import { toJsonSchema } from "./json-schema";
@@ -11,16 +15,8 @@ export const DataEditOperation = z.object({
   key: z.string().min(1),
   target_key: z.string().optional(),
   label: z.string().optional(),
-  type: z
-    .enum([
-      "vocab",
-      "grammar",
-      "collocation",
-      "error_pattern",
-      "expression_gap",
-    ])
-    .optional(),
-  status: z.enum(["struggling", "learning", "known"]).optional(),
+  type: z.enum(MASTERY_TYPE_VALUES).optional(),
+  status: z.enum(MASTERY_STATUS_VALUES).optional(),
   example: z.string().nullable().optional(),
   notes: z.string().nullable().optional(),
 });

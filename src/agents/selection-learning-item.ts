@@ -1,5 +1,9 @@
 import { z } from "zod";
-import type { MasteryStatus, MasteryType } from "../db/mastery-logic";
+import type { MasteryStatus } from "../db/mastery-logic";
+import {
+  TARGET_LANGUAGE_MASTERY_TYPE_VALUES,
+  type TargetLanguageMasteryType,
+} from "../db/mastery-values";
 import type { ChatMessage, ModelProvider } from "../providers/types";
 import { toJsonSchema } from "./json-schema";
 import { formatZodError, parseLLMJson } from "./parse-llm-json";
@@ -7,14 +11,14 @@ import { formatZodError, parseLLMJson } from "./parse-llm-json";
 const SelectionLearningItem = z.object({
   key: z.string().min(1),
   label: z.string().min(1),
-  type: z.enum(["vocab", "grammar", "collocation", "error_pattern"]),
+  type: z.enum(TARGET_LANGUAGE_MASTERY_TYPE_VALUES),
   notes: z.string().nullable().optional(),
 });
 
 export interface SelectionLearningItemDraft {
   key: string;
   label: string;
-  type: Exclude<MasteryType, "expression_gap">;
+  type: TargetLanguageMasteryType;
   status: MasteryStatus;
   example: string;
   notes: string | null;
@@ -29,9 +33,7 @@ function textKey(text: string): string {
     .slice(0, 80);
 }
 
-function fallbackType(
-  selection: string,
-): Exclude<MasteryType, "expression_gap"> {
+function fallbackType(selection: string): TargetLanguageMasteryType {
   const words = selection.trim().split(/\s+/).filter(Boolean);
   if (words.length <= 1) return "vocab";
   if (words.length <= 6) return "collocation";

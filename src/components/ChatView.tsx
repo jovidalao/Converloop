@@ -17,6 +17,7 @@ import {
   ChevronDownIcon,
   ChevronRightIcon,
   CopyIcon,
+  GitBranchIcon,
   LanguagesIcon,
   MessageSquareReplyIcon,
   PencilIcon,
@@ -82,7 +83,7 @@ import {
   startLearningSession,
   suggestReply,
 } from "../orchestrator";
-import { beginAction } from "../runtime";
+import { beginAction, getActions, isAgentEnabled } from "../runtime";
 import { loadTtsConfig } from "../tts/config";
 import { stopSpeech } from "../tts/playback";
 import { createReplySpeaker } from "../tts/stream";
@@ -235,9 +236,7 @@ function ModelLogo({
   compact?: boolean;
 }) {
   const brand = modelBrand(model);
-  const sizeClass = compact
-    ? "size-3 [&_svg]:size-3"
-    : "size-4 [&_svg]:size-4";
+  const sizeClass = compact ? "size-3 [&_svg]:size-3" : "size-4 [&_svg]:size-4";
   return (
     <span
       className={`inline-flex shrink-0 items-center justify-center ${sizeClass} ${brand.className}`}
@@ -866,11 +865,14 @@ function UserMessageActions({
   turn,
   suggestion,
   onEditFrom,
+  onTurnAction,
   editDisabled = false,
 }: {
   turn: ChatTurn;
   suggestion: ReplySuggestionControl;
   onEditFrom: () => void;
+  // 注册表驱动的 turn 级动作(如「从此处分支」);新增动作无需改本组件。
+  onTurnAction: (actionId: string) => void;
   // 任一轮还在批改时禁用「从此处开始」——截断会丢弃在途批改。
   editDisabled?: boolean;
 }) {
@@ -884,6 +886,20 @@ function UserMessageActions({
       {canSpeak && <SpeakButton text={speakTarget} />}
       <ReplySuggestionButton suggestion={suggestion} />
       <EditFromHereButton onClick={onEditFrom} disabled={editDisabled} />
+      {getActions("turn")
+        .filter((a) => isAgentEnabled(a.id))
+        .map((a) => (
+          <Button
+            key={a.id}
+            type="button"
+            variant="action"
+            size="action"
+            title={`${a.label}:${a.description ?? ""}`}
+            onClick={() => onTurnAction(a.id)}
+          >
+            <GitBranchIcon size={16} />
+          </Button>
+        ))}
     </>
   );
 }
@@ -897,6 +913,7 @@ function UserTurn({
   learningMode,
   coachVisible,
   onEditFrom,
+  onTurnAction,
   onLayoutChange,
   onUseSuggestion,
   editDisabled = false,
@@ -907,6 +924,7 @@ function UserTurn({
   learningMode: boolean;
   coachVisible: boolean;
   onEditFrom: () => void;
+  onTurnAction: (actionId: string) => void;
   onLayoutChange?: () => void;
   onUseSuggestion?: (text: string) => void;
   editDisabled?: boolean;
@@ -920,7 +938,7 @@ function UserTurn({
     resetKey: `${turn.id}:${turn.userText}`,
     onLayoutChange,
   });
-  // 离档轮(/btw):虚线气泡 + 「不计入上下文」标记;不批改、不显示改正/推荐等操作。
+  // 离档轮(/btw):虚线气泡 + 「不计入上下文」标记;不批改、不显示改正/推荐/分支等操作。
   if (turn.excludeFromContext) {
     return (
       <div className="flex max-w-[min(88%,520px)] flex-col items-end gap-1 self-end">
@@ -997,6 +1015,7 @@ function UserTurn({
             turn={turn}
             suggestion={replySuggestion}
             onEditFrom={onEditFrom}
+            onTurnAction={onTurnAction}
             editDisabled={editDisabled}
           />
         }
@@ -1693,7 +1712,10 @@ export function ChatView({
 
   // 会话动作:先创建 pending 衍生会话并切换过去;新页面再生成上下文并自动开场。
   // 原会话不动(非破坏式),区别于 editFromHere(截断)。
-  async function runConversationAction(actionId: string) {
+  async function runConversationAction(
+    actionId: string,
+    sourceTurnId?: string,
+  ) {
     if (actionBusy || replyBusy) return;
     setActionBusy(true);
     setError(null);
@@ -1701,6 +1723,7 @@ export function ChatView({
     try {
       const result = await beginAction(actionId, {
         conversationId,
+        sourceTurnId,
       });
       onActivity?.();
       if (result.navigateTo) onNavigateConversation?.(result.navigateTo);
@@ -1850,6 +1873,9 @@ export function ChatView({
                 onLayoutChange={requestLayoutScroll}
                 editDisabled={analyzing}
                 onEditFrom={() => void editFromHere(turn.id)}
+                onTurnAction={(actionId) =>
+                  void runConversationAction(actionId, turn.id)
+                }
                 onUseSuggestion={useSuggestedReply}
               />
             )}

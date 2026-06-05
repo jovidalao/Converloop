@@ -11,6 +11,10 @@ import {
   updateMasteryItem,
 } from "./db/mastery";
 import type { MasteryStatus, MasteryType } from "./db/mastery-logic";
+import {
+  MASTERY_STATUS_VALUES,
+  MASTERY_TYPE_VALUES,
+} from "./db/mastery-values";
 import type { ModelProvider } from "./providers/types";
 
 export interface DataEditResult {
@@ -19,22 +23,12 @@ export interface DataEditResult {
   skipped: string[];
 }
 
-const MASTERY_TYPES: MasteryType[] = [
-  "vocab",
-  "grammar",
-  "collocation",
-  "error_pattern",
-  "expression_gap",
-];
-
-const MASTERY_STATUSES: MasteryStatus[] = ["struggling", "learning", "known"];
-
 function validType(type: string | undefined): type is MasteryType {
-  return MASTERY_TYPES.includes(type as MasteryType);
+  return MASTERY_TYPE_VALUES.includes(type as MasteryType);
 }
 
 function validStatus(status: string | undefined): status is MasteryStatus {
-  return MASTERY_STATUSES.includes(status as MasteryStatus);
+  return MASTERY_STATUS_VALUES.includes(status as MasteryStatus);
 }
 
 export async function applyDataEditOperations(

@@ -1,3 +1,9 @@
+import {
+  GAP_KEY_ITEM_TYPE_VALUES,
+  MASTERY_TYPE_VALUES,
+  MASTERY_UPDATE_SIGNAL_VALUES,
+} from "../db/mastery-values";
+
 /** 只去掉完整包裹 JSON 的 markdown fence;不从混合文本里猜测截取对象。 */
 export function extractJsonText(raw: string): string {
   const trimmed = raw.trim();
@@ -108,15 +114,11 @@ const ISSUE_CATEGORIES = new Set([
 ]);
 
 const SEVERITIES = new Set(["minor", "moderate", "major"]);
-const MASTERY_TYPES = new Set([
-  "vocab",
-  "grammar",
-  "collocation",
-  "error_pattern",
-  "expression_gap",
-]);
-const GAP_KEY_ITEM_TYPES = new Set(["vocab", "grammar", "collocation"]);
-const SIGNALS = new Set(["correct", "introduced"]);
+const MASTERY_TYPES: ReadonlySet<string> = new Set(MASTERY_TYPE_VALUES);
+const GAP_KEY_ITEM_TYPES: ReadonlySet<string> = new Set(
+  GAP_KEY_ITEM_TYPE_VALUES,
+);
+const SIGNALS: ReadonlySet<string> = new Set(MASTERY_UPDATE_SIGNAL_VALUES);
 
 const ENUM_ALIASES: Record<string, string> = {
   auxiliary: "grammar",
@@ -194,7 +196,7 @@ function enumCandidates(value: string): string[] {
   ];
 }
 
-function pickEnum(value: unknown, allowed: Set<string>): unknown {
+function pickEnum(value: unknown, allowed: ReadonlySet<string>): unknown {
   if (typeof value !== "string") return value;
   const candidates = enumCandidates(value);
   for (const candidate of candidates) {

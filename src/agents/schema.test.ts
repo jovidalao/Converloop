@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { TutorAnalysis, tutorJsonSchema } from "./schema";
+import {
+  MASTERY_TYPE_VALUES,
+  MASTERY_UPDATE_SIGNAL_VALUES,
+} from "../db/mastery-values";
+import {
+  MasteryType,
+  MasteryUpdate,
+  TutorAnalysis,
+  tutorJsonSchema,
+} from "./schema";
 
 // 模拟 LLM 对一个真实错句的结构化输出:
 // "I have a apple and I go to school yesterday."
@@ -41,6 +50,13 @@ const sampleAnalysis = {
 };
 
 describe("TutorAnalysis schema", () => {
+  it("复用 DB 层 mastery 枚举,避免校验口径漂移", () => {
+    expect(MasteryType.options).toEqual([...MASTERY_TYPE_VALUES]);
+    expect(MasteryUpdate.shape.signal.options).toEqual([
+      ...MASTERY_UPDATE_SIGNAL_VALUES,
+    ]);
+  });
+
   it("通过 Zod 校验,issues 的 mastery_key 合理", () => {
     const parsed = TutorAnalysis.safeParse(sampleAnalysis);
     expect(parsed.success).toBe(true);

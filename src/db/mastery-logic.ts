@@ -1,15 +1,14 @@
 import type { TutorAnalysis } from "../agents/schema";
+import type { MasteryStatus, MasteryType, SignalKind } from "./mastery-values";
+
+export type {
+  MasteryStatus,
+  MasteryType,
+  SignalKind,
+} from "./mastery-values";
 
 // 纯逻辑:不碰 DB、不碰 Tauri,可单测。LLM 给离散信号,这里算计数/状态。
 // "gap" = 用户没能用目标语产出(母语/混说),区别于 "error"(产出了但错了)。
-export type SignalKind = "error" | "correct" | "introduced" | "gap";
-export type MasteryStatus = "struggling" | "learning" | "known";
-export type MasteryType =
-  | "vocab"
-  | "grammar"
-  | "collocation"
-  | "error_pattern"
-  | "expression_gap";
 
 export interface Signal {
   key: string;

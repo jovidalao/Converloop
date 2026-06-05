@@ -7,6 +7,7 @@ export type ConversationKind = Conversation["kind"];
 
 // 会话分支(Phase 3)。分支是非破坏式动作:从原会话派生新会话,原会话保持不变。
 export type BranchKind =
+  | "branch_from"
   | "restart"
   | "harder"
   | "easier"
@@ -16,6 +17,7 @@ export type BranchKind =
   | "custom_action";
 
 export const BRANCH_KIND_LABEL: Record<BranchKind, string> = {
+  branch_from: "分支",
   restart: "重新开始",
   harder: "更高难度",
   easier: "更简单",

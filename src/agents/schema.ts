@@ -1,4 +1,9 @@
 import { z } from "zod";
+import {
+  GAP_KEY_ITEM_TYPE_VALUES,
+  MASTERY_TYPE_VALUES,
+  MASTERY_UPDATE_SIGNAL_VALUES,
+} from "../db/mastery-values";
 import { toJsonSchema } from "./json-schema";
 
 // 见 docs/tutor-agent.md#输出-schemazod。LLM 只观察,代码记账;这里只校验观察结果。
@@ -12,14 +17,9 @@ export const IssueCategory = z.enum([
   "naturalness",
 ]);
 
-export const MasteryType = z.enum([
-  "vocab",
-  "grammar",
-  "collocation",
-  "error_pattern",
-  "expression_gap", // 一个"想表达但说不出"的情景/意图(母语/混说输入)
-]);
-const GapKeyItemType = z.enum(["vocab", "grammar", "collocation"]);
+// expression_gap = 一个"想表达但说不出"的情景/意图(母语/混说输入)。
+export const MasteryType = z.enum(MASTERY_TYPE_VALUES);
+const GapKeyItemType = z.enum(GAP_KEY_ITEM_TYPE_VALUES);
 
 export const Issue = z.object({
   category: IssueCategory,
@@ -37,7 +37,7 @@ export const MasteryUpdate = z.object({
   key: z.string(),
   label: z.string(),
   type: MasteryType,
-  signal: z.enum(["correct", "introduced"]),
+  signal: z.enum(MASTERY_UPDATE_SIGNAL_VALUES),
   evidence: z.string().optional(),
 });
 export type MasteryUpdate = z.infer<typeof MasteryUpdate>;

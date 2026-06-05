@@ -70,7 +70,7 @@ AI 语言学习 agent —— 第一版范围、数据流、存储与现状。Age
 
 migration 定义在 **Rust 侧**(`src-tauri/src/lib.rs`,`tauri_plugin_sql::Builder::add_migrations`),`Database.load()` 时触发。Drizzle 只做类型安全查询,不接管 migration —— TS 侧 `src/db/schema.ts` **手动镜像** Rust 的建表,两边保持一致。
 
-当前 31 个 migration:
+当前 32 个 migration:
 
 | ver | 描述 | 表 / 变更 |
 |---|---|---|
@@ -105,6 +105,7 @@ migration 定义在 **Rust 侧**(`src-tauri/src/lib.rs`,`tauri_plugin_sql::Build
 | 29 | add_learning_agent_enabled | `learning_agent.enabled` |
 | 30 | create_turn_annotation | `turn_annotation` |
 | 31 | create_memory_proposal | `memory_proposal` |
+| 32 | add_turn_exclude_from_context | `turn.exclude_from_context` |
 
 ### `mastery_item`(掌握项,起点,别一上来搞知识追踪)
 
@@ -152,7 +153,7 @@ migration 定义在 **Rust 侧**(`src-tauri/src/lib.rs`,`tauri_plugin_sql::Build
 少量应用内部 marker 放这里,例如 Profile Maintainer 的 `lastMaintainedAt` 水位。它不是用户偏好,
 但必须随数据库备份/迁移,否则会重复维护或漏维护。
 
-`type` 是裸 `TEXT`(无 CHECK),新增掌握类型(如 `expression_gap`)只改 TS 侧两个 enum(`agents/schema.ts` Zod + `db/schema.ts` drizzle),不需要 Rust 迁移。记账公式见 [tutor-agent](./tutor-agent.md#代码侧记账分数归代码管)。
+`type` 是裸 `TEXT`(无 CHECK),新增掌握类型(如 `expression_gap`)只改 TS 侧共享常量(`src/db/mastery-values.ts`),不需要 Rust 迁移。记账公式见 [tutor-agent](./tutor-agent.md#代码侧记账分数归代码管)。
 
 `key` 写入前由代码统一规整(`normalizeKey`,`db/mastery-logic.ts`:小写 / 空格→下划线 / 去冒号旁下划线),作为「同类错同一个 key」的兜底——LLM 偶尔的大小写/空格漂移不会再分叉成两条记录。
 
@@ -204,9 +205,9 @@ migration 定义在 **Rust 侧**(`src-tauri/src/lib.rs`,`tauri_plugin_sql::Build
 
 确认时走 `applyDataEditOperations`:代码校验 key/type/status/action,只允许 create/update/delete/merge/状态修改,不允许 Agent 改计数、密钥或 provider 设置。
 
-### `agent_job` / `learning_project`(Task Agent 任务层)
+### `agent_job` / `learning_project`(Agent 作业 / 运行日志)
 
-`agent_job` 记录后台 / 异步 agent 作业的生命周期:
+`agent_job` 记录两类可追踪事件:后台 / 异步 agent 作业(Task Agent、维护、摘要等),以及热路径 / 按需 agent 的已完成运行日志(`source="conversation"`,可关联 `turn_id`)。它现在是统一审计日志,不是只服务 Task Agent 的队列表:
 
 ```ts
 {
@@ -216,7 +217,8 @@ migration 定义在 **Rust 侧**(`src-tauri/src/lib.rs`,`tauri_plugin_sql::Build
   input_json?: string
   output_json?: string
   error?: string
-  source: 'task_agent' | 'maintainer' | 'summary' | 'manual'
+  source: 'task_agent' | 'maintainer' | 'summary' | 'manual' | 'conversation'
+  turn_id?: string
   created_at: number
   updated_at: number
   started_at?: number
@@ -342,7 +344,7 @@ v1 核心链路已完成并可用:
 - ✅ 学习数据页自然语言修改:LLM 只生成有限操作,代码执行 create/update/delete/merge/状态修改,不让 LLM 直接碰计数
 - ✅ 最小 UI:聊天 / 批改面板 / 档案查看编辑(含 AI 自定义偏好) / 学习数据管理 / 设置(provider + key + TTS)
 - ✅ 教练面板:右栏常驻 Coach Panel,展示本轮反馈 + 本轮「系统记下了什么」(`deriveSignals` 同源);三栏工作台布局(侧栏 / 对话 / 教练),窄屏降级为抽屉。后续界面打磨见 [craft-ui-plan.md](./craft-ui-plan.md)
-- ✅ 会话动作 + 分支:`conversation.action` action Agent(重新开始 / 升降难度 / 调换角色 / 第二天继续)非破坏式派生分支(`conversation` 加 parent/branch_kind/agent_modifiers 列,migration v23–v26),修饰符经 `SESSION ADJUSTMENTS` 注入对话回复;动作条与按钮由注册表驱动。
+- ✅ 会话动作 + 分支:`conversation.action` action Agent(从此处分支 / 重新开始 / 升降难度 / 调换角色 / 第二天继续)非破坏式派生分支(`conversation` 加 parent/branch_kind/agent_modifiers 列,migration v23–v26),修饰符经 `SESSION ADJUSTMENTS` 注入对话回复;动作条与按钮由注册表驱动。
 - ✅ Agent 能力库:能力库页(侧栏 → 能力库)按 kind 展示注册表里的内置 Agent(做什么/时机/读写)、启用/禁用(`runtime/enablement.ts`,localStorage)、运行日志(`agent_job`)。按需讲解 / 双语阅读 / 划词解析也作为不可关闭的 `transformer` 能力展示并记录运行日志。能力库真相源是内存注册表,未把代码 Agent 同步进 DB。
 - ✅ 自定义 Agent(Agent-first Phase 5):能力库提供 6 问式 prompt Agent 创建(observer/action)。observer 每轮产出 `turn_annotation` 并可提出 `memory_proposal`;Coach Panel 展示自定义观察和待确认记忆,确认后由代码执行有限数据操作。action 通过 LLM 生成分支指令并创建非破坏式分支;内置「变成专项课」动作可从当前会话生成专项课并跳转。
 - ✅ 开发者 package(Agent-first Phase 6):能力库支持导入/导出 runtime observer/action 的 `lang-agent.agent-package` JSON,包含 agent 元数据、`prompt.md`、`schema.json`、`examples.json`,导入前展示读取/写入权限预览并校验白名单。
