@@ -125,10 +125,9 @@ export function Sidebar({
   );
   const newChatAction = getAppAction("new-chat");
 
-  // Learning section peeks the first lesson while collapsed; the rest live in
-  // the animated body (capped at 5 like before).
-  const firstLearningAgent = learningAgents[0];
-  const restLearningAgents = learningAgents.slice(1, 5);
+  // Learning lessons (capped at 5) all live in the animated body, so collapsing
+  // the section hides every one — nothing peeks while collapsed.
+  const visibleLearningAgents = learningAgents.slice(0, 5);
 
   const editingAgent = useMemo(
     () => learningAgents.find((a) => a.id === editingAgentId) ?? null,
@@ -329,11 +328,8 @@ export function Sidebar({
                 label="定制化学习"
                 collapsed={learningCollapsed}
                 onToggle={() => setLearningCollapsed((v) => !v)}
-                pinned={
-                  firstLearningAgent ? renderAgentRow(firstLearningAgent) : null
-                }
               >
-                {restLearningAgents.map(renderAgentRow)}
+                {visibleLearningAgents.map(renderAgentRow)}
                 <EntityRow
                   className="codex-sidebar-child-row"
                   icon={<PlusIcon className="size-3.5 shrink-0" />}

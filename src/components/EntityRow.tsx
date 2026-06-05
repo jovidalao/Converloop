@@ -103,21 +103,19 @@ export function EntityRowAction({
 }
 
 // A collapsible list group: heading (icon + label + chevron) over an animated
-// body. `pinned` renders above the collapsible region and stays visible while
-// collapsed (e.g. a peek of the first item). Body height/opacity animate.
+// body. Everything lives inside the body, so collapsing hides every row. Body
+// height/opacity animate.
 export function EntitySection({
   icon,
   label,
   collapsed,
   onToggle,
-  pinned,
   children,
 }: {
   icon?: ReactNode;
   label: ReactNode;
   collapsed: boolean;
   onToggle: () => void;
-  pinned?: ReactNode;
   children: ReactNode;
 }) {
   const bodyId = useId();
@@ -141,7 +139,6 @@ export function EntitySection({
         )}
       </button>
       <div className="codex-sidebar-list">
-        {pinned}
         <div
           id={bodyId}
           className="codex-collapsible"

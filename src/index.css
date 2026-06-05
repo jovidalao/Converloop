@@ -687,19 +687,8 @@
   padding-bottom: 12px;
 }
 .codex-sidebar-child-row {
-  position: relative;
   width: calc(100% - 22px);
   margin-left: 22px;
-}
-.codex-sidebar-child-row::before {
-  position: absolute;
-  top: 7px;
-  bottom: 7px;
-  left: -9px;
-  width: 1px;
-  border-radius: 999px;
-  background: var(--foreground-20);
-  content: "";
 }
 /* Collapsible group body: animate height via grid-template-rows 1fr↔0fr
    (no JS measuring) plus an opacity fade. Used by EntitySection. */
@@ -712,12 +701,25 @@
   grid-template-rows: 0fr;
 }
 .codex-collapsible-inner {
+  position: relative;
   display: grid;
   min-height: 0;
   gap: 2px;
   overflow: hidden;
   opacity: 1;
   transition: opacity 0.18s ease;
+}
+/* One continuous guide line running through every child row (replaces the
+   per-row segments so the verticals connect). */
+.codex-collapsible-inner::before {
+  position: absolute;
+  top: 7px;
+  bottom: 7px;
+  left: 13px;
+  width: 1px;
+  border-radius: 999px;
+  background: var(--foreground-20);
+  content: "";
 }
 .codex-collapsible[data-collapsed] .codex-collapsible-inner {
   opacity: 0;
