@@ -187,6 +187,26 @@
   --shadow-blur-opacity: 0.12;
 }
 
+/* ============================================================
+   Accent (theme color) presets. The default brand is purple
+   (defined in :root / .dark above). "gray" neutralizes the brand
+   to a slate gray for primary actions / brand highlights, while
+   keeping the info / success / destructive semantics untouched.
+   Applied via [data-accent] on <html> by the theme provider;
+   data-accent="purple" simply falls back to the defaults above.
+   ============================================================ */
+:root[data-accent="gray"] {
+  --brand: oklch(0.44 0.006 286);
+  --brand-foreground: oklch(0.985 0.004 286);
+  --brand-rgb: 96, 95, 101;
+}
+
+.dark[data-accent="gray"] {
+  --brand: oklch(0.72 0.006 286);
+  --brand-foreground: oklch(0.18 0.012 286);
+  --brand-rgb: 172, 171, 178;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

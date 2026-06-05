@@ -13,6 +13,8 @@
           (t === "system" &&
             window.matchMedia("(prefers-color-scheme: dark)").matches);
         if (dark) document.documentElement.classList.add("dark");
+        var a = localStorage.getItem("lang-agent-accent") || "gray";
+        document.documentElement.setAttribute("data-accent", a);
       })();
     </script>
   </head>

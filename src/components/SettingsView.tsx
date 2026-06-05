@@ -42,7 +42,7 @@ import {
 import { synthesizeEdge } from "../tts/edge";
 import { synthesizeMimo } from "../tts/mimo";
 import { clearTtsCache, getTtsCacheCount } from "../tts/speak";
-import { type Theme, useTheme } from "./theme-provider";
+import { type Accent, type Theme, useTheme } from "./theme-provider";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import {
@@ -94,6 +94,11 @@ const THEMES: { value: Theme; label: string }[] = [
   { value: "light", label: "明亮" },
   { value: "dark", label: "暗黑" },
   { value: "system", label: "跟随系统" },
+];
+// 主题色:swatch 用浅色模式下的 --brand 取值,仅作选择标识。
+const ACCENTS: { value: Accent; label: string; swatch: string }[] = [
+  { value: "gray", label: "灰色", swatch: "oklch(0.44 0.006 286)" },
+  { value: "purple", label: "紫色", swatch: "oklch(0.55 0.2 292)" },
 ];
 const CUSTOM_MODEL_VALUE = "__custom_model__";
 export type SettingsSection = "general" | "llm" | "tts";
@@ -232,6 +237,33 @@ function ThemeToggle() {
           )}
         >
           {t.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function AccentToggle() {
+  const { accent, setAccent } = useTheme();
+  return (
+    <div className="inline-flex w-fit rounded-md border p-0.5">
+      {ACCENTS.map((a) => (
+        <button
+          key={a.value}
+          type="button"
+          onClick={() => setAccent(a.value)}
+          className={cn(
+            "flex items-center gap-2 rounded-sm px-3 py-1 text-ui-body transition-colors",
+            accent === a.value
+              ? "bg-accent text-foreground"
+              : "text-ui-muted hover:text-foreground",
+          )}
+        >
+          <span
+            className="size-3 rounded-full"
+            style={{ background: a.swatch }}
+          />
+          {a.label}
         </button>
       ))}
     </div>
@@ -698,6 +730,10 @@ export function SettingsView({ section }: { section: SettingsSection }) {
 
             <Field label="主题">
               <ThemeToggle />
+            </Field>
+
+            <Field label="主题色">
+              <AccentToggle />
             </Field>
 
             <div className="mb-3.5 flex flex-wrap items-end gap-2">

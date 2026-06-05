@@ -9,12 +9,16 @@ import {
 } from "react";
 
 export type Theme = "light" | "dark" | "system";
+export type Accent = "gray" | "purple";
 
 const STORAGE_KEY = "lang-agent-theme";
+const ACCENT_STORAGE_KEY = "lang-agent-accent";
 
 type ThemeContextValue = {
   theme: Theme;
   setTheme: (theme: Theme) => void;
+  accent: Accent;
+  setAccent: (accent: Accent) => void;
 };
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
@@ -55,6 +59,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<Theme>(
     () => (localStorage.getItem(STORAGE_KEY) as Theme | null) ?? "system",
   );
+  const [accent, setAccentState] = useState<Accent>(
+    () => (localStorage.getItem(ACCENT_STORAGE_KEY) as Accent | null) ?? "gray",
+  );
 
   // Apply on mount + whenever the choice changes; keep "system" live by
   // listening to the OS preference while it's selected.
@@ -67,13 +74,23 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     return () => mq.removeEventListener("change", onChange);
   }, [theme]);
 
+  // Reflect the accent on <html>; the [data-accent] CSS rules swap --brand.
+  useEffect(() => {
+    document.documentElement.dataset.accent = accent;
+  }, [accent]);
+
   function setTheme(next: Theme) {
     localStorage.setItem(STORAGE_KEY, next);
     setThemeState(next);
   }
 
+  function setAccent(next: Accent) {
+    localStorage.setItem(ACCENT_STORAGE_KEY, next);
+    setAccentState(next);
+  }
+
   return (
-    <ThemeContext.Provider value={{ theme, setTheme }}>
+    <ThemeContext.Provider value={{ theme, setTheme, accent, setAccent }}>
       {children}
     </ThemeContext.Provider>
   );
