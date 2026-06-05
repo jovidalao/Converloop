@@ -1,4 +1,12 @@
-import { PencilIcon, SparklesIcon, XIcon } from "lucide-react";
+import {
+  FileTextIcon,
+  PencilIcon,
+  RefreshCwIcon,
+  RotateCcwIcon,
+  SaveIcon,
+  SparklesIcon,
+  XIcon,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { loadConfig } from "../config";
 import { applyProfilePreferenceInstruction } from "../orchestrator";
@@ -112,23 +120,23 @@ function PreferencesPanel({
   onScopeBlur: () => void;
 }) {
   return (
-    <section className="mt-3 rounded-lg border bg-card p-3">
-      <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
+    <section className="rounded-md border border-border/70 bg-card/80 p-4 shadow-minimal-flat">
+      <div className="mb-4 flex flex-col gap-2">
         <div>
           <h3 className="m-0 text-ui-body font-semibold">AI 自定义</h3>
           <p className="m-0 mt-1 text-ui-body leading-snug text-ui-muted">
             用自然语言描述偏好,系统会把它写进档案并分发到对应模块。
           </p>
         </div>
-        <span className="rounded bg-primary/10 px-1.5 py-0.5 text-ui-caption text-primary">
+        <span className="w-fit rounded bg-primary/10 px-1.5 py-0.5 text-ui-caption text-primary">
           你的设置 · AI 维护档案时保留
         </span>
       </div>
 
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-3">
         <Textarea
           aria-label="一句话描述 AI 自定义"
-          className="min-h-24 resize-y text-ui-body leading-normal"
+          className="min-h-28 resize-y bg-background/60 text-ui-body leading-normal"
           value={smartDraft}
           onChange={(e) => onSmartDraftChange(e.target.value)}
           placeholder="例如: 对话用澳大利亚日常英语; 我经常用语音输入,批改时不要纠结大小写和标点; 讲解时多用中文类比。"
@@ -138,6 +146,7 @@ function PreferencesPanel({
             type="button"
             onClick={onSmartApply}
             disabled={smartBusy || !smartDraft.trim()}
+            className="w-full"
           >
             <SparklesIcon size={15} />
             {smartBusy ? "归类中…" : "让 AI 归类保存"}
@@ -145,11 +154,11 @@ function PreferencesPanel({
         </div>
       </div>
 
-      <details className="mt-3">
+      <details className="mt-4">
         <summary className="text-ui-body font-medium text-ui-muted">
           按模块微调
         </summary>
-        <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+        <div className="mt-3 grid grid-cols-1 gap-3">
           {PREFERENCE_FIELDS.map((field) => (
             <div key={field.scope} className="flex flex-col gap-1.5">
               <span className="text-ui-body text-ui-muted">
@@ -157,7 +166,7 @@ function PreferencesPanel({
               </span>
               <Textarea
                 aria-label={PREFERENCE_SCOPE_LABEL[field.scope]}
-                className="min-h-28 resize-y text-ui-body leading-normal"
+                className="min-h-24 resize-y bg-background/60 text-ui-body leading-normal"
                 value={preferences[field.scope]}
                 onChange={(e) => onScopeChange(field.scope, e.target.value)}
                 onBlur={onScopeBlur}
@@ -186,27 +195,29 @@ function SectionCard({
   const editable = !!onEdit;
 
   const header = (
-    <div className="mb-2 flex items-center justify-between gap-2">
-      <span className="flex items-center gap-1.5 text-ui-body font-medium">
+    <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+      <span className="flex min-w-0 items-center gap-1.5 text-ui-body font-semibold">
         {zhOf(section.title)}
         {editable && (
           <PencilIcon
             size={13}
-            className="text-ui-muted opacity-0 transition-opacity group-hover:opacity-100"
+            className="shrink-0 text-ui-muted opacity-0 transition-opacity group-hover:opacity-100"
           />
         )}
       </span>
-      <span className={`rounded px-1.5 py-0.5 text-ui-caption ${badge.cls}`}>
+      <span
+        className={`shrink-0 rounded px-1.5 py-0.5 text-ui-caption ${badge.cls}`}
+      >
         {badge.text}
       </span>
     </div>
   );
   const content = body ? (
-    <p className="whitespace-pre-wrap text-ui-body leading-relaxed text-foreground">
+    <p className="m-0 whitespace-pre-wrap text-ui-body leading-relaxed text-foreground">
       {body}
     </p>
   ) : (
-    <p className="text-ui-body text-ui-muted">
+    <p className="m-0 text-ui-body text-ui-muted">
       {editable ? "点击添加…" : "暂无"}
     </p>
   );
@@ -216,7 +227,7 @@ function SectionCard({
       <button
         type="button"
         onClick={onEdit}
-        className="group block w-full rounded-lg border bg-card p-3 text-left transition-colors hover:border-ring hover:bg-accent/40"
+        className="group block w-full rounded-md border border-border/70 bg-card/80 p-4 text-left shadow-minimal-flat transition-colors hover:border-ring hover:bg-accent/40"
       >
         {header}
         {content}
@@ -224,7 +235,7 @@ function SectionCard({
     );
   }
   return (
-    <div className="rounded-lg border bg-card p-3">
+    <div className="rounded-md border border-border/70 bg-card/80 p-4 shadow-minimal-flat">
       {header}
       {content}
     </div>
@@ -244,21 +255,30 @@ function distribute(sections: ProfileSection[], n: number): ProfileSection[][] {
   return cols;
 }
 
-// 列数随容器宽度自适应:每列目标 ~18rem,窄=1 列、宽=2/3 列。
-function useColumnCount(ref: React.RefObject<HTMLDivElement | null>): number {
+// 列数随容器宽度自适应:窄=1 列、宽=2/3 列,最多 3 列避免读起来碎。
+function useColumnCount(
+  ref: React.RefObject<HTMLDivElement | null>,
+  active: boolean,
+): number {
   const [cols, setCols] = useState(1);
   useEffect(() => {
+    if (!active) return;
     const el = ref.current;
     if (!el) return;
-    const minCol = 288; // 18rem
-    const gap = 12; // gap-3
+    const minCol = 300;
+    const gap = 16;
     const compute = () =>
-      setCols(Math.max(1, Math.floor((el.clientWidth + gap) / (minCol + gap))));
+      setCols(
+        Math.min(
+          3,
+          Math.max(1, Math.floor((el.clientWidth + gap) / (minCol + gap))),
+        ),
+      );
     compute();
     const ro = new ResizeObserver(compute);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [ref]);
+  }, [ref, active]);
   return cols;
 }
 
@@ -329,6 +349,95 @@ function EditOverlay({
         </div>
       </div>
     </div>
+  );
+}
+
+function ProfileActions({
+  raw,
+  dirty,
+  loaded,
+  busy,
+  canUndo,
+  status,
+  onSave,
+  onRefresh,
+  onUndo,
+  onToggleRaw,
+}: {
+  raw: boolean;
+  dirty: boolean;
+  loaded: boolean;
+  busy: boolean;
+  canUndo: boolean;
+  status: string | null;
+  onSave: () => void;
+  onRefresh: () => void;
+  onUndo: () => void;
+  onToggleRaw: () => void;
+}) {
+  return (
+    <section className="rounded-md border border-border/70 bg-card/80 p-4 shadow-minimal-flat">
+      <div className="mb-3">
+        <h3 className="m-0 text-ui-body font-semibold">维护</h3>
+        <p className="m-0 mt-1 text-ui-body leading-snug text-ui-muted">
+          手动刷新、撤销和原始 Markdown 编辑。
+        </p>
+      </div>
+      <div className="grid gap-2">
+        {raw && (
+          <Button
+            type="button"
+            onClick={onSave}
+            disabled={!dirty}
+            className="justify-start"
+          >
+            <SaveIcon size={15} />
+            {dirty ? "保存 Markdown" : "已保存"}
+          </Button>
+        )}
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={onRefresh}
+          disabled={busy || !loaded}
+          className="justify-start"
+        >
+          <RefreshCwIcon size={15} />
+          {busy ? "刷新中…" : "用 AI 刷新档案"}
+        </Button>
+        {canUndo && (
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={onUndo}
+            disabled={busy}
+            className="justify-start"
+          >
+            <RotateCcwIcon size={15} />
+            撤销 AI 刷新
+          </Button>
+        )}
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={onToggleRaw}
+          disabled={!loaded}
+          className="justify-start"
+        >
+          <FileTextIcon size={15} />
+          {raw ? "返回结构化编辑" : "编辑原始 Markdown"}
+        </Button>
+      </div>
+      {status && (
+        <p
+          className={`mt-3 break-words text-ui-body ${
+            status.startsWith("✓") ? "text-primary" : "text-warning"
+          }`}
+        >
+          {status}
+        </p>
+      )}
+    </section>
   );
 }
 
@@ -563,115 +672,119 @@ export function ProfileView() {
   const editingSection = sections.find((s) => s.title === editingTitle) ?? null;
 
   const gridRef = useRef<HTMLDivElement>(null);
-  const colCount = useColumnCount(gridRef);
+  const colCount = useColumnCount(gridRef, loaded && !raw);
   const displaySections = sections.filter(
     (section) => !isPreferenceSection(section),
   );
   const columns = distribute(displaySections, colCount);
 
   return (
-    <div className="flex h-full max-w-5xl flex-col overflow-y-auto px-6 pt-14 pb-6">
-      <h2 className="mt-0 mb-1 text-ui-title font-semibold tracking-tight">
-        学习者档案
-      </h2>
-      <p className="text-ui-body leading-snug text-ui-muted">
-        对话 AI 会读这份档案做个性化回复。你可以在这里写自定义体验;AI
-        自动维护的学习状态为只读。
-      </p>
-      {header && (
-        <p className="mt-2 truncate font-mono text-ui-caption text-ui-muted">
-          {header}
-        </p>
-      )}
+    <div className="h-full overflow-y-auto px-6 py-8">
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
+        <header className="flex flex-col gap-3 border-b border-border/70 pb-5 lg:flex-row lg:items-end lg:justify-between">
+          <div className="min-w-0 max-w-3xl">
+            <h2 className="m-0 text-ui-title font-semibold tracking-tight">
+              学习者档案
+            </h2>
+            <p className="m-0 mt-2 text-ui-body leading-relaxed text-ui-muted">
+              对话 AI 会读这份档案做个性化回复。你可以在这里写自定义体验;AI
+              自动维护的学习状态为只读。
+            </p>
+            {header && (
+              <p className="m-0 mt-3 truncate font-mono text-ui-caption text-ui-muted">
+                {header}
+              </p>
+            )}
+          </div>
+        </header>
 
-      {!loaded ? (
-        <p className="mt-4 text-ui-body text-ui-muted">加载档案…</p>
-      ) : raw ? (
-        <Textarea
-          aria-label="原始 Markdown"
-          className="mt-3 min-h-96 max-w-2xl resize-none font-mono text-ui-body leading-normal"
-          value={rawText}
-          onChange={(e) => setRawText(e.target.value)}
-          onBlur={() => void saveIfDirty()}
-          spellCheck={false}
-        />
-      ) : (
-        <>
-          <PreferencesPanel
-            preferences={preferences}
-            smartDraft={smartDraft}
-            smartBusy={smartBusy}
-            onSmartDraftChange={setSmartDraft}
-            onSmartApply={() => void applySmartPreference()}
-            onScopeChange={updatePreference}
-            onScopeBlur={() => void saveIfDirty()}
-          />
-          {/* 瀑布流:JS 把卡片分配到等宽 flex 列,各列从顶部开始 → 顶边齐平、间距统一。 */}
-          <div ref={gridRef} className="mt-3 flex items-start gap-3">
-            {columns.map((col, i) => (
-              <div key={i} className="flex min-w-0 flex-1 flex-col gap-3">
-                {col.map((s) => (
-                  <SectionCard
-                    key={s.title}
-                    section={s}
-                    onEdit={
-                      isEditable(s.title)
-                        ? () => setEditingTitle(s.title)
-                        : undefined
-                    }
-                  />
+        {!loaded ? (
+          <p className="m-0 text-ui-body text-ui-muted">加载档案…</p>
+        ) : raw ? (
+          <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+            <Textarea
+              aria-label="原始 Markdown"
+              className="min-h-[calc(100vh-260px)] resize-none bg-background/60 font-mono text-ui-body leading-normal"
+              value={rawText}
+              onChange={(e) => setRawText(e.target.value)}
+              onBlur={() => void saveIfDirty()}
+              spellCheck={false}
+            />
+            <ProfileActions
+              raw={raw}
+              dirty={dirty}
+              loaded={loaded}
+              busy={busy}
+              canUndo={canUndo}
+              status={status}
+              onSave={() => void save()}
+              onRefresh={() => void refresh()}
+              onUndo={() => void undo()}
+              onToggleRaw={toggleRaw}
+            />
+          </div>
+        ) : (
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
+            <main className="min-w-0">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <h3 className="m-0 text-ui-body font-semibold">档案条目</h3>
+                <span className="text-ui-caption text-ui-muted">
+                  {displaySections.length} 个模块
+                </span>
+              </div>
+              {/* 瀑布流:JS 把卡片分配到等宽 flex 列,各列从顶部开始 → 顶边齐平、间距统一。 */}
+              <div ref={gridRef} className="flex items-start gap-4">
+                {columns.map((col, i) => (
+                  <div key={i} className="flex min-w-0 flex-1 flex-col gap-4">
+                    {col.map((s) => (
+                      <SectionCard
+                        key={s.title}
+                        section={s}
+                        onEdit={
+                          isEditable(s.title)
+                            ? () => setEditingTitle(s.title)
+                            : undefined
+                        }
+                      />
+                    ))}
+                  </div>
                 ))}
               </div>
-            ))}
+            </main>
+            <aside className="flex min-w-0 flex-col gap-4 xl:sticky xl:top-4 xl:self-start">
+              <PreferencesPanel
+                preferences={preferences}
+                smartDraft={smartDraft}
+                smartBusy={smartBusy}
+                onSmartDraftChange={setSmartDraft}
+                onSmartApply={() => void applySmartPreference()}
+                onScopeChange={updatePreference}
+                onScopeBlur={() => void saveIfDirty()}
+              />
+              <ProfileActions
+                raw={raw}
+                dirty={dirty}
+                loaded={loaded}
+                busy={busy}
+                canUndo={canUndo}
+                status={status}
+                onSave={() => void save()}
+                onRefresh={() => void refresh()}
+                onUndo={() => void undo()}
+                onToggleRaw={toggleRaw}
+              />
+            </aside>
           </div>
-        </>
-      )}
+        )}
 
-      <div className="mt-4 flex flex-wrap items-center gap-2">
-        {raw && (
-          <Button onClick={save} disabled={!dirty}>
-            {dirty ? "保存" : "已保存"}
-          </Button>
+        {editingSection && (
+          <EditOverlay
+            section={editingSection}
+            onSave={(body) => void saveSection(editingSection.title, body)}
+            onCancel={() => setEditingTitle(null)}
+          />
         )}
-        <Button
-          variant="secondary"
-          onClick={refresh}
-          disabled={busy || !loaded}
-        >
-          {busy ? "刷新中…" : "用 AI 刷新档案"}
-        </Button>
-        {canUndo && (
-          <Button variant="ghost" size="sm" onClick={undo} disabled={busy}>
-            撤销 AI 刷新
-          </Button>
-        )}
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={toggleRaw}
-          disabled={!loaded}
-          className="ml-auto"
-        >
-          {raw ? "返回结构化编辑" : "编辑原始 Markdown"}
-        </Button>
       </div>
-      {status && (
-        <p
-          className={`mt-2 break-words text-ui-body ${
-            status.startsWith("✓") ? "text-primary" : "text-warning"
-          }`}
-        >
-          {status}
-        </p>
-      )}
-
-      {editingSection && (
-        <EditOverlay
-          section={editingSection}
-          onSave={(body) => void saveSection(editingSection.title, body)}
-          onCancel={() => setEditingTitle(null)}
-        />
-      )}
     </div>
   );
 }
