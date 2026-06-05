@@ -23,7 +23,7 @@ function PlayingBars() {
 
 // bar: 扁平,融入操作行;round: 独立圆钮(地道表达面板里)。
 const SPEAK_BASE: Record<"bar" | "round", string> = {
-  bar: "size-[1.85rem] rounded-md text-ui-muted hover:bg-accent hover:text-foreground",
+  bar: "size-[1.85rem] rounded-md text-foreground hover:bg-accent hover:text-foreground",
   round:
     "size-[1.65rem] rounded-full bg-accent text-primary hover:bg-accent/70",
 };
