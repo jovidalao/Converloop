@@ -1,22 +1,27 @@
 import {
+  ArrowLeftIcon,
   BlocksIcon,
   BookOpenCheckIcon,
+  BotIcon,
+  ChevronRightIcon,
   GraduationCapIcon,
   ListChecksIcon,
   PencilIcon,
   PlusIcon,
   SettingsIcon,
+  SlidersHorizontalIcon,
   SparklesIcon,
   SquarePenIcon,
   Trash2Icon,
   UserRoundIcon,
+  Volume2Icon,
 } from "lucide-react";
 import {
   type MouseEvent as ReactMouseEvent,
+  type ReactNode,
   type PointerEvent as ReactPointerEvent,
   useEffect,
   useMemo,
-  useRef,
   useState,
 } from "react";
 import { actionShortcutLabel, getAppAction } from "@/lib/app-actions";
@@ -31,12 +36,6 @@ import { getActions, isAgentEnabled } from "../runtime";
 import { useConfirm } from "./confirm";
 import { EntityRow, EntityRowAction, EntitySection } from "./EntityRow";
 import { LearningAgentEditDialog } from "./LearningAgentEditDialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "./ui/dropdown-menu";
 
 export type MainView =
   | "chat"
@@ -44,7 +43,9 @@ export type MainView =
   | "mastery"
   | "learning"
   | "agents"
-  | "settings";
+  | "settings-general"
+  | "settings-llm"
+  | "settings-tts";
 
 // 相对时间:1 分钟内「刚刚」,然后分钟→小时→天→周→月→年逐级进位。
 export function formatRelativeTime(ts: number): string {
@@ -77,6 +78,10 @@ interface SidebarProps {
   onRename: (id: string, title: string) => void;
   onDelete: (id: string) => void;
   onOpenView: (view: MainView) => void;
+  /** Sidebar is drilled into the settings sub-menu (derived from the active view). */
+  settingsMode: boolean;
+  /** Leave the settings sub-menu and return to the conversation list / chat. */
+  onExitSettings: () => void;
   width: number;
   onResize: (width: number) => void;
   onResizeStart?: () => void;
@@ -97,6 +102,8 @@ export function Sidebar({
   onRename,
   onDelete,
   onOpenView,
+  settingsMode,
+  onExitSettings,
   width,
   onResize,
   onResizeStart,
@@ -107,9 +114,6 @@ export function Sidebar({
   const [draft, setDraft] = useState("");
   const [learningCollapsed, setLearningCollapsed] = useState(false);
   const [editingAgentId, setEditingAgentId] = useState<string | null>(null);
-  // 设置菜单:点击外部关闭时不把焦点弹回触发按钮(否则按钮残留蓝色焦点环,需再点一次才消失)。
-  // 键盘(Esc)关闭仍归还焦点,保留可达性。
-  const settingsClosedByPointer = useRef(false);
   const [conversationMenu, setConversationMenu] = useState<{
     conv: ConversationMeta;
     x: number;
@@ -277,179 +281,218 @@ export function Sidebar({
     />
   );
 
+  // 设置子菜单的行:与「新对话」「设置」入口同款 .codex-sidebar-action,选中态走 data-active。
+  const renderSettingsItem = (v: MainView, icon: ReactNode, label: string) => (
+    <button
+      key={v}
+      type="button"
+      className="codex-sidebar-action"
+      data-active={view === v}
+      onClick={() => onOpenView(v)}
+    >
+      <span className="codex-sidebar-leading-icon">{icon}</span>
+      <span>{label}</span>
+    </button>
+  );
+
   return (
     <aside className="codex-sidebar" tabIndex={-1}>
       <div className="codex-sidebar-content">
-        <div className="codex-sidebar-actions">
-          <button
-            type="button"
-            className="codex-sidebar-action group"
-            data-active={newChatActive}
-            onClick={onNewChat}
-            title={`${newChatAction.label} ${actionShortcutLabel("new-chat")}`}
-            aria-keyshortcuts={newChatAction.ariaKeyshortcuts}
-          >
-            <span className="codex-sidebar-leading-icon">
-              <SquarePenIcon className="size-4" />
-            </span>
-            <span>新对话</span>
-            <kbd className="ml-auto rounded border border-border/60 bg-muted px-1.5 py-0.5 font-sans text-ui-caption text-ui-muted opacity-0 transition-opacity group-hover:opacity-100">
-              {actionShortcutLabel("new-chat")}
-            </kbd>
-          </button>
-        </div>
-
-        <nav className="codex-sidebar-scroll">
-          <EntitySection
-            icon={<GraduationCapIcon className="size-4 shrink-0" />}
-            label="定制化学习"
-            collapsed={learningCollapsed}
-            onToggle={() => setLearningCollapsed((v) => !v)}
-            pinned={
-              firstLearningAgent ? renderAgentRow(firstLearningAgent) : null
-            }
-          >
-            {restLearningAgents.map(renderAgentRow)}
-            <EntityRow
-              className="codex-sidebar-child-row"
-              icon={<PlusIcon className="size-3.5 shrink-0" />}
-              title="创建专项课"
-              onSelect={() => onOpenView("learning")}
-            />
-          </EntitySection>
-
-          <div className="codex-section-label">最近</div>
-          {conversations.map((c) => {
-            const active = view === "chat" && c.id === activeId;
-            if (editingId === c.id) {
-              return (
-                <input
-                  key={c.id}
-                  className="codex-sidebar-edit"
-                  value={draft}
-                  // biome-ignore lint/a11y/noAutofocus: user-triggered inline rename — focus the field as it opens
-                  autoFocus
-                  onChange={(e) => setDraft(e.target.value)}
-                  onBlur={commitEdit}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") commitEdit();
-                    if (e.key === "Escape") setEditingId(null);
-                  }}
-                />
-              );
-            }
-            return (
-              <EntityRow
-                key={c.id}
-                active={active}
-                icon={
-                  c.kind === "learning_agent" ? (
-                    <BookOpenCheckIcon className="size-3.5 shrink-0" />
-                  ) : undefined
-                }
-                title={c.title}
-                meta={formatRelativeTime(c.updatedAt)}
-                onSelect={() => onSelect(c.id)}
-                onContextMenu={(e) => openConversationMenu(e, c)}
-                onDoubleClick={() => startEdit(c)}
-                actions={
-                  <>
-                    <EntityRowAction
-                      label="重命名"
-                      icon={<PencilIcon className="size-3.5" />}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        startEdit(c);
-                      }}
-                    />
-                    <EntityRowAction
-                      label="删除"
-                      icon={<Trash2Icon className="size-3.5" />}
-                      onClick={async (e) => {
-                        e.stopPropagation();
-                        if (
-                          await confirm({
-                            title: `删除对话「${c.title}」?`,
-                            description: "此操作不可撤销。",
-                          })
-                        ) {
-                          onDelete(c.id);
-                        }
-                      }}
-                    />
-                    {c.kind === "practice" && derivationActions.length > 0 && (
-                      <EntityRowAction
-                        label="衍生新对话"
-                        icon={<SparklesIcon className="size-3.5" />}
-                        onClick={(e) => openMenuFromButton(e, c)}
-                      />
-                    )}
-                  </>
-                }
-              />
-            );
-          })}
-          {conversations.length === 0 && (
-            <div className="px-3 py-2 text-ui-body text-[color:var(--codex-sidebar-muted)]">
-              还没有对话
+        <div
+          className="codex-sidebar-track"
+          data-mode={settingsMode ? "settings" : "main"}
+        >
+          {/* Pane 1:会话 inbox。drilled into settings 时滑出并 inert。 */}
+          <div className="codex-sidebar-pane" inert={settingsMode || undefined}>
+            <div className="codex-sidebar-actions">
+              <button
+                type="button"
+                className="codex-sidebar-action group"
+                data-active={newChatActive}
+                onClick={onNewChat}
+                title={`${newChatAction.label} ${actionShortcutLabel("new-chat")}`}
+                aria-keyshortcuts={newChatAction.ariaKeyshortcuts}
+              >
+                <span className="codex-sidebar-leading-icon">
+                  <SquarePenIcon className="size-4" />
+                </span>
+                <span>新对话</span>
+                <kbd className="ml-auto rounded border border-border/60 bg-muted px-1.5 py-0.5 font-sans text-ui-caption text-ui-muted opacity-0 transition-opacity group-hover:opacity-100">
+                  {actionShortcutLabel("new-chat")}
+                </kbd>
+              </button>
             </div>
-          )}
-        </nav>
 
-        <div className="codex-sidebar-footer">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
+            <nav className="codex-sidebar-scroll">
+              <EntitySection
+                icon={<GraduationCapIcon className="size-4 shrink-0" />}
+                label="定制化学习"
+                collapsed={learningCollapsed}
+                onToggle={() => setLearningCollapsed((v) => !v)}
+                pinned={
+                  firstLearningAgent ? renderAgentRow(firstLearningAgent) : null
+                }
+              >
+                {restLearningAgents.map(renderAgentRow)}
+                <EntityRow
+                  className="codex-sidebar-child-row"
+                  icon={<PlusIcon className="size-3.5 shrink-0" />}
+                  title="创建专项课"
+                  onSelect={() => onOpenView("learning")}
+                />
+              </EntitySection>
+
+              <div className="codex-section-label">最近</div>
+              {conversations.map((c) => {
+                const active = view === "chat" && c.id === activeId;
+                if (editingId === c.id) {
+                  return (
+                    <input
+                      key={c.id}
+                      className="codex-sidebar-edit"
+                      value={draft}
+                      // biome-ignore lint/a11y/noAutofocus: user-triggered inline rename — focus the field as it opens
+                      autoFocus
+                      onChange={(e) => setDraft(e.target.value)}
+                      onBlur={commitEdit}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") commitEdit();
+                        if (e.key === "Escape") setEditingId(null);
+                      }}
+                    />
+                  );
+                }
+                return (
+                  <EntityRow
+                    key={c.id}
+                    active={active}
+                    icon={
+                      c.kind === "learning_agent" ? (
+                        <BookOpenCheckIcon className="size-3.5 shrink-0" />
+                      ) : undefined
+                    }
+                    title={c.title}
+                    meta={formatRelativeTime(c.updatedAt)}
+                    onSelect={() => onSelect(c.id)}
+                    onContextMenu={(e) => openConversationMenu(e, c)}
+                    onDoubleClick={() => startEdit(c)}
+                    actions={
+                      <>
+                        <EntityRowAction
+                          label="重命名"
+                          icon={<PencilIcon className="size-3.5" />}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            startEdit(c);
+                          }}
+                        />
+                        <EntityRowAction
+                          label="删除"
+                          icon={<Trash2Icon className="size-3.5" />}
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            if (
+                              await confirm({
+                                title: `删除对话「${c.title}」?`,
+                                description: "此操作不可撤销。",
+                              })
+                            ) {
+                              onDelete(c.id);
+                            }
+                          }}
+                        />
+                        {c.kind === "practice" &&
+                          derivationActions.length > 0 && (
+                            <EntityRowAction
+                              label="衍生新对话"
+                              icon={<SparklesIcon className="size-3.5" />}
+                              onClick={(e) => openMenuFromButton(e, c)}
+                            />
+                          )}
+                      </>
+                    }
+                  />
+                );
+              })}
+              {conversations.length === 0 && (
+                <div className="px-3 py-2 text-ui-body text-[color:var(--codex-sidebar-muted)]">
+                  还没有对话
+                </div>
+              )}
+            </nav>
+
+            <div className="codex-sidebar-footer">
+              <button
+                type="button"
+                className="codex-sidebar-action group"
+                onClick={() => onOpenView("settings-general")}
+                title={`设置 ${actionShortcutLabel("settings")}`}
+                aria-label="设置"
+              >
+                <span className="codex-sidebar-leading-icon">
+                  <SettingsIcon size={17} />
+                </span>
+                <span>设置</span>
+                <ChevronRightIcon className="ml-auto size-4 text-ui-muted transition-transform group-hover:translate-x-0.5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Pane 2:设置子菜单。drilled out 时滑出并 inert。 */}
+          <div
+            className="codex-sidebar-pane"
+            inert={!settingsMode || undefined}
+          >
+            <div className="codex-sidebar-actions">
               <button
                 type="button"
                 className="codex-sidebar-action"
-                data-active={
-                  view === "settings" ||
-                  view === "mastery" ||
-                  view === "profile" ||
-                  view === "agents"
-                }
-                title="设置"
-                aria-label="设置"
+                onClick={onExitSettings}
+                aria-label="返回"
               >
-                <SettingsIcon size={17} />
-                <span>设置</span>
+                <span className="codex-sidebar-leading-icon">
+                  <ArrowLeftIcon className="size-4" />
+                </span>
+                <span>返回</span>
               </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              side="top"
-              align="start"
-              className="w-(--radix-dropdown-menu-trigger-width)"
-              onPointerDownOutside={() => {
-                settingsClosedByPointer.current = true;
-              }}
-              onCloseAutoFocus={(e) => {
-                if (settingsClosedByPointer.current) {
-                  e.preventDefault();
-                  settingsClosedByPointer.current = false;
-                }
-              }}
-            >
-              <DropdownMenuItem onSelect={() => onOpenView("settings")}>
-                <SettingsIcon size={16} />
-                设置
-                <kbd className="ml-auto rounded border border-border/60 bg-muted px-1.5 py-0.5 font-sans text-ui-caption text-ui-muted">
-                  {actionShortcutLabel("settings")}
-                </kbd>
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => onOpenView("mastery")}>
-                <ListChecksIcon size={16} />
-                数据
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => onOpenView("agents")}>
-                <BlocksIcon size={16} />
-                能力库
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => onOpenView("profile")}>
-                <UserRoundIcon size={16} />
-                档案
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+            </div>
+
+            <nav className="codex-sidebar-scroll">
+              <div className="codex-section-label">设置内容</div>
+              {renderSettingsItem(
+                "settings-general",
+                <SlidersHorizontalIcon className="size-4" />,
+                "通用设置",
+              )}
+              {renderSettingsItem(
+                "settings-llm",
+                <BotIcon className="size-4" />,
+                "LLM 提供商",
+              )}
+              {renderSettingsItem(
+                "settings-tts",
+                <Volume2Icon className="size-4" />,
+                "TTS 提供商",
+              )}
+
+              <div className="codex-section-label">档案数据库</div>
+              {renderSettingsItem(
+                "mastery",
+                <ListChecksIcon className="size-4" />,
+                "数据",
+              )}
+              {renderSettingsItem(
+                "agents",
+                <BlocksIcon className="size-4" />,
+                "能力库",
+              )}
+              {renderSettingsItem(
+                "profile",
+                <UserRoundIcon className="size-4" />,
+                "档案",
+              )}
+            </nav>
+          </div>
         </div>
       </div>
 

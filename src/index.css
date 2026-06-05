@@ -563,9 +563,27 @@
   min-height: 0;
   flex-direction: column;
   padding: 4px 4px 8px;
+  overflow: hidden;
   transition:
     opacity 0.18s ease,
     transform 0.22s cubic-bezier(0.2, 0, 0, 1);
+}
+.codex-sidebar-track {
+  display: grid;
+  width: 200%;
+  min-height: 0;
+  flex: 1;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  transition: transform 0.24s cubic-bezier(0.2, 0, 0, 1);
+}
+.codex-sidebar-track[data-mode="settings"] {
+  transform: translateX(-50%);
+}
+.codex-sidebar-pane {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
 }
 .codex-shell[data-sidebar-collapsed="true"] .codex-sidebar {
   pointer-events: none;
@@ -584,6 +602,11 @@
   box-shadow: var(--shadow-minimal);
   backdrop-filter: saturate(180%) blur(28px);
   -webkit-backdrop-filter: saturate(180%) blur(28px);
+}
+.codex-secondary-view {
+  min-height: 0;
+  flex: 1;
+  animation: codex-secondary-view-in 0.18s cubic-bezier(0.2, 0, 0, 1);
 }
 .codex-coach {
   grid-column: 3;
@@ -701,8 +724,12 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .codex-collapsible,
-  .codex-collapsible-inner {
+  .codex-collapsible-inner,
+  .codex-sidebar-track {
     transition: none;
+  }
+  .codex-secondary-view {
+    animation: none;
   }
 }
 .codex-section-heading {
@@ -846,6 +873,16 @@
     transform: scaleY(1);
   }
 }
+@keyframes codex-secondary-view-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
 
 /* ============================================================
    动画(Layer 2)。零依赖:CSS 关键帧 + 原生 View Transitions。
@@ -884,11 +921,11 @@
   animation: message-in 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-/* 切页用「直切」而非交叉淡入——原生 app 在视图间是硬切,不做路由级淡入(那是网页习惯)。
-   侧栏收展仍用 grid column transition(见 .codex-shell)。 */
+/* 聊天路由仍直切;设置/档案二级页只做轻微入场,配合侧栏 drill-down。 */
 
 @media (prefers-reduced-motion: reduce) {
-  .animate-message-in {
+  .animate-message-in,
+  .codex-secondary-view {
     animation: none;
   }
 }

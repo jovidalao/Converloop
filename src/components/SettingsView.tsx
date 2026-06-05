@@ -89,6 +89,7 @@ const THEMES: { value: Theme; label: string }[] = [
   { value: "system", label: "跟随系统" },
 ];
 const CUSTOM_MODEL_VALUE = "__custom_model__";
+export type SettingsSection = "general" | "llm" | "tts";
 
 function ThemeToggle() {
   const { theme, setTheme } = useTheme();
@@ -113,7 +114,7 @@ function ThemeToggle() {
   );
 }
 
-export function SettingsView() {
+export function SettingsView({ section }: { section: SettingsSection }) {
   const [cfg, setCfg] = useState<AppConfig>(loadConfig);
   const [customModelActive, setCustomModelActive] = useState(() => {
     const initial = loadConfig();
@@ -344,366 +345,388 @@ export function SettingsView() {
 
   return (
     <div className="h-full overflow-y-auto px-6 pt-14 pb-6">
-      {/* 宽窗口两列并排、窄窗口堆叠;items-start 避免短区块被拉高。 */}
-      <div className="grid max-w-5xl grid-cols-1 items-start gap-x-10 gap-y-8 lg:grid-cols-2">
-        <section>
-          <h2 className="mb-4 mt-0 text-ui-title font-semibold tracking-tight">
-            模型与语言
-          </h2>
+      <div className="max-w-3xl">
+        {section === "general" && (
+          <section>
+            <h2 className="mb-4 mt-0 text-ui-title font-semibold tracking-tight">
+              通用设置
+            </h2>
 
-          <Field label="主题">
-            <ThemeToggle />
-          </Field>
-
-          <Field label="Provider">
-            <Select
-              value={cfg.providerType}
-              onValueChange={(v) => setProviderType(v as ProviderType)}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {(Object.keys(PROVIDER_PRESETS) as ProviderType[]).map((t) => (
-                  <SelectItem key={t} value={t}>
-                    {PROVIDER_PRESETS[t].label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
-
-          <Field label={baseUrlLabels[cfg.providerType]}>
-            <Input
-              value={cfg.baseUrl}
-              onChange={(e) => update("baseUrl", e.target.value)}
-              placeholder={preset.baseUrl}
-            />
-          </Field>
-          <Field label="模型">
-            <Select value={modelSelectValue} onValueChange={selectModel}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {preset.models.map((model) => (
-                  <SelectItem key={model.model} value={model.model}>
-                    {providerModelLabel(cfg.providerType, model.model)}
-                  </SelectItem>
-                ))}
-                <SelectItem value={CUSTOM_MODEL_VALUE}>
-                  {preset.shortLabel} · 自定义模型
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </Field>
-          {(customModelActive || !selectedModel) && (
-            <Field label="自定义模型 ID">
-              <Input
-                value={cfg.model}
-                onChange={(e) => {
-                  setCustomModelActive(true);
-                  update("model", e.target.value);
-                }}
-                placeholder={preset.model}
-              />
+            <Field label="主题">
+              <ThemeToggle />
             </Field>
-          )}
-          {!customModelActive && selectedModel && (
-            <p className="-mt-2 mb-3.5 break-all text-ui-caption text-ui-muted">
-              模型 ID: {selectedModel.model}
-            </p>
-          )}
-          <Field label="上下文窗口 (token · 留空自动按模型推断)">
-            <Input
-              type="number"
-              value={cfg.contextTokens ?? ""}
-              onChange={(e) => {
-                const n = Number(e.target.value);
-                update(
-                  "contextTokens",
-                  e.target.value.trim() && n > 0 ? n : undefined,
-                );
-              }}
-              placeholder={`自动:${getContextLimit({ ...cfg, contextTokens: undefined }).toLocaleString()}`}
-            />
-          </Field>
 
-          <div className="mb-3.5 flex flex-wrap items-end gap-2">
-            <Field label="母语" className="mb-0 min-w-28 flex-1">
-              <Input
-                value={cfg.nativeLanguage}
-                onChange={(e) => update("nativeLanguage", e.target.value)}
-              />
-            </Field>
-            <Field label="目标语言" className="mb-0 min-w-28 flex-1">
-              <Input
-                value={cfg.targetLanguage}
-                onChange={(e) => update("targetLanguage", e.target.value)}
-              />
-            </Field>
-            <Field label="水平" className="mb-0 min-w-28 flex-1">
-              <Input
-                value={cfg.level}
-                onChange={(e) => update("level", e.target.value)}
-              />
-            </Field>
-          </div>
-
-          {isOAuth ? (
-            <div className="mb-3.5 flex flex-col gap-2">
-              <span className="text-ui-body text-ui-muted">
-                订阅登录 {oauthTokens ? "· 已登录" : "· 未登录"}
-              </span>
-              <div className="flex flex-wrap items-center gap-2">
-                <Button
-                  onClick={() => void handleOauthLogin()}
-                  disabled={loggingIn}
-                >
-                  {loggingIn
-                    ? "等待浏览器授权…"
-                    : oauthTokens
-                      ? "重新登录"
-                      : "用浏览器登录"}
-                </Button>
-                {oauthTokens && (
-                  <Button
-                    variant="secondary"
-                    onClick={() => void handleOauthLogout()}
-                  >
-                    退出登录
-                  </Button>
-                )}
-              </div>
-              {oauthTokens && (
-                <span className="text-ui-caption text-ui-muted">
-                  访问令牌将于 {new Date(oauthTokens.expires).toLocaleString()}{" "}
-                  前自动刷新。
-                </span>
-              )}
-              <span className="text-ui-caption leading-snug text-ui-muted">
-                ⚠️ 第三方应用使用订阅令牌(claude.ai / ChatGPT)可能违反对应
-                服务条款、存在账号被标记风险;为你自有账号、请知悉后自担。
-              </span>
-            </div>
-          ) : (
-            <Field
-              label={`API key ${hasKey ? "(已保存 · 留空不改)" : "(未设置)"}`}
-            >
-              <div className="flex flex-wrap items-end gap-2">
+            <div className="mb-3.5 flex flex-wrap items-end gap-2">
+              <Field label="母语" className="mb-0 min-w-28 flex-1">
                 <Input
-                  type="password"
-                  className="flex-1"
-                  value={keyInput}
-                  onChange={(e) => setKeyInput(e.target.value)}
-                  placeholder={
-                    hasKey ? "••••••••" : keyPlaceholders[cfg.providerType]
-                  }
+                  value={cfg.nativeLanguage}
+                  onChange={(e) => update("nativeLanguage", e.target.value)}
                 />
-                <Button onClick={saveKey} disabled={!keyInput.trim()}>
-                  保存 key
-                </Button>
-                {hasKey && (
-                  <Button variant="secondary" onClick={clearKey}>
-                    清除
-                  </Button>
-                )}
-              </div>
-            </Field>
-          )}
+              </Field>
+              <Field label="目标语言" className="mb-0 min-w-28 flex-1">
+                <Input
+                  value={cfg.targetLanguage}
+                  onChange={(e) => update("targetLanguage", e.target.value)}
+                />
+              </Field>
+              <Field label="水平" className="mb-0 min-w-28 flex-1">
+                <Input
+                  value={cfg.level}
+                  onChange={(e) => update("level", e.target.value)}
+                />
+              </Field>
+            </div>
 
-          <ToggleField
-            checked={cfg.autoBilingual}
-            onChange={(v) => update("autoBilingual", v)}
-          >
-            AI 回复自动开启双语阅读(逐句对照)
-          </ToggleField>
-
-          <Button
-            variant="secondary"
-            onClick={testConnection}
-            disabled={testing}
-          >
-            {testing ? "测试中…" : "测试连接(流式 + 非流式)"}
-          </Button>
-
-          {status && (
-            <p className="mt-2 break-words text-ui-body text-primary">
-              {status}
-            </p>
-          )}
-        </section>
-
-        <section>
-          <h2 className="mb-2 mt-0 text-ui-title font-semibold tracking-tight">
-            朗读
-          </h2>
-          <p className="-mt-1 mb-4 text-ui-body leading-snug text-ui-muted">
-            聊天中 AI
-            回复、改正和更地道句子旁的小喇叭会调用语音合成。相同句子会缓存音频,避免重复请求。
-            {ttsCacheCount !== null && ` 当前缓存 ${ttsCacheCount} 条。`}
-          </p>
-
-          <Field label="朗读引擎">
-            <Select
-              value={ttsCfg.ttsProvider}
-              onValueChange={(v) => updateTts("ttsProvider", v as TtsProvider)}
+            <ToggleField
+              checked={cfg.autoBilingual}
+              onChange={(v) => update("autoBilingual", v)}
             >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="mimo">MiMo(需 API key)</SelectItem>
-                <SelectItem value="edge">微软 Edge(免费 · 无需 key)</SelectItem>
-              </SelectContent>
-            </Select>
-          </Field>
+              AI 回复自动开启双语阅读(逐句对照)
+            </ToggleField>
+          </section>
+        )}
 
-          <ToggleField
-            checked={ttsCfg.autoSpeak}
-            onChange={(v) => updateTts("autoSpeak", v)}
-          >
-            AI 回复自动朗读(关掉后仍可点小喇叭手动朗读)
-          </ToggleField>
+        {section === "llm" && (
+          <section>
+            <h2 className="mb-4 mt-0 text-ui-title font-semibold tracking-tight">
+              LLM 提供商
+            </h2>
 
-          {ttsCfg.ttsProvider === "edge" ? (
-            <>
-              <p className="mb-3.5 text-ui-body leading-snug text-ui-muted">
-                使用微软 Edge 在线神经语音,免费、无需 API key(合成走本地后端
-                WebSocket)。
+            <Field label="Provider">
+              <Select
+                value={cfg.providerType}
+                onValueChange={(v) => setProviderType(v as ProviderType)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {(Object.keys(PROVIDER_PRESETS) as ProviderType[]).map(
+                    (t) => (
+                      <SelectItem key={t} value={t}>
+                        {PROVIDER_PRESETS[t].label}
+                      </SelectItem>
+                    ),
+                  )}
+                </SelectContent>
+              </Select>
+            </Field>
+
+            <Field label={baseUrlLabels[cfg.providerType]}>
+              <Input
+                value={cfg.baseUrl}
+                onChange={(e) => update("baseUrl", e.target.value)}
+                placeholder={preset.baseUrl}
+              />
+            </Field>
+
+            <Field label="模型">
+              <Select value={modelSelectValue} onValueChange={selectModel}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {preset.models.map((model) => (
+                    <SelectItem key={model.model} value={model.model}>
+                      {providerModelLabel(cfg.providerType, model.model)}
+                    </SelectItem>
+                  ))}
+                  <SelectItem value={CUSTOM_MODEL_VALUE}>
+                    {preset.shortLabel} · 自定义模型
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
+
+            {(customModelActive || !selectedModel) && (
+              <Field label="自定义模型 ID">
+                <Input
+                  value={cfg.model}
+                  onChange={(e) => {
+                    setCustomModelActive(true);
+                    update("model", e.target.value);
+                  }}
+                  placeholder={preset.model}
+                />
+              </Field>
+            )}
+
+            {!customModelActive && selectedModel && (
+              <p className="-mt-2 mb-3.5 break-all text-ui-caption text-ui-muted">
+                模型 ID: {selectedModel.model}
               </p>
-              <div className="mb-3.5 flex flex-wrap items-end gap-2">
-                <Field label="音色" className="mb-0 min-w-40 flex-1">
-                  <Select
-                    value={ttsCfg.edgeVoice}
-                    onValueChange={(v) => updateTts("edgeVoice", v)}
+            )}
+
+            <Field label="上下文窗口 (token · 留空自动按模型推断)">
+              <Input
+                type="number"
+                value={cfg.contextTokens ?? ""}
+                onChange={(e) => {
+                  const n = Number(e.target.value);
+                  update(
+                    "contextTokens",
+                    e.target.value.trim() && n > 0 ? n : undefined,
+                  );
+                }}
+                placeholder={`自动:${getContextLimit({ ...cfg, contextTokens: undefined }).toLocaleString()}`}
+              />
+            </Field>
+
+            {isOAuth ? (
+              <div className="mb-3.5 flex flex-col gap-2">
+                <span className="text-ui-body text-ui-muted">
+                  订阅登录 {oauthTokens ? "· 已登录" : "· 未登录"}
+                </span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    onClick={() => void handleOauthLogin()}
+                    disabled={loggingIn}
                   >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {EDGE_VOICES.map((v) => (
-                        <SelectItem key={v.id} value={v.id}>
-                          {v.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </Field>
-                <Field label="语速" className="mb-0 min-w-24 flex-1">
-                  <Input
-                    value={ttsCfg.edgeRate}
-                    onChange={(e) => updateTts("edgeRate", e.target.value)}
-                    placeholder="+0%"
-                  />
-                </Field>
-                <Field label="音高" className="mb-0 min-w-24 flex-1">
-                  <Input
-                    value={ttsCfg.edgePitch}
-                    onChange={(e) => updateTts("edgePitch", e.target.value)}
-                    placeholder="+0Hz"
-                  />
-                </Field>
+                    {loggingIn
+                      ? "等待浏览器授权…"
+                      : oauthTokens
+                        ? "重新登录"
+                        : "用浏览器登录"}
+                  </Button>
+                  {oauthTokens && (
+                    <Button
+                      variant="secondary"
+                      onClick={() => void handleOauthLogout()}
+                    >
+                      退出登录
+                    </Button>
+                  )}
+                </div>
+                {oauthTokens && (
+                  <span className="text-ui-caption text-ui-muted">
+                    访问令牌将于{" "}
+                    {new Date(oauthTokens.expires).toLocaleString()}{" "}
+                    前自动刷新。
+                  </span>
+                )}
+                <span className="text-ui-caption leading-snug text-ui-muted">
+                  ⚠️ 第三方应用使用订阅令牌(claude.ai / ChatGPT)可能违反对应
+                  服务条款、存在账号被标记风险;为你自有账号、请知悉后自担。
+                </span>
               </div>
-            </>
-          ) : (
-            <>
+            ) : (
               <Field
-                label={`MiMo API key ${hasTtsKey ? "(已保存 · 留空不改)" : "(未设置)"}`}
+                label={`API key ${hasKey ? "(已保存 · 留空不改)" : "(未设置)"}`}
               >
                 <div className="flex flex-wrap items-end gap-2">
                   <Input
                     type="password"
                     className="flex-1"
-                    value={ttsKeyInput}
-                    onChange={(e) => setTtsKeyInput(e.target.value)}
-                    placeholder={hasTtsKey ? "••••••••" : "MiMo API key…"}
+                    value={keyInput}
+                    onChange={(e) => setKeyInput(e.target.value)}
+                    placeholder={
+                      hasKey ? "••••••••" : keyPlaceholders[cfg.providerType]
+                    }
                   />
-                  <Button
-                    onClick={() => void saveTtsKey()}
-                    disabled={!ttsKeyInput.trim()}
-                  >
+                  <Button onClick={saveKey} disabled={!keyInput.trim()}>
                     保存 key
                   </Button>
-                  {hasTtsKey && (
-                    <Button
-                      variant="secondary"
-                      onClick={() => void clearTtsKey()}
-                    >
+                  {hasKey && (
+                    <Button variant="secondary" onClick={clearKey}>
                       清除
                     </Button>
                   )}
                 </div>
               </Field>
+            )}
 
-              <Field label="朗读风格 prompt (user 消息)">
-                <Textarea
-                  className="min-h-18 resize-y leading-snug"
-                  value={ttsCfg.stylePrompt}
-                  onChange={(e) => updateTts("stylePrompt", e.target.value)}
-                  rows={3}
-                  placeholder="描述朗读的语气、语速、情感…"
-                />
-              </Field>
+            <Button
+              variant="secondary"
+              onClick={testConnection}
+              disabled={testing}
+            >
+              {testing ? "测试中…" : "测试连接(流式 + 非流式)"}
+            </Button>
 
-              <div className="mb-3.5 flex flex-wrap items-end gap-2">
-                <Field label="音色" className="mb-0 min-w-28 flex-1">
-                  <Select
-                    value={ttsCfg.voice}
-                    onValueChange={(v) => updateTts("voice", v)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {MIMO_VOICES.map((v) => (
-                        <SelectItem key={v.id} value={v.id}>
-                          {v.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+            {status && (
+              <p className="mt-2 break-words text-ui-body text-primary">
+                {status}
+              </p>
+            )}
+          </section>
+        )}
+
+        {section === "tts" && (
+          <section>
+            <h2 className="mb-2 mt-0 text-ui-title font-semibold tracking-tight">
+              TTS 提供商
+            </h2>
+            <p className="-mt-1 mb-4 text-ui-body leading-snug text-ui-muted">
+              聊天中 AI
+              回复、改正和更地道句子旁的小喇叭会调用语音合成。相同句子会缓存音频,避免重复请求。
+              {ttsCacheCount !== null && ` 当前缓存 ${ttsCacheCount} 条。`}
+            </p>
+
+            <Field label="朗读引擎">
+              <Select
+                value={ttsCfg.ttsProvider}
+                onValueChange={(v) =>
+                  updateTts("ttsProvider", v as TtsProvider)
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="mimo">MiMo(需 API key)</SelectItem>
+                  <SelectItem value="edge">
+                    微软 Edge(免费 · 无需 key)
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
+
+            <ToggleField
+              checked={ttsCfg.autoSpeak}
+              onChange={(v) => updateTts("autoSpeak", v)}
+            >
+              AI 回复自动朗读(关掉后仍可点小喇叭手动朗读)
+            </ToggleField>
+
+            {ttsCfg.ttsProvider === "edge" ? (
+              <>
+                <p className="mb-3.5 text-ui-body leading-snug text-ui-muted">
+                  使用微软 Edge 在线神经语音,免费、无需 API key(合成走本地后端
+                  WebSocket)。
+                </p>
+                <div className="mb-3.5 flex flex-wrap items-end gap-2">
+                  <Field label="音色" className="mb-0 min-w-40 flex-1">
+                    <Select
+                      value={ttsCfg.edgeVoice}
+                      onValueChange={(v) => updateTts("edgeVoice", v)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {EDGE_VOICES.map((v) => (
+                          <SelectItem key={v.id} value={v.id}>
+                            {v.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                  <Field label="语速" className="mb-0 min-w-24 flex-1">
+                    <Input
+                      value={ttsCfg.edgeRate}
+                      onChange={(e) => updateTts("edgeRate", e.target.value)}
+                      placeholder="+0%"
+                    />
+                  </Field>
+                  <Field label="音高" className="mb-0 min-w-24 flex-1">
+                    <Input
+                      value={ttsCfg.edgePitch}
+                      onChange={(e) => updateTts("edgePitch", e.target.value)}
+                      placeholder="+0Hz"
+                    />
+                  </Field>
+                </div>
+              </>
+            ) : (
+              <>
+                <Field
+                  label={`MiMo API key ${hasTtsKey ? "(已保存 · 留空不改)" : "(未设置)"}`}
+                >
+                  <div className="flex flex-wrap items-end gap-2">
+                    <Input
+                      type="password"
+                      className="flex-1"
+                      value={ttsKeyInput}
+                      onChange={(e) => setTtsKeyInput(e.target.value)}
+                      placeholder={hasTtsKey ? "••••••••" : "MiMo API key…"}
+                    />
+                    <Button
+                      onClick={() => void saveTtsKey()}
+                      disabled={!ttsKeyInput.trim()}
+                    >
+                      保存 key
+                    </Button>
+                    {hasTtsKey && (
+                      <Button
+                        variant="secondary"
+                        onClick={() => void clearTtsKey()}
+                      >
+                        清除
+                      </Button>
+                    )}
+                  </div>
                 </Field>
-                <Field label="模型" className="mb-0 min-w-28 flex-1">
-                  <Input
-                    value={ttsCfg.model}
-                    onChange={(e) => updateTts("model", e.target.value)}
+
+                <Field label="朗读风格 prompt (user 消息)">
+                  <Textarea
+                    className="min-h-18 resize-y leading-snug"
+                    value={ttsCfg.stylePrompt}
+                    onChange={(e) => updateTts("stylePrompt", e.target.value)}
+                    rows={3}
+                    placeholder="描述朗读的语气、语速、情感…"
                   />
                 </Field>
-              </div>
 
-              <Field label="Base URL">
-                <Input
-                  value={ttsCfg.baseUrl}
-                  onChange={(e) => updateTts("baseUrl", e.target.value)}
-                />
-              </Field>
-            </>
-          )}
+                <div className="mb-3.5 flex flex-wrap items-end gap-2">
+                  <Field label="音色" className="mb-0 min-w-28 flex-1">
+                    <Select
+                      value={ttsCfg.voice}
+                      onValueChange={(v) => updateTts("voice", v)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {MIMO_VOICES.map((v) => (
+                          <SelectItem key={v.id} value={v.id}>
+                            {v.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                  <Field label="模型" className="mb-0 min-w-28 flex-1">
+                    <Input
+                      value={ttsCfg.model}
+                      onChange={(e) => updateTts("model", e.target.value)}
+                    />
+                  </Field>
+                </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              variant="secondary"
-              onClick={() => void testTts()}
-              disabled={testingTts}
-            >
-              {testingTts ? "测试中…" : "测试朗读"}
-            </Button>
-            <Button
-              variant="secondary"
-              onClick={() => void handleClearTtsCache()}
-              disabled={clearingTtsCache || ttsCacheCount === 0}
-            >
-              {clearingTtsCache ? "清空中…" : "清空朗读缓存"}
-            </Button>
-          </div>
+                <Field label="Base URL">
+                  <Input
+                    value={ttsCfg.baseUrl}
+                    onChange={(e) => updateTts("baseUrl", e.target.value)}
+                  />
+                </Field>
+              </>
+            )}
 
-          {ttsStatus && (
-            <p className="mt-2 break-words text-ui-body text-primary">
-              {ttsStatus}
-            </p>
-          )}
-        </section>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="secondary"
+                onClick={() => void testTts()}
+                disabled={testingTts}
+              >
+                {testingTts ? "测试中…" : "测试朗读"}
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => void handleClearTtsCache()}
+                disabled={clearingTtsCache || ttsCacheCount === 0}
+              >
+                {clearingTtsCache ? "清空中…" : "清空朗读缓存"}
+              </Button>
+            </div>
+
+            {ttsStatus && (
+              <p className="mt-2 break-words text-ui-body text-primary">
+                {ttsStatus}
+              </p>
+            )}
+          </section>
+        )}
       </div>
     </div>
   );

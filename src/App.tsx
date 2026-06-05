@@ -82,6 +82,21 @@ function sameLocation(a: AppLocation, b: AppLocation): boolean {
   return a.view === b.view && a.activeId === b.activeId;
 }
 
+// 设置子菜单里的视图(三页设置 + 档案数据库三页)。进入这些视图时侧栏 drill 进
+// 设置面板;「创建专项课」走主侧栏的定制化学习分组,不算设置视图。
+const SETTINGS_VIEWS: ReadonlySet<MainView> = new Set<MainView>([
+  "settings-general",
+  "settings-llm",
+  "settings-tts",
+  "mastery",
+  "agents",
+  "profile",
+]);
+
+function isSettingsView(view: MainView): boolean {
+  return SETTINGS_VIEWS.has(view);
+}
+
 function App() {
   const [conversations, setConversations] = useState<ConversationMeta[]>([]);
   const [learningAgents, setLearningAgents] = useState<LearningAgentMeta[]>([]);
@@ -166,6 +181,9 @@ function App() {
 
   const applyLocation = useCallback(
     (loc: AppLocation) => {
+      if (isSettingsView(loc.view)) {
+        setCollapsed(false);
+      }
       if (
         loc.view === "chat" &&
         loc.activeId !== draftId &&
@@ -261,7 +279,7 @@ function App() {
         !!e.target.closest("input, textarea, select, [contenteditable]");
       if (matchesActionShortcut(e, "settings")) {
         e.preventDefault();
-        if (activeId) navigateTo({ view: "settings", activeId });
+        if (activeId) navigateTo({ view: "settings-general", activeId });
         return;
       }
       if (matchesActionShortcut(e, "command-palette")) {
@@ -461,6 +479,7 @@ function App() {
     !draftActive &&
     activeConversation.kind === "practice" &&
     derivationActions.length > 0;
+  const settingsMode = isSettingsView(view);
   const topbarTitle =
     view === "profile"
       ? "学习者档案"
@@ -470,13 +489,34 @@ function App() {
           ? "创建专项课"
           : view === "agents"
             ? "能力库"
-            : view === "settings"
-              ? "设置"
-              : view === "chat"
-                ? draftActive
-                  ? "新对话"
-                  : (activeConversation?.title ?? "")
-                : "";
+            : view === "settings-general"
+              ? "通用设置"
+              : view === "settings-llm"
+                ? "LLM 提供商"
+                : view === "settings-tts"
+                  ? "TTS 提供商"
+                  : view === "chat"
+                    ? draftActive
+                      ? "新对话"
+                      : (activeConversation?.title ?? "")
+                    : "";
+
+  const secondaryView =
+    view === "profile" ? (
+      <ProfileView />
+    ) : view === "mastery" ? (
+      <MasteryView />
+    ) : view === "learning" ? (
+      <LearningAgentsView onRefresh={refreshLearningAgents} />
+    ) : view === "agents" ? (
+      <AgentLibraryView />
+    ) : view === "settings-general" ? (
+      <SettingsView section="general" />
+    ) : view === "settings-llm" ? (
+      <SettingsView section="llm" />
+    ) : view === "settings-tts" ? (
+      <SettingsView section="tts" />
+    ) : null;
 
   return (
     <div
@@ -707,6 +747,8 @@ function App() {
           onRename={(id, t) => void rename(id, t)}
           onDelete={(id) => void remove(id)}
           onOpenView={(v) => navigateTo({ view: v, activeId })}
+          settingsMode={settingsMode}
+          onExitSettings={() => navigateTo({ view: "chat", activeId })}
           width={sidebarWidth}
           onResize={(w) =>
             setSidebarWidth(Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, w)))
@@ -733,13 +775,11 @@ function App() {
             coachVisible={coachVisible}
           />
         </div>
-        {view === "profile" && <ProfileView />}
-        {view === "mastery" && <MasteryView />}
-        {view === "learning" && (
-          <LearningAgentsView onRefresh={refreshLearningAgents} />
+        {secondaryView && (
+          <div key={view} className="codex-secondary-view">
+            {secondaryView}
+          </div>
         )}
-        {view === "agents" && <AgentLibraryView />}
-        {view === "settings" && <SettingsView />}
       </main>
 
       {coachVisible && (
