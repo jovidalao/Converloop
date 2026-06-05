@@ -7,6 +7,7 @@ import {
   GraduationCapIcon,
   ListChecksIcon,
   PencilIcon,
+  PencilRulerIcon,
   PlusIcon,
   ScrollTextIcon,
   SettingsIcon,
@@ -43,6 +44,7 @@ export type MainView =
   | "profile"
   | "mastery"
   | "learning"
+  | "design"
   | "agents"
   | "settings-logs"
   | "settings-general"
@@ -460,6 +462,11 @@ export function Sidebar({
               )}
 
               <div className="codex-section-label">档案数据库</div>
+              {renderSettingsItem(
+                "design",
+                <PencilRulerIcon className="size-4" />,
+                "设计说明",
+              )}
               {renderSettingsItem(
                 "mastery",
                 <ListChecksIcon className="size-4" />,

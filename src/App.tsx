@@ -19,6 +19,7 @@ import {
   useState,
 } from "react";
 import { AgentLibraryView } from "./components/AgentLibraryView";
+import { AppDesignView } from "./components/AppDesignView";
 import { ChatView } from "./components/ChatView";
 import { CoachPanel } from "./components/CoachPanel";
 import { CommandPalette } from "./components/CommandPalette";
@@ -89,6 +90,7 @@ const SETTINGS_VIEWS: ReadonlySet<MainView> = new Set<MainView>([
   "settings-general",
   "settings-llm",
   "settings-tts",
+  "design",
   "mastery",
   "agents",
   "settings-logs",
@@ -486,6 +488,7 @@ function App() {
     profile: "学习者档案",
     mastery: "学习数据",
     learning: "创建专项课",
+    design: "设计说明",
     agents: "能力库",
     "settings-logs": "日志",
     "settings-general": "通用设置",
@@ -506,6 +509,8 @@ function App() {
       <MasteryView />
     ) : view === "learning" ? (
       <LearningAgentsView onRefresh={refreshLearningAgents} />
+    ) : view === "design" ? (
+      <AppDesignView />
     ) : view === "agents" ? (
       <AgentLibraryView onOpenView={(v) => navigateTo({ view: v, activeId })} />
     ) : view === "settings-logs" ? (
