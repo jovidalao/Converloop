@@ -237,7 +237,7 @@ function ModelLogo({
 }) {
   const brand = modelBrand(model);
   const sizeClass = compact
-    ? "size-2.5 [&_svg]:size-2.5"
+    ? "size-3 [&_svg]:size-3"
     : "size-4 [&_svg]:size-4";
   return (
     <span
@@ -253,7 +253,7 @@ function ModelLogo({
           dangerouslySetInnerHTML={{ __html: brand.svg }}
         />
       ) : (
-        <SparklesIcon className={compact ? "size-2.5" : "size-3.5"} />
+        <SparklesIcon className="size-3.5" />
       )}
     </span>
   );
@@ -2080,12 +2080,12 @@ export function ChatView({
                   disabled={replyBusy}
                 >
                   <SelectTrigger
-                    className="h-4 w-auto min-w-[5.5rem] max-w-[min(42vw,12rem)] gap-1 rounded-sm border-0 bg-transparent px-1 py-0 text-ui-caption font-medium leading-none text-ui-muted shadow-none hover:bg-accent focus-visible:ring-1 sm:max-w-[14rem] [&>svg]:size-2.5"
+                    className="h-4 w-auto min-w-[5.5rem] max-w-[min(42vw,12rem)] gap-1.5 rounded-sm border-0 bg-transparent px-1 py-0 font-normal leading-none text-ui-muted shadow-none hover:bg-accent sm:max-w-[14rem] [&>svg]:size-2.5"
                     aria-label="选择模型"
                     title={currentProviderModelLabel}
                   >
                     <ModelLogo model={config.model} compact />
-                    <span className="min-w-0 truncate">
+                    <span className="min-w-0 truncate text-ui-meta">
                       {currentModelButtonLabel}
                     </span>
                   </SelectTrigger>
