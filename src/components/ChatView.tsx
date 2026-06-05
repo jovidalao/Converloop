@@ -40,9 +40,11 @@ import {
   slashMenuToken,
 } from "../commands";
 import {
+  findProviderModelOption,
   getContextLimit,
   PROVIDER_PRESETS,
   type ProviderType,
+  providerModelLabel,
   saveConfig,
   useConfig,
 } from "../config";
@@ -112,15 +114,8 @@ interface ChatViewProps {
   coachVisible?: boolean;
 }
 
-const MODEL_PROVIDER_LABEL: Record<ProviderType, string> = {
-  openai: "OpenAI",
-  gemini: "Gemini",
-  anthropic: "Claude",
-  "claude-oauth": "Claude (Pro/Max)",
-  "codex-oauth": "ChatGPT (Codex)",
-};
-
 const MODEL_PROVIDERS = Object.keys(PROVIDER_PRESETS) as ProviderType[];
+const CURRENT_MODEL_VALUE = "current";
 const INPUT_TEXTAREA_MIN_HEIGHT = 52;
 const INPUT_TEXTAREA_MAX_HEIGHT = 96;
 
@@ -270,6 +265,20 @@ function modelShortName(model: string): string {
       .replace(/[-_]/g, " ");
   }
   return raw || "模型";
+}
+
+function modelSelectValue(providerType: ProviderType, model: string): string {
+  return `${providerType}::${model}`;
+}
+
+function parseModelSelectValue(
+  value: string,
+): { providerType: ProviderType; model: string } | null {
+  const splitAt = value.indexOf("::");
+  if (splitAt < 0) return null;
+  const providerType = value.slice(0, splitAt) as ProviderType;
+  if (!(providerType in PROVIDER_PRESETS)) return null;
+  return { providerType, model: value.slice(splitAt + 2) };
 }
 
 // 复制这条回复。复制后短暂显示对勾。
@@ -1691,21 +1700,32 @@ export function ChatView({
       optionBadges.push({ label: `难度·${diff}`, tone: "muted" });
   }
   const currentPreset = PROVIDER_PRESETS[config.providerType];
-  const usingPresetModel =
-    config.model.trim() === currentPreset.model &&
-    config.baseUrl.trim() === currentPreset.baseUrl;
-  const modelSelectValue = usingPresetModel ? config.providerType : "current";
+  const currentModelOption = findProviderModelOption(
+    config.providerType,
+    config.model,
+  );
+  const usingPresetEndpoint = config.baseUrl.trim() === currentPreset.baseUrl;
+  const currentProviderModelLabel = providerModelLabel(
+    config.providerType,
+    config.model,
+  );
+  const selectedModelValue =
+    usingPresetEndpoint && currentModelOption
+      ? modelSelectValue(config.providerType, currentModelOption.model)
+      : CURRENT_MODEL_VALUE;
   const contextTitle = `约 ${usedTokens.toLocaleString()} / ${contextLimit.toLocaleString()} tokens · 上下文 ${usedPercent}%`;
 
   function selectModelProvider(value: string) {
-    if (value === "current") return;
-    const providerType = value as ProviderType;
+    if (value === CURRENT_MODEL_VALUE) return;
+    const selected = parseModelSelectValue(value);
+    if (!selected) return;
+    const { providerType, model } = selected;
     const preset = PROVIDER_PRESETS[providerType];
     saveConfig({
       ...config,
       providerType,
       baseUrl: preset.baseUrl,
-      model: preset.model,
+      model,
     });
   }
 
@@ -1950,41 +1970,56 @@ export function ChatView({
                   ))}
                 </div>
                 <Select
-                  value={modelSelectValue}
+                  value={selectedModelValue}
                   onValueChange={selectModelProvider}
                   disabled={replyBusy}
                 >
                   <SelectTrigger
-                    className="h-7 w-auto max-w-[9.5rem] min-w-0 gap-1.5 border-0 bg-transparent px-1.5 text-ui-caption text-foreground shadow-none hover:bg-accent focus-visible:ring-1"
+                    className="h-7 w-auto max-w-[13rem] min-w-0 gap-1.5 border-0 bg-transparent px-1.5 text-ui-caption text-foreground shadow-none hover:bg-accent focus-visible:ring-1 sm:max-w-[16rem]"
                     aria-label="选择模型"
+                    title={currentProviderModelLabel}
                   >
                     <ModelLogo model={config.model} />
                     <span className="min-w-0 truncate">
-                      {modelShortName(config.model)}
+                      {currentProviderModelLabel}
                     </span>
                   </SelectTrigger>
-                  <SelectContent align="start" className="min-w-56">
-                    {!usingPresetModel && (
-                      <SelectItem value="current">
-                        <span className="flex items-center gap-2.5">
+                  <SelectContent align="start" className="min-w-72">
+                    {selectedModelValue === CURRENT_MODEL_VALUE && (
+                      <SelectItem value={CURRENT_MODEL_VALUE}>
+                        <span className="flex min-w-0 items-center gap-2.5">
                           <ModelLogo model={config.model} />
-                          <span>当前 · {modelShortName(config.model)}</span>
+                          <span className="flex min-w-0 flex-col">
+                            <span className="truncate">
+                              当前 · {currentProviderModelLabel}
+                            </span>
+                            <span className="truncate text-ui-caption text-ui-muted">
+                              {config.model.trim() || "未填写模型 ID"}
+                            </span>
+                          </span>
                         </span>
                       </SelectItem>
                     )}
                     {MODEL_PROVIDERS.map((providerType) => {
                       const preset = PROVIDER_PRESETS[providerType];
-                      return (
-                        <SelectItem key={providerType} value={providerType}>
-                          <span className="flex items-center gap-2.5">
-                            <ModelLogo model={preset.model} />
-                            <span>
-                              {MODEL_PROVIDER_LABEL[providerType]} ·{" "}
-                              {modelShortName(preset.model)}
+                      return preset.models.map((model) => (
+                        <SelectItem
+                          key={`${providerType}:${model.model}`}
+                          value={modelSelectValue(providerType, model.model)}
+                        >
+                          <span className="flex min-w-0 items-center gap-2.5">
+                            <ModelLogo model={model.model} />
+                            <span className="flex min-w-0 flex-col">
+                              <span className="truncate">
+                                {providerModelLabel(providerType, model.model)}
+                              </span>
+                              <span className="truncate text-ui-caption text-ui-muted">
+                                {model.model}
+                              </span>
                             </span>
                           </span>
                         </SelectItem>
-                      );
+                      ));
                     })}
                   </SelectContent>
                 </Select>

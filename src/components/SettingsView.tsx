@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 import {
   type AppConfig,
   apiKeyAccount,
+  findProviderModelOption,
   getContextLimit,
   getProvider,
   isOAuthProvider,
@@ -10,6 +11,7 @@ import {
   oauthAccount,
   PROVIDER_PRESETS,
   type ProviderType,
+  providerModelLabel,
   saveConfig,
 } from "../config";
 import { deleteSecret, getSecret, setSecret } from "../keychain";
@@ -86,6 +88,7 @@ const THEMES: { value: Theme; label: string }[] = [
   { value: "dark", label: "暗黑" },
   { value: "system", label: "跟随系统" },
 ];
+const CUSTOM_MODEL_VALUE = "__custom_model__";
 
 function ThemeToggle() {
   const { theme, setTheme } = useTheme();
@@ -111,7 +114,11 @@ function ThemeToggle() {
 }
 
 export function SettingsView() {
-  const [cfg, setCfg] = useState<AppConfig>(loadConfig());
+  const [cfg, setCfg] = useState<AppConfig>(loadConfig);
+  const [customModelActive, setCustomModelActive] = useState(() => {
+    const initial = loadConfig();
+    return !findProviderModelOption(initial.providerType, initial.model);
+  });
   const [ttsCfg, setTtsCfg] = useState<TtsConfig>(loadTtsConfig());
   const [hasKey, setHasKey] = useState(false);
   const [hasTtsKey, setHasTtsKey] = useState(false);
@@ -129,6 +136,11 @@ export function SettingsView() {
   const keyAccount = apiKeyAccount(cfg.providerType);
   const preset = PROVIDER_PRESETS[cfg.providerType];
   const isOAuth = isOAuthProvider(cfg.providerType);
+  const selectedModel = findProviderModelOption(cfg.providerType, cfg.model);
+  const modelSelectValue =
+    customModelActive || !selectedModel
+      ? CUSTOM_MODEL_VALUE
+      : selectedModel.model;
 
   const baseUrlLabels: Record<ProviderType, string> = {
     openai: "Base URL (OpenAI 兼容)",
@@ -171,8 +183,18 @@ export function SettingsView() {
       baseUrl: p.baseUrl,
       model: p.model,
     };
+    setCustomModelActive(false);
     setCfg(next);
     saveConfig(next);
+  }
+
+  function selectModel(value: string) {
+    if (value === CUSTOM_MODEL_VALUE) {
+      setCustomModelActive(true);
+      return;
+    }
+    setCustomModelActive(false);
+    update("model", value);
   }
 
   async function saveKey() {
@@ -359,11 +381,39 @@ export function SettingsView() {
             />
           </Field>
           <Field label="模型">
-            <Input
-              value={cfg.model}
-              onChange={(e) => update("model", e.target.value)}
-            />
+            <Select value={modelSelectValue} onValueChange={selectModel}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {preset.models.map((model) => (
+                  <SelectItem key={model.model} value={model.model}>
+                    {providerModelLabel(cfg.providerType, model.model)}
+                  </SelectItem>
+                ))}
+                <SelectItem value={CUSTOM_MODEL_VALUE}>
+                  {preset.shortLabel} · 自定义模型
+                </SelectItem>
+              </SelectContent>
+            </Select>
           </Field>
+          {(customModelActive || !selectedModel) && (
+            <Field label="自定义模型 ID">
+              <Input
+                value={cfg.model}
+                onChange={(e) => {
+                  setCustomModelActive(true);
+                  update("model", e.target.value);
+                }}
+                placeholder={preset.model}
+              />
+            </Field>
+          )}
+          {!customModelActive && selectedModel && (
+            <p className="-mt-2 mb-3.5 break-all text-ui-caption text-ui-muted">
+              模型 ID: {selectedModel.model}
+            </p>
+          )}
           <Field label="上下文窗口 (token · 留空自动按模型推断)">
             <Input
               type="number"

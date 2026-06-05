@@ -84,39 +84,94 @@ export function isOAuthProvider(type: ProviderType): boolean {
   return OAUTH_PROVIDERS.has(type);
 }
 
-// 切换 provider 时给设置页用的预设(baseUrl + 示例模型)。
-export const PROVIDER_PRESETS: Record<
-  ProviderType,
-  { label: string; baseUrl: string; model: string }
-> = {
+export interface ProviderModelOption {
+  label: string;
+  model: string;
+}
+
+interface ProviderPreset {
+  label: string;
+  shortLabel: string;
+  baseUrl: string;
+  /** 默认模型:切换 provider 时使用,也作为模型列表的第一项。 */
+  model: string;
+  models: ProviderModelOption[];
+}
+
+// 切换 provider 时给设置页/聊天输入区共用的预设(baseUrl + 可选模型)。
+export const PROVIDER_PRESETS: Record<ProviderType, ProviderPreset> = {
   openai: {
     label: "OpenAI 兼容(OpenAI / OpenRouter / LM Studio)",
+    shortLabel: "OpenAI 兼容",
     baseUrl: "http://192.168.31.154:8045/v1",
     model: "gpt-4o-mini",
+    models: [
+      { label: "GPT-4o mini", model: "gpt-4o-mini" },
+      { label: "GPT-4o", model: "gpt-4o" },
+      { label: "GPT-4.1", model: "gpt-4.1" },
+      { label: "GPT-5 mini", model: "gpt-5-mini" },
+      { label: "GPT-5", model: "gpt-5" },
+    ],
   },
   gemini: {
     label: "Gemini (原生 API)",
+    shortLabel: "Gemini",
     baseUrl: "http://192.168.31.154:8045/v1beta",
     model: "gemini-2.0-flash",
+    models: [
+      { label: "Gemini 2.0 Flash", model: "gemini-2.0-flash" },
+      { label: "Gemini 1.5 Flash", model: "gemini-1.5-flash" },
+      { label: "Gemini 1.5 Pro", model: "gemini-1.5-pro" },
+    ],
   },
   anthropic: {
     label: "Anthropic (Claude)",
+    shortLabel: "Anthropic Claude",
     baseUrl: "http://192.168.31.154:8045/v1",
     model: "claude-sonnet-4-20250514",
+    models: [
+      { label: "Claude Sonnet 4", model: "claude-sonnet-4-20250514" },
+      { label: "Claude Opus 4.1", model: "claude-opus-4-1-20250805" },
+      { label: "Claude Haiku 3.5", model: "claude-3-5-haiku-20241022" },
+    ],
   },
   // 订阅登录:令牌直连 Anthropic 官方 API(非代理),模型可在设置里改成订阅可用的型号。
   "claude-oauth": {
     label: "Claude (Pro/Max 登录)",
+    shortLabel: "Claude Code",
     baseUrl: "https://api.anthropic.com/v1",
     model: "claude-sonnet-4-5",
+    models: [
+      { label: "Claude Sonnet 4.5", model: "claude-sonnet-4-5" },
+      { label: "Claude Opus 4.1", model: "claude-opus-4-1-20250805" },
+      { label: "Claude Sonnet 4", model: "claude-sonnet-4-20250514" },
+      { label: "Claude Haiku 3.5", model: "claude-3-5-haiku-20241022" },
+    ],
   },
   // Codex 订阅登录:走 ChatGPT 后端 Responses API,模型用 codex 系列。
   "codex-oauth": {
     label: "ChatGPT (Codex 登录)",
+    shortLabel: "ChatGPT Codex",
     baseUrl: "https://chatgpt.com/backend-api",
     model: "gpt-5-codex",
+    models: [{ label: "GPT-5 Codex", model: "gpt-5-codex" }],
   },
 };
+
+export function findProviderModelOption(
+  type: ProviderType,
+  model: string,
+): ProviderModelOption | undefined {
+  const normalized = model.trim();
+  return PROVIDER_PRESETS[type].models.find((m) => m.model === normalized);
+}
+
+export function providerModelLabel(type: ProviderType, model: string): string {
+  const preset = PROVIDER_PRESETS[type];
+  const modelLabel =
+    findProviderModelOption(type, model)?.label || model.trim() || "自定义模型";
+  return `${preset.shortLabel} · ${modelLabel}`;
+}
 
 const STORAGE_KEY = "lang-agent.config";
 
