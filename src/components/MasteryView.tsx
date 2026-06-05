@@ -326,7 +326,7 @@ export function MasteryView() {
         <select
           value={status}
           onChange={(e) => setStatus(e.target.value)}
-          className="h-9 rounded-md border bg-card px-2 text-ui-body outline-none focus-visible:border-ring"
+          className="h-9 rounded-md border bg-card px-2 text-ui-body outline-none"
         >
           <option value="all">全部状态</option>
           <option value="struggling">薄弱</option>
@@ -336,7 +336,7 @@ export function MasteryView() {
         <select
           value={type}
           onChange={(e) => setType(e.target.value)}
-          className="h-9 rounded-md border bg-card px-2 text-ui-body outline-none focus-visible:border-ring"
+          className="h-9 rounded-md border bg-card px-2 text-ui-body outline-none"
         >
           <option value="all">全部类型</option>
           {types.map((t) => (
