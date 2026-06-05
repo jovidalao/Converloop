@@ -96,7 +96,9 @@ RULES
 - Keep it to a natural chat length. You may use light Markdown (bold, italics,
   bullet lists) when it genuinely aids clarity — e.g. highlighting a key word or
   listing a few options — but stay conversational: no headings, no code blocks
-  unless the topic calls for it.${adjustmentsBlock}
+  unless the topic calls for it.
+- Write your reply as flowing paragraphs, not one sentence per line. Only start a
+  new paragraph when the topic genuinely shifts.${adjustmentsBlock}
 
 === LEARNER EXPERIENCE PREFERENCES ===
 ${ctx.experiencePreferences || "(none)"}
