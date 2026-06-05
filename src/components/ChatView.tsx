@@ -116,8 +116,8 @@ interface ChatViewProps {
 
 const MODEL_PROVIDERS = Object.keys(PROVIDER_PRESETS) as ProviderType[];
 const CURRENT_MODEL_VALUE = "current";
-const INPUT_TEXTAREA_MIN_HEIGHT = 52;
-const INPUT_TEXTAREA_MAX_HEIGHT = 96;
+const INPUT_TEXTAREA_MIN_HEIGHT = 56;
+const INPUT_TEXTAREA_MAX_HEIGHT = 104;
 
 interface ModelBrand {
   name: string;
@@ -1709,6 +1709,8 @@ export function ChatView({
     config.providerType,
     config.model,
   );
+  const currentModelButtonLabel =
+    currentModelOption?.label || modelShortName(config.model);
   const selectedModelValue =
     usingPresetEndpoint && currentModelOption
       ? modelSelectValue(config.providerType, currentModelOption.model)
@@ -1838,7 +1840,7 @@ export function ChatView({
           )}
         </div>
       )}
-      <div className="shrink-0 px-4 pb-4 pt-1.5">
+      <div className="shrink-0 px-3 pb-3 pt-1.5">
         <div className="relative">
           {slashOpen && (
             <SlashMenu
@@ -1856,7 +1858,7 @@ export function ChatView({
               onActivate={activateMention}
             />
           )}
-          <div className="overflow-hidden rounded-xl border bg-card shadow-minimal transition-colors">
+          <div className="overflow-hidden rounded-[var(--radius-panel)] border bg-card shadow-minimal transition-colors">
             <form
               className="flex flex-col"
               onSubmit={(e) => {
@@ -1949,7 +1951,7 @@ export function ChatView({
                     : "用目标语言输入一句话…（/ 命令 · @ 引用学习点）"
                 }
                 disabled={replyBusy}
-                className="max-h-24 min-h-[3.25rem] min-w-0 resize-none border-none bg-transparent px-4 pt-3 pb-1.5 text-ui-chat outline-none placeholder:text-muted-foreground"
+                className="max-h-[6.5rem] min-h-14 min-w-0 resize-none border-none bg-transparent px-4 pt-3 pb-2 text-ui-chat outline-none placeholder:text-muted-foreground"
               />
               <div className="flex min-h-11 items-center gap-2 px-2 py-1.5">
                 <div
@@ -1975,13 +1977,13 @@ export function ChatView({
                   disabled={replyBusy}
                 >
                   <SelectTrigger
-                    className="h-7 w-auto max-w-[13rem] min-w-0 gap-1.5 border-0 bg-transparent px-1.5 text-ui-caption text-foreground shadow-none hover:bg-accent focus-visible:ring-1 sm:max-w-[16rem]"
+                    className="h-7 w-[8.75rem] max-w-[42vw] min-w-0 gap-1 border-0 bg-transparent px-1.5 text-ui-caption text-foreground shadow-none hover:bg-accent focus-visible:ring-1 sm:w-[10.75rem] [&>svg]:size-3.5"
                     aria-label="选择模型"
                     title={currentProviderModelLabel}
                   >
                     <ModelLogo model={config.model} />
                     <span className="min-w-0 truncate">
-                      {currentProviderModelLabel}
+                      {currentModelButtonLabel}
                     </span>
                   </SelectTrigger>
                   <SelectContent align="start" className="min-w-72">
