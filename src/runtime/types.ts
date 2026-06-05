@@ -8,7 +8,7 @@ import type {
   BranchKind,
   NewConversationContext,
 } from "../db/conversations";
-import type { ReviewItem } from "../db/mastery";
+import type { ComfortableItem, ReviewItem } from "../db/mastery";
 import type { ProficiencySnapshot } from "../lib/proficiency";
 import type { CorrectionPreferenceFlags } from "../profile/preferences";
 import type { ModelProvider } from "../providers/types";
@@ -106,6 +106,7 @@ export interface PracticeContext extends BaseContext {
   tutorHistory: string;
   weakList: WeakItem[];
   keyHints: MasteryKeyHint[];
+  comfortableItems: ComfortableItem[];
   reviewItems: ReviewItem[];
   proficiency: ProficiencySnapshot;
   /** 会话级调节(分支带来的难度/角色/第二天等);普通会话为空对象。 */

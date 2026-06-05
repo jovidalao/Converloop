@@ -35,6 +35,7 @@ import { createLearningProject } from "./db/learning-projects";
 import {
   createManualMasteryItem,
   getAllMastery,
+  getComfortableList,
   getMasteryKeyHints,
   getReviewDueList,
   getWeakList,
@@ -331,12 +332,13 @@ export async function runTurn(
   };
 
   // 共享上下文(两个 agent 都读),先查好再喂。彼此独立,并行取以免叠加延迟、拖慢首 token。
-  // 历史按当前会话隔离(话题不串);weakList / reviewItems / proficiency 走全局掌握表。
+  // 历史按当前会话隔离(话题不串);weakList / comfortableItems / reviewItems / proficiency 走全局掌握表。
   // 自动压缩:对话上下文 = 滚动摘要(较早内容)+ 水位之后的全部原文。摘要为 NULL 时退化为纯原文。
   const [
     summaryData,
     weakListRaw,
     profileMd,
+    comfortableItemsRaw,
     reviewItemsRaw,
     proficiency,
     keyHints,
@@ -344,6 +346,7 @@ export async function runTurn(
     getSummary(conversationId),
     getWeakList(),
     readProfile(config),
+    getComfortableList(),
     getReviewDueList(),
     getProficiencySnapshot(),
     getMasteryKeyHints(),
@@ -362,6 +365,11 @@ export async function runTurn(
   );
   const reviewItems = rankMasteryItemsForInput(
     reviewItemsRaw,
+    userInput,
+    history,
+  );
+  const comfortableItems = rankMasteryItemsForInput(
+    comfortableItemsRaw,
     userInput,
     history,
   );
@@ -405,6 +413,7 @@ export async function runTurn(
     tutorHistory,
     weakList,
     keyHints,
+    comfortableItems,
     reviewItems,
     proficiency,
     agentModifiers,
@@ -438,6 +447,11 @@ export async function runTurn(
   if (!offRecord) {
     const nonHistoryTokens =
       estimateTokens(profileSlice) +
+      estimateTokens(
+        comfortableItems
+          .map((r) => `${r.label} ${r.example ?? ""} ${r.notes ?? ""}`)
+          .join("\n"),
+      ) +
       estimateTokens(
         reviewItems
           .map((r) => `${r.label} ${r.example ?? ""} ${r.notes ?? ""}`)
@@ -487,6 +501,7 @@ export async function startDerivedConversation(
     summaryData,
     weakListRaw,
     profileMd,
+    comfortableItemsRaw,
     reviewItemsRaw,
     proficiency,
     conv,
@@ -495,6 +510,7 @@ export async function startDerivedConversation(
     getSummary(conversationId),
     getWeakList(),
     readProfile(config),
+    getComfortableList(),
     getReviewDueList(),
     getProficiencySnapshot(),
     getConversation(conversationId),
@@ -512,6 +528,11 @@ export async function startDerivedConversation(
   );
   const reviewItems = rankMasteryItemsForInput(
     reviewItemsRaw,
+    openingInstruction,
+    history,
+  );
+  const comfortableItems = rankMasteryItemsForInput(
+    comfortableItemsRaw,
     openingInstruction,
     history,
   );
@@ -543,6 +564,7 @@ export async function startDerivedConversation(
     tutorHistory: "",
     weakList,
     keyHints,
+    comfortableItems,
     reviewItems,
     proficiency,
     agentModifiers: parseAgentModifiers(conv?.agentModifiersJson ?? null),
@@ -557,6 +579,11 @@ export async function startDerivedConversation(
 
   const nonHistoryTokens =
     estimateTokens(profileSlice) +
+    estimateTokens(
+      comfortableItems
+        .map((r) => `${r.label} ${r.example ?? ""} ${r.notes ?? ""}`)
+        .join("\n"),
+    ) +
     estimateTokens(
       reviewItems
         .map((r) => `${r.label} ${r.example ?? ""} ${r.notes ?? ""}`)
@@ -664,14 +691,21 @@ export async function regenerateReply(
 
   const config = loadConfig();
   // 上下文构成与 runTurn 的对话侧一致:摘要 + 水位后原文,叠加 profile / 复习 / 校准 / 会话调节。
-  const [summaryData, profileMd, reviewItemsRaw, proficiency, conv] =
-    await Promise.all([
-      getSummary(conversationId),
-      readProfile(config),
-      getReviewDueList(),
-      getProficiencySnapshot(),
-      getConversation(conversationId),
-    ]);
+  const [
+    summaryData,
+    profileMd,
+    comfortableItemsRaw,
+    reviewItemsRaw,
+    proficiency,
+    conv,
+  ] = await Promise.all([
+    getSummary(conversationId),
+    readProfile(config),
+    getComfortableList(),
+    getReviewDueList(),
+    getProficiencySnapshot(),
+    getConversation(conversationId),
+  ]);
   const verbatimTurns = await getTurnsAfterId(
     conversationId,
     summaryData.throughId,
@@ -683,6 +717,11 @@ export async function regenerateReply(
   const history = formatTurns(verbatimTurns.slice(0, idx));
   const reviewItems = rankMasteryItemsForInput(
     reviewItemsRaw,
+    target.userInput,
+    history,
+  );
+  const comfortableItems = rankMasteryItemsForInput(
+    comfortableItemsRaw,
     target.userInput,
     history,
   );
@@ -699,6 +738,7 @@ export async function regenerateReply(
       level: config.level,
       experiencePreferences,
       profileSlice: profileSliceForConversation(profileMd),
+      comfortableItems,
       reviewItems,
       calibrationHint: proficiency.calibrationHint,
       sessionAdjustments: formatModifierInstructions(

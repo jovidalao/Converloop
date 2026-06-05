@@ -17,11 +17,12 @@ system prompt,可以用母语讲解,也可以用目标语言出练习。
 专项课只读代码明确拼好的数据上下文,不直接查库:
 
 - `profile`:学习者档案切片
+- `comfortable`:已掌握脚手架,可放心复用和迁移的表达 / 语法 / 搭配
 - `weak_all`:当前薄弱项
 - `weak_grammar`:语法 / 错误模式 / 搭配薄弱项
 - `expression_gaps`:表达缺口
 - `today_turns`:今日或最近练习内容
-- `due_review`:久未重温的复习项
+- `due_review`:retention 已衰减、最该重温的复习项
 - `proficiency`:近期难度校准读数
 
 具体每个 Agent 能读哪些 scope 由 `learning_agent.data_scope_json` 决定。

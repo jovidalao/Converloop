@@ -168,7 +168,7 @@ migration 定义在 **Rust 侧**(`src-tauri/src/lib.rs`,`tauri_plugin_sql::Build
   name: string
   description: string
   prompt: string
-  data_scope_json: string // profile / weak_all / weak_grammar / expression_gaps / today_turns / due_review / proficiency
+  data_scope_json: string // profile / comfortable / weak_all / weak_grammar / expression_gaps / today_turns / due_review / proficiency
   kind: 'lesson' | 'observer' | 'action'
   hook?: 'conversation.observe' | 'conversation.action'
   enabled: number
@@ -319,7 +319,11 @@ provider 解析全在 TS;**LLM HTTP 走 Rust**(`src-tauri/src/llm.rs` 的 `llm_r
 
 ## 复习去哪了
 
-砍掉抽认卡 SRS。复习靠对话 agent 在聊天里**被动复用**薄弱项/最近学到项(interleaving),比抽认卡更自然,且不需要排程 UI。复习候选不再只靠维护 agent 写进 prose:代码每轮用 `getReviewDueList`(非 known、最久未重温优先)定向选出一小撮喂给对话 agent(`DUE FOR REVIEW` 段),对话 agent 自然带出一两个——代码选取、LLM 复用。
+砍掉抽认卡 SRS。复习靠对话 agent 在聊天里**被动复用**薄弱项/最近学到项(interleaving),比抽认卡更自然,且不需要排程 UI。复习候选不再只靠维护 agent 写进 prose:代码每轮用 `getReviewDueList` 定向选出一小撮喂给对话 agent(`DUE FOR REVIEW` 段),对话 agent 自然带出一两个——代码选取、LLM 复用。
+
+`getReviewDueList` 不是纯 `last_seen_at` 排序:它从 `seen_count / error_count / status / last_seen_at` 派生 retention,近似 `retention = exp(-elapsed_days / strength)`。`correct` 证据越多 strength 越高,`error/gap` 越多 strength 越低;最终用 `dueScore = (1 - retention) * statusNeed + errorRate` 排序。这样 `due_review` 表达的是"保持率已经掉下来了,该复习",而不只是"很久没见"。
+
+`known` 项不会进入弱项表,但会通过 `getComfortableList` 作为结构化"已掌握脚手架"喂给对话 agent / 专项课数据上下文。它的用途是告诉 agent 哪些表达可以放心复用、迁移和作为解释支架,不要每轮只围着错误转。
 
 显式复习现在由**专项课**承接:侧边栏顶部的定制化学习入口内置「今日复盘」「语法专项复习」「表达缺口训练」,它们新开学习会话,使用老师型 prompt 和有界数据上下文。旧设计里的独立 `review_day` 缓存页暂不做;先把复习产品形态收敛到专项课。
 
@@ -331,7 +335,7 @@ v1 核心链路已完成并可用:
 - ✅ 导师链路(结构化 `TutorAnalysis` + 代码记账)· 对话链路(流式)· orchestrator 端到端
 - ✅ MD 档案读写 + 维护 agent(含 sanity check、每 10 轮/空闲/切换会话触发)· `## About me` 个人记忆
 - ✅ 多会话侧边栏 · Markdown 回复 · 按需讲解 · 朗读(TTS)· 母语/混说表达缺口(见 expression-gap)
-- ✅ 理解信号(每条回复的讲解/双语请求数)· 代码定向选取的复习候选(`getReviewDueList`)· 证据驱动的难度校准(`lib/proficiency`,喂对话 agent)
+- ✅ 理解信号(每条回复的讲解/双语请求数)· retention 驱动的复习候选(`getReviewDueList`)· 已掌握脚手架(`getComfortableList`)· 证据驱动的难度校准(`lib/proficiency`,喂对话 agent)
 - ✅ `mastery_event` 事件日志:每条 error/correct/introduced/gap 都保留结构化证据,`introduced` 不再推动掌握毕业
 - ✅ 定制化学习 Agent / 专项课:内置今日复盘、语法专项复习、表达缺口训练;支持自然语言创建和 prompt 微调;专项课会话独立于普通批改热路径;课堂回答可由用户确认后回写 `correct` 复习信号
 - ✅ Task Agent / 学习项目:把开放式学习需求规划成 `learning_project`,并生成有界专项课草案;`agent_job` 记录作业状态

@@ -4,6 +4,7 @@ import { type LearningAgent, learningAgent } from "./schema";
 
 export const LEARNING_DATA_SCOPE_VALUES = [
   "profile",
+  "comfortable",
   "weak_all",
   "weak_grammar",
   "expression_gaps",
@@ -67,6 +68,7 @@ export interface LearningAgentMeta extends LearningAgent {
 
 export const DATA_SCOPE_LABELS: Record<LearningDataScope, string> = {
   profile: "学习者档案: 兴趣、偏好、最近在练什么",
+  comfortable: "已掌握脚手架: 可放心复用和迁移的表达、语法、搭配",
   weak_all: "薄弱项: 仍未掌握的词汇、语法、搭配、错误模式",
   weak_grammar: "语法/错误模式: 最近错过或仍薄弱的语法点",
   expression_gaps: "表达缺口: 用母语/混说时暴露出的“想说但说不出”",
@@ -112,6 +114,7 @@ const BUILT_INS: BuiltInAgent[] = [
     description: "先给一份今日练习报告,再带你复习最该补的几个点。",
     dataScopes: [
       "profile",
+      "comfortable",
       "today_turns",
       "weak_all",
       "due_review",
@@ -133,6 +136,7 @@ AFTER the report, transition into practice: take the first of the Top 3 points, 
         description: "总结今天练过的内容,抓出最值得马上复习的 3 个点。",
         dataScopes: [
           "profile",
+          "comfortable",
           "today_turns",
           "weak_all",
           "due_review",
@@ -153,7 +157,13 @@ Keep the lesson focused. Do not turn this into a long report; make it actionable
     id: "builtin:grammar_review",
     name: "语法专项复习",
     description: "把最近几次的语法问题逐个讲清楚,再一个一个练到会。",
-    dataScopes: ["profile", "weak_grammar", "due_review", "proficiency"],
+    dataScopes: [
+      "profile",
+      "comfortable",
+      "weak_grammar",
+      "due_review",
+      "proficiency",
+    ],
     prompt: `On the FIRST message of the session, walk through the learner's RECENT grammar mistakes and recurring error patterns. Focus on what they got wrong most recently — the data is ordered newest-first — not old history. Cover EVERY recent grammar issue shown; only merge mistakes that are genuinely the same pattern. Write it as clear Markdown the learner can scan:
 
 1. **最近的语法问题** — a numbered list, one entry per recent grammar issue. For each: name the pattern, show how the learner wrote it (wrong) vs. the natural form, and a one-line explanation of the underlying rule in the learner's native language.
@@ -166,7 +176,13 @@ AFTER the report, drill the issues ONE AT A TIME (逐个击破): start with the 
       {
         name: "语法专项复习",
         description: "先给一份语法体检报告,再针对最该练的点做专项练习。",
-        dataScopes: ["profile", "weak_grammar", "due_review", "proficiency"],
+        dataScopes: [
+          "profile",
+          "comfortable",
+          "weak_grammar",
+          "due_review",
+          "proficiency",
+        ],
         prompt: `On the FIRST message of the session, open with a detailed grammar diagnostic report based on the learner's grammar and recurring error patterns. Group related mistakes instead of listing every item. Write it as clear Markdown:
 
 1. **语法体检** — 2-4 grammar patterns most worth reviewing now, ordered by impact. For each: name the pattern, show 1-2 examples of how the learner currently gets it wrong vs. the natural form, and a one-line explanation in the native language of the underlying rule.
@@ -179,7 +195,13 @@ AFTER the report, run a small drill on the top-priority pattern: ask for 2-3 sho
       {
         name: "语法专项复习",
         description: "按错误模式归纳最近错过的语法,给解释、例句和即时练习。",
-        dataScopes: ["profile", "weak_grammar", "due_review", "proficiency"],
+        dataScopes: [
+          "profile",
+          "comfortable",
+          "weak_grammar",
+          "due_review",
+          "proficiency",
+        ],
         prompt: `Focus on grammar and recurring error patterns. Group related mistakes instead of listing every item.
 
 Begin with a short diagnosis: what grammar pattern is most worth reviewing now and why. Explain it like a teacher, using the learner's native language where that saves time, then show natural target-language examples.
@@ -192,7 +214,13 @@ After the explanation, run a small drill: ask for 2-3 short target-language sent
     id: "builtin:expression_gap_review",
     name: "表达缺口训练",
     description: "把“想说但说不出”的母语/混说内容变成可复用句型。",
-    dataScopes: ["profile", "expression_gaps", "due_review", "proficiency"],
+    dataScopes: [
+      "profile",
+      "comfortable",
+      "expression_gaps",
+      "due_review",
+      "proficiency",
+    ],
     prompt: `Focus on expression gaps: things the learner wanted to say but fell back to their native language or mixed language.
 
 Pick one or two high-value situations. For each, teach the reusable target-language pattern, explain when to use it in the learner's native language, then ask the learner to produce a similar sentence.

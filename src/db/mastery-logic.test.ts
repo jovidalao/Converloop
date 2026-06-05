@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { TutorAnalysis } from "../agents/schema";
-import { applySignal, deriveSignals, normalizeKey } from "./mastery-logic";
+import {
+  applySignal,
+  deriveSignals,
+  dueReviewScore,
+  normalizeKey,
+  retentionScore,
+  retentionStrengthDays,
+} from "./mastery-logic";
 
 describe("normalizeKey", () => {
   it("大小写 / 空格漂移收敛到同一个 key", () => {
@@ -68,6 +75,57 @@ describe("applySignal", () => {
   it("gap 与 error 一样增 error_count", () => {
     expect(applySignal({ seenCount: 5, errorCount: 2 }, "gap").errorCount).toBe(
       3,
+    );
+  });
+});
+
+describe("retention", () => {
+  const day = 24 * 60 * 60 * 1000;
+
+  it("correct 证据越多,strength 越高", () => {
+    const weak = retentionStrengthDays({
+      seenCount: 3,
+      errorCount: 2,
+      status: "struggling",
+      lastSeenAt: 0,
+    });
+    const strong = retentionStrengthDays({
+      seenCount: 8,
+      errorCount: 1,
+      status: "known",
+      lastSeenAt: 0,
+    });
+    expect(strong).toBeGreaterThan(weak);
+  });
+
+  it("随时间衰减", () => {
+    const input = {
+      seenCount: 4,
+      errorCount: 1,
+      status: "learning" as const,
+      lastSeenAt: 1_000,
+    };
+    expect(retentionScore(input, 1_000 + day)).toBeGreaterThan(
+      retentionScore(input, 1_000 + 10 * day),
+    );
+  });
+
+  it("同样久未复习时,错误率高的项 due score 更高", () => {
+    const now = 1_000 + 7 * day;
+    const correctLeaning = {
+      seenCount: 6,
+      errorCount: 1,
+      status: "learning" as const,
+      lastSeenAt: 1_000,
+    };
+    const errorLeaning = {
+      seenCount: 6,
+      errorCount: 5,
+      status: "struggling" as const,
+      lastSeenAt: 1_000,
+    };
+    expect(dueReviewScore(errorLeaning, now)).toBeGreaterThan(
+      dueReviewScore(correctLeaning, now),
     );
   });
 });

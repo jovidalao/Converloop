@@ -6,7 +6,8 @@
 
 - 用**目标语言**自然地回应用户的**意图/内容**(不是纠错——纠错是导师 agent 的事)。
 - 按用户水平校准难度:略微拉伸,别压垮。
-- 在自然的地方**复用**代码选出的「复习候选」(久未重温的非 known 项),实现被动复习。
+- 在自然的地方**复用**代码选出的「复习候选」(retention 已衰减的非 known 项),实现被动复习。
+- 把已掌握项当作安全脚手架,用于解释、迁移和自然复用,避免每轮只围着错误转。
 
 ## 输出:纯文本,流式
 
@@ -26,18 +27,20 @@
    ## Recently introduced → 优先复用
    ## My notes          → 用户手写的记忆/指示,当作用户自己的 standing 指令尊重
    (`## AI preferences` 不在这里重复注入;代码会按模块拆成 experience_preferences)
-2. 复习候选清单(`DUE FOR REVIEW`):代码从 SQLite 选出的少量「学过/练过但最久没重温」
-   的非 known 项(`getReviewDueList`,最久未碰优先),让被动复习从「指望维护 agent 写进
-   prose」变成代码可控的定向选取。只给 label(+ 真实例句),不给计数。
-3. 难度校准提示(可选一行):代码从近期表现派生的水平读数(`lib/proficiency` +
+2. 已掌握脚手架(`COMFORTABLE WITH`):代码从 SQLite 选出的少量 `known` 项
+   (`getComfortableList`),让对话 agent 知道哪些表达/结构可以放心复用和迁移,但不要当新知识重讲。
+3. 复习候选清单(`DUE FOR REVIEW`):代码从 SQLite 选出的少量 retention 已衰减的
+   非 known 项(`getReviewDueList`:由 seen/error/status/last_seen_at 派生 due score),
+   让被动复习从「指望维护 agent 写进 prose」变成代码可控的定向选取。只给 label(+ 真实例句),不给计数。
+4. 难度校准提示(可选一行):代码从近期表现派生的水平读数(`lib/proficiency` +
    `db/proficiency`:产出长度/准确度、母语回退率、讲解/双语请求率),证据不足时省略。
    静态 `level` 是用户自填的基线,这行让难度随真实表现微调。
-4. 会话上下文(自动压缩,见下文「滚动摘要」):`STORY SO FAR` 摘要(较早内容)+
+5. 会话上下文(自动压缩,见下文「滚动摘要」):`STORY SO FAR` 摘要(较早内容)+
    水位之后的全部原文轮次
-5. 用户本轮输入
+6. 用户本轮输入
 ```
 
-对照:导师 agent 吃的是 SQLite 精确薄弱表(见 [tutor-agent](./tutor-agent.md))。**对话 agent 主读 MD**;复习候选是一份**代码已选好、只含 label 的小清单**——仍是「代码记账/选取,LLM 只产出」,不破坏分工。
+对照:导师 agent 吃的是 SQLite 精确薄弱表(见 [tutor-agent](./tutor-agent.md))。**对话 agent 主读 MD**;已掌握脚手架与复习候选都是**代码已选好、只含 label/例句 的小清单**——仍是「代码记账/选取,LLM 只产出」,不破坏分工。
 
 ## System Prompt
 
@@ -63,6 +66,9 @@ RULES
 - The profile also lists what they're working on, what they're comfortable with,
   what they avoid, their interests, and recently learned items — use them to gauge
   what is easy or hard for this person.
+- Below the profile is a short COMFORTABLE WITH list selected from confirmed
+  known items. Use these as safe scaffolds when explaining or stretching the
+  learner, and avoid reteaching them as if they were new.
 - Below the profile is a short DUE-FOR-REVIEW list the app selected: things the
   learner met before but hasn't practiced lately. Where it fits naturally, weave
   in ONE (at most two) so they meet it again — this is how review happens. Keep it
@@ -83,6 +89,9 @@ RULES
 
 === LEARNER PROFILE ===
 {md_profile_slice}
+
+=== COMFORTABLE WITH (safe scaffolds, do not reteach) ===
+{comfortable_items}
 
 === DUE FOR REVIEW (weave in at most one, only if it fits) ===
 {review_items}

@@ -1,4 +1,4 @@
-import type { ReviewItem } from "../db/mastery";
+import type { ComfortableItem, ReviewItem } from "../db/mastery";
 import type { ChatMessage, ModelProvider } from "../providers/types";
 
 export interface ConversationContext {
@@ -7,6 +7,7 @@ export interface ConversationContext {
   level: string;
   profileSlice: string; // MD 档案切片(Task 7 前用占位)
   experiencePreferences: string; // 用户在设置页显式配置的体验偏好
+  comfortableItems: ComfortableItem[]; // 已掌握项,可作为解释/对话脚手架
   reviewItems: ReviewItem[]; // 代码选的复习候选,自然复用(见 db/mastery getReviewDueList)
   calibrationHint: string; // 证据驱动的难度校准(见 lib/proficiency;证据不足时为空)
   sessionAdjustments: string; // 会话级调节指令(分支带来的难度/角色/第二天等;无则为空)
@@ -31,6 +32,21 @@ function formatReviewItems(items: ReviewItem[]): string {
       return example
         ? `- ${r.label} — e.g. "${oneLine(example, 140)}"`
         : `- ${r.label}`;
+    })
+    .join("\n");
+}
+
+function formatComfortableItems(items: ComfortableItem[]): string {
+  if (items.length === 0) return "(none yet)";
+  return items
+    .map((item) => {
+      const example =
+        item.type === "expression_gap" && item.notes
+          ? item.notes
+          : item.example;
+      return example
+        ? `- ${item.label} — e.g. "${oneLine(example, 120)}"`
+        : `- ${item.label}`;
     })
     .join("\n");
 }
@@ -64,6 +80,9 @@ RULES
 - The profile also lists what they're working on, what they're comfortable with,
   what they avoid, their interests, and recently learned items — use them to gauge
   what is easy or hard for this person.
+- Below the profile is a short COMFORTABLE WITH list selected from confirmed
+  known items. Use these as safe scaffolds when explaining or stretching the
+  learner, and avoid reteaching them as if they were new.
 - Below the profile is a short DUE-FOR-REVIEW list the app selected: things the
   learner met before but hasn't practiced lately. Where it fits naturally, weave
   in ONE (at most two) so they meet it again — this is how review happens. Keep it
@@ -84,6 +103,9 @@ ${ctx.experiencePreferences || "(none)"}
 
 === LEARNER PROFILE ===
 ${ctx.profileSlice || "(no profile yet)"}
+
+=== COMFORTABLE WITH (safe scaffolds, do not reteach) ===
+${formatComfortableItems(ctx.comfortableItems)}
 
 === DUE FOR REVIEW (weave in at most one, only if it fits) ===
 ${formatReviewItems(ctx.reviewItems)}`;

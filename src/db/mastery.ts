@@ -5,9 +5,11 @@ import { db } from "./client";
 import {
   applySignal,
   deriveSignals,
+  dueReviewScore,
   type MasteryStatus,
   type MasteryType,
   normalizeKey,
+  retentionScore,
   type Signal,
   statusFromCounts,
 } from "./mastery-logic";
@@ -395,22 +397,83 @@ export interface ReviewItem {
   key: string;
   label: string;
   type: string;
+  status: string;
   example: string | null;
   notes: string | null;
+  retention: number;
+  dueScore: number;
 }
 
 export async function getReviewDueList(limit = 5): Promise<ReviewItem[]> {
-  return db
+  const now = Date.now();
+  const rows = await db
     .select({
       key: masteryItem.key,
       label: masteryItem.label,
       type: masteryItem.type,
+      status: masteryItem.status,
+      seenCount: masteryItem.seenCount,
+      errorCount: masteryItem.errorCount,
+      lastSeenAt: masteryItem.lastSeenAt,
       example: masteryItem.example,
       notes: masteryItem.notes,
     })
     .from(masteryItem)
     .where(ne(masteryItem.status, "known"))
-    .orderBy(asc(masteryItem.lastSeenAt)) // 最久没碰的优先
+    .orderBy(asc(masteryItem.lastSeenAt));
+
+  return rows
+    .map((row) => {
+      const retentionInput = {
+        seenCount: row.seenCount,
+        errorCount: row.errorCount,
+        status: row.status,
+        lastSeenAt: row.lastSeenAt,
+      };
+      return {
+        key: row.key,
+        label: row.label,
+        type: row.type,
+        status: row.status,
+        example: row.example,
+        notes: row.notes,
+        retention: retentionScore(retentionInput, now),
+        dueScore: dueReviewScore(retentionInput, now),
+      };
+    })
+    .sort(
+      (a, b) =>
+        b.dueScore - a.dueScore ||
+        a.retention - b.retention ||
+        (a.label > b.label ? 1 : -1),
+    )
+    .slice(0, limit);
+}
+
+export interface ComfortableItem {
+  key: string;
+  label: string;
+  type: string;
+  status: string;
+  example: string | null;
+  notes: string | null;
+}
+
+export async function getComfortableList(
+  limit = 8,
+): Promise<ComfortableItem[]> {
+  return db
+    .select({
+      key: masteryItem.key,
+      label: masteryItem.label,
+      type: masteryItem.type,
+      status: masteryItem.status,
+      example: masteryItem.example,
+      notes: masteryItem.notes,
+    })
+    .from(masteryItem)
+    .where(eq(masteryItem.status, "known"))
+    .orderBy(desc(masteryItem.seenCount), desc(masteryItem.lastSeenAt))
     .limit(limit);
 }
 

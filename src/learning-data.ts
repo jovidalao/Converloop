@@ -4,9 +4,14 @@ import type {
   LearningAgentMeta,
   LearningDataScope,
 } from "./db/learning-agents";
-import { getAllMastery, getReviewDueList, getWeakList } from "./db/mastery";
+import {
+  getAllMastery,
+  getComfortableList,
+  getReviewDueList,
+  getWeakList,
+} from "./db/mastery";
 import { getProficiencySnapshot } from "./db/proficiency";
-import type { MasteryItem, Turn } from "./db/schema";
+import type { Turn } from "./db/schema";
 import { getRecentTurns, getTurnsSince, parseTurnFeedback } from "./db/turns";
 import { profileSliceForConversation, readProfile } from "./profile/profile";
 
@@ -15,7 +20,17 @@ function oneLine(text: string, max = 220): string {
   return clean.length > max ? `${clean.slice(0, max)}...` : clean;
 }
 
-function formatMasteryItems(items: MasteryItem[], limit = 12): string {
+function formatMasteryItems(
+  items: {
+    key: string;
+    label: string;
+    type: string;
+    status: string;
+    example?: string | null;
+    notes?: string | null;
+  }[],
+  limit = 12,
+): string {
   if (items.length === 0) return "(none)";
   return items
     .slice(0, limit)
@@ -109,6 +124,7 @@ export async function buildLearningDataContext(
 
   const [
     profileMd,
+    comfortableItems,
     weakList,
     allMastery,
     dueReview,
@@ -117,6 +133,9 @@ export async function buildLearningDataContext(
     proficiency,
   ] = await Promise.all([
     hasScope(scopes, "profile") ? readProfile(config) : Promise.resolve(""),
+    hasScope(scopes, "comfortable")
+      ? getComfortableList(12)
+      : Promise.resolve([]),
     hasScope(scopes, "weak_all") ? getWeakList(15) : Promise.resolve([]),
     hasScope(scopes, "weak_grammar") || hasScope(scopes, "expression_gaps")
       ? getAllMastery()
@@ -139,6 +158,14 @@ export async function buildLearningDataContext(
 
   if (hasScope(scopes, "proficiency") && proficiency.calibrationHint) {
     sections.push(`## Difficulty Calibration\n${proficiency.calibrationHint}`);
+  }
+
+  if (hasScope(scopes, "comfortable")) {
+    sections.push(
+      `## Comfortable With / Safe Scaffolds\n${formatMasteryItems(
+        comfortableItems,
+      )}`,
+    );
   }
 
   if (hasScope(scopes, "weak_all")) {
