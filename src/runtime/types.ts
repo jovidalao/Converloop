@@ -13,22 +13,16 @@ import type { ProficiencySnapshot } from "../lib/proficiency";
 import type { CorrectionPreferenceFlags } from "../profile/preferences";
 import type { ModelProvider } from "../providers/types";
 
-// 运行阶段 hook。当前只接线实际使用的 hook;其余先登记为常量,
-// 不接线(YAGNI),仅标记未来的挂载点。
+// 运行阶段 hook。只登记实际接线、会写进 agent_job 运行日志的 hook(YAGNI:
+// 需要新挂载点时再加,不预留未接线常量)。
 export const HOOKS = {
   conversationReply: "conversation.reply",
   conversationObserve: "conversation.observe",
-  // 以下尚未接线:
-  conversationBeforeUserInput: "conversation.before_user_input",
-  conversationAfterReply: "conversation.after_reply",
   conversationAction: "conversation.action",
-  conversationIdle: "conversation.idle",
-  conversationEnd: "conversation.end",
   turnExplain: "turn.explain",
   turnBilingual: "turn.bilingual",
   turnTranslate: "turn.translate",
   turnReplySuggestion: "turn.reply_suggestion",
-  profileMaintain: "profile.maintain",
 } as const;
 
 export type HookName = (typeof HOOKS)[keyof typeof HOOKS];

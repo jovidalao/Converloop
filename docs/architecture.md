@@ -342,16 +342,10 @@ v1 核心链路已完成并可用:
 - ✅ 学习数据页自然语言修改:LLM 只生成有限操作,代码执行 create/update/delete/merge/状态修改,不让 LLM 直接碰计数
 - ✅ 最小 UI:聊天 / 批改面板 / 档案查看编辑(含 AI 自定义偏好) / 学习数据管理 / 设置(provider + key + TTS)
 - ✅ 教练面板:右栏常驻 Coach Panel,展示本轮反馈 + 本轮「系统记下了什么」(`deriveSignals` 同源);三栏工作台布局(侧栏 / 对话 / 教练),窄屏降级为抽屉。后续界面打磨见 [craft-ui-plan.md](./craft-ui-plan.md)
-- ✅ 会话动作 + 分支:`conversation.action` action Agent(从此处分支 / 重新开始 / 升降难度 / 调换角色 / 第二天继续)非破坏式派生分支(`createBranch`,`conversation` 加 parent/branch_kind/agent_modifiers 列,migration v23–v26),修饰符经 `SESSION ADJUSTMENTS` 注入对话回复;动作条与按钮由注册表驱动。
+- ✅ 会话动作 + 分支:`conversation.action` action Agent(重新开始 / 升降难度 / 调换角色 / 第二天继续)非破坏式派生分支(`conversation` 加 parent/branch_kind/agent_modifiers 列,migration v23–v26),修饰符经 `SESSION ADJUSTMENTS` 注入对话回复;动作条与按钮由注册表驱动。
 - ✅ Agent 能力库:能力库页(侧栏 → 能力库)按 kind 展示注册表里的内置 Agent(做什么/时机/读写)、启用/禁用(`runtime/enablement.ts`,localStorage)、运行日志(`agent_job`)。按需讲解 / 双语阅读 / 划词解析也作为不可关闭的 `transformer` 能力展示并记录运行日志。能力库真相源是内存注册表,未把代码 Agent 同步进 DB。
 - ✅ 自定义 Agent(Agent-first Phase 5):能力库提供 6 问式 prompt Agent 创建(observer/action)。observer 每轮产出 `turn_annotation` 并可提出 `memory_proposal`;Coach Panel 展示自定义观察和待确认记忆,确认后由代码执行有限数据操作。action 通过 LLM 生成分支指令并创建非破坏式分支;内置「变成专项课」动作可从当前会话生成专项课并跳转。
 - ✅ 开发者 package(Agent-first Phase 6):能力库支持导入/导出 runtime observer/action 的 `lang-agent.agent-package` JSON,包含 agent 元数据、`prompt.md`、`schema.json`、`examples.json`,导入前展示读取/写入权限预览并校验白名单。
-
-**下一步(未实现):**
-
-- 按 [craft-ui-plan.md](./craft-ui-plan.md) 重做界面设计体系:✅ Phase 1 Craft 式设计令牌(6 色系统,`primary`=品牌紫 / `accent`=中性面 / `info` / `success` / `destructive` + `foreground-N` 混合层级 + shadow / z-index)、✅ Phase 2 `EntityRow`/`EntitySection` + 丝滑 Sidebar(统一行原语、折叠动画)、✅ Phase 3 `TurnCard` + 活动适配器(`lib/turn-activity.ts`,与 `deriveSignals` 同源)+ 思考指示 + 渐变滚动遮罩、✅ Phase 4 输入台控制台(`@` 学习上下文菜单 `lib/mentions.ts` + active-option badges + `/`·`@` 菜单统一)、✅ Phase 5 选区浮岛(`AnnotationIsland`:解析 / 朗读 / 加入生词)、✅ Phase 6 Coach Inspector tab 化(反馈 / 记忆 / 观察 / 待确认)、✅ Phase 7 微交互 / 快捷键(全局动作元数据、`Cmd+1/2/3` 聚焦、快捷键弹窗、processing elapsed)。
-- Anthropic 显式 `cache_control` 缓存断点。
-- ⏳ 人工验证:用真实句子盯 Tutor 的 `mastery_key` 跨句**稳定性**(prompt 改动记得 docs 与 `src/agents/*.ts` 两处同步)。
 
 ## 踩坑记录
 

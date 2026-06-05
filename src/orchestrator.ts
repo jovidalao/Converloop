@@ -19,7 +19,7 @@ import {
 } from "./agents/selection-learning-item";
 import { planLearningProject } from "./agents/task-agent";
 import { translate } from "./agents/translate";
-import { getProvider, loadConfig } from "./config";
+import { type AppConfig, getProvider, loadConfig } from "./config";
 import { applyDataEditInstruction, type DataEditResult } from "./data-edit";
 import { runTrackedAgentJob } from "./db/agent-jobs";
 import {
@@ -105,6 +105,70 @@ function tailTurnsByChars<T extends { userInput: string; reply: string }>(
     start = i;
   }
   return turns.slice(start);
+}
+
+// runTurn 与 startDerivedConversation 共享的每轮数据拉取:摘要 + 全局掌握表 + 档案,
+// 一次并行取好(彼此独立,避免叠加延迟)。各自的 rankMasteryItemsForInput(query /
+// context 因热路径 vs 衍生开场而不同)留在调用方。
+async function loadTurnContextData(conversationId: string, config: AppConfig) {
+  const [
+    summaryData,
+    weakListRaw,
+    profileMd,
+    comfortableItemsRaw,
+    reviewItemsRaw,
+    proficiency,
+    keyHints,
+  ] = await Promise.all([
+    getSummary(conversationId),
+    getWeakList(),
+    readProfile(config),
+    getComfortableList(),
+    getReviewDueList(),
+    getProficiencySnapshot(),
+    getMasteryKeyHints(),
+  ]);
+  const verbatimTurns = await getTurnsAfterId(
+    conversationId,
+    summaryData.throughId,
+  );
+  return {
+    summaryData,
+    weakListRaw,
+    profileMd,
+    comfortableItemsRaw,
+    reviewItemsRaw,
+    proficiency,
+    keyHints,
+    verbatimTurns,
+  };
+}
+
+// 自动压缩水位用的「非历史动态块」token 估算:profile 切片 + 已掌握脚手架 + 复习候选。
+function estimateNonHistoryTokens(
+  profileSlice: string,
+  comfortableItems: {
+    label: string;
+    example?: string | null;
+    notes?: string | null;
+  }[],
+  reviewItems: {
+    label: string;
+    example?: string | null;
+    notes?: string | null;
+  }[],
+): number {
+  const listText = (
+    items: { label: string; example?: string | null; notes?: string | null }[],
+  ) =>
+    items
+      .map((r) => `${r.label} ${r.example ?? ""} ${r.notes ?? ""}`)
+      .join("\n");
+  return (
+    estimateTokens(profileSlice) +
+    estimateTokens(listText(comfortableItems)) +
+    estimateTokens(listText(reviewItems))
+  );
 }
 
 export async function createCustomLearningAgentFromDescription(
@@ -334,7 +398,7 @@ export async function runTurn(
   // 共享上下文(两个 agent 都读),先查好再喂。彼此独立,并行取以免叠加延迟、拖慢首 token。
   // 历史按当前会话隔离(话题不串);weakList / comfortableItems / reviewItems / proficiency 走全局掌握表。
   // 自动压缩:对话上下文 = 滚动摘要(较早内容)+ 水位之后的全部原文。摘要为 NULL 时退化为纯原文。
-  const [
+  const {
     summaryData,
     weakListRaw,
     profileMd,
@@ -342,19 +406,8 @@ export async function runTurn(
     reviewItemsRaw,
     proficiency,
     keyHints,
-  ] = await Promise.all([
-    getSummary(conversationId),
-    getWeakList(),
-    readProfile(config),
-    getComfortableList(),
-    getReviewDueList(),
-    getProficiencySnapshot(),
-    getMasteryKeyHints(),
-  ]);
-  const verbatimTurns = await getTurnsAfterId(
-    conversationId,
-    summaryData.throughId,
-  );
+    verbatimTurns,
+  } = await loadTurnContextData(conversationId, config);
   const history = formatTurns(verbatimTurns);
   // 导师拿直近几轮即可,别把水位后的全部原文喂进结构化分析(省 token、缩短输入)。
   const tutorHistory = formatTurns(verbatimTurns.slice(-TUTOR_HISTORY_TURNS));
@@ -445,19 +498,10 @@ export async function runTurn(
   // 非历史动态块 = profile + 复习列表,叠加到固定 reserve 上,让水位贴合本轮实际负载。
   // 离档轮不进上下文,自然不增加压缩压力,跳过。
   if (!offRecord) {
-    const nonHistoryTokens =
-      estimateTokens(profileSlice) +
-      estimateTokens(
-        comfortableItems
-          .map((r) => `${r.label} ${r.example ?? ""} ${r.notes ?? ""}`)
-          .join("\n"),
-      ) +
-      estimateTokens(
-        reviewItems
-          .map((r) => `${r.label} ${r.example ?? ""} ${r.notes ?? ""}`)
-          .join("\n"),
-      );
-    void maybeCompressConversation(conversationId, nonHistoryTokens);
+    void maybeCompressConversation(
+      conversationId,
+      estimateNonHistoryTokens(profileSlice, comfortableItems, reviewItems),
+    );
   }
 
   return { reply, analysis: null };
@@ -498,28 +542,21 @@ export async function startDerivedConversation(
   };
 
   const [
-    summaryData,
-    weakListRaw,
-    profileMd,
-    comfortableItemsRaw,
-    reviewItemsRaw,
-    proficiency,
+    {
+      summaryData,
+      weakListRaw,
+      profileMd,
+      comfortableItemsRaw,
+      reviewItemsRaw,
+      proficiency,
+      keyHints,
+      verbatimTurns,
+    },
     conv,
-    keyHints,
   ] = await Promise.all([
-    getSummary(conversationId),
-    getWeakList(),
-    readProfile(config),
-    getComfortableList(),
-    getReviewDueList(),
-    getProficiencySnapshot(),
+    loadTurnContextData(conversationId, config),
     getConversation(conversationId),
-    getMasteryKeyHints(),
   ]);
-  const verbatimTurns = await getTurnsAfterId(
-    conversationId,
-    summaryData.throughId,
-  );
   const history = formatTurns(verbatimTurns);
   const weakList = rankMasteryItemsForInput(
     weakListRaw,
@@ -577,19 +614,10 @@ export async function startDerivedConversation(
   cb.onReplyComplete?.(reply);
   cb.onAnalysis(null);
 
-  const nonHistoryTokens =
-    estimateTokens(profileSlice) +
-    estimateTokens(
-      comfortableItems
-        .map((r) => `${r.label} ${r.example ?? ""} ${r.notes ?? ""}`)
-        .join("\n"),
-    ) +
-    estimateTokens(
-      reviewItems
-        .map((r) => `${r.label} ${r.example ?? ""} ${r.notes ?? ""}`)
-        .join("\n"),
-    );
-  void maybeCompressConversation(conversationId, nonHistoryTokens);
+  void maybeCompressConversation(
+    conversationId,
+    estimateNonHistoryTokens(profileSlice, comfortableItems, reviewItems),
+  );
   return { reply, analysis: null };
 }
 

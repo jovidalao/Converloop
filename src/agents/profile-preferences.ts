@@ -1,11 +1,11 @@
 import { z } from "zod";
-import { zodToJsonSchema } from "zod-to-json-schema";
 import {
   type ClassifiedPreference,
   PREFERENCE_SCOPE_LABEL,
   type ProfilePreferences,
 } from "../profile/preferences";
 import type { ChatMessage, ModelProvider } from "../providers/types";
+import { toJsonSchema } from "./json-schema";
 import {
   formatZodError,
   normalizeTutorPayload,
@@ -20,15 +20,6 @@ const PreferenceItem = z.object({
 const PreferenceClassification = z.object({
   items: z.array(PreferenceItem).min(1),
 });
-
-function classificationJsonSchema() {
-  const schema = zodToJsonSchema(PreferenceClassification, {
-    target: "jsonSchema7",
-    $refStrategy: "none",
-  }) as Record<string, unknown>;
-  delete schema.$schema;
-  return { name: "ProfilePreferenceClassification", schema };
-}
 
 function formatCurrentPreferences(prefs: ProfilePreferences): string {
   return (
@@ -88,7 +79,10 @@ export async function classifyProfilePreferenceInstruction(
   instruction: string,
   prefs: ProfilePreferences,
 ): Promise<ClassifiedPreference[]> {
-  const schema = classificationJsonSchema();
+  const schema = toJsonSchema(
+    "ProfilePreferenceClassification",
+    PreferenceClassification,
+  );
   const messages: ChatMessage[] = [
     { role: "system", content: systemPrompt() },
     { role: "user", content: userPrompt(instruction, prefs) },

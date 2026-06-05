@@ -1,30 +1,11 @@
 import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
-import type { DataEditOperation } from "../agents/data-editor";
+import { DataEditOperation } from "../agents/data-editor";
 import { applyDataEditOperations } from "../data-edit";
 import { db } from "./client";
 import { type MemoryProposal, memoryProposal } from "./schema";
 
-const DataEditOperationSchema = z.object({
-  action: z.enum(["update", "delete", "create", "merge"]),
-  key: z.string().min(1),
-  target_key: z.string().optional(),
-  label: z.string().optional(),
-  type: z
-    .enum([
-      "vocab",
-      "grammar",
-      "collocation",
-      "error_pattern",
-      "expression_gap",
-    ])
-    .optional(),
-  status: z.enum(["struggling", "learning", "known"]).optional(),
-  example: z.string().nullable().optional(),
-  notes: z.string().nullable().optional(),
-});
-
-const OperationListSchema = z.array(DataEditOperationSchema);
+const OperationListSchema = z.array(DataEditOperation);
 
 function parseOperations(json: string): DataEditOperation[] {
   const raw = JSON.parse(json) as unknown;

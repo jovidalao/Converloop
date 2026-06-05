@@ -1,11 +1,11 @@
 import { z } from "zod";
-import { zodToJsonSchema } from "zod-to-json-schema";
 import {
   DATA_SCOPE_LABELS,
   LEARNING_DATA_SCOPE_VALUES,
   type LearningAgentDraft,
 } from "../db/learning-agents";
 import type { ChatMessage, ModelProvider } from "../providers/types";
+import { toJsonSchema } from "./json-schema";
 import { formatZodError, parseLLMJson } from "./parse-llm-json";
 
 const GeneratedLearningAgent = z.object({
@@ -14,15 +14,6 @@ const GeneratedLearningAgent = z.object({
   prompt: z.string().min(80),
   data_scopes: z.array(z.enum(LEARNING_DATA_SCOPE_VALUES)).min(1),
 });
-
-function jsonSchema(): { name: string; schema: Record<string, unknown> } {
-  const schema = zodToJsonSchema(GeneratedLearningAgent, {
-    target: "jsonSchema7",
-    $refStrategy: "none",
-  }) as Record<string, unknown>;
-  delete schema.$schema;
-  return { name: "GeneratedLearningAgent", schema };
-}
 
 function scopeList(): string {
   return LEARNING_DATA_SCOPE_VALUES.map(
@@ -67,12 +58,11 @@ export async function generateLearningAgentDraft(
       content: `Create a learning agent from this natural-language request:\n${description}`,
     },
   ];
-  const schema = jsonSchema();
   const raw = await provider.generate({
     messages,
     temperature: 0.2,
     maxTokens: 2048,
-    jsonSchema: schema,
+    jsonSchema: toJsonSchema("GeneratedLearningAgent", GeneratedLearningAgent),
     meta: { label: "learning_agent_builder" },
   });
   const parsed = parseLLMJson(raw);

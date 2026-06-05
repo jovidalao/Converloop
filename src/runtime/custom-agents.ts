@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { zodToJsonSchema } from "zod-to-json-schema";
-import type { DataEditOperation as DataEditOperationType } from "../agents/data-editor";
+import { DataEditOperation } from "../agents/data-editor";
+import { toJsonSchema } from "../agents/json-schema";
 import { parseLLMJson } from "../agents/parse-llm-json";
 import { getProvider, loadConfig } from "../config";
 import {
@@ -16,6 +16,7 @@ import { createTurnAnnotation } from "../db/turn-annotations";
 import { formatTurns, getTurnsAfterId } from "../db/turns";
 import { buildLearningDataContext } from "../learning-data";
 import type { ChatMessage } from "../providers/types";
+import { generateDerivedConversation } from "./derive-conversation";
 import { replaceCustomRuntimeAgents } from "./registry";
 import type {
   ActionAgent,
@@ -24,54 +25,12 @@ import type {
   PracticeContext,
 } from "./types";
 
-const DataEditOperation = z.object({
-  action: z.enum(["update", "delete", "create", "merge"]),
-  key: z.string().min(1),
-  target_key: z.string().optional(),
-  label: z.string().optional(),
-  type: z
-    .enum([
-      "vocab",
-      "grammar",
-      "collocation",
-      "error_pattern",
-      "expression_gap",
-    ])
-    .optional(),
-  status: z.enum(["struggling", "learning", "known"]).optional(),
-  example: z.string().nullable().optional(),
-  notes: z.string().nullable().optional(),
-});
-
 const CustomObserverOutput = z.object({
   title: z.string().min(1),
   body_md: z.string().min(1),
   proposal_summary: z.string().optional(),
   memory_proposals: z.array(DataEditOperation).optional().default([]),
 });
-
-const CustomActionOutput = z.object({
-  title: z.string().min(1).max(60),
-  scenario: z.string().min(1),
-  user_role: z.string().min(1),
-  ai_role: z.string().min(1),
-  difficulty: z.string().min(1),
-  continuity_summary: z.string().default(""),
-  opening_instruction: z.string().min(1),
-  constraints: z.array(z.string()).default([]),
-});
-
-function jsonSchema(
-  name: string,
-  schema: z.ZodTypeAny,
-): { name: string; schema: Record<string, unknown> } {
-  const raw = zodToJsonSchema(schema, {
-    target: "jsonSchema7",
-    $refStrategy: "none",
-  }) as Record<string, unknown>;
-  delete raw.$schema;
-  return { name, schema: raw };
-}
 
 function parseStructured<T>(
   raw: string,
@@ -151,7 +110,7 @@ ${ctx.userInput}`,
     messages,
     temperature: 0.2,
     maxTokens: 2048,
-    jsonSchema: jsonSchema("CustomObserverOutput", CustomObserverOutput),
+    jsonSchema: toJsonSchema("CustomObserverOutput", CustomObserverOutput),
     meta: { label: agent.id },
   });
   const output = parseStructured(raw, CustomObserverOutput, agent.name);
@@ -162,7 +121,7 @@ ${ctx.userInput}`,
     bodyMd: output.body_md,
     payload: output,
   });
-  const proposals = (output.memory_proposals ?? []) as DataEditOperationType[];
+  const proposals = (output.memory_proposals ?? []) as DataEditOperation[];
   if (
     agent.writebackPolicy === "propose_review_signals" &&
     proposals.length > 0
@@ -174,28 +133,6 @@ ${ctx.userInput}`,
       operations: proposals,
     });
   }
-}
-
-function toNewConversationContext(raw: {
-  title: string;
-  scenario: string;
-  user_role: string;
-  ai_role: string;
-  difficulty: string;
-  opening_instruction: string;
-  continuity_summary?: string;
-  constraints?: string[];
-}): NewConversationContext {
-  return {
-    title: raw.title,
-    scenario: raw.scenario,
-    userRole: raw.user_role,
-    aiRole: raw.ai_role,
-    difficulty: raw.difficulty,
-    continuitySummary: raw.continuity_summary ?? "",
-    openingInstruction: raw.opening_instruction,
-    constraints: raw.constraints ?? [],
-  };
 }
 
 async function runCustomAction(
@@ -249,15 +186,11 @@ ${formatTurns(turns) || "(empty conversation)"}`,
     },
   ];
 
-  const raw = await provider.generate({
-    messages,
+  return generateDerivedConversation(provider, messages, {
     temperature: 0.2,
     maxTokens: 1024,
-    jsonSchema: jsonSchema("CustomActionOutput", CustomActionOutput),
-    meta: { label: agent.id },
+    label: agent.id,
   });
-  const output = parseStructured(raw, CustomActionOutput, agent.name);
-  return toNewConversationContext(output);
 }
 
 function observerFromAgent(agent: LearningAgentMeta): Observer {

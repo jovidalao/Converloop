@@ -1,11 +1,11 @@
 import { z } from "zod";
-import { zodToJsonSchema } from "zod-to-json-schema";
 import {
   DATA_SCOPE_LABELS,
   LEARNING_DATA_SCOPE_VALUES,
   type LearningAgentDraft,
 } from "../db/learning-agents";
 import type { ChatMessage, ModelProvider } from "../providers/types";
+import { toJsonSchema } from "./json-schema";
 import { formatZodError, parseLLMJson } from "./parse-llm-json";
 
 const SuggestedLesson = z.object({
@@ -40,12 +40,7 @@ export function learningProjectJsonSchema(): {
   name: string;
   schema: Record<string, unknown>;
 } {
-  const schema = zodToJsonSchema(GeneratedLearningProject, {
-    target: "jsonSchema7",
-    $refStrategy: "none",
-  }) as Record<string, unknown>;
-  delete schema.$schema;
-  return { name: "GeneratedLearningProject", schema };
+  return toJsonSchema("GeneratedLearningProject", GeneratedLearningProject);
 }
 
 function scopeList(): string {

@@ -2,12 +2,9 @@
 // 并在本模块求值时自注册。行为与迁移前的 orchestrator 一致,只是「谁调用它」换成了 Runtime。
 // 从 ./index 的副作用 import 触发注册。
 
-import { z } from "zod";
-import { zodToJsonSchema } from "zod-to-json-schema";
 import { converse } from "../agents/conversation";
 import { runLearningAgent } from "../agents/learning";
 import { generateLearningAgentDraft } from "../agents/learning-agent-builder";
-import { parseLLMJson } from "../agents/parse-llm-json";
 import { analyze } from "../agents/tutor";
 import { getProvider, loadConfig } from "../config";
 import {
@@ -24,6 +21,7 @@ import { formatTurns, getTurnsAfterId, updateTurnAnalysis } from "../db/turns";
 import { logError } from "../lib/log";
 import { maybeRunMaintainer } from "../profile/maintainer-runner";
 import { getBuiltinActionOverride } from "./builtin-overrides";
+import { generateDerivedConversation } from "./derive-conversation";
 import {
   registerAction,
   registerObserver,
@@ -39,53 +37,6 @@ import type {
   ReplyProducer,
   TransformerInfo,
 } from "./types";
-
-const NewConversationContextSchema = z.object({
-  title: z.string().min(1).max(60),
-  scenario: z.string().min(1),
-  user_role: z.string().min(1),
-  ai_role: z.string().min(1),
-  difficulty: z.string().min(1),
-  continuity_summary: z.string().default(""),
-  opening_instruction: z.string().min(1),
-  constraints: z.array(z.string()).default([]),
-});
-
-function derivationJsonSchema(): {
-  name: string;
-  schema: Record<string, unknown>;
-} {
-  const raw = zodToJsonSchema(NewConversationContextSchema, {
-    target: "jsonSchema7",
-    $refStrategy: "none",
-  }) as Record<string, unknown>;
-  delete raw.$schema;
-  return { name: "NewConversationContext", schema: raw };
-}
-
-function parseDerivationOutput(raw: string): NewConversationContext {
-  const parsed = parseLLMJson(raw);
-  if (!parsed.ok) throw new Error(parsed.error);
-  const validated = NewConversationContextSchema.safeParse(parsed.value);
-  if (!validated.success) {
-    throw new Error(
-      `对话衍生上下文校验失败: ${validated.error.issues
-        .map((issue) => `${issue.path.join(".") || "root"}: ${issue.message}`)
-        .join("; ")}`,
-    );
-  }
-  const data = validated.data;
-  return {
-    title: data.title,
-    scenario: data.scenario,
-    userRole: data.user_role,
-    aiRole: data.ai_role,
-    difficulty: data.difficulty,
-    continuitySummary: data.continuity_summary,
-    openingInstruction: data.opening_instruction,
-    constraints: data.constraints,
-  };
-}
 
 async function deriveConversationContext(
   ctx: DerivationContext,
@@ -146,14 +97,11 @@ ${selectedBlock}
 ${formatTurns(turns) || "(empty conversation)"}`,
     },
   ];
-  const raw = await provider.generate({
-    messages,
+  return generateDerivedConversation(provider, messages, {
     temperature: 0.3,
     maxTokens: 1400,
-    jsonSchema: derivationJsonSchema(),
-    meta: { label: `conversation_derivation:${action.label}` },
+    label: `conversation_derivation:${action.label}`,
   });
-  return parseDerivationOutput(raw);
 }
 
 // 普通对话主回复。读 MD 切片 + 复习候选 + 校准,流式秒回。
@@ -383,15 +331,6 @@ function makeDerivationAction(spec: DerivationSpec): ActionAgent {
 }
 
 const derivationSpecs: DerivationSpec[] = [
-  {
-    id: "builtin:action:branch_from",
-    scope: "turn",
-    label: "从此处分支",
-    description: "基于这条之前的上下文,另开一个新对话继续探索。",
-    kind: "branch_from",
-    objective:
-      "Create a fresh continuation based on the selected source turn. Preserve the useful setup before that point, but start the new conversation cleanly without copying visible history.",
-  },
   {
     id: "builtin:action:restart",
     scope: "session",

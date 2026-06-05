@@ -1,7 +1,7 @@
 import { z } from "zod";
-import { zodToJsonSchema } from "zod-to-json-schema";
 import type { MasteryStatus, MasteryType } from "../db/mastery-logic";
 import type { ChatMessage, ModelProvider } from "../providers/types";
+import { toJsonSchema } from "./json-schema";
 import { formatZodError, parseLLMJson } from "./parse-llm-json";
 
 const SelectionLearningItem = z.object({
@@ -18,15 +18,6 @@ export interface SelectionLearningItemDraft {
   status: MasteryStatus;
   example: string;
   notes: string | null;
-}
-
-function jsonSchema(): { name: string; schema: Record<string, unknown> } {
-  const schema = zodToJsonSchema(SelectionLearningItem, {
-    target: "jsonSchema7",
-    $refStrategy: "none",
-  }) as Record<string, unknown>;
-  delete schema.$schema;
-  return { name: "SelectionLearningItem", schema };
 }
 
 function textKey(text: string): string {
@@ -110,7 +101,7 @@ ${input.selection}`,
     messages,
     temperature: 0,
     maxTokens: 800,
-    jsonSchema: jsonSchema(),
+    jsonSchema: toJsonSchema("SelectionLearningItem", SelectionLearningItem),
     meta: { label: "selection_learning_item" },
   });
   const parsed = parseLLMJson(raw);

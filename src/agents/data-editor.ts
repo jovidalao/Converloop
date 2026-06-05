@@ -1,10 +1,12 @@
 import { z } from "zod";
-import { zodToJsonSchema } from "zod-to-json-schema";
 import type { MasteryItem } from "../db/schema";
 import type { ChatMessage, ModelProvider } from "../providers/types";
+import { toJsonSchema } from "./json-schema";
 import { formatZodError, parseLLMJson } from "./parse-llm-json";
 
-const DataEditOperation = z.object({
+// 学习数据「有限操作」的唯一 schema 真相源:data-edit / memory-proposal / 自定义
+// observer 都从这里 import,新增掌握类型只改这一处(再同步 db/schema.ts 的 enum)。
+export const DataEditOperation = z.object({
   action: z.enum(["update", "delete", "create", "merge"]),
   key: z.string().min(1),
   target_key: z.string().optional(),
@@ -30,15 +32,6 @@ const DataEditPlan = z.object({
 
 export type DataEditPlan = z.infer<typeof DataEditPlan>;
 export type DataEditOperation = z.infer<typeof DataEditOperation>;
-
-function jsonSchema(): { name: string; schema: Record<string, unknown> } {
-  const schema = zodToJsonSchema(DataEditPlan, {
-    target: "jsonSchema7",
-    $refStrategy: "none",
-  }) as Record<string, unknown>;
-  delete schema.$schema;
-  return { name: "DataEditPlan", schema };
-}
 
 function oneLine(text: string | null, max = 140): string {
   const clean = (text ?? "").replace(/\s+/g, " ").trim();
@@ -100,7 +93,7 @@ ${instruction}`,
     messages,
     temperature: 0,
     maxTokens: 4096,
-    jsonSchema: jsonSchema(),
+    jsonSchema: toJsonSchema("DataEditPlan", DataEditPlan),
     meta: { label: "data_editor" },
   });
   const parsed = parseLLMJson(raw);

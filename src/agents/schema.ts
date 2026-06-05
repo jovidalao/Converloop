@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { zodToJsonSchema } from "zod-to-json-schema";
+import { toJsonSchema } from "./json-schema";
 
 // 见 docs/tutor-agent.md#输出-schemazod。LLM 只观察,代码记账;这里只校验观察结果。
 export const IssueCategory = z.enum([
@@ -82,10 +82,5 @@ export function tutorJsonSchema(): {
   name: string;
   schema: Record<string, unknown>;
 } {
-  const schema = zodToJsonSchema(TutorAnalysis, {
-    target: "jsonSchema7",
-    $refStrategy: "none",
-  }) as Record<string, unknown>;
-  delete schema.$schema;
-  return { name: "TutorAnalysis", schema };
+  return toJsonSchema("TutorAnalysis", TutorAnalysis);
 }

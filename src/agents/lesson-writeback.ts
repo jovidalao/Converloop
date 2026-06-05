@@ -1,8 +1,8 @@
 import { z } from "zod";
-import { zodToJsonSchema } from "zod-to-json-schema";
 import type { MasteryType } from "../db/mastery-logic";
 import type { MasteryItem } from "../db/schema";
 import type { ChatMessage, ModelProvider } from "../providers/types";
+import { toJsonSchema } from "./json-schema";
 import { formatZodError, parseLLMJson } from "./parse-llm-json";
 
 const LessonWritebackSignal = z.object({
@@ -24,15 +24,6 @@ export interface LessonWritebackCandidate {
   status: string;
   example?: string | null;
   notes?: string | null;
-}
-
-function jsonSchema(): { name: string; schema: Record<string, unknown> } {
-  const schema = zodToJsonSchema(LessonWritebackResult, {
-    target: "jsonSchema7",
-    $refStrategy: "none",
-  }) as Record<string, unknown>;
-  delete schema.$schema;
-  return { name: "LessonWritebackResult", schema };
 }
 
 function oneLine(text: string | null | undefined, max = 160): string {
@@ -135,7 +126,7 @@ ${input.partnerReply || "(none yet)"}`,
     messages,
     temperature: 0,
     maxTokens: 1200,
-    jsonSchema: jsonSchema(),
+    jsonSchema: toJsonSchema("LessonWritebackResult", LessonWritebackResult),
     meta: { label: "lesson_writeback" },
   });
   const parsed = parseLLMJson(raw);
