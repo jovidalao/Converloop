@@ -109,7 +109,7 @@
 
   /* === panel / layout constants (craft panel shell, used from Phase 2) === */
   --radius-panel: 12px;
-  --panel-gap: 6px;
+  --panel-gap: 4px;
   --panel-inset: 6px;
 
   /* === z-index scale === */
@@ -289,14 +289,14 @@
       transparent;
   }
   ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
+    width: 4px;
+    height: 4px;
   }
   ::-webkit-scrollbar-track {
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    border: 2px solid transparent;
+    border: 1px solid transparent;
     border-radius: 999px;
     background: color-mix(in srgb, var(--foreground) 12%, transparent);
     background-clip: padding-box;
@@ -562,7 +562,7 @@
   height: 100%;
   min-height: 0;
   flex-direction: column;
-  padding: 10px 8px 8px;
+  padding: 4px 4px 8px;
   transition:
     opacity 0.18s ease,
     transform 0.22s cubic-bezier(0.2, 0, 0, 1);
@@ -855,7 +855,7 @@
 /* 聊天滚动区上下渐变遮罩:内容在边缘淡出,不硬切(craft 风格)。遮罩相对视口固定,
    随内容滚动产生稳定的渐隐边。fade 高度可调。 */
 .chat-scroll-mask {
-  --chat-fade: 20px;
+  --chat-fade: 12px;
   -webkit-mask-image: linear-gradient(
     to bottom,
     transparent 0,
