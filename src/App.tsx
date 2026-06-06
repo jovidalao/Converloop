@@ -1,9 +1,9 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
-  BrainIcon,
   ChevronDownIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
+  GraduationCapIcon,
   PanelLeftIcon,
   PanelRightIcon,
   SearchIcon,
@@ -747,7 +747,7 @@ function App() {
                       coachVisible ? t("app.hideCoach") : t("app.showCoach")
                     }
                   >
-                    <BrainIcon />
+                    <GraduationCapIcon />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent side="bottom" align="end">

@@ -1,9 +1,9 @@
 import {
   ArrowRightIcon,
-  BrainIcon,
   CheckIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
+  GraduationCapIcon,
   LanguagesIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -929,7 +929,7 @@ export function CoachPanel({
     <div className="codex-coach-content group flex h-full min-h-0 flex-col">
       <div className="flex shrink-0 flex-col gap-3 border-b px-4 py-3">
         <div className="flex items-center gap-2">
-          <BrainIcon size={16} className="shrink-0 text-foreground" />
+          <GraduationCapIcon size={16} className="shrink-0 text-foreground" />
           <div className="min-w-0 flex-1">
             <div className="truncate text-ui-title font-semibold text-foreground">
               {t("coach.title")}

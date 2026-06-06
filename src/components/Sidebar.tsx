@@ -4,7 +4,6 @@ import {
   BookOpenCheckIcon,
   BotIcon,
   ChevronRightIcon,
-  GraduationCapIcon,
   ListChecksIcon,
   PencilIcon,
   PencilRulerIcon,
@@ -262,7 +261,6 @@ export function Sidebar({
     <EntityRow
       key={agent.id}
       className="codex-sidebar-child-row"
-      icon={<BookOpenCheckIcon className="size-3.5 shrink-0" />}
       title={agent.name}
       tooltip={agent.description}
       onSelect={() => onStartLearningAgent(agent.id)}
@@ -339,7 +337,7 @@ export function Sidebar({
 
             <nav className="codex-sidebar-scroll">
               <EntitySection
-                icon={<GraduationCapIcon className="size-4 shrink-0" />}
+                icon={<BookOpenCheckIcon className="size-4 shrink-0" />}
                 label={t("sidebar.customLearning")}
                 collapsed={learningCollapsed}
                 onToggle={() => setLearningCollapsed((v) => !v)}
