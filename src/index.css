@@ -100,7 +100,7 @@
   /* === app shell surfaces (desktop chrome / panels) === */
   --app-shell: color-mix(in oklab, var(--background) 96%, var(--brand) 4%);
   --app-topbar: var(--app-shell);
-  --app-sidebar: var(--sidebar);
+  --app-sidebar: var(--app-shell);
   --app-main: var(--card);
   --app-main-material: color-mix(in srgb, var(--app-main) 96%, transparent);
 
@@ -202,7 +202,7 @@
   --sidebar-ring: var(--ring);
   --app-shell: color-mix(in oklab, var(--background) 92%, var(--brand) 8%);
   --app-topbar: var(--app-shell);
-  --app-sidebar: var(--sidebar);
+  --app-sidebar: var(--app-shell);
   --app-main: var(--card);
   --app-main-material: color-mix(in srgb, var(--app-main) 92%, transparent);
 
@@ -248,7 +248,7 @@
   --panel-inset: 8px;
   --app-shell: oklch(0.953 0.009 96);
   --app-topbar: var(--app-shell);
-  --app-sidebar: var(--sidebar);
+  --app-sidebar: var(--app-shell);
   --app-main: color-mix(in oklab, var(--card) 92%, white 8%);
   --app-main-material: color-mix(in srgb, var(--app-main) 97%, transparent);
   --shadow-border-opacity: 0.1;
@@ -283,7 +283,7 @@
   --sidebar-ring: oklch(0.7731 0 0);
   --app-shell: oklch(0.215 0.003 86);
   --app-topbar: var(--app-shell);
-  --app-sidebar: var(--sidebar);
+  --app-sidebar: var(--app-shell);
   --app-main: var(--card);
   --app-main-material: color-mix(in srgb, var(--app-main) 94%, transparent);
 }
@@ -316,7 +316,7 @@
   --sidebar-border: oklch(0.875 0.004 286);
   --app-shell: oklch(0.945 0.004 286);
   --app-topbar: var(--app-shell);
-  --app-sidebar: var(--sidebar);
+  --app-sidebar: var(--app-shell);
   --app-main: var(--card);
   --app-main-material: color-mix(in srgb, var(--app-main) 88%, transparent);
 }
@@ -340,7 +340,7 @@
   --sidebar-border: oklch(0.29 0.007 286);
   --app-shell: oklch(0.105 0.004 286);
   --app-topbar: var(--app-shell);
-  --app-sidebar: var(--sidebar);
+  --app-sidebar: var(--app-shell);
   --app-main: var(--card);
   --app-main-material: color-mix(in srgb, var(--app-main) 82%, transparent);
 }
@@ -364,7 +364,7 @@
   --sidebar-border: oklch(0.872 0.006 286);
   --app-shell: oklch(0.943 0.006 286);
   --app-topbar: var(--app-shell);
-  --app-sidebar: var(--sidebar);
+  --app-sidebar: var(--app-shell);
   --app-main: var(--card);
   --app-main-material: color-mix(in srgb, var(--app-main) 88%, transparent);
 }
@@ -388,7 +388,7 @@
   --sidebar-border: oklch(0.29 0.011 286);
   --app-shell: oklch(0.105 0.006 286);
   --app-topbar: var(--app-shell);
-  --app-sidebar: var(--sidebar);
+  --app-sidebar: var(--app-shell);
   --app-main: var(--card);
   --app-main-material: color-mix(in srgb, var(--app-main) 82%, transparent);
 }
@@ -844,13 +844,17 @@
 
 :root[data-glass="on"] .codex-shell {
   background: transparent;
+  /* One blur region spanning the whole chrome: the topbar and sidebar are
+     adjacent grid items, so blurring each separately leaves a seam at their
+     shared edge (each backdrop-filter can't sample across its own box). Blur
+     the shell once instead; topbar/sidebar just go transparent over it. */
+  backdrop-filter: saturate(160%) blur(22px);
+  -webkit-backdrop-filter: saturate(160%) blur(22px);
 }
 
 :root[data-glass="on"] .codex-topbar,
 :root[data-glass="on"] .codex-sidebar {
   background: transparent;
-  backdrop-filter: saturate(160%) blur(22px);
-  -webkit-backdrop-filter: saturate(160%) blur(22px);
 }
 
 :root[data-glass="on"] .codex-main,
