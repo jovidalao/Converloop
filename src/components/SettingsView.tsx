@@ -4,6 +4,7 @@ import geminiLogo from "@lobehub/icons-static-svg/icons/gemini-color.svg?raw";
 import openAiLogo from "@lobehub/icons-static-svg/icons/openai.svg?raw";
 import { ChevronDownIcon, SparklesIcon, Volume2Icon } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
+import { type Locale, type MessageKey, useTranslation } from "@/i18n";
 import { cn } from "@/lib/utils";
 import {
   type AppConfig,
@@ -55,7 +56,7 @@ import {
 import { Switch } from "./ui/switch";
 import { Textarea } from "./ui/textarea";
 
-// 表单字段:标签 + 控件。row 里用 flex-1 让字段等宽分布。
+// A form field: label + control. Inside a row, flex-1 makes fields share width.
 function Field({
   label,
   children,
@@ -90,28 +91,44 @@ function ToggleField({
   );
 }
 
-const THEMES: { value: Theme; label: string }[] = [
-  { value: "light", label: "明亮" },
-  { value: "dark", label: "暗黑" },
-  { value: "system", label: "跟随系统" },
+const THEMES: { value: Theme; labelKey: MessageKey }[] = [
+  { value: "light", labelKey: "settings.themes.light" },
+  { value: "dark", labelKey: "settings.themes.dark" },
+  { value: "system", labelKey: "settings.themes.system" },
 ];
-// 主题色:swatch 用浅色模式下的 --brand 取值,仅作选择标识。
-const ACCENTS: { value: Accent; label: string; swatch: string }[] = [
-  { value: "gray", label: "灰色", swatch: "oklch(0.44 0.006 286)" },
-  { value: "blue", label: "蓝色", swatch: "oklch(0.5729 0.2337 264.3664)" },
-  { value: "purple", label: "紫色", swatch: "oklch(0.55 0.2 292)" },
+// Accent swatches use the light-mode --brand value, purely as a selection marker.
+const ACCENTS: { value: Accent; labelKey: MessageKey; swatch: string }[] = [
+  {
+    value: "gray",
+    labelKey: "settings.accents.gray",
+    swatch: "oklch(0.44 0.006 286)",
+  },
+  {
+    value: "blue",
+    labelKey: "settings.accents.blue",
+    swatch: "oklch(0.5729 0.2337 264.3664)",
+  },
+  {
+    value: "purple",
+    labelKey: "settings.accents.purple",
+    swatch: "oklch(0.55 0.2 292)",
+  },
   {
     value: "claude",
-    label: "Claude 橙",
+    labelKey: "settings.accents.claude",
     swatch: "oklch(0.6171 0.1375 39.0427)",
   },
+];
+const LOCALES: { value: Locale; labelKey: MessageKey }[] = [
+  { value: "en", labelKey: "settings.languages.en" },
+  { value: "zh", labelKey: "settings.languages.zh" },
 ];
 const CUSTOM_MODEL_VALUE = "__custom_model__";
 export type SettingsSection = "general" | "llm" | "tts";
 
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
-// 每个 provider 的品牌图标(本地 SVG 资产),配色沿用 ChatView 的 ModelLogo。
+// Each provider's brand icon (local SVG asset); colors follow ChatView's ModelLogo.
 const PROVIDER_BRAND: Record<ProviderType, { svg: string; className: string }> =
   {
     openai: { svg: openAiLogo, className: "text-foreground" },
@@ -137,7 +154,8 @@ function ProviderBrandIcon({ type }: { type: ProviderType }) {
   );
 }
 
-// 列表里的 provider 卡片:头部一眼看清「使用中 / 已配置」状态,展开后是该 provider 的配置表单。
+// A provider card in the list: the header shows "in use / configured" status at
+// a glance; expanding it reveals that provider's configuration form.
 function ProviderCard({
   icon,
   title,
@@ -159,6 +177,7 @@ function ProviderCard({
   onActivate: () => void;
   children: ReactNode;
 }) {
+  const { t } = useTranslation();
   return (
     <div
       className={cn(
@@ -178,7 +197,7 @@ function ProviderCard({
             <span className="truncate text-ui-body font-medium">{title}</span>
             {active && (
               <span className="shrink-0 rounded-full bg-primary px-2 py-0.5 text-ui-micro font-medium text-primary-foreground">
-                使用中
+                {t("settings.card.inUse")}
               </span>
             )}
           </span>
@@ -198,7 +217,9 @@ function ProviderCard({
               configured ? "bg-success" : "bg-foreground/25",
             )}
           />
-          {configured ? "已配置" : "未配置"}
+          {configured
+            ? t("settings.card.configured")
+            : t("settings.card.notConfigured")}
         </span>
         <ChevronDownIcon
           className={cn(
@@ -212,11 +233,11 @@ function ProviderCard({
         <div className="border-t border-border/70 bg-background/45 px-5 py-5">
           {active ? (
             <p className="mb-5 text-ui-caption text-ui-muted">
-              ✓ 这是当前正在使用的 provider。
+              {t("settings.card.current")}
             </p>
           ) : (
             <Button size="sm" className="mb-5" onClick={onActivate}>
-              设为当前 provider
+              {t("settings.card.setCurrent")}
             </Button>
           )}
           <div className="space-y-5">{children}</div>
@@ -228,21 +249,22 @@ function ProviderCard({
 
 function ThemeToggle() {
   const { theme, setTheme } = useTheme();
+  const { t } = useTranslation();
   return (
     <div className="inline-flex max-w-full flex-wrap rounded-lg border bg-card/70 p-1">
-      {THEMES.map((t) => (
+      {THEMES.map((opt) => (
         <button
-          key={t.value}
+          key={opt.value}
           type="button"
-          onClick={() => setTheme(t.value)}
+          onClick={() => setTheme(opt.value)}
           className={cn(
             "rounded-md px-3 py-1.5 text-ui-body transition-colors",
-            theme === t.value
+            theme === opt.value
               ? "bg-accent text-foreground"
               : "text-ui-muted hover:text-foreground",
           )}
         >
-          {t.label}
+          {t(opt.labelKey)}
         </button>
       ))}
     </div>
@@ -251,6 +273,7 @@ function ThemeToggle() {
 
 function AccentToggle() {
   const { accent, setAccent } = useTheme();
+  const { t } = useTranslation();
   return (
     <div className="inline-flex max-w-full flex-wrap rounded-lg border bg-card/70 p-1">
       {ACCENTS.map((a) => (
@@ -269,7 +292,30 @@ function AccentToggle() {
             className="size-3 rounded-full"
             style={{ background: a.swatch }}
           />
-          {a.label}
+          {t(a.labelKey)}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function LanguageToggle() {
+  const { locale, setLocale, t } = useTranslation();
+  return (
+    <div className="inline-flex max-w-full flex-wrap rounded-lg border bg-card/70 p-1">
+      {LOCALES.map((opt) => (
+        <button
+          key={opt.value}
+          type="button"
+          onClick={() => setLocale(opt.value)}
+          className={cn(
+            "rounded-md px-3 py-1.5 text-ui-body transition-colors",
+            locale === opt.value
+              ? "bg-accent text-foreground"
+              : "text-ui-muted hover:text-foreground",
+          )}
+        >
+          {t(opt.labelKey)}
         </button>
       ))}
     </div>
@@ -278,18 +324,21 @@ function AccentToggle() {
 
 function GlassToggle() {
   const { glassEnabled, setGlassEnabled } = useTheme();
+  const { t } = useTranslation();
   return (
     <ToggleField checked={glassEnabled} onChange={setGlassEnabled}>
-      开启 macOS 玻璃效果
+      {t("settings.general.glass")}
     </ToggleField>
   );
 }
 
 export function SettingsView({ section }: { section: SettingsSection }) {
+  const { t } = useTranslation();
   const [cfg, setCfg] = useState<AppConfig>(loadConfig);
   const [ttsCfg, setTtsCfg] = useState<TtsConfig>(loadTtsConfig());
 
-  // 一次性加载全部 provider 的配置状态(有无 key / 是否已登录),好让每张卡片直接显示。
+  // Load every provider's config status once (whether it has a key / is signed
+  // in) so each card can display it directly.
   const [keyStatus, setKeyStatus] = useState<
     Partial<Record<ProviderType, boolean>>
   >({});
@@ -298,7 +347,7 @@ export function SettingsView({ section }: { section: SettingsSection }) {
   >({});
   const [hasTtsKey, setHasTtsKey] = useState(false);
 
-  // 单开手风琴:默认展开当前 provider。
+  // Single-open accordion: expand the current provider by default.
   const [expandedLlm, setExpandedLlm] = useState<ProviderType | null>(
     () => loadConfig().providerType,
   );
@@ -309,7 +358,8 @@ export function SettingsView({ section }: { section: SettingsSection }) {
   const [keyInputs, setKeyInputs] = useState<
     Partial<Record<ProviderType, string>>
   >({});
-  // 用户在某 provider 上显式选了「自定义模型」(即使当前 model 还命中预设)。
+  // The user explicitly chose "custom model" for a provider (even if the current
+  // model still matches a preset).
   const [customModel, setCustomModel] = useState<
     Partial<Record<ProviderType, boolean>>
   >({});
@@ -331,13 +381,6 @@ export function SettingsView({ section }: { section: SettingsSection }) {
   const [ttsCacheCount, setTtsCacheCount] = useState<number | null>(null);
   const [clearingTtsCache, setClearingTtsCache] = useState(false);
 
-  const baseUrlLabels: Record<ProviderType, string> = {
-    openai: "Base URL (OpenAI 兼容)",
-    gemini: "Base URL (Gemini 原生 API)",
-    anthropic: "Base URL (Anthropic)",
-    "claude-oauth": "Base URL (Anthropic 官方)",
-    "codex-oauth": "Base URL (ChatGPT Codex 后端)",
-  };
   const keyPlaceholders: Record<ProviderType, string> = {
     openai: "sk-…",
     gemini: "AIza…",
@@ -378,85 +421,96 @@ export function SettingsView({ section }: { section: SettingsSection }) {
     saveConfig(next);
   }
 
-  // 改某个 provider 的连接配置(不影响其它 provider,也不一定是当前激活的那个)。
-  function updateProvider(t: ProviderType, patch: Partial<ProviderSettings>) {
+  // Change one provider's connection config (without affecting the others, and
+  // not necessarily the currently active one).
+  function updateProvider(
+    type: ProviderType,
+    patch: Partial<ProviderSettings>,
+  ) {
     const next: AppConfig = {
       ...cfg,
-      providers: { ...cfg.providers, [t]: { ...cfg.providers[t], ...patch } },
+      providers: {
+        ...cfg.providers,
+        [type]: { ...cfg.providers[type], ...patch },
+      },
     };
     setCfg(next);
     saveConfig(next);
   }
 
-  function selectModel(t: ProviderType, value: string) {
+  function selectModel(type: ProviderType, value: string) {
     if (value === CUSTOM_MODEL_VALUE) {
-      setCustomModel((prev) => ({ ...prev, [t]: true }));
+      setCustomModel((prev) => ({ ...prev, [type]: true }));
       return;
     }
-    setCustomModel((prev) => ({ ...prev, [t]: false }));
-    updateProvider(t, { model: value });
+    setCustomModel((prev) => ({ ...prev, [type]: false }));
+    updateProvider(type, { model: value });
   }
 
-  function resetToPreset(t: ProviderType) {
-    const p = PROVIDER_PRESETS[t];
-    setCustomModel((prev) => ({ ...prev, [t]: false }));
-    updateProvider(t, {
+  function resetToPreset(type: ProviderType) {
+    const p = PROVIDER_PRESETS[type];
+    setCustomModel((prev) => ({ ...prev, [type]: false }));
+    updateProvider(type, {
       baseUrl: p.baseUrl,
       model: p.model,
       contextTokens: undefined,
     });
   }
 
-  async function saveKey(t: ProviderType) {
-    const v = (keyInputs[t] ?? "").trim();
+  async function saveKey(type: ProviderType) {
+    const v = (keyInputs[type] ?? "").trim();
     if (!v) return;
-    await setSecret(apiKeyAccount(t), v);
-    setKeyInputs((prev) => ({ ...prev, [t]: "" }));
-    setKeyStatus((prev) => ({ ...prev, [t]: true }));
-    setLlmStatus({ type: t, text: "API key 已加密保存到本地。" });
+    await setSecret(apiKeyAccount(type), v);
+    setKeyInputs((prev) => ({ ...prev, [type]: "" }));
+    setKeyStatus((prev) => ({ ...prev, [type]: true }));
+    setLlmStatus({ type, text: t("settings.llm.keySaved") });
   }
 
-  async function clearKey(t: ProviderType) {
-    await deleteSecret(apiKeyAccount(t));
-    setKeyStatus((prev) => ({ ...prev, [t]: false }));
-    setLlmStatus({ type: t, text: "API key 已从本地清除。" });
+  async function clearKey(type: ProviderType) {
+    await deleteSecret(apiKeyAccount(type));
+    setKeyStatus((prev) => ({ ...prev, [type]: false }));
+    setLlmStatus({ type, text: t("settings.llm.keyCleared") });
   }
 
   function loginForProvider(type: ProviderType): Promise<OAuthTokens> {
     if (type === "claude-oauth") return loginAnthropic();
     if (type === "codex-oauth") return loginOpenAICodex();
-    throw new Error("该 provider 暂不支持订阅登录");
+    throw new Error(t("settings.llm.noSubscription"));
   }
 
-  async function handleOauthLogin(t: ProviderType) {
-    setLoggingIn(t);
+  async function handleOauthLogin(type: ProviderType) {
+    setLoggingIn(type);
     setLlmStatus(null);
     try {
-      const tokens = await loginForProvider(t);
-      await setTokens(oauthAccount(t), tokens);
-      setOauthTokens((prev) => ({ ...prev, [t]: tokens }));
-      setLlmStatus({ type: t, text: "✓ 登录成功,令牌已加密保存到本地。" });
+      const tokens = await loginForProvider(type);
+      await setTokens(oauthAccount(type), tokens);
+      setOauthTokens((prev) => ({ ...prev, [type]: tokens }));
+      setLlmStatus({ type, text: t("settings.llm.loginSuccess") });
     } catch (e) {
-      setLlmStatus({ type: t, text: `✗ 登录失败:${errText(e)}` });
+      setLlmStatus({
+        type,
+        text: t("settings.llm.loginFailed", { error: errText(e) }),
+      });
     } finally {
       setLoggingIn(null);
     }
   }
 
-  async function handleOauthLogout(t: ProviderType) {
-    await clearTokens(oauthAccount(t));
-    setOauthTokens((prev) => ({ ...prev, [t]: null }));
-    setLlmStatus({ type: t, text: "已退出登录,令牌已清除。" });
+  async function handleOauthLogout(type: ProviderType) {
+    await clearTokens(oauthAccount(type));
+    setOauthTokens((prev) => ({ ...prev, [type]: null }));
+    setLlmStatus({ type, text: t("settings.llm.loggedOut") });
   }
 
-  // 同一个 key 跑通 generate(非流式)和 stream(流式),针对这张卡片的 provider。
-  async function testConnection(t: ProviderType) {
-    setTestingLlm(t);
+  // Run both generate (non-streaming) and stream (streaming) with the same key,
+  // for this card's provider.
+  async function testConnection(type: ProviderType) {
+    setTestingLlm(type);
     setLlmStatus(null);
     try {
-      const provider = await getProviderFor(t);
+      const provider = await getProviderFor(type);
       if (!provider) {
-        setLlmStatus({ type: t, text: "还没有 API key / 未登录。" });
+        setLlmStatus({ type, text: t("settings.llm.testNoCredential") });
         return;
       }
       const gen = await provider.generate({
@@ -472,11 +526,17 @@ export function SettingsView({ section }: { section: SettingsSection }) {
         },
       );
       setLlmStatus({
-        type: t,
-        text: `✓ 连接正常 — 非流式: "${gen.trim().slice(0, 40)}" | 流式收到 ${streamed.length} 字符`,
+        type,
+        text: t("settings.llm.testOk", {
+          sample: gen.trim().slice(0, 40),
+          count: streamed.length,
+        }),
       });
     } catch (e) {
-      setLlmStatus({ type: t, text: `✗ 失败:${errText(e)}` });
+      setLlmStatus({
+        type,
+        text: t("settings.llm.testFailed", { error: errText(e) }),
+      });
     } finally {
       setTestingLlm(null);
     }
@@ -495,14 +555,14 @@ export function SettingsView({ section }: { section: SettingsSection }) {
     setHasTtsKey(true);
     setTtsStatus({
       provider: "mimo",
-      text: "MiMo TTS API key 已加密保存到本地。",
+      text: t("settings.tts.mimoKeySaved"),
     });
   }
 
   async function clearTtsKey() {
     await deleteSecret(MIMO_TTS_KEY_ACCOUNT);
     setHasTtsKey(false);
-    setTtsStatus({ provider: "mimo", text: "MiMo TTS API key 已从本地清除。" });
+    setTtsStatus({ provider: "mimo", text: t("settings.tts.mimoKeyCleared") });
   }
 
   async function testTts(provider: TtsProvider) {
@@ -520,7 +580,7 @@ export function SettingsView({ section }: { section: SettingsSection }) {
       } else {
         const apiKey = await getSecret(MIMO_TTS_KEY_ACCOUNT);
         if (!apiKey) {
-          setTtsStatus({ provider, text: "还没有 MiMo TTS API key。" });
+          setTtsStatus({ provider, text: t("settings.tts.noMimoKey") });
           return;
         }
         audio = await synthesizeMimo({
@@ -534,10 +594,13 @@ export function SettingsView({ section }: { section: SettingsSection }) {
       }
       setTtsStatus({
         provider,
-        text: `✓ TTS 正常 — 收到 ${audio.byteLength} 字节音频`,
+        text: t("settings.tts.ttsOk", { bytes: audio.byteLength }),
       });
     } catch (e) {
-      setTtsStatus({ provider, text: `✗ 失败:${errText(e)}` });
+      setTtsStatus({
+        provider,
+        text: t("settings.tts.testFailed", { error: errText(e) }),
+      });
     } finally {
       setTestingTts(null);
     }
@@ -549,78 +612,83 @@ export function SettingsView({ section }: { section: SettingsSection }) {
     try {
       const removed = await clearTtsCache();
       setTtsCacheCount(0);
-      setCacheStatus(`✓ 已清空朗读缓存(${removed} 条)`);
+      setCacheStatus(t("settings.tts.cacheCleared", { n: removed }));
     } catch (e) {
-      setCacheStatus(`✗ 清空缓存失败:${errText(e)}`);
+      setCacheStatus(t("settings.tts.cacheClearFailed", { error: errText(e) }));
     } finally {
       setClearingTtsCache(false);
     }
   }
 
-  function renderLlmCard(t: ProviderType) {
-    const entry = cfg.providers[t];
-    const preset = PROVIDER_PRESETS[t];
-    const oauth = isOAuthProvider(t);
-    const tokens = oauthTokens[t] ?? null;
-    const hasKey = !!keyStatus[t];
+  function renderLlmCard(type: ProviderType) {
+    const entry = cfg.providers[type];
+    const preset = PROVIDER_PRESETS[type];
+    const oauth = isOAuthProvider(type);
+    const tokens = oauthTokens[type] ?? null;
+    const hasKey = !!keyStatus[type];
     const configured = oauth ? !!tokens : hasKey;
-    const selectedModel = findProviderModelOption(t, entry.model);
-    const isCustom = (customModel[t] ?? false) || !selectedModel;
+    const selectedModel = findProviderModelOption(type, entry.model);
+    const isCustom = (customModel[type] ?? false) || !selectedModel;
     const modelValue =
       isCustom || !selectedModel ? CUSTOM_MODEL_VALUE : selectedModel.model;
     const statusText = oauth
       ? tokens
-        ? "已登录 · 订阅令牌"
-        : "未登录 · 需浏览器订阅登录"
+        ? t("settings.llm.statusSignedIn")
+        : t("settings.llm.statusSignedOut")
       : hasKey
-        ? "API key 已保存"
-        : "未设置 API key";
+        ? t("settings.llm.statusKeySaved")
+        : t("settings.llm.statusKeyUnset");
 
     return (
       <ProviderCard
-        key={t}
-        icon={<ProviderBrandIcon type={t} />}
+        key={type}
+        icon={<ProviderBrandIcon type={type} />}
         title={preset.label}
         statusText={statusText}
         configured={configured}
-        active={cfg.providerType === t}
-        expanded={expandedLlm === t}
-        onToggle={() => setExpandedLlm((prev) => (prev === t ? null : t))}
-        onActivate={() => update("providerType", t)}
+        active={cfg.providerType === type}
+        expanded={expandedLlm === type}
+        onToggle={() => setExpandedLlm((prev) => (prev === type ? null : type))}
+        onActivate={() => update("providerType", type)}
       >
-        <Field label={baseUrlLabels[t]}>
+        <Field label={t(`settings.baseUrl.${type}`)}>
           <Input
             value={entry.baseUrl}
-            onChange={(e) => updateProvider(t, { baseUrl: e.target.value })}
+            onChange={(e) => updateProvider(type, { baseUrl: e.target.value })}
             placeholder={preset.baseUrl}
           />
         </Field>
 
-        <Field label="模型">
-          <Select value={modelValue} onValueChange={(v) => selectModel(t, v)}>
+        <Field label={t("settings.llm.model")}>
+          <Select
+            value={modelValue}
+            onValueChange={(v) => selectModel(type, v)}
+          >
             <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               {preset.models.map((model) => (
                 <SelectItem key={model.model} value={model.model}>
-                  {providerModelLabel(t, model.model)}
+                  {providerModelLabel(type, model.model)}
                 </SelectItem>
               ))}
               <SelectItem value={CUSTOM_MODEL_VALUE}>
-                {preset.shortLabel} · 自定义模型
+                {t("settings.llm.customModelOption", {
+                  label: preset.shortLabel,
+                })}
               </SelectItem>
             </SelectContent>
           </Select>
         </Field>
 
         {isCustom ? (
-          <Field label="自定义模型 ID">
+          <Field label={t("settings.llm.customModelId")}>
             <Input
               value={entry.model}
               onChange={(e) => {
-                setCustomModel((prev) => ({ ...prev, [t]: true }));
-                updateProvider(t, { model: e.target.value });
+                setCustomModel((prev) => ({ ...prev, [type]: true }));
+                updateProvider(type, { model: e.target.value });
               }}
               placeholder={preset.model}
             />
@@ -628,84 +696,94 @@ export function SettingsView({ section }: { section: SettingsSection }) {
         ) : (
           selectedModel && (
             <p className="-mt-3 break-all text-ui-caption text-ui-muted">
-              模型 ID: {selectedModel.model}
+              {t("settings.llm.modelId", { id: selectedModel.model })}
             </p>
           )
         )}
 
-        <Field label="上下文窗口 (token · 留空自动按模型推断)">
+        <Field label={t("settings.llm.contextWindow")}>
           <Input
             type="number"
             value={entry.contextTokens ?? ""}
             onChange={(e) => {
               const n = Number(e.target.value);
-              updateProvider(t, {
+              updateProvider(type, {
                 contextTokens: e.target.value.trim() && n > 0 ? n : undefined,
               });
             }}
-            placeholder={`自动:${inferContextLimit(entry.model).toLocaleString()}`}
+            placeholder={t("settings.llm.contextAuto", {
+              n: inferContextLimit(entry.model).toLocaleString(),
+            })}
           />
         </Field>
 
         {oauth ? (
           <div className="flex flex-col gap-2.5">
             <span className="text-ui-meta font-medium text-ui-muted">
-              订阅登录 {tokens ? "· 已登录" : "· 未登录"}
+              {t("settings.llm.subscriptionLogin", {
+                state: tokens
+                  ? t("settings.llm.stateSignedIn")
+                  : t("settings.llm.stateSignedOut"),
+              })}
             </span>
             <div className="flex flex-wrap items-center gap-2">
               <Button
-                onClick={() => void handleOauthLogin(t)}
-                disabled={loggingIn === t}
+                onClick={() => void handleOauthLogin(type)}
+                disabled={loggingIn === type}
               >
-                {loggingIn === t
-                  ? "等待浏览器授权…"
+                {loggingIn === type
+                  ? t("settings.llm.waitingBrowser")
                   : tokens
-                    ? "重新登录"
-                    : "用浏览器登录"}
+                    ? t("settings.llm.reLogin")
+                    : t("settings.llm.loginWithBrowser")}
               </Button>
               {tokens && (
                 <Button
                   variant="secondary"
-                  onClick={() => void handleOauthLogout(t)}
+                  onClick={() => void handleOauthLogout(type)}
                 >
-                  退出登录
+                  {t("settings.llm.logout")}
                 </Button>
               )}
             </div>
             {tokens && (
               <span className="text-ui-caption text-ui-muted">
-                访问令牌将于 {new Date(tokens.expires).toLocaleString()}{" "}
-                前自动刷新。
+                {t("settings.llm.tokenRefresh", {
+                  date: new Date(tokens.expires).toLocaleString(),
+                })}
               </span>
             )}
             <span className="text-ui-caption leading-snug text-ui-muted">
-              ⚠️ 第三方应用使用订阅令牌(claude.ai / ChatGPT)可能违反对应
-              服务条款、存在账号被标记风险;为你自有账号、请知悉后自担。
+              {t("settings.llm.subscriptionWarning")}
             </span>
           </div>
         ) : (
           <Field
-            label={`API key ${hasKey ? "(已保存 · 留空不改)" : "(未设置)"}`}
+            label={t("settings.llm.apiKeyLabel", {
+              state: hasKey
+                ? t("settings.llm.apiKeyStateSaved")
+                : t("settings.llm.apiKeyStateUnset"),
+            })}
           >
             <div className="flex flex-wrap items-end gap-2">
               <Input
                 type="password"
                 className="flex-1"
-                value={keyInputs[t] ?? ""}
+                value={keyInputs[type] ?? ""}
                 onChange={(e) =>
-                  setKeyInputs((prev) => ({ ...prev, [t]: e.target.value }))
+                  setKeyInputs((prev) => ({ ...prev, [type]: e.target.value }))
                 }
-                placeholder={hasKey ? "••••••••" : keyPlaceholders[t]}
+                placeholder={hasKey ? "••••••••" : keyPlaceholders[type]}
               />
               <Button
-                onClick={() => void saveKey(t)}
-                disabled={!(keyInputs[t] ?? "").trim()}
+                onClick={() => void saveKey(type)}
+                disabled={!(keyInputs[type] ?? "").trim()}
               >
-                保存 key
+                {t("settings.llm.saveKey")}
               </Button>
               {hasKey && (
-                <Button variant="secondary" onClick={() => void clearKey(t)}>
-                  清除
+                <Button variant="secondary" onClick={() => void clearKey(type)}>
+                  {t("settings.llm.clear")}
                 </Button>
               )}
             </div>
@@ -715,17 +793,19 @@ export function SettingsView({ section }: { section: SettingsSection }) {
         <div className="flex flex-wrap items-center gap-2">
           <Button
             variant="secondary"
-            onClick={() => void testConnection(t)}
-            disabled={testingLlm === t}
+            onClick={() => void testConnection(type)}
+            disabled={testingLlm === type}
           >
-            {testingLlm === t ? "测试中…" : "测试连接(流式 + 非流式)"}
+            {testingLlm === type
+              ? t("settings.llm.testing")
+              : t("settings.llm.testConnection")}
           </Button>
-          <Button variant="ghost" size="sm" onClick={() => resetToPreset(t)}>
-            恢复预设
+          <Button variant="ghost" size="sm" onClick={() => resetToPreset(type)}>
+            {t("settings.llm.restorePreset")}
           </Button>
         </div>
 
-        {llmStatus?.type === t && (
+        {llmStatus?.type === type && (
           <p className="mt-2 break-words text-ui-body text-primary">
             {llmStatus.text}
           </p>
@@ -741,19 +821,23 @@ export function SettingsView({ section }: { section: SettingsSection }) {
           <section className="space-y-7">
             <div className="space-y-2 border-b border-border/70 pb-5">
               <h2 className="mt-0 text-ui-title font-semibold tracking-tight">
-                通用设置
+                {t("settings.general.title")}
               </h2>
               <p className="max-w-2xl text-ui-body leading-relaxed text-ui-muted">
-                调整应用外观和学习语言。这里的设置会立即保存到本地。
+                {t("settings.general.description")}
               </p>
             </div>
 
             <div className="grid gap-5 rounded-xl border border-border/70 bg-card/75 p-5 shadow-minimal-flat md:grid-cols-2">
-              <Field label="主题">
+              <Field label={t("settings.general.interfaceLanguage")}>
+                <LanguageToggle />
+              </Field>
+
+              <Field label={t("settings.general.theme")}>
                 <ThemeToggle />
               </Field>
 
-              <Field label="主题色">
+              <Field label={t("settings.general.accent")}>
                 <AccentToggle />
               </Field>
 
@@ -763,19 +847,19 @@ export function SettingsView({ section }: { section: SettingsSection }) {
             </div>
 
             <div className="grid gap-4 rounded-xl border border-border/70 bg-card/75 p-5 shadow-minimal-flat sm:grid-cols-3">
-              <Field label="母语">
+              <Field label={t("settings.general.nativeLanguage")}>
                 <Input
                   value={cfg.nativeLanguage}
                   onChange={(e) => update("nativeLanguage", e.target.value)}
                 />
               </Field>
-              <Field label="目标语言">
+              <Field label={t("settings.general.targetLanguage")}>
                 <Input
                   value={cfg.targetLanguage}
                   onChange={(e) => update("targetLanguage", e.target.value)}
                 />
               </Field>
-              <Field label="水平">
+              <Field label={t("settings.general.level")}>
                 <Input
                   value={cfg.level}
                   onChange={(e) => update("level", e.target.value)}
@@ -787,7 +871,7 @@ export function SettingsView({ section }: { section: SettingsSection }) {
               checked={cfg.autoBilingual}
               onChange={(v) => update("autoBilingual", v)}
             >
-              AI 回复自动开启双语阅读(逐句对照)
+              {t("settings.general.autoBilingual")}
             </ToggleField>
           </section>
         )}
@@ -796,11 +880,10 @@ export function SettingsView({ section }: { section: SettingsSection }) {
           <section className="space-y-6">
             <div className="space-y-2 border-b border-border/70 pb-5">
               <h2 className="mt-0 text-ui-title font-semibold tracking-tight">
-                LLM 提供商
+                {t("settings.llm.title")}
               </h2>
               <p className="max-w-2xl text-ui-body leading-relaxed text-ui-muted">
-                下面列出全部提供商,每个都可单独配置并保存。点开任意一个修改连接信息,
-                「设为当前 provider」决定聊天实际使用哪个。
+                {t("settings.llm.description")}
               </p>
             </div>
 
@@ -814,12 +897,12 @@ export function SettingsView({ section }: { section: SettingsSection }) {
           <section className="space-y-6">
             <div className="space-y-2 border-b border-border/70 pb-5">
               <h2 className="mt-0 text-ui-title font-semibold tracking-tight">
-                TTS 提供商
+                {t("settings.tts.title")}
               </h2>
               <p className="max-w-2xl text-ui-body leading-relaxed text-ui-muted">
-                聊天中 AI
-                回复、改正和更地道句子旁的小喇叭会调用语音合成。相同句子会缓存音频,避免重复请求。
-                {ttsCacheCount !== null && ` 当前缓存 ${ttsCacheCount} 条。`}
+                {t("settings.tts.description")}
+                {ttsCacheCount !== null &&
+                  t("settings.tts.cacheCount", { n: ttsCacheCount })}
               </p>
             </div>
 
@@ -827,14 +910,18 @@ export function SettingsView({ section }: { section: SettingsSection }) {
               checked={ttsCfg.autoSpeak}
               onChange={(v) => updateTts("autoSpeak", v)}
             >
-              AI 回复自动朗读(关掉后仍可点小喇叭手动朗读)
+              {t("settings.tts.autoSpeak")}
             </ToggleField>
 
             <div className="flex flex-col gap-4">
               <ProviderCard
                 icon={<SparklesIcon className="size-5 shrink-0 text-brand" />}
-                title="MiMo(神经语音 · 需 API key)"
-                statusText={hasTtsKey ? "API key 已保存" : "未设置 API key"}
+                title={t("settings.tts.mimoTitle")}
+                statusText={
+                  hasTtsKey
+                    ? t("settings.llm.statusKeySaved")
+                    : t("settings.llm.statusKeyUnset")
+                }
                 configured={hasTtsKey}
                 active={ttsCfg.ttsProvider === "mimo"}
                 expanded={expandedTts === "mimo"}
@@ -844,7 +931,11 @@ export function SettingsView({ section }: { section: SettingsSection }) {
                 onActivate={() => updateTts("ttsProvider", "mimo")}
               >
                 <Field
-                  label={`MiMo API key ${hasTtsKey ? "(已保存 · 留空不改)" : "(未设置)"}`}
+                  label={t("settings.tts.mimoApiKeyLabel", {
+                    state: hasTtsKey
+                      ? t("settings.llm.apiKeyStateSaved")
+                      : t("settings.llm.apiKeyStateUnset"),
+                  })}
                 >
                   <div className="flex flex-wrap items-end gap-2">
                     <Input
@@ -852,37 +943,41 @@ export function SettingsView({ section }: { section: SettingsSection }) {
                       className="flex-1"
                       value={ttsKeyInput}
                       onChange={(e) => setTtsKeyInput(e.target.value)}
-                      placeholder={hasTtsKey ? "••••••••" : "MiMo API key…"}
+                      placeholder={
+                        hasTtsKey
+                          ? "••••••••"
+                          : t("settings.tts.mimoKeyPlaceholder")
+                      }
                     />
                     <Button
                       onClick={() => void saveTtsKey()}
                       disabled={!ttsKeyInput.trim()}
                     >
-                      保存 key
+                      {t("settings.tts.saveKey")}
                     </Button>
                     {hasTtsKey && (
                       <Button
                         variant="secondary"
                         onClick={() => void clearTtsKey()}
                       >
-                        清除
+                        {t("settings.tts.clear")}
                       </Button>
                     )}
                   </div>
                 </Field>
 
-                <Field label="朗读风格 prompt (user 消息)">
+                <Field label={t("settings.tts.stylePrompt")}>
                   <Textarea
                     className="min-h-18 resize-y leading-snug"
                     value={ttsCfg.stylePrompt}
                     onChange={(e) => updateTts("stylePrompt", e.target.value)}
                     rows={3}
-                    placeholder="描述朗读的语气、语速、情感…"
+                    placeholder={t("settings.tts.stylePromptPlaceholder")}
                   />
                 </Field>
 
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <Field label="音色">
+                  <Field label={t("settings.tts.voice")}>
                     <Select
                       value={ttsCfg.voice}
                       onValueChange={(v) => updateTts("voice", v)}
@@ -899,7 +994,7 @@ export function SettingsView({ section }: { section: SettingsSection }) {
                       </SelectContent>
                     </Select>
                   </Field>
-                  <Field label="模型">
+                  <Field label={t("settings.tts.model")}>
                     <Input
                       value={ttsCfg.model}
                       onChange={(e) => updateTts("model", e.target.value)}
@@ -907,7 +1002,7 @@ export function SettingsView({ section }: { section: SettingsSection }) {
                   </Field>
                 </div>
 
-                <Field label="Base URL">
+                <Field label={t("settings.tts.baseUrl")}>
                   <Input
                     value={ttsCfg.baseUrl}
                     onChange={(e) => updateTts("baseUrl", e.target.value)}
@@ -919,7 +1014,9 @@ export function SettingsView({ section }: { section: SettingsSection }) {
                   onClick={() => void testTts("mimo")}
                   disabled={testingTts === "mimo"}
                 >
-                  {testingTts === "mimo" ? "测试中…" : "测试朗读"}
+                  {testingTts === "mimo"
+                    ? t("settings.tts.testing")
+                    : t("settings.tts.testTts")}
                 </Button>
                 {ttsStatus?.provider === "mimo" && (
                   <p className="mt-2 break-words text-ui-body text-primary">
@@ -930,8 +1027,8 @@ export function SettingsView({ section }: { section: SettingsSection }) {
 
               <ProviderCard
                 icon={<Volume2Icon className="size-5 shrink-0 text-info" />}
-                title="微软 Edge(免费 · 无需 key)"
-                statusText="免费可用 · 无需 API key"
+                title={t("settings.tts.edgeTitle")}
+                statusText={t("settings.tts.edgeStatus")}
                 configured
                 active={ttsCfg.ttsProvider === "edge"}
                 expanded={expandedTts === "edge"}
@@ -941,11 +1038,10 @@ export function SettingsView({ section }: { section: SettingsSection }) {
                 onActivate={() => updateTts("ttsProvider", "edge")}
               >
                 <p className="text-ui-body leading-relaxed text-ui-muted">
-                  使用微软 Edge 在线神经语音,免费、无需 API key(合成走本地后端
-                  WebSocket)。
+                  {t("settings.tts.edgeDescription")}
                 </p>
                 <div className="grid gap-4 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]">
-                  <Field label="音色">
+                  <Field label={t("settings.tts.voice")}>
                     <Select
                       value={ttsCfg.edgeVoice}
                       onValueChange={(v) => updateTts("edgeVoice", v)}
@@ -962,14 +1058,14 @@ export function SettingsView({ section }: { section: SettingsSection }) {
                       </SelectContent>
                     </Select>
                   </Field>
-                  <Field label="语速">
+                  <Field label={t("settings.tts.rate")}>
                     <Input
                       value={ttsCfg.edgeRate}
                       onChange={(e) => updateTts("edgeRate", e.target.value)}
                       placeholder="+0%"
                     />
                   </Field>
-                  <Field label="音高">
+                  <Field label={t("settings.tts.pitch")}>
                     <Input
                       value={ttsCfg.edgePitch}
                       onChange={(e) => updateTts("edgePitch", e.target.value)}
@@ -983,7 +1079,9 @@ export function SettingsView({ section }: { section: SettingsSection }) {
                   onClick={() => void testTts("edge")}
                   disabled={testingTts === "edge"}
                 >
-                  {testingTts === "edge" ? "测试中…" : "测试朗读"}
+                  {testingTts === "edge"
+                    ? t("settings.tts.testing")
+                    : t("settings.tts.testTts")}
                 </Button>
                 {ttsStatus?.provider === "edge" && (
                   <p className="mt-2 break-words text-ui-body text-primary">
@@ -999,7 +1097,9 @@ export function SettingsView({ section }: { section: SettingsSection }) {
                 onClick={() => void handleClearTtsCache()}
                 disabled={clearingTtsCache || ttsCacheCount === 0}
               >
-                {clearingTtsCache ? "清空中…" : "清空朗读缓存"}
+                {clearingTtsCache
+                  ? t("settings.tts.clearing")
+                  : t("settings.tts.clearCache")}
               </Button>
               {cacheStatus && (
                 <span className="break-words text-ui-body text-primary">

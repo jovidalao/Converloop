@@ -6,6 +6,7 @@ import {
   WandSparklesIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "@/i18n";
 import {
   exportAgentPackage,
   importAgentPackage,
@@ -39,6 +40,7 @@ function scopeName(scope: LearningDataScope): string {
 }
 
 export function LearningAgentsView({ onRefresh }: LearningAgentsViewProps) {
+  const { t } = useTranslation();
   const [lessonRequest, setLessonRequest] = useState("");
   const [lessonBusy, setLessonBusy] = useState(false);
   const [projectRequest, setProjectRequest] = useState("");
@@ -88,7 +90,9 @@ export function LearningAgentsView({ onRefresh }: LearningAgentsViewProps) {
       await refreshLocalItems();
       await onRefresh();
       setMessage(
-        `已创建学习项目,并生成 ${result.createdLearningAgentIds.length} 个专项课。`,
+        t("learningAgents.projectCreated", {
+          n: result.createdLearningAgentIds.length,
+        }),
       );
     } catch (e) {
       reportError(e);
@@ -108,9 +112,7 @@ export function LearningAgentsView({ onRefresh }: LearningAgentsViewProps) {
       setLessonRequest("");
       await refreshLocalItems();
       await onRefresh();
-      setMessage(
-        "已创建专项课。它已加入左侧「定制化学习」,可直接开始或在那里编辑。",
-      );
+      setMessage(t("learningAgents.lessonCreated"));
     } catch (e) {
       reportError(e);
     } finally {
@@ -125,7 +127,7 @@ export function LearningAgentsView({ onRefresh }: LearningAgentsViewProps) {
       const text = await exportAgentPackage(agentId);
       setPackageText(text);
       setPackageOpen(true);
-      setMessage("已导出到下方「导入/导出」里的包文本框。");
+      setMessage(t("learningAgents.exported"));
     } catch (e) {
       reportError(e);
     }
@@ -144,7 +146,10 @@ export function LearningAgentsView({ onRefresh }: LearningAgentsViewProps) {
       await refreshLocalItems();
       await onRefresh();
       setMessage(
-        `包已导入: ${result.lessonCount} 个专项课、${result.runtimeSkillCount} 个技能。`,
+        t("learningAgents.imported", {
+          lessons: result.lessonCount,
+          skills: result.runtimeSkillCount,
+        }),
       );
     } catch (e) {
       reportError(e);
@@ -167,11 +172,10 @@ export function LearningAgentsView({ onRefresh }: LearningAgentsViewProps) {
   return (
     <div className="flex h-full max-w-4xl flex-col overflow-y-auto px-6 pt-14 pb-6">
       <h2 className="mt-0 mb-2 text-ui-title font-semibold tracking-tight">
-        创建专项课
+        {t("learningAgents.title")}
       </h2>
       <p className="mt-0 mb-3 max-w-3xl text-ui-body leading-relaxed text-ui-muted">
-        「专项课」会新开一个对话,使用老师型 system prompt,可以用母语讲解,
-        也可以用目标语言出练习。创建后会出现在左侧「定制化学习」里,在那里开始或编辑。
+        {t("learningAgents.description")}
       </p>
 
       <div className="grid gap-2 border-y py-3 md:grid-cols-2">
@@ -189,11 +193,13 @@ export function LearningAgentsView({ onRefresh }: LearningAgentsViewProps) {
       </div>
 
       <div className="mt-4 rounded-lg border bg-card p-3">
-        <div className="mb-2 text-ui-body font-semibold">学习项目</div>
+        <div className="mb-2 text-ui-body font-semibold">
+          {t("learningAgents.projectTitle")}
+        </div>
         <Textarea
           value={projectRequest}
           onChange={(e) => setProjectRequest(e.target.value)}
-          placeholder="例如: 我下个月要英语面试前端岗位,帮我做一个练习计划。"
+          placeholder={t("learningAgents.projectPlaceholder")}
           className="min-h-24 resize-none"
         />
         <Button
@@ -204,13 +210,17 @@ export function LearningAgentsView({ onRefresh }: LearningAgentsViewProps) {
           disabled={projectBusy || !projectRequest.trim()}
         >
           <ListChecksIcon size={15} />
-          {projectBusy ? "规划中…" : "生成项目"}
+          {projectBusy
+            ? t("learningAgents.planning")
+            : t("learningAgents.generateProject")}
         </Button>
       </div>
 
       {projects.length > 0 && (
         <div className="mt-4 border-y py-3">
-          <div className="mb-2 text-ui-body font-semibold">已有学习项目</div>
+          <div className="mb-2 text-ui-body font-semibold">
+            {t("learningAgents.existingProjects")}
+          </div>
           <div className="grid gap-2">
             {projects.map((project) => (
               <div key={project.id} className="text-ui-body leading-snug">
@@ -239,13 +249,12 @@ export function LearningAgentsView({ onRefresh }: LearningAgentsViewProps) {
             size={15}
             className={packageOpen ? "rotate-180 transition-transform" : ""}
           />
-          专项课导入/导出
+          {t("learningAgents.packageSection")}
         </button>
         {packageOpen && (
           <div className="border-t px-3.5 py-3">
             <div className="mb-2 text-ui-caption text-ui-muted">
-              分享包只包含
-              prompt、权限和课程结构,不包含你的学习数据、对话历史或密钥。
+              {t("learningAgents.packageNote")}
             </div>
             {customLessons.length > 0 && (
               <div className="mb-3 grid gap-1.5">
@@ -269,7 +278,7 @@ export function LearningAgentsView({ onRefresh }: LearningAgentsViewProps) {
                       onClick={() => void exportLessonPackage(lesson.id)}
                     >
                       <DownloadIcon size={14} />
-                      导出
+                      {t("learningAgents.export")}
                     </Button>
                   </div>
                 ))}
@@ -278,15 +287,18 @@ export function LearningAgentsView({ onRefresh }: LearningAgentsViewProps) {
             <Textarea
               value={packageText}
               onChange={(e) => setPackageText(e.target.value)}
-              placeholder="粘贴 lang-agent.package JSON。导出包也会出现在这里。"
+              placeholder={t("learningAgents.packagePlaceholder")}
               className="min-h-32 resize-y font-mono text-ui-caption leading-relaxed"
             />
             {packageReview && (
               <div className="mt-2 rounded-md bg-muted px-2.5 py-2 text-ui-caption leading-relaxed">
                 <div className="font-medium">{packageReview.name}</div>
                 <div className="text-ui-muted">
-                  {packageReview.itemSummary} · 读取: {packageReview.reads} ·
-                  写入: {packageReview.writes}
+                  {t("learningAgents.packageSummary", {
+                    summary: packageReview.itemSummary,
+                    reads: packageReview.reads,
+                    writes: packageReview.writes,
+                  })}
                 </div>
               </div>
             )}
@@ -299,18 +311,22 @@ export function LearningAgentsView({ onRefresh }: LearningAgentsViewProps) {
               disabled={packageBusy || !packageText.trim() || !packageReview}
             >
               <UploadIcon size={14} />
-              {packageBusy ? "导入中…" : "导入包"}
+              {packageBusy
+                ? t("learningAgents.importing")
+                : t("learningAgents.importPackage")}
             </Button>
           </div>
         )}
       </section>
 
       <div className="mt-4 rounded-lg border bg-card p-3">
-        <div className="mb-2 text-ui-body font-semibold">自然语言创建</div>
+        <div className="mb-2 text-ui-body font-semibold">
+          {t("learningAgents.nlCreate")}
+        </div>
         <Textarea
           value={lessonRequest}
           onChange={(e) => setLessonRequest(e.target.value)}
-          placeholder="例如: 帮我创建一个专门练商务邮件开头和结尾的老师,根据我的表达缺口出题。"
+          placeholder={t("learningAgents.lessonPlaceholder")}
           className="min-h-24 resize-none"
         />
         <Button
@@ -321,7 +337,9 @@ export function LearningAgentsView({ onRefresh }: LearningAgentsViewProps) {
           disabled={lessonBusy || !lessonRequest.trim()}
         >
           <WandSparklesIcon size={15} />
-          {lessonBusy ? "创建中…" : "自动创建"}
+          {lessonBusy
+            ? t("learningAgents.creating")
+            : t("learningAgents.autoCreate")}
         </Button>
       </div>
 

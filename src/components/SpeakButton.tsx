@@ -1,5 +1,6 @@
 import { Volume2Icon } from "lucide-react";
 import { useState, useSyncExternalStore } from "react";
+import { useTranslation } from "@/i18n";
 import { cn } from "@/lib/utils";
 import {
   getPlaybackSnapshot,
@@ -10,7 +11,7 @@ import {
 import { MissingTtsApiKeyError, speakText } from "../tts/speak";
 import { Spinner } from "./ui/spinner";
 
-// 正在播放时的动态条形(像声波),清晰地告诉用户"在响"。
+// Animated bars while playing (like a sound wave) — a clear "it's playing" cue.
 function PlayingBars() {
   return (
     <span className="speak-bars" aria-hidden>
@@ -21,7 +22,8 @@ function PlayingBars() {
   );
 }
 
-// bar: 扁平,融入操作行;round: 独立圆钮(地道表达面板里)。
+// bar: flat, blends into the action row; round: a standalone circular button
+// (used in the natural-expression panel).
 const SPEAK_BASE: Record<"bar" | "round", string> = {
   bar: "size-[1.85rem] rounded-md text-foreground hover:bg-accent hover:text-foreground",
   round:
@@ -39,7 +41,9 @@ export function SpeakButton({
   text: string;
   variant?: "bar" | "round";
 }) {
-  // 播放状态来自全局播放器,所以自动朗读时本按钮也会亮起。
+  const { t } = useTranslation();
+  // Playback state comes from the global player, so this button also lights up
+  // during auto-read.
   const playback = useSyncExternalStore(subscribePlayback, getPlaybackSnapshot);
   const active = playback.key === text;
   const playing = active && playback.phase === "playing";
@@ -81,8 +85,8 @@ export function SpeakButton({
         )}
         onClick={() => void handleClick()}
         disabled={localLoading || !text.trim()}
-        aria-label={active ? "停止朗读" : "朗读"}
-        title={active ? "停止朗读" : "朗读"}
+        aria-label={active ? t("speak.stop") : t("speak.play")}
+        title={active ? t("speak.stop") : t("speak.play")}
       >
         {localLoading || playbackLoading ? (
           <Spinner className="size-3" />

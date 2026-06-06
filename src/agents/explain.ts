@@ -6,12 +6,12 @@ export interface ExplainContext {
   targetLanguage: string;
   level: string;
   experiencePreferences: string;
-  profileSlice: string; // MD 档案切片(定性掌握情况),和对话 agent 同源
-  reply: string; // 要讲解的对话回复
-  customInstructions?: string; // 用户在能力库追加的补充指令
+  profileSlice: string; // MD profile slice (qualitative mastery status), same source as the conversation agent
+  reply: string; // the conversation reply to explain
+  customInstructions?: string; // additional instructions appended by the user in the agent library
 }
 
-// 按需讲解:不在热路径,读 MD 档案判断"这个学习者大概哪里看不懂"。
+// On-demand explanation: not on the hot path; reads the MD profile to determine "where this learner is likely to get confused".
 function systemPrompt(ctx: ExplainContext): string {
   const base = `You are a patient tutor helping a ${ctx.nativeLanguage} speaker learning
 ${ctx.targetLanguage} at roughly ${ctx.level} level understand a message they just
@@ -51,7 +51,7 @@ function userPrompt(ctx: ExplainContext): string {
 ${ctx.reply}`;
 }
 
-// 纯文本流式讲解。onDelta 边收边推 UI;返回完整文本。
+// Plain-text streaming explanation. onDelta pushes to the UI as chunks arrive; returns the full text.
 export async function explain(
   provider: ModelProvider,
   ctx: ExplainContext,

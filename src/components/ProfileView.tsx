@@ -8,6 +8,8 @@ import {
   XIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "@/i18n";
+import type { TFunction } from "@/i18n";
 import { loadConfig } from "../config";
 import { applyProfilePreferenceInstruction } from "../orchestrator";
 import { runMaintainerNow } from "../profile/maintainer-runner";
@@ -36,37 +38,42 @@ import { Textarea } from "./ui/textarea";
 
 type Owner = "user" | "shared" | "ai";
 
-// 段 → 中文标题 + 归属。归属决定徽章、提示语,以及是否可编辑(ai = 只读)。
-const SECTION_META: Record<string, { zh: string; owner: Owner }> = {
-  "About me": { zh: "关于我", owner: "shared" },
-  "AI preferences": { zh: "AI 自定义", owner: "user" },
-  "Working on": { zh: "正在练", owner: "ai" },
-  "Comfortable with": { zh: "已掌握", owner: "ai" },
-  "Avoids / rarely attempts": { zh: "回避 / 很少尝试", owner: "ai" },
-  Interests: { zh: "兴趣", owner: "ai" },
-  "Recently introduced": { zh: "最近学到", owner: "ai" },
-  "Expression gaps": { zh: "想说但说不出", owner: "ai" },
-  "My notes": { zh: "我的笔记", owner: "user" },
+// Section title → ownership. Ownership determines badge, hint, and editability (ai = read-only).
+const SECTION_META: Record<string, { key: string; owner: Owner }> = {
+  "About me": { key: "aboutMe", owner: "shared" },
+  "AI preferences": { key: "aiPreferences", owner: "user" },
+  "Working on": { key: "workingOn", owner: "ai" },
+  "Comfortable with": { key: "comfortableWith", owner: "ai" },
+  "Avoids / rarely attempts": { key: "avoids", owner: "ai" },
+  Interests: { key: "interests", owner: "ai" },
+  "Recently introduced": { key: "recentlyIntroduced", owner: "ai" },
+  "Expression gaps": { key: "expressionGaps", owner: "ai" },
+  "My notes": { key: "myNotes", owner: "user" },
 };
 
-const BADGE: Record<Owner, { text: string; cls: string }> = {
-  user: { text: "你的笔记 · AI 永不改动", cls: "bg-primary/10 text-primary" },
-  shared: { text: "你和 AI 共同维护", cls: "bg-muted text-ui-muted" },
-  ai: { text: "AI 自动维护", cls: "bg-muted text-ui-muted" },
+const BADGE_CLS: Record<Owner, string> = {
+  user: "bg-primary/10 text-primary",
+  shared: "bg-muted text-ui-muted",
+  ai: "bg-muted text-ui-muted",
 };
 
 function ownerOf(title: string): Owner {
   return SECTION_META[title]?.owner ?? "ai";
 }
-function zhOf(title: string): string {
-  return SECTION_META[title]?.zh ?? title;
+
+function sectionLabel(title: string, t: TFunction): string {
+  const key = SECTION_META[title]?.key as string | undefined;
+  if (!key) return title;
+  // Key is always one of the profile.section.* keys defined in en.ts.
+  return t(`profile.section.${key}` as Parameters<TFunction>[0]);
 }
-// 可编辑 = 用户拥有/共管;AI 自动维护的段只读、不可点击。
+
+// Editable = user-owned or shared; AI-maintained sections are read-only.
 function isEditable(title: string): boolean {
   return ownerOf(title) !== "ai";
 }
 
-// My notes 正文里去掉占位 HTML 注释,只显示用户真正写的内容。
+// Strip placeholder HTML comments from "My notes" body for display.
 function displayBody(s: ProfileSection): string {
   if (s.title !== "My notes") return s.body;
   return s.body.replace(/<!--[\s\S]*?-->/g, "").trim();
@@ -76,30 +83,12 @@ function normalizeProfileMd(md: string): string {
   return serializeProfile(ensureSections(parseProfile(md)));
 }
 
-const PREFERENCE_FIELDS: Array<{
-  scope: PreferenceScope;
-  placeholder: string;
-}> = [
-  {
-    scope: "global",
-    placeholder: "适用于所有模块,例如: 使用澳大利亚英语; 默认简洁一点",
-  },
-  {
-    scope: "conversation",
-    placeholder: "只影响普通聊天,例如: 多问开放式问题; 回复不要太长",
-  },
-  {
-    scope: "tutor",
-    placeholder: "只影响批改,例如: 我经常语音输入,忽略纯大小写和标点问题",
-  },
-  {
-    scope: "learning",
-    placeholder: "只影响专项课,例如: 先诊断再练习; 每次只练一个点",
-  },
-  {
-    scope: "reading",
-    placeholder: "只影响阅读辅助,例如: 翻译更口语化; 解释习语时多给语境",
-  },
+const PREFERENCE_SCOPES: PreferenceScope[] = [
+  "global",
+  "conversation",
+  "tutor",
+  "learning",
+  "reading",
 ];
 
 function PreferencesPanel({
@@ -119,27 +108,28 @@ function PreferencesPanel({
   onScopeChange: (scope: PreferenceScope, value: string) => void;
   onScopeBlur: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <section className="rounded-md border border-border/70 bg-card/80 p-4 shadow-minimal-flat">
       <div className="mb-4 flex flex-col gap-2">
         <div>
-          <h3 className="m-0 text-ui-body font-semibold">AI 自定义</h3>
+          <h3 className="m-0 text-ui-body font-semibold">{t("profile.aiCustomTitle")}</h3>
           <p className="m-0 mt-1 text-ui-body leading-snug text-ui-muted">
-            用自然语言描述偏好,系统会把它写进档案并分发到对应模块。
+            {t("profile.aiCustomDesc")}
           </p>
         </div>
         <span className="w-fit rounded bg-primary/10 px-1.5 py-0.5 text-ui-caption text-primary">
-          你的设置 · AI 维护档案时保留
+          {t("profile.aiPreferenceBadge")}
         </span>
       </div>
 
       <div className="flex flex-col gap-3">
         <Textarea
-          aria-label="一句话描述 AI 自定义"
+          aria-label={t("profile.aiCustomAriaLabel")}
           className="min-h-28 resize-y bg-background/60 text-ui-body leading-normal"
           value={smartDraft}
           onChange={(e) => onSmartDraftChange(e.target.value)}
-          placeholder="例如: 对话用澳大利亚日常英语; 我经常用语音输入,批改时不要纠结大小写和标点; 讲解时多用中文类比。"
+          placeholder={t("profile.smartDraftPlaceholder")}
         />
         <div className="flex justify-end">
           <Button
@@ -149,28 +139,30 @@ function PreferencesPanel({
             className="w-full"
           >
             <SparklesIcon size={15} />
-            {smartBusy ? "归类中…" : "让 AI 归类保存"}
+            {smartBusy ? t("profile.aiClassifying") : t("profile.aiClassifySave")}
           </Button>
         </div>
       </div>
 
       <details className="mt-4">
         <summary className="text-ui-body font-medium text-ui-muted">
-          按模块微调
+          {t("profile.finetuneByModule")}
         </summary>
         <div className="mt-3 grid grid-cols-1 gap-3">
-          {PREFERENCE_FIELDS.map((field) => (
-            <div key={field.scope} className="flex flex-col gap-1.5">
+          {PREFERENCE_SCOPES.map((scope) => (
+            <div key={scope} className="flex flex-col gap-1.5">
               <span className="text-ui-body text-ui-muted">
-                {PREFERENCE_SCOPE_LABEL[field.scope]}
+                {PREFERENCE_SCOPE_LABEL[scope]}
               </span>
               <Textarea
-                aria-label={PREFERENCE_SCOPE_LABEL[field.scope]}
+                aria-label={PREFERENCE_SCOPE_LABEL[scope]}
                 className="min-h-24 resize-y bg-background/60 text-ui-body leading-normal"
-                value={preferences[field.scope]}
-                onChange={(e) => onScopeChange(field.scope, e.target.value)}
+                value={preferences[scope]}
+                onChange={(e) => onScopeChange(scope, e.target.value)}
                 onBlur={onScopeBlur}
-                placeholder={field.placeholder}
+                placeholder={t(
+                  `profile.pref${scope.charAt(0).toUpperCase()}${scope.slice(1)}Placeholder` as Parameters<TFunction>[0],
+                )}
               />
             </div>
           ))}
@@ -180,8 +172,8 @@ function PreferencesPanel({
   );
 }
 
-// 只读卡片:完整显示内容,卡片高度随内容自适应,内部无滚动条。
-// 可编辑的卡片整张可点击 → 打开编辑层;只读的不可点、无悬停反馈。
+// Read-only card: content height adapts to its body; no inner scrollbar.
+// Editable cards are fully clickable to open the edit overlay; read-only ones have no hover feedback.
 function SectionCard({
   section,
   onEdit,
@@ -189,15 +181,23 @@ function SectionCard({
   section: ProfileSection;
   onEdit?: () => void;
 }) {
+  const { t } = useTranslation();
   const owner = ownerOf(section.title);
-  const badge = BADGE[owner];
+  const badgeCls = BADGE_CLS[owner];
   const body = displayBody(section);
   const editable = !!onEdit;
+  const label = sectionLabel(section.title, t);
+  const badgeText =
+    owner === "user"
+      ? t("profile.badgeUser")
+      : owner === "shared"
+        ? t("profile.badgeShared")
+        : t("profile.badgeAi");
 
   const header = (
     <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
       <span className="flex min-w-0 items-center gap-1.5 text-ui-body font-semibold">
-        {zhOf(section.title)}
+        {label}
         {editable && (
           <PencilIcon
             size={13}
@@ -205,10 +205,8 @@ function SectionCard({
           />
         )}
       </span>
-      <span
-        className={`shrink-0 rounded px-1.5 py-0.5 text-ui-caption ${badge.cls}`}
-      >
-        {badge.text}
+      <span className={`shrink-0 rounded px-1.5 py-0.5 text-ui-caption ${badgeCls}`}>
+        {badgeText}
       </span>
     </div>
   );
@@ -218,7 +216,7 @@ function SectionCard({
     </p>
   ) : (
     <p className="m-0 text-ui-body text-ui-muted">
-      {editable ? "点击添加…" : "暂无"}
+      {editable ? t("profile.clickToAdd") : t("profile.emptySection")}
     </p>
   );
 
@@ -242,20 +240,19 @@ function SectionCard({
   );
 }
 
-// 把卡片分配到 n 列(贪心:每张放进当前最矮的列),近似瀑布流均衡。
-// 各列都是从顶部开始的 flex-col,顶边天然齐平、间距统一。
+// Distribute cards into n columns (greedy: each card goes to the shortest column) for a waterfall layout.
 function distribute(sections: ProfileSection[], n: number): ProfileSection[][] {
   const cols: ProfileSection[][] = Array.from({ length: n }, () => []);
   const heights = new Array(n).fill(0);
   for (const s of sections) {
     const i = heights.indexOf(Math.min(...heights));
     cols[i].push(s);
-    heights[i] += displayBody(s).length + 60; // 60 ≈ 标题/内边距的基础高度
+    heights[i] += displayBody(s).length + 60; // 60 ≈ base height for title/padding
   }
   return cols;
 }
 
-// 列数随容器宽度自适应:窄=1 列、宽=2/3 列,最多 3 列避免读起来碎。
+// Responsive column count: narrow=1, wide=2/3, max 3 columns.
 function useColumnCount(
   ref: React.RefObject<HTMLDivElement | null>,
   active: boolean,
@@ -282,7 +279,7 @@ function useColumnCount(
   return cols;
 }
 
-// 编辑层(悬浮窗):点开某段后在此编辑,保存/取消。Esc 关闭。
+// Edit overlay: open when clicking a section card. Esc closes it.
 function EditOverlay({
   section,
   onSave,
@@ -292,8 +289,10 @@ function EditOverlay({
   onSave: (body: string) => void;
   onCancel: () => void;
 }) {
+  const { t } = useTranslation();
   const [draft, setDraft] = useState(displayBody(section));
   const owner = ownerOf(section.title);
+  const label = sectionLabel(section.title, t);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -307,45 +306,45 @@ function EditOverlay({
     <div
       role="dialog"
       aria-modal="true"
-      aria-label={`编辑 ${zhOf(section.title)}`}
+      aria-label={t("profile.editSectionLabel", { name: label })}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
       onMouseDown={onCancel}
     >
-      {/* biome-ignore lint/a11y/noStaticElementInteractions: 仅阻止冒泡到背景关闭,非交互控件 */}
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: prevents background dismiss on inner click */}
       <div
         className="flex max-h-[80vh] w-full max-w-lg flex-col rounded-xl border bg-card p-4 shadow-lg"
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="mb-3 flex items-center justify-between gap-2">
-          <h3 className="text-ui-title font-semibold">{zhOf(section.title)}</h3>
+          <h3 className="text-ui-title font-semibold">{label}</h3>
           <Button
             variant="ghost"
             size="icon"
             className="size-7"
             onClick={onCancel}
-            aria-label="关闭"
+            aria-label={t("common.close")}
           >
             <XIcon size={16} />
           </Button>
         </div>
         <Textarea
           autoFocus
-          aria-label={zhOf(section.title)}
+          aria-label={label}
           className="min-h-48 flex-1 resize-none font-mono text-ui-body leading-normal"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           placeholder={
             owner === "user"
-              ? "写点想让 AI 记住的:提醒、长期偏好、关于你的事实…(AI 不会改动这里)"
-              : "每行一条"
+              ? t("profile.userSectionPlaceholder")
+              : t("profile.perLineHint")
           }
           spellCheck={false}
         />
         <div className="mt-3 flex justify-end gap-2">
           <Button variant="ghost" onClick={onCancel}>
-            取消
+            {t("common.cancel")}
           </Button>
-          <Button onClick={() => onSave(draft)}>保存</Button>
+          <Button onClick={() => onSave(draft)}>{t("common.save")}</Button>
         </div>
       </div>
     </div>
@@ -375,12 +374,13 @@ function ProfileActions({
   onUndo: () => void;
   onToggleRaw: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <section className="rounded-md border border-border/70 bg-card/80 p-4 shadow-minimal-flat">
       <div className="mb-3">
-        <h3 className="m-0 text-ui-body font-semibold">维护</h3>
+        <h3 className="m-0 text-ui-body font-semibold">{t("profile.maintenanceTitle")}</h3>
         <p className="m-0 mt-1 text-ui-body leading-snug text-ui-muted">
-          手动刷新、撤销和原始 Markdown 编辑。
+          {t("profile.maintenanceDesc")}
         </p>
       </div>
       <div className="grid gap-2">
@@ -392,7 +392,7 @@ function ProfileActions({
             className="justify-start"
           >
             <SaveIcon size={15} />
-            {dirty ? "保存 Markdown" : "已保存"}
+            {dirty ? t("profile.saveMarkdown") : t("profile.alreadySaved")}
           </Button>
         )}
         <Button
@@ -403,7 +403,7 @@ function ProfileActions({
           className="justify-start"
         >
           <RefreshCwIcon size={15} />
-          {busy ? "刷新中…" : "用 AI 刷新档案"}
+          {busy ? t("profile.refreshingBtn") : t("profile.aiRefresh")}
         </Button>
         {canUndo && (
           <Button
@@ -414,7 +414,7 @@ function ProfileActions({
             className="justify-start"
           >
             <RotateCcwIcon size={15} />
-            撤销 AI 刷新
+            {t("profile.undoRefresh")}
           </Button>
         )}
         <Button
@@ -425,7 +425,7 @@ function ProfileActions({
           className="justify-start"
         >
           <FileTextIcon size={15} />
-          {raw ? "返回结构化编辑" : "编辑原始 Markdown"}
+          {raw ? t("profile.backToStructured") : t("profile.editRawMarkdown")}
         </Button>
       </div>
       {status && (
@@ -442,6 +442,7 @@ function ProfileActions({
 }
 
 export function ProfileView() {
+  const { t } = useTranslation();
   const [header, setHeader] = useState("");
   const [sections, setSections] = useState<ProfileSection[]>([]);
   const [raw, setRaw] = useState(false);
@@ -473,7 +474,7 @@ export function ProfileView() {
     };
   }, [load]);
 
-  // 当前编辑态序列化回规范 MD(标题永远齐全)。
+  // Serialize current edit state to canonical MD (all section titles always present).
   const currentMd = useMemo(
     () =>
       loaded ? (raw ? rawText : serializeProfile({ header, sections })) : "",
@@ -485,7 +486,7 @@ export function ProfileView() {
     [currentMd],
   );
 
-  // 失焦/卸载自动保存、文件同步都用最新值,避免闭包读到旧 state。
+  // Keep refs to latest values so async flush/sync handlers always see current state.
   const currentMdRef = useRef("");
   currentMdRef.current = currentMd;
   const savedMdRef = useRef("");
@@ -520,7 +521,7 @@ export function ProfileView() {
           load(md);
         }
       } catch (e) {
-        console.warn("同步档案失败:", e);
+        console.warn("Profile sync failed:", e);
       }
     }
 
@@ -539,7 +540,7 @@ export function ProfileView() {
     };
   }, [load]);
 
-  // 卸载时(切走档案页)冲洗未保存编辑。
+  // Flush unsaved edits when navigating away from the profile page.
   useEffect(
     () => () => {
       if (loadedRef.current && currentMdRef.current !== savedMdRef.current) {
@@ -556,7 +557,7 @@ export function ProfileView() {
     setSavedMd(currentMdRef.current);
   }
 
-  // 编辑层保存:更新该段 → 立即落盘。
+  // Edit overlay save: update that section then immediately persist.
   async function saveSection(title: string, body: string) {
     if (!loaded) return;
     const next = sections.map((s) => (s.title === title ? { ...s, body } : s));
@@ -565,7 +566,7 @@ export function ProfileView() {
     const md = serializeProfile({ header, sections: next });
     await writeProfile(md);
     setSavedMd(md);
-    setStatus("✓ 已保存。");
+    setStatus(t("profile.savedStatus"));
   }
 
   function applyProfileMdToState(md: string) {
@@ -589,7 +590,7 @@ export function ProfileView() {
     const instruction = smartDraft.trim();
     if (!loaded || !instruction) return;
     setSmartBusy(true);
-    setStatus("AI 正在判断这条自定义应该放到哪个模块…");
+    setStatus(t("profile.aiClassifyingStatus"));
     try {
       await writeProfile(currentMd);
       const next = await applyProfilePreferenceInstruction(
@@ -599,9 +600,9 @@ export function ProfileView() {
       await writeProfile(next);
       applyProfileMdToState(next);
       setSmartDraft("");
-      setStatus("✓ 已归类并保存到档案。");
+      setStatus(t("profile.classifiedStatus"));
     } catch (e) {
-      setStatus(`归类失败:${e instanceof Error ? e.message : String(e)}`);
+      setStatus(t("profile.classifyFailed", { error: e instanceof Error ? e.message : String(e) }));
     } finally {
       setSmartBusy(false);
     }
@@ -622,17 +623,17 @@ export function ProfileView() {
     if (!loaded) return;
     await writeProfile(currentMd);
     setSavedMd(currentMd);
-    setStatus("✓ 已保存。");
+    setStatus(t("profile.savedStatus"));
   }
 
   async function refresh() {
     if (!loaded) return;
     setBusy(true);
-    setStatus("AI 正在根据掌握数据 + 近期对话刷新档案…");
+    setStatus(t("profile.refreshingStatus"));
     try {
-      await writeProfile(currentMd); // 先落盘当前编辑
+      await writeProfile(currentMd);
       setSavedMd(currentMd);
-      await snapshotProfile(); // 快照到 .bak,供「撤销」
+      await snapshotProfile();
       const r = await runMaintainerNow();
       if (r.written && r.profile) {
         if (raw) {
@@ -642,12 +643,12 @@ export function ProfileView() {
           load(r.profile);
         }
         setCanUndo(true);
-        setStatus("✓ 档案已更新(通过 sanity check)。");
+        setStatus(t("profile.refreshedStatus"));
       } else {
-        setStatus(`未更新:${r.reason}`);
+        setStatus(t("profile.refreshNotUpdated", { reason: r.reason ?? "" }));
       }
     } catch (e) {
-      setStatus(`刷新失败:${e instanceof Error ? e.message : String(e)}`);
+      setStatus(t("profile.refreshFailed", { error: e instanceof Error ? e.message : String(e) }));
     } finally {
       setBusy(false);
     }
@@ -656,7 +657,7 @@ export function ProfileView() {
   async function undo() {
     const restored = await restoreProfile();
     if (restored == null) {
-      setStatus("没有可恢复的版本。");
+      setStatus(t("profile.noUndoVersion"));
       return;
     }
     if (raw) {
@@ -666,7 +667,7 @@ export function ProfileView() {
       load(restored);
     }
     setCanUndo(false);
-    setStatus("✓ 已恢复到 AI 刷新前的版本。");
+    setStatus(t("profile.undoneStatus"));
   }
 
   const editingSection = sections.find((s) => s.title === editingTitle) ?? null;
@@ -684,11 +685,10 @@ export function ProfileView() {
         <header className="flex flex-col gap-3 border-b border-border/70 pb-5 lg:flex-row lg:items-end lg:justify-between">
           <div className="min-w-0 max-w-3xl">
             <h2 className="m-0 text-ui-title font-semibold tracking-tight">
-              学习者档案
+              {t("sidebar.profile")}
             </h2>
             <p className="m-0 mt-2 text-ui-body leading-relaxed text-ui-muted">
-              对话 AI 会读这份档案做个性化回复。你可以在这里写自定义体验;AI
-              自动维护的学习状态为只读。
+              {t("profile.description")}
             </p>
             {header && (
               <p className="m-0 mt-3 truncate font-mono text-ui-caption text-ui-muted">
@@ -699,11 +699,11 @@ export function ProfileView() {
         </header>
 
         {!loaded ? (
-          <p className="m-0 text-ui-body text-ui-muted">加载档案…</p>
+          <p className="m-0 text-ui-body text-ui-muted">{t("profile.loading")}</p>
         ) : raw ? (
           <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
             <Textarea
-              aria-label="原始 Markdown"
+              aria-label={t("profile.rawAriaLabel")}
               className="min-h-[calc(100vh-260px)] resize-none bg-background/60 font-mono text-ui-body leading-normal"
               value={rawText}
               onChange={(e) => setRawText(e.target.value)}
@@ -727,12 +727,12 @@ export function ProfileView() {
           <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
             <main className="min-w-0">
               <div className="mb-3 flex items-center justify-between gap-3">
-                <h3 className="m-0 text-ui-body font-semibold">档案条目</h3>
+                <h3 className="m-0 text-ui-body font-semibold">{t("profile.sections")}</h3>
                 <span className="text-ui-caption text-ui-muted">
-                  {displaySections.length} 个模块
+                  {t("profile.modulesCount", { n: String(displaySections.length) })}
                 </span>
               </div>
-              {/* 瀑布流:JS 把卡片分配到等宽 flex 列,各列从顶部开始 → 顶边齐平、间距统一。 */}
+              {/* Waterfall layout: JS distributes cards into equal-width flex columns, top-aligned. */}
               <div ref={gridRef} className="flex items-start gap-4">
                 {columns.map((col, i) => (
                   <div key={i} className="flex min-w-0 flex-1 flex-col gap-4">

@@ -70,7 +70,7 @@ export async function generateLearningAgentDraft(
   const validated = GeneratedLearningAgent.safeParse(parsed.value);
   if (!validated.success) {
     throw new Error(
-      `学习 Agent 生成结果校验失败: ${formatZodError(validated.error)}`,
+      `Learning agent generation result validation failed: ${formatZodError(validated.error)}`,
     );
   }
   return {

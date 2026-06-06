@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { generatePkce, randomState } from "./pkce";
 
-const B64URL = /^[A-Za-z0-9_-]+$/; // base64url:无 +、/、=
+const B64URL = /^[A-Za-z0-9_-]+$/; // base64url: no +, /, or =
 
 async function sha256Base64url(input: string): Promise<string> {
   const digest = await crypto.subtle.digest(

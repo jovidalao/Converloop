@@ -1,7 +1,7 @@
-// Agent Runtime 注册表与派发(Phase 1)。
-// 内置 Agent 在 ./builtins 里通过下面的 register* 自注册(从 ./index 触发)。
-// 关键:reply_producer 按 kind 唯一(查表即得),observer 可多个(派发时遍历)——
-// 「新增一个 observer 不需要改 runTurn」靠的就是 getObservers() 这一层。
+// Agent Runtime registry and dispatch (Phase 1).
+// Built-in agents in ./builtins self-register via the register* functions below (triggered from ./index).
+// Key invariant: reply_producer is unique per kind (direct map lookup); observers can be multiple (iterated on dispatch) —
+// "adding a new observer without touching runTurn" is exactly what the getObservers() indirection provides.
 
 import { recordAgentRun } from "../db/agent-jobs";
 import {
@@ -53,8 +53,8 @@ export function registerTransformer(transformer: TransformerInfo): void {
   transformers.push(transformer);
 }
 
-// 把内置 Agent 的用户改写(名称/说明)合并进展示卡片,让动作条与能力库展示一致。
-// 补充指令(instructions)由各能力在执行时自行读取追加,这里只覆盖展示字段。
+// Merge user overrides (name/description) for built-in agents into their display card, so the action bar and agent library stay consistent.
+// Supplemental instructions are read and appended by each capability at execution time; only display fields are overridden here.
 function applyCardOverride(
   id: string,
   card?: AgentCard,
@@ -70,7 +70,7 @@ function applyCardOverride(
   };
 }
 
-// 动作在菜单里按 label/description 渲染,故也要把改写合进动作本身(不只是卡片)。
+// Actions are rendered in the menu using label/description, so overrides must be merged into the action itself (not just the card).
 function withActionOverride(a: ActionAgent): ActionAgent {
   const ov = getBuiltinAgentOverride(a.id);
   if (!ov || (ov.label === undefined && ov.description === undefined)) return a;
@@ -106,7 +106,7 @@ export function getObservers(): readonly Observer[] {
   return observers;
 }
 
-// 隐藏的动作(用户在能力库「删除」)不进任何菜单。隐藏无恢复入口,故直接从派发源滤掉。
+// Hidden actions (user "deleted" them in the agent library) do not appear in any menu. There is no restore path, so filter them out at the dispatch source.
 export function getActions(scope?: ActionScope): readonly ActionAgent[] {
   const list = (scope ? actions.filter((a) => a.scope === scope) : actions)
     .filter((a) => !isAgentHidden(a.id))
@@ -118,7 +118,7 @@ export function getTransformers(): readonly TransformerInfo[] {
   return transformers;
 }
 
-// 能力库目录:所有注册的 Agent(含当前启用态),供 UI 展示与开关。
+// Agent library catalog: all registered agents (with current enabled state), for UI display and toggling.
 export function listAgentCatalog(): AgentCatalogEntry[] {
   const entries: AgentCatalogEntry[] = [];
   for (const p of replyProducers.values())
@@ -150,12 +150,12 @@ export function listAgentCatalog(): AgentCatalogEntry[] {
       enabled: true,
       card: applyCardOverride(t.id, t.card),
     });
-  // 隐藏(永久删除)的能力不在能力库出现,也不可恢复。
+  // Hidden (permanently deleted) capabilities do not appear in the library and cannot be restored.
   return entries.filter((e) => !isAgentHidden(e.id));
 }
 
-// 把一次 Agent 运行包成「跑完后异步落一条日志」。日志在完成后 fire-and-forget 写入,
-// 绝不在 LLM 调用前插行——否则会给首 token 加一次 DB 往返(验收 #1)。
+// Wrap an agent run so that a log entry is written asynchronously after the run completes. The log is fire-and-forget after completion,
+// and is never inserted before the LLM call — doing so would add a DB round-trip to first-token latency (acceptance criterion #1).
 async function runLogged<T>(
   meta: {
     agentId: string;
@@ -177,7 +177,7 @@ async function runLogged<T>(
       output: meta.summarize?.(result),
       startedAt,
       finishedAt: Date.now(),
-    }).catch((e) => logError("agent-run", "运行日志写入失败", e));
+    }).catch((e) => logError("agent-run", "Failed to write agent run log", e));
     return result;
   } catch (e) {
     void recordAgentRun({
@@ -189,18 +189,18 @@ async function runLogged<T>(
       error: e instanceof Error ? e.message : String(e),
       startedAt,
       finishedAt: Date.now(),
-    }).catch((err) => logError("agent-run", "运行日志写入失败", err));
+    }).catch((err) => logError("agent-run", "Failed to write agent run log", err));
     throw e;
   }
 }
 
-// 派发主回复:按 kind 取唯一 reply_producer,流式跑,带日志。错误向上抛给 runTurn。
+// Dispatch the main reply: look up the unique reply_producer by kind, run it streaming with logging. Errors propagate up to runTurn.
 export async function dispatchReply(
   ctx: ConversationContext,
   onDelta: (delta: string) => void,
 ): Promise<string> {
   const producer = getReplyProducer(ctx.kind);
-  if (!producer) throw new Error(`没有注册 ${ctx.kind} 的回复 Agent`);
+  if (!producer) throw new Error(`No reply agent registered for ${ctx.kind}`);
   return runLogged(
     {
       agentId: producer.id,
@@ -212,11 +212,11 @@ export async function dispatchReply(
   );
 }
 
-// 派发 observer:遍历所有注册的 observer 并行触发,fire-and-forget(不阻塞下一轮输入)。
-// 每个 observer 自行 await ctx.turnPersisted 后再写回,并自管 UI 回调与错误展示。
+// Dispatch observers: iterate all registered observers and fire them in parallel, fire-and-forget (non-blocking for the next user input).
+// Each observer awaits ctx.turnPersisted before writing back, and manages its own UI callbacks and error display.
 export function dispatchObservers(ctx: PracticeContext): void {
   const active = getObservers().filter((o) => isAgentEnabled(o.id));
-  // 没有启用的 observer(如用户关掉了导师)→ 通知 UI 本轮无批改,清掉「分析中」pending。
+  // No enabled observers (e.g. user turned off the tutor) → notify UI there is no correction this turn, clear the "analyzing" pending state.
   if (active.length === 0) {
     ctx.callbacks.onAnalysis(null);
     return;
@@ -229,19 +229,19 @@ export function dispatchObservers(ctx: PracticeContext): void {
         turnId: ctx.turnId,
       },
       () => observer.run(ctx),
-    ).catch((e) => logError("agent-observe", `${observer.id} 运行失败`, e));
+    ).catch((e) => logError("agent-observe", `${observer.id} failed`, e));
   }
 }
 
-// 运行一个会话动作 Agent(用户点击触发)。带日志,结果回传给 UI(通常含要跳转的新会话 id)。
+// Run a conversation action agent (triggered by user click). Logged; result is returned to the UI (typically contains the new conversation id to navigate to).
 export async function runAction(
   actionId: string,
   ctx: ActionContext,
 ): Promise<ActionResult> {
   const action = actions.find((a) => a.id === actionId);
-  if (!action) throw new Error(`没有注册 id=${actionId} 的动作 Agent`);
+  if (!action) throw new Error(`No action agent registered with id=${actionId}`);
   const run = action.run;
-  if (!run) throw new Error(`动作 ${actionId} 不是直接执行动作`);
+  if (!run) throw new Error(`Action ${actionId} is not a directly executable action`);
   return runLogged(
     {
       agentId: action.id,
@@ -252,14 +252,14 @@ export async function runAction(
   );
 }
 
-// 用户点击动作时先建 pending 衍生会话,让 UI 可以立刻跳过去显示加载态。
-// 非衍生动作(如「变成专项课」)仍退回 runAction。
+// When the user clicks an action, first create a pending derived conversation so the UI can navigate there immediately and show a loading state.
+// Non-derivation actions (e.g. "turn into a focused lesson") fall back to runAction.
 export async function beginAction(
   actionId: string,
   ctx: ActionContext,
 ): Promise<ActionResult> {
   const found = actions.find((a) => a.id === actionId);
-  if (!found) throw new Error(`没有注册 id=${actionId} 的动作 Agent`);
+  if (!found) throw new Error(`No action agent registered with id=${actionId}`);
   if (!found.deriveContext) return runAction(actionId, ctx);
   const action = withActionOverride(found);
 
@@ -274,9 +274,9 @@ export async function beginAction(
   return { navigateTo: id };
 }
 
-// 新衍生会话页面挂载后调用:读取 pending 状态,运行对应 action agent 生成新上下文。
-// 这里只负责 Agent 运行与日志;持久化 ready/failed 状态由 orchestrator 处理,避免 registry
-// 直接决定会话开场逻辑。
+// Called when a new derived conversation page mounts: reads the pending state, runs the corresponding action agent to generate the new context.
+// This function is only responsible for agent execution and logging; persisting the ready/failed state is handled by the orchestrator,
+// so the registry does not directly control conversation startup logic.
 export async function derivePendingAction(
   newConversationId: string,
 ): Promise<NewConversationContext> {
@@ -286,14 +286,14 @@ export async function derivePendingAction(
   );
   const derivation = modifiers.derivation;
   if (!conversation || !derivation) {
-    throw new Error("这个会话没有待生成的对话衍生上下文");
+    throw new Error("This conversation has no pending derivation context to generate");
   }
   if (!conversation.parentConversationId) {
-    throw new Error("衍生会话缺少来源对话");
+    throw new Error("Derived conversation is missing a source conversation");
   }
   const action = actions.find((a) => a.id === derivation.actionId);
   if (!action?.deriveContext) {
-    throw new Error(`动作 ${derivation.actionId} 不能生成对话衍生上下文`);
+    throw new Error(`Action ${derivation.actionId} cannot generate a derived conversation context`);
   }
   const ctx: DerivationContext = {
     newConversationId,
@@ -314,7 +314,7 @@ export async function derivePendingAction(
   );
 }
 
-// 按需 transformer(讲解 / 双语 / 划词)不走热路径派发,但仍进入能力库与运行日志。
+// On-demand transformers (explain / bilingual / selection translate) do not go through hot-path dispatch, but still appear in the agent library and run log.
 export async function runTransformer<T>(
   transformerId: string,
   hook: HookName,
@@ -323,10 +323,10 @@ export async function runTransformer<T>(
 ): Promise<T> {
   const transformer = transformers.find((t) => t.id === transformerId);
   if (!transformer)
-    throw new Error(`没有注册 id=${transformerId} 的转换 Agent`);
-  // 兜底:即使触发按钮已被隐藏,入口也拒绝运行被删除的能力。
+    throw new Error(`No transformer agent registered with id=${transformerId}`);
+  // Safety fallback: even if the trigger button is hidden, refuse to run a deleted capability.
   if (isAgentHidden(transformerId))
-    throw new Error(`能力 ${transformerId} 已被删除`);
+    throw new Error(`Capability ${transformerId} has been deleted`);
   return runLogged(
     {
       agentId: transformer.id,

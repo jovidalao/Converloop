@@ -24,7 +24,7 @@ export async function persistTurn(
   return id;
 }
 
-// 覆盖某轮的对话回复(「重新生成」用)。批改不动——只换 AI 那句。
+// Overwrite the AI reply for a turn (used by "regenerate"). The correction is left unchanged — only the AI sentence is replaced.
 export async function updateTurnReply(
   id: string,
   reply: string,
@@ -54,7 +54,7 @@ export interface ChatTurn {
   analysisProse?: string | null;
   analysisPending?: boolean;
   analysisError?: string | null;
-  /** /btw 离档轮:仍显示在记录里,但不计入后续上下文,也不批改。 */
+  /** /btw off-record turn: still shown in history, but excluded from future context and not corrected. */
   excludeFromContext?: boolean;
 }
 
@@ -109,7 +109,7 @@ export function parseTurnFeedback(json: string | null): {
   }
 }
 
-// 从 DB 恢复某会话的聊天(时间正序),供 ChatView 挂载时加载。
+// Restore chat history for a conversation from the DB (chronological order), loaded when ChatView mounts.
 export async function loadChatHistory(
   conversationId: string,
   limit = 200,
@@ -133,14 +133,14 @@ export function parseTurnAnalysis(json: string | null): TutorAnalysis | null {
   return parseTurnFeedback(json).analysis;
 }
 
-// 全局最近 turns(跨会话)。维护 agent 的 getRecentlyIntroduced 用,刻意不按会话隔离。
+// Global most-recent turns (cross-conversation). Used by the maintainer agent's getRecentlyIntroduced — intentionally not scoped per conversation.
 export async function getRecentTurns(limit = 6): Promise<Turn[]> {
   const rows = await db
     .select()
     .from(turn)
     .orderBy(desc(turn.createdAt))
     .limit(limit);
-  return rows.reverse(); // 时间正序,喂 prompt 更自然
+  return rows.reverse(); // chronological order — more natural to feed into prompts
 }
 
 export async function getTurnsSince(
@@ -161,7 +161,7 @@ export async function getTurn(id: string): Promise<Turn | null> {
   return row ?? null;
 }
 
-// 某会话内的最近 turns。对话/导师 agent 的上下文按会话隔离,话题不串。
+// Most-recent turns within a conversation. The conversation/tutor agent context is scoped per conversation so topics do not bleed across.
 export async function getRecentTurnsForConversation(
   conversationId: string,
   limit = 6,
@@ -172,18 +172,18 @@ export async function getRecentTurnsForConversation(
     .where(eq(turn.conversationId, conversationId))
     .orderBy(desc(turn.createdAt))
     .limit(limit);
-  return rows.reverse(); // 时间正序,喂 prompt 更自然
+  return rows.reverse(); // chronological order — more natural to feed into prompts
 }
 
-// 历史里某轮的"用户行":母语/混说轮(有 expression_gap)用导师转换出的地道目标语,
-// 让后续对话在目标语里连贯延续;否则用原始输入。
+// The "user line" for a turn in history: for native-language/mixed-language turns (those with an expression_gap),
+// use the tutor's idiomatic target-language translation so the conversation continues coherently in the target language; otherwise use the raw input.
 function userLineForHistory(t: Turn): string {
   const { analysis } = parseTurnFeedback(t.analysisJson);
   const target = analysis?.expression_gap?.target_expression?.trim();
   return target || t.userInput;
 }
 
-// 把一组 turns 格式化成对话 / 导师 agent 都能用的历史文本(时间正序传入)。
+// Format a set of turns (passed in chronological order) into history text usable by both the conversation and tutor agents.
 export function formatTurns(turns: Turn[]): string {
   return turns
     .map((t) => {
@@ -195,14 +195,14 @@ export function formatTurns(turns: Turn[]): string {
     .join("\n\n");
 }
 
-// 取某会话「水位之后」的全部原文轮次(时间正序)。afterId = summary_through_id:
-// 已折叠进摘要的最后一个 turn。null = 尚未压缩,返回全部。自动压缩的对话 agent 用
-// 「摘要 + 这些原文」组装上下文(见 orchestrator / summary-runner)。
+// Fetch all verbatim turns after the "watermark" for a conversation (chronological order). afterId = summary_through_id:
+// the last turn folded into the summary. null = not yet compressed, returns all. The auto-compressing conversation agent
+// assembles context from "summary + these verbatim turns" (see orchestrator / summary-runner).
 export async function getTurnsAfterId(
   conversationId: string,
   afterId: string | null,
 ): Promise<Turn[]> {
-  // 离档轮(/btw)永不计入上下文:context 构建处统一在 SQL 层过滤掉。
+  // Off-record turns (/btw) are never included in context: filtered out uniformly at the SQL level here.
   const all = () =>
     db
       .select()
@@ -221,9 +221,9 @@ export async function getTurnsAfterId(
     .from(turn)
     .where(eq(turn.id, afterId))
     .limit(1);
-  if (!mark) return all(); // 水位指向的 turn 已不存在 → 退化为全部,安全。
+  if (!mark) return all(); // The watermark turn no longer exists → fall back to all, safe.
 
-  // 用 createdAt >= 水位再按 id 剔除水位本身:既不漏(同毫秒并列也保留),也不重复水位轮。
+  // Use createdAt >= watermark then exclude the watermark turn itself by id: no gaps (concurrent same-millisecond turns are kept) and no duplicate of the watermark turn.
   const rows = await db
     .select()
     .from(turn)
@@ -238,9 +238,9 @@ export async function getTurnsAfterId(
   return rows.filter((t) => t.id !== afterId);
 }
 
-// 维护 agent 的增量转写:只取上次维护之后(createdAt > sinceMs)的 turns,避免
-// 每次都重嚼老内容(反复重写 About me、缓慢漂移)。跨会话不隔离(档案是全局的)。
-// 再按字符预算从最近往回截断,粗略对应 token 预算,防止长 turn 撑爆上下文。
+// Incremental transcript for the maintainer agent: only fetch turns created after the last maintenance run (createdAt > sinceMs),
+// to avoid re-digesting old content (repeated rewrites of "About me" cause slow drift). Not scoped per conversation (profile is global).
+// Then truncate from the most recent turn down to the character budget, a rough proxy for the token budget, to prevent long turns from blowing up the context.
 export async function formatHistorySince(
   sinceMs: number,
   charBudget: number,
@@ -260,11 +260,11 @@ export async function formatHistorySince(
     lines.push(line);
     used += line.length;
   }
-  return lines.reverse().join("\n\n"); // 时间正序,喂 prompt 更自然
+  return lines.reverse().join("\n\n"); // chronological order — more natural to feed into prompts
 }
 
-// 理解信号:用户在某条回复上点「讲解」/「双语阅读」时 +1(仅用户主动触发,
-// 自动展开的双语不算)。原子自增,best-effort——计错一次不影响主链路。
+// Comprehension signal: incremented by 1 when the user taps "explain" / "bilingual reading" on a reply
+// (only user-initiated actions; auto-expanded bilingual does not count). Atomic increment, best-effort — one missed count does not affect the main flow.
 export async function incrementExplainCount(id: string): Promise<void> {
   await db
     .update(turn)
@@ -284,7 +284,7 @@ export async function getTurnCount(): Promise<number> {
   return row?.n ?? 0;
 }
 
-// 从近期 turns 的分析里抽 "introduced" 项,去重(给维护 agent 的"最近学到")。
+// Extract "introduced" items from recent turns' analyses, deduplicated (used as "recently learned" for the maintainer agent).
 export async function getRecentlyIntroduced(
   limit = 12,
 ): Promise<{ key: string; label: string }[]> {

@@ -7,6 +7,7 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
+import { useTranslation } from "@/i18n";
 import { cn } from "@/lib/utils";
 import {
   addSelectionToLearningData,
@@ -19,7 +20,7 @@ import { Markdown } from "./Markdown";
 import { Spinner } from "./ui/spinner";
 
 interface Anchor {
-  left: number; // 视口坐标:选区末尾
+  left: number; // viewport coordinates: end of the selection
   top: number;
 }
 
@@ -39,9 +40,12 @@ function errText(e: unknown) {
   return e instanceof Error ? e.message : String(e);
 }
 
-// 从当前选区取出:选中文字 + 所在「可解析块」整段文本 + 末尾视口坐标。
-// 选区必须落在 container 内、且祖先带 data-selectable-context(消息正文)才算数。
-// 只快照字符串,不持有 Range —— 动作都基于快照,无需回写 DOM 选区。
+// Pull from the current selection: the selected text + the full text of its
+// enclosing "parseable block" + the end's viewport coordinates. The selection
+// only counts if it falls inside `container` and has an ancestor with
+// data-selectable-context (message body). Snapshots strings only, never holds a
+// Range — every action works off the snapshot, no need to write back the DOM
+// selection.
 function readPick(container: HTMLElement): Pick | null {
   const sel = window.getSelection();
   if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return null;
@@ -113,13 +117,16 @@ function IslandButton({
   );
 }
 
-// 划词浮动岛:在消息区选中词/句 → 浮出学习动作(解析 / 朗读 / 加入)。
-// 不暴露模型内部,只给可观察动作。挂在 ChatView 消息滚动区上,portal 到 body。
+// Selection floating island: select a word/sentence in the message area → a set
+// of learning actions floats up (analyze / read aloud / add). Exposes no model
+// internals, only observable actions. Mounts on ChatView's message scroll area
+// and portals to body.
 export function AnnotationIsland({
   containerRef,
 }: {
   containerRef: RefObject<HTMLElement | null>;
 }) {
+  const { t } = useTranslation();
   const [pick, setPick] = useState<Pick | null>(null);
   const [view, setView] = useState<View>("actions");
   const [result, setResult] = useState("");
@@ -127,7 +134,7 @@ export function AnnotationIsland({
   const [busy, setBusy] = useState<Busy | null>(null);
   const [status, setStatus] = useState<Status | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
-  const genRef = useRef(0); // 作废在途的流式解析
+  const genRef = useRef(0); // invalidate in-flight streaming analysis
 
   const dismiss = useCallback(() => {
     setPick(null);
@@ -137,9 +144,12 @@ export function AnnotationIsland({
     setStatus(null);
     setBusy(null);
     genRef.current++;
-    // 清掉残留高亮,否则点空白处虽 mousedown 已关闭,紧跟的 mouseup 又会把它当成
-    // 有效选区重开浮岛(需点两次)。但只清「消息区内」的选区 —— 绝不碰输入框等容器
-    // 外的选区/光标,否则会破坏 textarea 的输入与划选。
+    // Clear leftover highlights, otherwise clicking blank space (mousedown
+    // already closed it) lets the following mouseup treat it as a valid
+    // selection and reopen the island (requiring two clicks). But only clear
+    // selections "inside the message area" — never touch selections/cursors
+    // outside the container such as the input, or it breaks textarea typing and
+    // selection.
     const sel = window.getSelection();
     const container = containerRef.current;
     const anchor = sel?.rangeCount
@@ -185,7 +195,7 @@ export function AnnotationIsland({
       stopSpeech();
       const audio = await speakText(pick.selection);
       await playSpeech(audio, pick.selection);
-      setStatus({ tone: "success", text: "正在朗读选中文本" });
+      setStatus({ tone: "success", text: t("annotationIsland.speaking") });
     } catch (e) {
       setStatus({ tone: "error", text: errText(e) });
     } finally {
@@ -197,7 +207,7 @@ export function AnnotationIsland({
     if (!pick || busy) return;
     setStatus(null);
     if (!pick.selection.trim()) {
-      setStatus({ tone: "error", text: "请选择包含文字或数字的内容" });
+      setStatus({ tone: "error", text: t("annotationIsland.selectTextHint") });
       return;
     }
     setBusy("save");
@@ -206,7 +216,10 @@ export function AnnotationIsland({
         pick.selection,
         pick.context,
       );
-      setStatus({ tone: "success", text: `已加入学习数据:${item.label}` });
+      setStatus({
+        tone: "success",
+        text: t("annotationIsland.added", { label: item.label }),
+      });
     } catch (e) {
       setStatus({ tone: "error", text: errText(e) });
     } finally {
@@ -218,7 +231,8 @@ export function AnnotationIsland({
     const container = containerRef.current;
     if (!container) return;
 
-    // 选区结束:浮岛外的 mouseup 才重算选区。有有效新选区→以 actions 视图打开。
+    // Selection ends: only a mouseup outside the island recomputes the
+    // selection. A valid new selection → open in the actions view.
     function onMouseUp(e: MouseEvent) {
       if (rootRef.current?.contains(e.target as Node)) return;
       const next = container ? readPick(container) : null;
@@ -235,7 +249,8 @@ export function AnnotationIsland({
       genRef.current++;
     }
 
-    // 浮岛外的 mousedown 立即关闭(含开始新一次选择)。岛内点击交给按钮处理。
+    // A mousedown outside the island closes it immediately (including starting a
+    // new selection). Clicks inside are handled by the buttons.
     function onMouseDown(e: MouseEvent) {
       if (rootRef.current?.contains(e.target as Node)) return;
       dismiss();
@@ -263,26 +278,30 @@ export function AnnotationIsland({
 
   const position = clampPosition(pick.anchor, ISLAND_WIDTH);
 
-  // position: fixed 坐标取自 getClientRects() 的视口坐标。portal 到 body 让 fixed
-  // 相对视口定位 —— 否则祖先 .codex-main 的 backdrop-filter 会建立包含块,使浮岛偏移。
-  // 不做入场动画:opacity 渐入期间 WebKit 会临时停用 backdrop-filter,毛玻璃在深色
-  // 模式下会「先深后浅」闪一下;直接出现,材质从首帧即稳定。
+  // position: fixed coordinates come from getClientRects()'s viewport coords.
+  // Portaling to body makes the fixed positioning relative to the viewport —
+  // otherwise the ancestor .codex-main's backdrop-filter establishes a
+  // containing block and offsets the island. No entrance animation: during an
+  // opacity fade-in WebKit temporarily disables backdrop-filter, so the frosted
+  // glass would flash "dark then light" in dark mode; appearing instantly keeps
+  // the material stable from the first frame.
   return createPortal(
     <div
       ref={rootRef}
       role="dialog"
-      aria-label="选区学习动作"
+      aria-label={t("annotationIsland.ariaLabel")}
       className="fixed z-[400]"
       style={{ left: position.left, top: position.top, width: ISLAND_WIDTH }}
       onMouseDown={(e) => e.preventDefault()}
     >
-      {/* 半透明毛玻璃材质 + 柔和投影,贴近 macOS NSPopover 观感 */}
+      {/* Semi-transparent frosted-glass material + soft shadow, close to the
+          macOS NSPopover look */}
       <div className="overflow-hidden rounded-xl border border-border/60 bg-popover/85 shadow-modal-small backdrop-blur-2xl backdrop-saturate-150 supports-[backdrop-filter]:bg-popover/75">
         <div className="flex items-center gap-1 border-b border-border/60 px-1.5 py-1.5">
           {!isAgentHidden("builtin:transformer:translate") && (
             <IslandButton
               icon={<LanguagesIcon size={14} />}
-              label="解析"
+              label={t("annotationIsland.analyze")}
               active={view === "analysis"}
               disabled={busy !== null && busy !== "analysis"}
               onClick={() => void startAnalysis()}
@@ -296,7 +315,7 @@ export function AnnotationIsland({
                 <Volume2Icon size={14} />
               )
             }
-            label="朗读"
+            label={t("annotationIsland.speak")}
             disabled={busy !== null && busy !== "speak"}
             onClick={() => void speakSelection()}
           />
@@ -308,14 +327,14 @@ export function AnnotationIsland({
                 <BookPlusIcon size={14} />
               )
             }
-            label="加入"
+            label={t("annotationIsland.add")}
             disabled={busy !== null && busy !== "save"}
             onClick={() => void addToLearningData()}
           />
           <button
             type="button"
             className="ml-auto inline-flex size-7 select-none items-center justify-center rounded-md text-ui-muted transition-colors hover:bg-accent hover:text-foreground active:bg-foreground-10 focus-visible:outline-none focus-visible:ring-[1.5px] focus-visible:ring-ring"
-            aria-label="关闭"
+            aria-label={t("common.close")}
             onMouseDown={(e) => e.preventDefault()}
             onClick={dismiss}
           >
@@ -338,7 +357,7 @@ export function AnnotationIsland({
               ) : (
                 <span className="inline-flex items-center gap-2 text-ui-muted">
                   <Spinner className="size-3.5" />
-                  解析中…
+                  {t("annotationIsland.analyzing")}
                 </span>
               )}
             </div>

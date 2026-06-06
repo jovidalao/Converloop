@@ -61,6 +61,7 @@ import {
   listLearningAgents,
 } from "./db/learning-agents";
 import type { ChatTurn } from "./db/turns";
+import { useTranslation } from "./i18n";
 import { actionShortcutLabel, matchesActionShortcut } from "./lib/app-actions";
 import { withViewTransition } from "./lib/view-transition";
 import { flushMaintainerSoon } from "./profile/maintainer-runner";
@@ -85,8 +86,10 @@ function sameLocation(a: AppLocation, b: AppLocation): boolean {
   return a.view === b.view && a.activeId === b.activeId;
 }
 
-// 设置子菜单里的视图(三页设置 + 档案数据库三页)。进入这些视图时侧栏 drill 进
-// 设置面板;「创建专项课」走主侧栏的定制化学习分组,不算设置视图。
+// Views inside the settings sub-menu (the three settings pages + three profile
+// database pages). Entering these drills the sidebar into the settings panel;
+// "Create lesson" lives under the main sidebar's custom-learning group and is
+// not treated as a settings view.
 const SETTINGS_VIEWS: ReadonlySet<MainView> = new Set<MainView>([
   "settings-general",
   "settings-llm",
@@ -103,6 +106,7 @@ function isSettingsView(view: MainView): boolean {
 }
 
 function App() {
+  const { t } = useTranslation();
   const [conversations, setConversations] = useState<ConversationMeta[]>([]);
   const [learningAgents, setLearningAgents] = useState<LearningAgentMeta[]>([]);
   const [ready, setReady] = useState(false);
@@ -113,7 +117,7 @@ function App() {
   const [coachOpen, setCoachOpen] = useState(
     () => localStorage.getItem("coachOpen") !== "false",
   );
-  const [coachTurn, setCoachTurn] = useState<ChatTurn | null>(null);
+  const [coachTurns, setCoachTurns] = useState<ChatTurn[]>([]);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [derivationBusy, setDerivationBusy] = useState(false);
@@ -143,17 +147,19 @@ function App() {
     localStorage.setItem("coachOpen", String(coachOpen));
   }, [coachOpen]);
 
-  // 顶层轻量提示(如衍生失败):几秒后自动消失,也可手动关。
+  // Top-level lightweight toast (e.g. a derivation failure): auto-dismisses
+  // after a few seconds, and can also be closed manually.
   useEffect(() => {
     if (!toast) return;
     const timer = window.setTimeout(() => setToast(null), 6000);
     return () => window.clearTimeout(timer);
   }, [toast]);
 
-  // 切换会话时清掉上一会话残留的本轮反馈,等新会话 ChatView 重新上报。
-  // biome-ignore lint/correctness/useExhaustiveDependencies: activeId 仅作触发,effect 不读它
+  // When switching conversations, clear the previous conversation's leftover
+  // per-turn feedback; the new conversation's ChatView re-reports it.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: activeId is only a trigger; the effect doesn't read it
   useEffect(() => {
-    setCoachTurn(null);
+    setCoachTurns([]);
   }, [activeId]);
 
   useEffect(() => {
@@ -276,7 +282,7 @@ function App() {
     [activeId, navigateTo],
   );
 
-  // ⌘, 设置 · ⌘B 侧栏 · ⌘N 新对话 · ⌘1/2/3 聚焦三栏 · ⌘/ 快捷键。
+  // ⌘, settings · ⌘B sidebar · ⌘N new chat · ⌘1/2/3 focus the three panes · ⌘/ shortcuts.
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       const inField =
@@ -349,7 +355,7 @@ function App() {
   }, [refresh, refreshLearningAgents]);
 
   function selectConversation(id: string) {
-    setActiveConversationId(id); // 持久化,不进过渡
+    setActiveConversationId(id); // persist; no view transition
     navigateTo({ view: "chat", activeId: id });
   }
 
@@ -361,7 +367,7 @@ function App() {
 
   async function startLearningAgent(agentId: string) {
     const agent = learningAgents.find((a) => a.id === agentId);
-    const title = agent?.name ?? "定制化学习";
+    const title = agent?.name ?? t("app.customLearningFallback");
     const id = await createConversation(title, crypto.randomUUID(), {
       kind: "learning_agent",
       learningAgentId: agentId,
@@ -385,7 +391,11 @@ function App() {
       await refresh();
       if (result.navigateTo) selectConversation(result.navigateTo);
     } catch (e) {
-      setToast(`对话衍生失败：${e instanceof Error ? e.message : String(e)}`);
+      setToast(
+        t("app.deriveFailed", {
+          error: e instanceof Error ? e.message : String(e),
+        }),
+      );
     } finally {
       setDerivationBusy(false);
     }
@@ -465,13 +475,14 @@ function App() {
   if (!ready || !activeId)
     return (
       <div className="flex h-full min-h-screen items-center justify-center text-ui-muted">
-        加载中…
+        {t("common.loading")}
       </div>
     );
 
   const activeConversation = conversations.find((c) => c.id === activeId);
   const draftActive = view === "chat" && activeId === draftId;
-  // 教练面板只在普通练习对话出现(专项课在对话内反馈,无结构化批改)。
+  // The coach panel only appears in regular practice conversations (lessons
+  // give feedback inline, without structured correction).
   const coachEligible =
     view === "chat" && (activeConversation?.kind ?? "practice") === "practice";
   const coachVisible = coachEligible && coachOpen;
@@ -486,20 +497,20 @@ function App() {
     derivationActions.length > 0;
   const settingsMode = isSettingsView(view);
   const TOPBAR_TITLES: Partial<Record<MainView, string>> = {
-    profile: "学习者档案",
-    mastery: "学习数据",
-    learning: "创建专项课",
-    design: "设计说明",
-    agents: "能力库",
-    "settings-logs": "日志",
-    "settings-general": "通用设置",
-    "settings-llm": "LLM 提供商",
-    "settings-tts": "TTS 提供商",
+    profile: t("viewTitles.profile"),
+    mastery: t("viewTitles.mastery"),
+    learning: t("viewTitles.learning"),
+    design: t("viewTitles.design"),
+    agents: t("viewTitles.agents"),
+    "settings-logs": t("viewTitles.logs"),
+    "settings-general": t("viewTitles.general"),
+    "settings-llm": t("viewTitles.llm"),
+    "settings-tts": t("viewTitles.tts"),
   };
   const topbarTitle =
     view === "chat"
       ? draftActive
-        ? "新对话"
+        ? t("app.newChat")
         : (activeConversation?.title ?? "")
       : (TOPBAR_TITLES[view] ?? "");
 
@@ -554,7 +565,11 @@ function App() {
                   size="icon"
                   className="codex-chrome-button"
                   onClick={toggleSidebar}
-                  aria-label={collapsed ? "展开侧栏" : "收起侧栏"}
+                  aria-label={
+                    collapsed
+                      ? t("app.expandSidebar")
+                      : t("app.collapseSidebar")
+                  }
                 >
                   {collapsed ? <PanelRightIcon /> : <PanelLeftIcon />}
                 </Button>
@@ -564,7 +579,11 @@ function App() {
                 align="start"
                 className="flex items-center gap-2"
               >
-                <span>{collapsed ? "展开侧栏" : "收起侧栏"}</span>
+                <span>
+                  {collapsed
+                    ? t("app.expandSidebar")
+                    : t("app.collapseSidebar")}
+                </span>
                 <kbd className="rounded border border-border/60 bg-muted px-1.5 py-0.5 font-sans text-ui-caption text-ui-muted">
                   {actionShortcutLabel("toggle-sidebar")}
                 </kbd>
@@ -579,13 +598,13 @@ function App() {
                   className="codex-chrome-button"
                   onClick={goBack}
                   disabled={backStack.length === 0}
-                  aria-label="后退"
+                  aria-label={t("app.back")}
                 >
                   <ChevronLeftIcon />
                 </Button>
               </TooltipTrigger>
               <TooltipContent side="bottom" align="start">
-                <span>后退</span>
+                <span>{t("app.back")}</span>
               </TooltipContent>
             </Tooltip>
             <Tooltip>
@@ -597,13 +616,13 @@ function App() {
                   className="codex-chrome-button"
                   onClick={goForward}
                   disabled={forwardStack.length === 0}
-                  aria-label="前进"
+                  aria-label={t("app.forward")}
                 >
                   <ChevronRightIcon />
                 </Button>
               </TooltipTrigger>
               <TooltipContent side="bottom" align="start">
-                <span>前进</span>
+                <span>{t("app.forward")}</span>
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
@@ -622,7 +641,7 @@ function App() {
                     size="icon"
                     className="codex-chrome-button"
                     onClick={openDraftConversation}
-                    aria-label="新对话"
+                    aria-label={t("app.newChat")}
                   >
                     <SquarePenIcon />
                   </Button>
@@ -632,7 +651,7 @@ function App() {
                   align="end"
                   className="flex items-center gap-2"
                 >
-                  <span>新对话</span>
+                  <span>{t("app.newChat")}</span>
                   <kbd className="rounded border border-border/60 bg-muted px-1.5 py-0.5 font-sans text-ui-caption text-ui-muted">
                     {actionShortcutLabel("new-chat")}
                   </kbd>
@@ -647,7 +666,7 @@ function App() {
                   size="icon"
                   className="codex-chrome-button"
                   onClick={() => setPaletteOpen(true)}
-                  aria-label="搜索"
+                  aria-label={t("app.search")}
                 >
                   <SearchIcon />
                 </Button>
@@ -657,7 +676,7 @@ function App() {
                 align="end"
                 className="flex items-center gap-2"
               >
-                <span>搜索</span>
+                <span>{t("app.search")}</span>
                 <kbd className="rounded border border-border/60 bg-muted px-1.5 py-0.5 font-sans text-ui-caption text-ui-muted">
                   {actionShortcutLabel("command-palette")}
                 </kbd>
@@ -672,7 +691,7 @@ function App() {
                     size="sm"
                     className="h-8 gap-1.5 px-2.5 text-ui-caption"
                     disabled={derivationBusy}
-                    title="基于当前对话生成新的对话上下文"
+                    title={t("app.deriveTooltip")}
                     data-no-window-drag
                   >
                     {derivationBusy ? (
@@ -680,7 +699,9 @@ function App() {
                     ) : (
                       <SparklesIcon size={15} />
                     )}
-                    {derivationBusy ? "生成中…" : "衍生新对话"}
+                    {derivationBusy
+                      ? t("app.deriving")
+                      : t("app.deriveNewConversation")}
                     <ChevronDownIcon size={13} />
                   </Button>
                 </DropdownMenuTrigger>
@@ -722,13 +743,17 @@ function App() {
                     onClick={toggleCoach}
                     data-active={coachVisible}
                     aria-pressed={coachVisible}
-                    aria-label={coachVisible ? "隐藏教练面板" : "显示教练面板"}
+                    aria-label={
+                      coachVisible ? t("app.hideCoach") : t("app.showCoach")
+                    }
                   >
                     <BrainIcon />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent side="bottom" align="end">
-                  <span>{coachVisible ? "隐藏教练面板" : "显示教练面板"}</span>
+                  <span>
+                    {coachVisible ? t("app.hideCoach") : t("app.showCoach")}
+                  </span>
                 </TooltipContent>
               </Tooltip>
             )}
@@ -776,7 +801,7 @@ function App() {
             mode={activeConversation?.kind ?? "practice"}
             onCreateDraftConversation={materializeDraftConversation}
             onActivity={() => void refresh()}
-            onActiveTurnChange={setCoachTurn}
+            onTurnsChange={setCoachTurns}
             onNavigateConversation={selectConversation}
             coachVisible={coachVisible}
           />
@@ -793,10 +818,11 @@ function App() {
           <div
             className="codex-coach-resizer"
             onPointerDown={startCoachResize}
-            title="拖动调整宽度"
+            title={t("sidebar.resizeTooltip")}
           />
           <CoachPanel
-            turn={coachTurn}
+            turns={coachTurns}
+            conversationId={activeId}
             onOpenView={(v) => navigateTo({ view: v, activeId })}
           />
         </aside>
@@ -824,7 +850,7 @@ function App() {
             type="button"
             className="shrink-0 text-ui-muted transition-colors hover:text-foreground"
             onClick={() => setToast(null)}
-            aria-label="关闭"
+            aria-label={t("common.close")}
           >
             <XIcon size={15} />
           </button>

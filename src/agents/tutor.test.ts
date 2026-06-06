@@ -38,10 +38,10 @@ const validAnalysis = JSON.stringify({
       category: "grammar",
       span_original: "go",
       span_corrected: "went",
-      explanation: "yesterday 表示过去,动词要用过去式。",
+      explanation: "'yesterday' implies past tense; use the past form of the verb.",
       severity: "moderate",
       mastery_key: "grammar:past_tense",
-      mastery_label: "一般过去时",
+      mastery_label: "Simple past tense",
       mastery_type: "grammar",
     },
   ],
@@ -50,7 +50,7 @@ const validAnalysis = JSON.stringify({
 });
 
 describe("analyze", () => {
-  it("结构化校验失败后先尝试 JSON 修复,成功后仍返回 analysis", async () => {
+  it("on structured validation failure, tries JSON repair first and still returns analysis on success", async () => {
     const calls: GenerateOptions[] = [];
     const provider = stubProvider((opts, call) => {
       calls.push(opts);
@@ -67,7 +67,7 @@ describe("analyze", () => {
     expect(calls[1].jsonObject).toBeUndefined();
   });
 
-  it("JSON 修复也失败时才退回纯文本批改", async () => {
+  it("falls back to plain-text correction only when JSON repair also fails", async () => {
     const provider = stubProvider((_opts, call) => {
       if (call <= 2) return '{"is_correct":"maybe"}';
       return "【总评】有误\n\n【改正句】I went home yesterday.";
@@ -77,12 +77,12 @@ describe("analyze", () => {
 
     expect(result.analysis).toBeNull();
     expect(result.proseFeedback).toContain("【总评】");
-    expect(result.error).toContain("结构化批改已降级为纯文本");
+    expect(result.error).toContain("Structured correction degraded");
     expect(result.error).toContain("initial json_schema");
     expect(result.error).toContain("repair json_schema");
   });
 
-  it("把体验偏好放进结构化导师 prompt", async () => {
+  it("includes experience preferences in the structured tutor prompt", async () => {
     const calls: GenerateOptions[] = [];
     const provider = stubProvider((opts) => {
       calls.push(opts);
@@ -100,7 +100,7 @@ describe("analyze", () => {
     expect(system).toContain("punctuation-only differences");
   });
 
-  it("把 recent mastery key hints 放进结构化导师 prompt", async () => {
+  it("includes recent mastery key hints in the structured tutor prompt", async () => {
     const calls: GenerateOptions[] = [];
     const provider = stubProvider((opts) => {
       calls.push(opts);
@@ -112,7 +112,7 @@ describe("analyze", () => {
       keyHints: [
         {
           key: "grammar:past_tense",
-          label: "一般过去时",
+          label: "Simple past tense",
           type: "grammar",
           status: "learning",
         },
@@ -124,7 +124,7 @@ describe("analyze", () => {
     expect(system).toContain("grammar:past_tense");
   });
 
-  it("中文/混合枚举不导致真实纠错退到纯文本", async () => {
+  it("Chinese/mixed enums from the LLM do not cause real corrections to fall back to plain text", async () => {
     const provider = stubProvider(() =>
       JSON.stringify({
         is_correct: false,
@@ -172,7 +172,7 @@ describe("analyze", () => {
     });
   });
 
-  it("代码侧过滤被忽略的纯标点和大小写问题", async () => {
+  it("code-side filtering strips ignored capitalization and punctuation-only issues", async () => {
     const punctuationAndCaseOnly = JSON.stringify({
       is_correct: false,
       corrected: "I'm happy.",
@@ -182,20 +182,20 @@ describe("analyze", () => {
           category: "spelling",
           span_original: "im",
           span_corrected: "I'm",
-          explanation: "需要大写并加 apostrophe。",
+          explanation: "Needs capitalization and apostrophe.",
           severity: "minor",
           mastery_key: "spelling:capitalization_contractions",
-          mastery_label: "大小写和撇号",
+          mastery_label: "Capitalization and apostrophe",
           mastery_type: "error_pattern",
         },
         {
           category: "punctuation",
           span_original: "happy",
           span_corrected: "happy.",
-          explanation: "句末需要标点。",
+          explanation: "Sentence needs a final punctuation mark.",
           severity: "minor",
           mastery_key: "punctuation:sentence_final_period",
-          mastery_label: "句末标点",
+          mastery_label: "Sentence-final punctuation",
           mastery_type: "error_pattern",
         },
       ],

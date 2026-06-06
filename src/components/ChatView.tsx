@@ -86,6 +86,7 @@ import {
 import { loadTtsConfig } from "../tts/config";
 import { stopSpeech } from "../tts/playback";
 import { createReplySpeaker } from "../tts/stream";
+import { useTranslation, staticT } from "../i18n";
 import { AnnotationIsland } from "./AnnotationIsland";
 import { useConfirm } from "./confirm";
 import { InlineCorrection, UserSentence } from "./InlineCorrection";
@@ -103,15 +104,15 @@ interface ChatViewProps {
   conversationId: string;
   isDraft?: boolean;
   mode?: "practice" | "learning_agent";
-  /** 本会话新一轮持久化后触发(标题可能变了、排序要刷新)。 */
+  /** Fires after a new turn is persisted (title may have changed, sidebar needs refresh). */
   onActivity?: () => void;
-  /** 新对话草稿首轮成功持久化后,补建真实 conversation 行。 */
+  /** Called after the first turn of a draft conversation is persisted; creates the real conversation row. */
   onCreateDraftConversation?: (id: string) => Promise<void>;
-  /** 把最新一轮上报给右栏教练面板;批改到达时会再次上报(只读,不改本组件逻辑)。 */
-  onActiveTurnChange?: (turn: ChatTurn | null) => void;
-  /** 会话动作创建分支后切换到新会话(由 App 提供)。 */
+  /** Reports all turns to the coach panel; re-reported when analysis arrives (read-only, doesn't affect this component's logic). */
+  onTurnsChange?: (turns: ChatTurn[]) => void;
+  /** Called when a conversation action creates a branch; App switches to the new conversation. */
   onNavigateConversation?: (id: string) => void;
-  /** 教练面板是否可见:可见时气泡内批改精简,详情只在右栏,避免双份。 */
+  /** When the coach panel is visible, the in-chat turn-activity row is hidden — that content lives in the right panel. */
   coachVisible?: boolean;
 }
 
@@ -290,7 +291,7 @@ function modelShortName(model: string): string {
       .replace(/[-_ ]flash$/i, " Flash")
       .replace(/[-_]/g, " ");
   }
-  return raw || "模型";
+  return raw || staticT("chat.defaultModel");
 }
 
 function modelSelectValue(providerType: ProviderType, model: string): string {
@@ -307,15 +308,16 @@ function parseModelSelectValue(
   return { providerType, model: value.slice(splitAt + 2) };
 }
 
-// 复制这条回复。复制后短暂显示对勾。
+// Copy the reply; briefly shows a checkmark after copying.
 function CopyButton({ text }: { text: string }) {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   return (
     <Button
       type="button"
       variant="action"
       size="action"
-      title="复制"
+      title={t("common.copy")}
       onClick={() => {
         void navigator.clipboard.writeText(text).then(() => {
           setCopied(true);
@@ -352,6 +354,7 @@ function useReplySuggestion({
   resetKey: string;
   onLayoutChange?: () => void;
 }): ReplySuggestionControl {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [text, setText] = useState("");
@@ -392,7 +395,10 @@ function useReplySuggestion({
         setText(result.text);
         setWarning(
           result.finishReason?.kind === "length"
-            ? `推荐回复因输出长度限制被截断(${result.finishReason.provider}:${result.finishReason.raw})。可以重试;反馈问题时请带上括号里的原因。`
+            ? t("chat.replySuggestionTruncated", {
+                provider: result.finishReason.provider,
+                raw: result.finishReason.raw,
+              })
             : null,
         );
       }
@@ -437,6 +443,7 @@ function ReplySuggestionButton({
 }: {
   suggestion: ReplySuggestionControl;
 }) {
+  const { t } = useTranslation();
   return (
     <Button
       type="button"
@@ -446,12 +453,12 @@ function ReplySuggestionButton({
       onClick={suggestion.onToggle}
       disabled={suggestion.loading}
       aria-expanded={suggestion.expanded}
-      title="生成推荐回复"
+      title={t("chat.generateReplySuggestion")}
     >
       <span className="inline-flex size-4 shrink-0 items-center justify-center">
         <MessageSquareReplyIcon className="size-4" />
       </span>
-      <span>推荐回复</span>
+      <span>{t("chat.replySuggestion")}</span>
     </Button>
   );
 }
@@ -463,6 +470,7 @@ function ReplySuggestionPanel({
   suggestion: ReplySuggestionControl;
   onUse?: (text: string) => void;
 }) {
+  const { t } = useTranslation();
   if (
     !suggestion.open ||
     (!suggestion.loading && !suggestion.text && !suggestion.error)
@@ -487,7 +495,7 @@ function ReplySuggestionPanel({
             onClick={suggestion.onRetry}
           >
             <RefreshCwIcon size={14} />
-            重试
+            {t("common.retry")}
           </Button>
         </div>
       ) : suggestion.text ? (
@@ -512,8 +520,8 @@ function ReplySuggestionPanel({
             className="size-7 p-0"
             disabled={suggestion.loading}
             onClick={() => onUse?.(suggestion.text)}
-            title="填入输入框"
-            aria-label="填入输入框"
+            title={t("chat.fillInput")}
+            aria-label={t("chat.fillInput")}
           >
             <PencilIcon size={14} />
           </Button>
@@ -521,15 +529,15 @@ function ReplySuggestionPanel({
       ) : (
         <span className="inline-flex items-center gap-1.5 text-ui-body text-ui-muted">
           <Spinner />
-          正在生成推荐回复…
+          {t("chat.generatingReplySuggestion")}
         </span>
       )}
     </div>
   );
 }
 
-// 「从此处开始」:把这条用户消息的文字放回输入框重新编辑,并舍弃它(含)之后的所有对话。
-// 已记入学习记忆的内容不受影响(只删对话 turn)。
+// "Edit from here": puts this user message back into the input for re-editing,
+// discarding it and all following turns. Already-recorded learning memory is unaffected.
 function EditFromHereButton({
   onClick,
   disabled = false,
@@ -537,15 +545,14 @@ function EditFromHereButton({
   onClick: () => void;
   disabled?: boolean;
 }) {
+  const { t } = useTranslation();
   return (
     <Button
       type="button"
       variant="action"
       size="action"
       title={
-        disabled
-          ? "正在批改,完成后即可从此处重新编辑"
-          : "从此处开始:重新编辑这句,舍弃其后的对话"
+        disabled ? t("chat.editFromHereGrading") : t("chat.editFromHere")
       }
       disabled={disabled}
       onClick={onClick}
@@ -566,6 +573,7 @@ function LessonMasteryButton({
   disabled?: boolean;
   onChanged?: () => void;
 }) {
+  const { t } = useTranslation();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -579,7 +587,7 @@ function LessonMasteryButton({
       const result = await confirmLearningTurnMastery(conversationId, turnId);
       setMessage(
         result.applied > 0
-          ? `已写入 ${result.applied} 条掌握证据。`
+          ? t("chat.masteryWritten", { n: result.applied })
           : result.summary,
       );
       onChanged?.();
@@ -602,7 +610,7 @@ function LessonMasteryButton({
         type="button"
         variant="action"
         size="action"
-        title="把这句课堂回答记为掌握证据"
+        title={t("chat.recordMastery")}
         disabled={disabled || busy}
         onClick={() => void run()}
       >
@@ -622,9 +630,10 @@ function LessonMasteryButton({
   );
 }
 
-// 一条 AI 回复:气泡(原文 / 双语对照可切换)+ 操作行(复制 / 朗读 / 讲解 / 双语阅读)。
-// 双语对照按需 AI 生成、替换显示原文,再点恢复;状态留在组件内,不持久化。
-// 关键:朗读始终读原文(目标语言版),SpeakButton 永远拿原始 text。
+// One AI reply: bubble (original / bilingual toggle) + action row (copy / speak / explain / bilingual).
+// Bilingual view is generated on demand and replaces the original; clicking again restores it.
+// State is local to the component and not persisted.
+// Key invariant: TTS always reads the original (target-language) text; SpeakButton always receives the raw text.
 function PartnerReply({
   conversationId,
   turnId,
@@ -644,20 +653,21 @@ function PartnerReply({
   text: string;
   autoOpen?: boolean;
   learningMode?: boolean;
-  /** /btw 离档轮的回复:藏掉「推荐回复」(其依赖按 turnId 查上下文,离档轮已被排除会报错)。 */
+  /** /btw off-record reply: hide "Reply suggestion" (it looks up context by turnId; off-record turns are excluded and would error). */
   offRecord?: boolean;
-  /** 用户首次主动点开讲解/双语时各触发一次(理解信号记账;自动展开不算)。 */
+  /** Fired once on the user's first manual open of explain/bilingual (signals comprehension difficulty; auto-open doesn't count). */
   onFirstExplain?: () => void;
   onFirstBilingual?: () => void;
   onLayoutChange?: () => void;
-  /** 提供时显示「重新生成回复」按钮(仅挂在最新一条回复上)。 */
+  /** When provided, shows the "Regenerate reply" button (only attached to the latest reply). */
   onRegenerate?: () => void;
   onUseSuggestion?: (text: string) => void;
   regenerating?: boolean;
 }) {
-  const [open, setOpen] = useState(false); // 当前是否显示双语对照
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false); // whether bilingual view is currently shown
   const [loading, setLoading] = useState(false);
-  const [view, setView] = useState<string | null>(null); // 双语 Markdown
+  const [view, setView] = useState<string | null>(null); // bilingual Markdown
   const [error, setError] = useState<string | null>(null);
   const didAutoOpen = useRef(false);
   const prevTextRef = useRef(text);
@@ -668,13 +678,14 @@ function PartnerReply({
     resetKey: `${turnId}:${text}`,
     onLayoutChange,
   });
-  // 转换能力被「删除」(隐藏)后,对应触发按钮也不出现。
+  // When a transformer capability is "deleted" (hidden), its trigger button is also hidden.
   const bilingualHidden = isAgentHidden("builtin:transformer:bilingual");
   const suggestionHidden = isAgentHidden(
     "builtin:transformer:reply_suggestion",
   );
 
-  // 回复被「重新生成」替换后,旧的双语对照不再对应,收起重置(首次挂载不动,避免和 autoOpen 打架)。
+  // When a reply is replaced by "Regenerate", the old bilingual view no longer corresponds to it
+  // — collapse and reset. Skip on first mount to avoid fighting with autoOpen.
   useEffect(() => {
     if (prevTextRef.current === text) return;
     prevTextRef.current = text;
@@ -706,14 +717,14 @@ function PartnerReply({
     if (loading) return;
     if (!view && !error) {
       setOpen(true);
-      onFirstBilingual?.(); // 用户主动请求双语对照 → 理解吃力信号
+      onFirstBilingual?.(); // user explicitly requested bilingual → comprehension-difficulty signal
       void generate();
       return;
     }
     setOpen((o) => !o);
   }
 
-  // 设置里开了「自动开启双语阅读」时,新回复挂载即展开并生成一次。
+  // When "auto-open bilingual reading" is enabled in settings, a new reply expands and generates once on mount.
   // biome-ignore lint/correctness/useExhaustiveDependencies: run once when autoOpen flips, guarded by didAutoOpen ref; adding generate would re-fire every render
   useEffect(() => {
     if (autoOpen && !didAutoOpen.current && !bilingualHidden) {
@@ -777,7 +788,7 @@ function PartnerReply({
               onClick={() => void generate()}
             >
               <RefreshCwIcon size={14} />
-              重试
+              {t("common.retry")}
             </Button>
           </div>
         ) : showBilingual && view ? (
@@ -807,7 +818,7 @@ function PartnerReply({
                 type="button"
                 variant="action"
                 size="action"
-                title="重新生成回复"
+                title={t("chat.regenerateReply")}
                 onClick={onRegenerate}
                 disabled={regenerating}
               >
@@ -837,7 +848,7 @@ function PartnerReply({
               onClick={toggle}
               disabled={loading}
               aria-pressed={!!showBilingual}
-              title="目标语言/母语逐句对照"
+              title={t("chat.bilingualTitle")}
             >
               <span className="inline-flex size-4 shrink-0 items-center justify-center">
                 {loading ? (
@@ -846,7 +857,7 @@ function PartnerReply({
                   <LanguagesIcon className="size-4" />
                 )}
               </span>
-              <span>双语阅读</span>
+              <span>{t("chat.bilingualReading")}</span>
             </Button>
           )
         }
@@ -855,8 +866,8 @@ function PartnerReply({
   );
 }
 
-// 「更地道」改写:仅纯目标语轮,有且与改正句不同才返回,否则 null。
-// 直接显示在用户气泡内(分割线下方),不再用 toggle 面板。
+// "More natural" rewrite: only for pure target-language turns; returned only when it exists
+// and differs from the corrected sentence, otherwise null. Shown directly inside the user bubble.
 function idiomaticText(analysis: TutorAnalysis | null): string | null {
   if (!analysis || analysis.expression_gap) return null;
   const natural = analysis.natural?.trim();
@@ -865,9 +876,10 @@ function idiomaticText(analysis: TutorAnalysis | null): string | null {
   return natural === corrected ? null : natural;
 }
 
-// 用户消息操作:复制 + 朗读。朗读优先读「地道表达」改写,没有则读纠正后的句子。
-// 作为 leading 渲染进批改操作行,排在切换按钮左边(同一行)。
-// 母语/混说轮(expression_gap)没有目标语正句可读,所以不显示朗读。
+// User message actions: copy + speak. TTS prefers the "more natural" rewrite;
+// falls back to the corrected sentence. Rendered as the leading slot in the
+// correction action row, to the left of the toggle. Native/mixed turns
+// (expression_gap) have no target-language sentence to read, so speak is hidden.
 function UserMessageActions({
   turn,
   suggestion,
@@ -878,9 +890,9 @@ function UserMessageActions({
   turn: ChatTurn;
   suggestion: ReplySuggestionControl;
   onEditFrom: () => void;
-  // 注册表驱动的 turn 级动作(如「从此处分支」);新增动作无需改本组件。
+  // Registry-driven turn-level actions (e.g. "branch from here"); adding new actions requires no changes here.
   onTurnAction: (actionId: string) => void;
-  // 任一轮还在批改时禁用「从此处开始」——截断会丢弃在途批改。
+  // "Edit from here" is disabled while any turn is being graded — truncation would discard in-flight analysis.
   editDisabled?: boolean;
 }) {
   const analysis = turn.analysis;
@@ -911,14 +923,13 @@ function UserMessageActions({
   );
 }
 
-// 用户这一轮:气泡(原句 + 可切换的「地道表达」改写)+ 操作行 / 批改。
-// 「地道表达」的开关状态留在这里,同时驱动气泡内容和操作行里的切换按钮。
+// One user turn: bubble (original + optional "more natural" toggle) + action row / corrections.
+// The "more natural" toggle state lives here and drives both the bubble content and the action row button.
 function UserTurn({
   turn,
   conversationId,
   nativeLanguage,
   learningMode,
-  coachVisible,
   onEditFrom,
   onTurnAction,
   onLayoutChange,
@@ -929,13 +940,13 @@ function UserTurn({
   conversationId: string;
   nativeLanguage: string;
   learningMode: boolean;
-  coachVisible: boolean;
   onEditFrom: () => void;
   onTurnAction: (actionId: string) => void;
   onLayoutChange?: () => void;
   onUseSuggestion?: (text: string) => void;
   editDisabled?: boolean;
 }) {
+  const { t } = useTranslation();
   const idiomatic = idiomaticText(turn.analysis);
   const [naturalOpen, setNaturalOpen] = useState(true);
   const replySuggestion = useReplySuggestion({
@@ -945,7 +956,7 @@ function UserTurn({
     resetKey: `${turn.id}:${turn.userText}`,
     onLayoutChange,
   });
-  // 离档轮(/btw):虚线气泡 + 「不计入上下文」标记;不批改、不显示改正/推荐/分支等操作。
+  // Off-record turn (/btw): dashed bubble + "not in context" label; no grading or correction/suggestion/branch actions.
   if (turn.excludeFromContext) {
     return (
       <div className="flex max-w-[min(88%,520px)] flex-col items-end gap-1 self-end">
@@ -957,7 +968,7 @@ function UserTurn({
         </div>
         <div className="-mr-1 flex items-center gap-1.5 pr-1">
           <span className="text-ui-caption text-ui-subtle">
-            顺便一问 · 不计入上下文
+            {t("chat.btwLabel")}
           </span>
           <CopyButton text={turn.userText} />
         </div>
@@ -999,7 +1010,7 @@ function UserTurn({
           analysis={turn.analysis}
           nativeLanguage={nativeLanguage}
         />
-        {idiomatic && naturalOpen && !coachVisible && (
+        {idiomatic && naturalOpen && (
           <div className="mt-2 flex items-start gap-1.5 border-t pt-2 text-ui-body text-ui-muted">
             <span
               className="mt-0.5 inline-flex shrink-0 text-primary"
@@ -1016,7 +1027,6 @@ function UserTurn({
         proseFeedback={turn.analysisProse}
         pending={!!turn.analysisPending}
         error={turn.analysisError}
-        compact={coachVisible}
         leading={
           <UserMessageActions
             turn={turn}
@@ -1027,7 +1037,7 @@ function UserTurn({
           />
         }
         natural={
-          idiomatic && !coachVisible
+          idiomatic
             ? { open: naturalOpen, onToggle: () => setNaturalOpen((v) => !v) }
             : undefined
         }
@@ -1040,7 +1050,7 @@ function UserTurn({
   );
 }
 
-// 哪些衍生会话的上下文面板已经看过:首次进入默认展开一次,之后默认折叠。
+// Tracks which derived-conversation context panels have been seen; first visit expands, subsequent visits collapse.
 const DERIVED_BANNER_SEEN_KEY = "lang-agent.derivedBannerSeen";
 
 function hasSeenDerivedBanner(id: string): boolean {
@@ -1062,19 +1072,20 @@ function markDerivedBannerSeen(id: string): void {
     const list: string[] = Array.isArray(arr) ? arr : [];
     if (!list.includes(id)) {
       list.push(id);
-      // 封顶避免无限增长。
+      // Cap size to prevent unbounded growth.
       localStorage.setItem(
         DERIVED_BANNER_SEEN_KEY,
         JSON.stringify(list.slice(-200)),
       );
     }
   } catch {
-    // localStorage 不可用时无所谓,只是退化为每次都展开。
+    // localStorage unavailable — degrades gracefully to always-expanded.
   }
 }
 
-// 衍生会话顶部:展示这个 Agent 生成的对话上下文(场景/角色/难度/衔接等)。
-// 首次进入默认展开,看过后默认折叠;让用户知道「这条对话从哪来、按什么设定衍生」。
+// Banner at the top of a derived conversation showing the context the Agent generated
+// (scenario, roles, difficulty, continuity, etc.). Expanded on first visit, collapsed after.
+// Lets the user understand where this conversation came from and what settings drove it.
 function DerivedContextBanner({
   conversationId,
   context,
@@ -1084,18 +1095,19 @@ function DerivedContextBanner({
   context: NewConversationContext;
   label?: string;
 }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(() => !hasSeenDerivedBanner(conversationId));
   useEffect(() => {
     markDerivedBannerSeen(conversationId);
   }, [conversationId]);
   const rows: [string, string][] = [
-    ["场景", context.scenario],
-    ["你的角色", context.userRole],
-    ["AI 角色", context.aiRole],
-    ["难度", context.difficulty],
-    ["衔接", context.continuitySummary],
-    ["开场", context.openingInstruction],
-    ["约束", context.constraints.join(" / ")],
+    [t("chat.context.scenario"), context.scenario],
+    [t("chat.context.userRole"), context.userRole],
+    [t("chat.context.aiRole"), context.aiRole],
+    [t("chat.context.difficulty"), context.difficulty],
+    [t("chat.context.continuity"), context.continuitySummary],
+    [t("chat.context.opening"), context.openingInstruction],
+    [t("chat.context.constraints"), context.constraints.join(" / ")],
   ];
   return (
     <div className="rounded-lg border bg-muted/40 text-ui-body">
@@ -1116,7 +1128,7 @@ function DerivedContextBanner({
           <SparklesIcon size={14} />
         </span>
         <span className="min-w-0 flex-1 truncate">
-          {label ? `${label} · ` : ""}由 Agent 衍生生成的对话上下文
+          {label ? `${label} · ` : ""}{t("chat.derivedContextLabel")}
         </span>
       </button>
       {open && (
@@ -1135,8 +1147,9 @@ function DerivedContextBanner({
   );
 }
 
-// 一轮 = 用户输入 + 对话回复 + (默认折叠的)活动行。活动行把本轮的渐进披露收口到
-// 一处:中间区保持轻,细节一键展开。教练面板打开时把细节交给右栏,这里只渲染对话本身。
+// One turn = user input + partner reply + (collapsed by default) activity row.
+// The activity row consolidates progressive disclosure for the turn: the center stays light,
+// details expand on demand. When the coach panel is open, details go to the right panel; only the conversation is rendered here.
 function TurnCard({
   live,
   activities,
@@ -1160,10 +1173,11 @@ export function ChatView({
   mode = "practice",
   onActivity,
   onCreateDraftConversation,
-  onActiveTurnChange,
+  onTurnsChange,
   onNavigateConversation,
   coachVisible = false,
 }: ChatViewProps) {
+  const { t } = useTranslation();
   const [turns, setTurns] = useState<ChatTurn[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState("");
@@ -1171,14 +1185,14 @@ export function ChatView({
   const [replyBusy, setReplyBusy] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
   const [derivationPreparing, setDerivationPreparing] = useState(false);
-  // 衍生会话的上下文(顶部折叠展示);非衍生会话为 null。
+  // Derived conversation context (shown in the collapsible header); null for regular conversations.
   const [derivedBanner, setDerivedBanner] = useState<{
     context: NewConversationContext;
     label?: string;
   } | null>(null);
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // 上一次失败操作的重试入口(发送 / 重新生成 / 专项课启动共用底部错误条)。
+  // Retry entry for the last failed operation (send / regenerate / lesson start all share the bottom error bar).
   const [retry, setRetry] = useState<{ run: () => void } | null>(null);
   const messagesRef = useRef<HTMLDivElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
@@ -1188,20 +1202,20 @@ export function ChatView({
   const replyCommittedRef = useRef(false);
   const kickoffStartedRef = useRef(false);
   const derivationStartedRef = useRef(false);
-  const liveTurnIdsRef = useRef<Set<string>>(new Set()); // 本会话内新发的轮次,自动双语只作用于它们
+  const liveTurnIdsRef = useRef<Set<string>>(new Set()); // turns sent in this session; auto-bilingual only applies to these
   const config = useConfig();
   const { nativeLanguage, autoBilingual } = config;
   const confirm = useConfirm();
   const learningMode = mode === "learning_agent";
 
-  // 输入框底部状态条:当前模型 + 上下文占用量(粗估,见 lib/tokens)。
+  // Status bar below the input: current model + context usage (rough estimate, see lib/tokens).
   const contextLimit = getContextLimit(config);
   const usedTokens = useMemo(() => {
     const parts: string[] = [];
-    for (const t of turns) {
-      if (t.excludeFromContext) continue; // 离档轮(/btw)不进上下文,不计入占用量
-      if (t.userText) parts.push(t.userText);
-      if (t.partnerText) parts.push(t.partnerText);
+    for (const turn of turns) {
+      if (turn.excludeFromContext) continue; // off-record turns (/btw) are excluded from context and usage count
+      if (turn.userText) parts.push(turn.userText);
+      if (turn.partnerText) parts.push(turn.partnerText);
     }
     if (streaming) parts.push(streaming);
     return estimatePromptTokens(parts);
@@ -1211,8 +1225,9 @@ export function ChatView({
     Math.round((usedTokens / contextLimit) * 100),
   );
 
-  // 对话栏斜杠命令(/btw 等):输入以 / 开头、命令词还在编辑时弹出菜单。键盘导航在 textarea
-  // 拦截;Esc 关闭直到退出命令语境再重开。action 类命令仅在能衍生分支(practice 且非草稿)时出现。
+  // Slash commands (/btw etc.): menu pops up when input starts with / and the command token is being edited.
+  // Keyboard navigation is intercepted in the textarea; Esc closes until the command context is left and re-entered.
+  // Action commands only appear when branching is possible (practice mode and not a draft).
   const [slashSelected, setSlashSelected] = useState(0);
   const [slashDismissed, setSlashDismissed] = useState(false);
   const slashToken = useMemo(() => slashMenuToken(input), [input]);
@@ -1226,17 +1241,17 @@ export function ChatView({
   );
   const slashOpen = slashCommands.length > 0;
 
-  // 退出命令语境(无 token)时清掉「Esc 关闭」标记,下次再输入 / 即可重新弹出。
+  // When leaving the command context (no token), clear the "Esc-closed" flag so the next / re-opens the menu.
   useEffect(() => {
     if (slashToken === null && slashDismissed) setSlashDismissed(false);
   }, [slashToken, slashDismissed]);
 
-  // 过滤结果变化后选中项可能越界——夹回 0。
+  // When the filtered results change, the selected index may be out of bounds — clamp to 0.
   useEffect(() => {
     setSlashSelected((s) => (s < slashCommands.length ? s : 0));
   }, [slashCommands.length]);
 
-  // 输入框随内容增高,最多三行,超过后内部滚动。
+  // Input grows with content up to three lines; after that it scrolls internally.
   // biome-ignore lint/correctness/useExhaustiveDependencies: input is the intentional trigger; the effect reads inputRef after it changes, not input directly
   useEffect(() => {
     const el = inputRef.current;
@@ -1306,10 +1321,10 @@ export function ChatView({
     };
   }, [conversationId, learningMode]);
 
-  // 最新一轮上报给教练面板。turns 在批改到达时会被 patch(新对象),故 analysis 一到就自动重报。
+  // All turns are reported to the coach panel. Turns are patched (new object) when analysis arrives, so re-reporting is automatic.
   useEffect(() => {
-    onActiveTurnChange?.(turns.length ? turns[turns.length - 1] : null);
-  }, [turns, onActiveTurnChange]);
+    onTurnsChange?.(turns);
+  }, [turns, onTurnsChange]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: turns/streaming/layoutTick are intentional scroll triggers; the effect reads refs only
   useEffect(() => {
@@ -1373,7 +1388,7 @@ export function ChatView({
     } catch (e) {
       patchTurn(turnId, {
         analysisPending: false,
-        analysisError: "专项课启动失败",
+        analysisError: t("chat.lessonStartFailed"),
       });
       setError(
         e instanceof MissingApiKeyError
@@ -1382,7 +1397,7 @@ export function ChatView({
             ? e.message
             : String(e),
       );
-      // 放开 kickoff 守卫,让重试可以重新发起;重试时换掉这条失败轮次。
+      // Release the kickoff guard so retry can restart; the failed turn is replaced on retry.
       kickoffStartedRef.current = false;
       setRetry({ run: () => void startLesson(turnId) });
     } finally {
@@ -1417,7 +1432,7 @@ export function ChatView({
     setReplyBusy(true);
     setStreaming("");
     let acc = "";
-    // 衍生会话的开场同样自动朗读(与普通发送一致),关掉自动朗读时不创建。
+    // Derived conversation opening also auto-speaks (same as regular send); not created when auto-speak is off.
     const speaker = loadTtsConfig().autoSpeak ? createReplySpeaker() : null;
     try {
       const result = await startDerivedConversation(
@@ -1447,7 +1462,7 @@ export function ChatView({
         commitPartnerReply(turnId, result.reply);
         speaker?.finish(result.reply);
       }
-      // 上下文已由 orchestrator 写回会话;读出来点亮顶部折叠面板。
+      // Context has been written back to the conversation by the orchestrator; read it to light up the top banner.
       const conv = await getConversation(conversationId);
       const mods = parseAgentModifiers(conv?.agentModifiersJson ?? null);
       if (mods.derivedContext)
@@ -1458,11 +1473,11 @@ export function ChatView({
       await touchConversation(conversationId);
       onActivity?.();
     } catch (e) {
-      stopSpeech(); // 出错则停掉正在播放的朗读。
+      stopSpeech(); // stop any in-progress TTS on error
       speaker?.abort();
       patchTurn(turnId, {
         analysisPending: false,
-        analysisError: "对话衍生失败",
+        analysisError: t("chat.derivationFailed"),
       });
       setError(
         e instanceof MissingApiKeyError
@@ -1479,13 +1494,14 @@ export function ChatView({
         setStreaming("");
         setReplyBusy(false);
       } else {
-        speaker?.abort(); // 本轮已被新动作取代,停止合成。
+        speaker?.abort(); // this turn was superseded by a new action; stop synthesis
       }
     }
   }
 
-  // opts.text:重试时复用原文(不从输入框取);opts.replacingId:换掉那条失败的旧轮次;
-  // opts.offRecord:/btw 离档轮——照常回复但不批改、不计入上下文(气泡带标记)。
+  // opts.text: reuse original text on retry (don't pull from input box);
+  // opts.replacingId: replace the failed old turn;
+  // opts.offRecord: /btw off-record turn — replied to normally but not graded, not in context (bubble has a marker).
   async function send(opts?: {
     text?: string;
     replacingId?: string;
@@ -1524,8 +1540,8 @@ export function ChatView({
     setReplyBusy(true);
     setStreaming("");
     let acc = "";
-    // 自动朗读:回复完成后把整条回复作为一次 TTS 请求合成并播放。
-    // 设置里关掉「自动朗读」时不创建朗读会话(小喇叭仍可手动朗读)。
+    // Auto-speak: synthesizes and plays the full reply as a single TTS request once streaming completes.
+    // Not created when "auto-speak" is off in settings (the speaker icon can still be used manually).
     const speaker =
       !learningMode && loadTtsConfig().autoSpeak ? createReplySpeaker() : null;
     try {
@@ -1560,18 +1576,18 @@ export function ChatView({
         speaker?.finish(result.reply);
       }
       if (draftAtSend) await onCreateDraftConversation?.(conversationId);
-      // 轮次已持久化:更新会话排序,首条消息顺带自动命名,再刷新侧边栏。
-      // 离档轮(/btw)不定义会话主题,不参与自动命名。
+      // Turn persisted: update conversation sort order, auto-name on first message, then refresh sidebar.
+      // Off-record turns (/btw) don't define the conversation topic and are excluded from auto-naming.
       await touchConversation(conversationId);
       if ((isFirstMessage || draftAtSend) && !learningMode && !offRecord)
         await maybeAutoTitle(conversationId, text);
       onActivity?.();
     } catch (e) {
-      stopSpeech(); // 出错则停掉正在播放的朗读。
+      stopSpeech(); // stop any in-progress TTS on error
       speaker?.abort();
       patchTurn(turnId, {
         analysisPending: false,
-        analysisError: learningMode ? "发送失败" : "发送失败,本轮未批改",
+        analysisError: learningMode ? t("chat.sendFailed") : t("chat.sendFailedNoGrading"),
       });
       setError(
         e instanceof MissingApiKeyError
@@ -1588,28 +1604,28 @@ export function ChatView({
         setStreaming("");
         setReplyBusy(false);
       } else {
-        speaker?.abort(); // 轮次已被新消息取代,停止本轮合成(播放已由新 send 的 stopSpeech 接管)。
+        speaker?.abort(); // turn superseded by a new message; stop synthesis (playback already handed off to new send's stopSpeech)
       }
     }
   }
 
-  // 从某条用户消息「从此处开始」:确认后舍弃这条(含)之后的所有 turn,把原文放回输入框
-  // 供重新编辑。只删对话——已记入学习记忆(掌握/档案)的内容保留。
+  // "Edit from here": after confirmation, discard this turn and all following turns,
+  // and put the original text back into the input for re-editing.
+  // Only the conversation is deleted — already-recorded learning memory (mastery/profile) is preserved.
   async function editFromHere(turnId: string) {
-    // 批改在途时截断会丢弃结果(observer 的 onAnalysis 写回已删除的 turn 变成空操作)。
-    if (replyBusy || turns.some((t) => t.analysisPending)) return;
-    const target = turns.find((t) => t.id === turnId);
+    // Truncating while grading is in flight would discard the result (observer's onAnalysis writing back to a deleted turn becomes a no-op).
+    if (replyBusy || turns.some((turn) => turn.analysisPending)) return;
+    const target = turns.find((turn) => turn.id === turnId);
     if (!target) return;
     const ok = await confirm({
-      title: "从这条消息重新开始?",
-      description:
-        "这条及其之后的对话会被舍弃,消息内容会回到输入框供你修改。已记入学习记忆的内容不受影响。",
-      confirmText: "舍弃并编辑",
-      cancelText: "取消",
+      title: t("chat.editFromHereTitle"),
+      description: t("chat.editFromHereDesc"),
+      confirmText: t("chat.editFromHereConfirm"),
+      cancelText: t("common.cancel"),
     });
     if (!ok) return;
     stopSpeech();
-    turnGenRef.current++; // 让任何在途轮次的回调失效,别再写回被删的 turn
+    turnGenRef.current++; // invalidate any in-flight turn callbacks; they must not write back to a deleted turn
     await truncateConversationFrom(conversationId, turnId);
     setTurns((prev) => {
       const idx = prev.findIndex((t) => t.id === turnId);
@@ -1623,7 +1639,7 @@ export function ChatView({
     onActivity?.();
   }
 
-  // 重新生成最新一条回复:就地流式覆盖该轮气泡,失败则恢复原文。批改不变。
+  // Regenerate the latest reply: overwrite that turn's bubble in-place via streaming; restore original text on failure. Corrections remain unchanged.
   async function regenerate(turnId: string) {
     if (replyBusy) return;
     stopSpeech();
@@ -1668,8 +1684,8 @@ export function ChatView({
     }
   }
 
-  // 会话动作:先创建 pending 衍生会话并切换过去;新页面再生成上下文并自动开场。
-  // 原会话不动(非破坏式),区别于 editFromHere(截断)。
+  // Conversation action: creates a pending derived conversation and navigates to it;
+  // the new page generates context and auto-starts. The original conversation is unchanged (non-destructive, unlike editFromHere which truncates).
   async function runConversationAction(
     actionId: string,
     sourceTurnId?: string,
@@ -1692,8 +1708,9 @@ export function ChatView({
     }
   }
 
-  // 提交输入:先判斜杠命令。message 类(/btw)走离档发送;action 类执行现有会话动作;
-  // meta(/help)展开完整命令清单;非命令照常发送。菜单已关闭时由 Enter / 发送键走到这里。
+  // Submit input: check for slash commands first. "message" type (/btw) sends off-record;
+  // "action" type executes an existing conversation action; "meta" (/help) expands the full list;
+  // non-commands send normally. Arrives here via Enter / Send when the menu is already closed.
   function submitInput() {
     const parsed = parseSlashInput(input);
     if (!parsed) {
@@ -1701,13 +1718,13 @@ export function ChatView({
       return;
     }
     if (parsed.command.kind === "message") {
-      if (!parsed.rest) return; // 只敲了命令、没正文:不发送
+      if (!parsed.rest) return; // only the command was typed with no body text: don't send
       setInput("");
       void send({ text: parsed.rest, offRecord: true });
       return;
     }
     if (parsed.command.kind === "meta") {
-      setInput("/"); // /help:展开完整命令清单
+      setInput("/"); // /help: expand the full command list
       requestAnimationFrame(() => inputRef.current?.focus());
       return;
     }
@@ -1717,8 +1734,8 @@ export function ChatView({
     }
   }
 
-  // 菜单里选中某命令(Enter / 点击):message 补成 "/btw " 进入正文输入;meta 展开全部;
-  // action 立即执行(清空输入,菜单随之关闭)。
+  // Select a command in the menu (Enter / click): "message" completes to "/btw " for body input;
+  // "meta" expands all; "action" executes immediately (clears input, menu closes as a result).
   function activateSlashCommand(command: SlashCommand) {
     if (command.kind === "action") {
       if (command.actionId) {
@@ -1727,12 +1744,12 @@ export function ChatView({
       }
       return;
     }
-    // message → "/name "(进入正文态);meta(/help)→ "/"(展开完整清单)。
+    // message → "/name " (enter body mode); meta (/help) → "/" (expand full list)
     setInput(command.kind === "message" ? `/${command.name} ` : "/");
     requestAnimationFrame(() => inputRef.current?.focus());
   }
 
-  // Tab 补全命令名:message 补成 "/btw "(进入正文态),其余补成 "/btw"(再 Enter 执行)。
+  // Tab-complete the command name: "message" completes to "/btw " (body mode); others to "/btw" (press Enter to run).
   function completeSlashCommand(command: SlashCommand) {
     setInput(
       command.kind === "message" ? `/${command.name} ` : `/${command.name}`,
@@ -1740,24 +1757,24 @@ export function ChatView({
     requestAnimationFrame(() => inputRef.current?.focus());
   }
 
-  // 最新一条带回复的轮次——「重新生成」只挂在它上面。
+  // The latest turn with a partner reply — "Regenerate" is only attached to it.
   let lastReplyTurnId: string | undefined;
-  for (const t of turns) if (t.partnerText) lastReplyTurnId = t.id;
+  for (const turn of turns) if (turn.partnerText) lastReplyTurnId = turn.id;
 
-  // 任一轮还在批改时,「从此处开始」会截断对话、丢弃在途批改结果——批改完成前一律禁用。
-  const analyzing = turns.some((t) => t.analysisPending);
+  // "Edit from here" truncates the conversation and discards in-flight analysis — disabled until all grading completes.
+  const analyzing = turns.some((turn) => turn.analysisPending);
 
-  // 输入台上方的 active option badges:一眼看到本轮带的学习上下文(模式 + 衍生设定)。
+  // Active option badges above the input area: shows at a glance the learning context for this turn (mode + derivation settings).
   const optionBadges: { label: string; tone: "info" | "muted" }[] = [
     learningMode
-      ? { label: "专项课", tone: "info" }
-      : { label: "练习", tone: "muted" },
+      ? { label: t("chat.lessonBadge"), tone: "info" }
+      : { label: t("chat.practiceBadge"), tone: "muted" },
   ];
   if (derivedBanner) {
-    optionBadges.push({ label: derivedBanner.label ?? "衍生", tone: "info" });
+    optionBadges.push({ label: derivedBanner.label ?? t("chat.derivedBadge"), tone: "info" });
     const diff = derivedBanner.context.difficulty?.trim();
     if (diff && diff.length <= 16)
-      optionBadges.push({ label: `难度·${diff}`, tone: "muted" });
+      optionBadges.push({ label: t("chat.difficultyBadge", { diff }), tone: "muted" });
   }
   const active = activeProvider(config);
   const currentPreset = PROVIDER_PRESETS[config.providerType];
@@ -1775,7 +1792,11 @@ export function ChatView({
     usingPresetEndpoint && currentModelOption
       ? modelSelectValue(config.providerType, currentModelOption.model)
       : CURRENT_MODEL_VALUE;
-  const contextTitle = `约 ${usedTokens.toLocaleString()} / ${contextLimit.toLocaleString()} tokens · 上下文 ${usedPercent}%`;
+  const contextTitle = t("chat.contextUsage", {
+    used: usedTokens.toLocaleString(),
+    limit: contextLimit.toLocaleString(),
+    pct: usedPercent,
+  });
 
   function selectModelProvider(value: string) {
     if (value === CURRENT_MODEL_VALUE) return;
@@ -1801,8 +1822,8 @@ export function ChatView({
         {turns.length === 0 && !streaming && (
           <div className="m-auto text-center text-ui-body leading-relaxed text-ui-muted">
             {learningMode
-              ? "正在准备专项课…"
-              : "用目标语言说点什么,开始对话吧。"}
+              ? t("chat.preparingLesson")
+              : t("chat.startConversation")}
           </div>
         )}
         {turns.map((turn) => (
@@ -1821,7 +1842,6 @@ export function ChatView({
                 conversationId={conversationId}
                 nativeLanguage={nativeLanguage}
                 learningMode={learningMode}
-                coachVisible={coachVisible}
                 onLayoutChange={requestLayoutScroll}
                 editDisabled={analyzing}
                 onEditFrom={() => void editFromHere(turn.id)}
@@ -1862,7 +1882,7 @@ export function ChatView({
         {derivationPreparing && (
           <div className="m-auto flex flex-col items-center gap-2 text-center text-ui-body leading-relaxed text-ui-muted">
             <Spinner />
-            <span>正在生成新的对话上下文…</span>
+            <span>{t("chat.preparingContext")}</span>
           </div>
         )}
         {replyBusy && !derivationPreparing && streaming.trim().length < 2 && (
@@ -1888,7 +1908,7 @@ export function ChatView({
               onClick={() => retry.run()}
             >
               <RefreshCwIcon size={14} />
-              重试
+              {t("common.retry")}
             </Button>
           )}
         </div>
@@ -1916,7 +1936,7 @@ export function ChatView({
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => {
-                  // 菜单打开时拦截导航键(IME 合成中不拦截),不冒泡到发送。
+                  // Intercept navigation keys when the menu is open (not during IME composition); don't let them bubble to send.
                   if (slashOpen && !e.nativeEvent.isComposing) {
                     if (e.key === "ArrowDown") {
                       e.preventDefault();
@@ -1962,8 +1982,8 @@ export function ChatView({
                 rows={1}
                 placeholder={
                   learningMode
-                    ? "问老师、回答练习，母语/目标语言都可以…"
-                    : "用目标语言输入一句话…（/ 命令）"
+                    ? t("chat.inputPlaceholderLesson")
+                    : t("chat.inputPlaceholderPractice")
                 }
                 disabled={replyBusy}
                 className="max-h-[6.5rem] min-h-14 min-w-0 resize-none border-none bg-transparent px-4 pt-3 pb-2 text-ui-chat outline-none placeholder:text-muted-foreground"
@@ -1993,7 +2013,7 @@ export function ChatView({
                 >
                   <SelectTrigger
                     className="h-4 w-auto min-w-[5.5rem] max-w-[min(42vw,12rem)] gap-1.5 rounded-sm border-0 bg-transparent px-1 py-0 font-normal leading-none text-ui-muted shadow-none hover:bg-accent sm:max-w-[14rem] [&>svg]:size-2.5"
-                    aria-label="选择模型"
+                    aria-label={t("chat.selectModel")}
                     title={currentProviderModelLabel}
                   >
                     <ModelLogo model={active.model} compact />
@@ -2018,7 +2038,7 @@ export function ChatView({
                             </span>
                             <span className="truncate text-ui-caption text-ui-muted">
                               {currentPreset.shortLabel} ·{" "}
-                              {active.model.trim() || "未填写模型 ID"}
+                              {active.model.trim() || t("chat.emptyModelId")}
                             </span>
                           </span>
                         </span>
@@ -2050,8 +2070,8 @@ export function ChatView({
                   size="icon"
                   className="size-8 rounded-full transition-transform active:scale-90"
                   disabled={replyBusy || !input.trim()}
-                  title="发送"
-                  aria-label="发送"
+                  title={t("chat.send")}
+                  aria-label={t("chat.send")}
                 >
                   {replyBusy ? (
                     <Spinner className="size-3.5" />

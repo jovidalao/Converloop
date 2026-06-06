@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { TtsConfig } from "./config";
 
-// 共用 mock:Tauri invoke(Rust 合成命令)、缓存(免 IndexedDB)、config(免读 localStorage)。
+// Shared mocks: Tauri invoke (Rust synthesis command), cache (no IndexedDB), config (no localStorage read).
 const mocks = vi.hoisted(() => ({
   invoke: vi.fn(),
   loadTtsConfig: vi.fn(),
@@ -52,7 +52,7 @@ beforeEach(() => {
 });
 
 describe("synthesizeEdge", () => {
-  it("调用 edge_tts_synthesize 并把 base64 解成 ArrayBuffer", async () => {
+  it("calls edge_tts_synthesize and decodes base64 to ArrayBuffer", async () => {
     mocks.invoke.mockResolvedValueOnce(B64_123);
     const buf = await synthesizeEdge({
       text: "hi",
@@ -70,8 +70,8 @@ describe("synthesizeEdge", () => {
   });
 });
 
-describe("speakText 引擎路由", () => {
-  it("edge 引擎免 key:不查 MiMo key,直接走 Edge 合成", async () => {
+describe("speakText engine routing", () => {
+  it("edge engine needs no key: skips MiMo key lookup and goes straight to Edge synthesis", async () => {
     mocks.loadTtsConfig.mockReturnValue(edgeConfig);
     mocks.invoke.mockResolvedValueOnce(B64_123);
 

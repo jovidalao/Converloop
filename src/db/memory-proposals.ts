@@ -3,7 +3,7 @@ import { z } from "zod";
 import { DataEditOperation } from "../agents/data-editor";
 import { applyDataEditOperations } from "../data-edit";
 import { db } from "./client";
-import { type MemoryProposal, memoryProposal } from "./schema";
+import { type MemoryProposal, memoryProposal, turn } from "./schema";
 
 const OperationListSchema = z.array(DataEditOperation);
 
@@ -29,7 +29,7 @@ export async function createMemoryProposal(input: {
     status: "pending",
     agentId: input.agentId,
     turnId: input.turnId ?? null,
-    summary: input.summary.trim() || "Agent 提议更新学习数据",
+    summary: input.summary.trim() || "Agent proposes updating learning data",
     operationsJson: JSON.stringify(operations),
     resultJson: null,
   });
@@ -52,6 +52,25 @@ export async function listPendingMemoryProposals(
     .orderBy(desc(memoryProposal.createdAt));
 }
 
+// Conversation-scoped pending writes: join turn to gather all pending proposals for every turn in this conversation,
+// for the Coach Panel "entire conversation" view to aggregate and display.
+export async function listPendingMemoryProposalsForConversation(
+  conversationId: string,
+): Promise<MemoryProposal[]> {
+  const rows = await db
+    .select({ proposal: memoryProposal })
+    .from(memoryProposal)
+    .innerJoin(turn, eq(memoryProposal.turnId, turn.id))
+    .where(
+      and(
+        eq(memoryProposal.status, "pending"),
+        eq(turn.conversationId, conversationId),
+      ),
+    )
+    .orderBy(desc(memoryProposal.createdAt));
+  return rows.map((r) => r.proposal);
+}
+
 export function memoryProposalOperations(
   proposal: MemoryProposal,
 ): DataEditOperation[] {
@@ -68,8 +87,8 @@ export async function applyMemoryProposal(id: string): Promise<{
     .from(memoryProposal)
     .where(eq(memoryProposal.id, id))
     .limit(1);
-  if (!row) throw new Error("找不到这条记忆提议");
-  if (row.status !== "pending") throw new Error("这条记忆提议已处理");
+  if (!row) throw new Error("Memory proposal not found");
+  if (row.status !== "pending") throw new Error("This memory proposal has already been processed");
 
   const operations = parseOperations(row.operationsJson);
   const result = await applyDataEditOperations(operations, row.summary);

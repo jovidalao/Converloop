@@ -12,12 +12,14 @@ import {
   useRef,
   useState,
 } from "react";
+import { type Locale, type TFunction, useTranslation } from "@/i18n";
 import { actionShortcutLabel } from "@/lib/app-actions";
 import type { ConversationMeta } from "../db/conversations";
 import type { LearningAgentMeta } from "../db/learning-agents";
 import { formatRelativeTime } from "./Sidebar";
 
-// 命令面板能跳转/触发的三类目标:新建对话、开启某专项课的新一节、打开某条历史对话。
+// The three kinds of targets the command palette can jump to / trigger: start a
+// new chat, start a new session of a lesson, or open a past conversation.
 type PaletteItem =
   | { kind: "new-chat" }
   | { kind: "start-agent"; agent: LearningAgentMeta }
@@ -39,9 +41,11 @@ function keyFor(item: PaletteItem): string {
   return `conv:${item.conv.id}`;
 }
 
-// ⌘K 命令面板:一个键盘驱动的悬浮搜索框。搜历史对话直接跳转;搜专项课时,既能
-// 「开启新一节」(start-agent),也能从下方「最近对话」里点开它过往的会话——同一门
-// 课的两种入口都覆盖到。Esc / 点背景关闭,↑↓ 选,↵ 确认。
+// ⌘K command palette: a keyboard-driven floating search box. Searching past
+// conversations jumps straight to them; searching lessons lets you either
+// "start a new session" (start-agent) or open one of its past conversations
+// from the "Recent conversations" group below — both entry points to the same
+// lesson are covered. Esc / clicking the backdrop closes; ↑↓ select, ↵ confirm.
 export function CommandPalette({
   open,
   onClose,
@@ -51,11 +55,12 @@ export function CommandPalette({
   onStartLearningAgent,
   onNewChat,
 }: CommandPaletteProps) {
+  const { t, locale } = useTranslation();
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
 
-  // 每次打开重置查询与选中项。
+  // Reset the query and selection each time it opens.
   useEffect(() => {
     if (open) {
       setQuery("");
@@ -80,27 +85,32 @@ export function CommandPalette({
           )
         : learningAgents
     ).map((agent): PaletteItem => ({ kind: "start-agent", agent }));
-    if (agents.length) result.push({ label: "定制化课程", items: agents });
+    if (agents.length)
+      result.push({ label: t("commandPalette.customLessons"), items: agents });
 
     const convs = (
       q
         ? conversations.filter((c) => c.title.toLowerCase().includes(q))
         : conversations
     ).map((conv): PaletteItem => ({ kind: "conversation", conv }));
-    if (convs.length) result.push({ label: "最近对话", items: convs });
+    if (convs.length)
+      result.push({
+        label: t("commandPalette.recentConversations"),
+        items: convs,
+      });
 
     return result;
-  }, [query, learningAgents, conversations]);
+  }, [query, learningAgents, conversations, t]);
 
   const flat = useMemo(() => groups.flatMap((g) => g.items), [groups]);
 
-  // 查询变化后,选中项可能越界——夹回 0。
+  // After the query changes the selection may be out of range — clamp to 0.
   useEffect(() => {
     setSelected((s) => (s < flat.length ? s : 0));
   }, [flat.length]);
 
-  // 让选中行始终可见。
-  // biome-ignore lint/correctness/useExhaustiveDependencies: 选中项变化即滚动到可见,不直接引用 selected
+  // Keep the selected row in view.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: scroll into view whenever the selection changes; `selected` isn't referenced directly
   useEffect(() => {
     listRef.current
       ?.querySelector('[data-selected="true"]')
@@ -141,11 +151,11 @@ export function CommandPalette({
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="快速跳转"
+      aria-label={t("commandPalette.ariaLabel")}
       className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-[12vh]"
       onMouseDown={onClose}
     >
-      {/* biome-ignore lint/a11y/noStaticElementInteractions: 仅阻止冒泡到背景关闭,非交互控件 */}
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: only stops propagation to the backdrop-close handler; not an interactive control */}
       <div
         className="flex max-h-[70vh] w-full max-w-xl flex-col overflow-hidden rounded-xl border bg-card shadow-lg"
         onMouseDown={(e) => e.stopPropagation()}
@@ -153,12 +163,12 @@ export function CommandPalette({
         <div className="flex items-center gap-2 border-b px-3">
           <SearchIcon className="size-4 shrink-0 text-ui-muted" />
           <input
-            // biome-ignore lint/a11y/noAutofocus: 命令面板打开即应聚焦输入框
+            // biome-ignore lint/a11y/noAutofocus: focus the input as soon as the command palette opens
             autoFocus
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onKeyDown}
-            placeholder="搜索对话、专项课…"
+            placeholder={t("commandPalette.searchPlaceholder")}
             spellCheck={false}
             className="h-12 flex-1 bg-transparent text-ui-body outline-none placeholder:text-muted-foreground"
           />
@@ -167,7 +177,7 @@ export function CommandPalette({
         <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto py-1">
           {flat.length === 0 && (
             <div className="px-3 py-6 text-center text-ui-body text-ui-muted">
-              没有匹配的结果
+              {t("commandPalette.noResults")}
             </div>
           )}
           {groups.map((group) => (
@@ -182,8 +192,8 @@ export function CommandPalette({
                 const idx = flatIndex;
                 const isSelected = idx === selected;
                 return (
-                  // biome-ignore lint/a11y/useKeyWithClickEvents: 键盘导航统一由输入框处理(activedescendant 模式)
-                  // biome-ignore lint/a11y/useFocusableInteractive: option 不单独获焦,焦点留在输入框
+                  // biome-ignore lint/a11y/useKeyWithClickEvents: keyboard navigation is handled entirely by the input (activedescendant pattern)
+                  // biome-ignore lint/a11y/useFocusableInteractive: options aren't individually focused; focus stays in the input
                   <div
                     key={keyFor(item)}
                     role="option"
@@ -193,7 +203,7 @@ export function CommandPalette({
                     onMouseMove={() => setSelected(idx)}
                     onClick={() => activate(item)}
                   >
-                    <PaletteRow item={item} />
+                    <PaletteRow item={item} t={t} locale={locale} />
                   </div>
                 );
               })}
@@ -205,12 +215,22 @@ export function CommandPalette({
   );
 }
 
-function PaletteRow({ item }: { item: PaletteItem }) {
+function PaletteRow({
+  item,
+  t,
+  locale,
+}: {
+  item: PaletteItem;
+  t: TFunction;
+  locale: Locale;
+}) {
   if (item.kind === "new-chat") {
     return (
       <>
         <SquarePenIcon className="size-4 shrink-0 text-ui-muted" />
-        <span className="min-w-0 flex-1 truncate">新对话</span>
+        <span className="min-w-0 flex-1 truncate">
+          {t("commandPalette.newChat")}
+        </span>
         <kbd className="rounded border border-border/60 bg-muted px-1.5 py-0.5 font-sans text-ui-caption text-ui-muted">
           {actionShortcutLabel("new-chat")}
         </kbd>
@@ -223,7 +243,7 @@ function PaletteRow({ item }: { item: PaletteItem }) {
         <GraduationCapIcon className="size-4 shrink-0 text-ui-muted" />
         <span className="min-w-0 flex-1 truncate">{item.agent.name}</span>
         <span className="shrink-0 text-ui-caption text-ui-muted">
-          开启新一节
+          {t("commandPalette.startNewSession")}
         </span>
       </>
     );
@@ -237,7 +257,7 @@ function PaletteRow({ item }: { item: PaletteItem }) {
       )}
       <span className="min-w-0 flex-1 truncate">{item.conv.title}</span>
       <span className="shrink-0 text-ui-caption text-ui-muted">
-        {formatRelativeTime(item.conv.updatedAt)}
+        {formatRelativeTime(item.conv.updatedAt, locale)}
       </span>
     </>
   );

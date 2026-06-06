@@ -1,8 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import { base64ToArrayBuffer } from "./audio";
 
-// 免费微软 Edge「朗读」TTS。HTTP→WebSocket 全在 Rust 侧(edge_tts_synthesize),
-// 这里只把参数透传、把回传的 base64(WAV)还原成 ArrayBuffer。无需 API key。
+// Free Microsoft Edge "Read Aloud" TTS. The full HTTP→WebSocket flow runs on the Rust side (edge_tts_synthesize);
+// here we only forward parameters and convert the returned base64 (WAV) back into an ArrayBuffer. No API key required.
 export async function synthesizeEdge(opts: {
   text: string;
   voice: string;

@@ -1,17 +1,18 @@
 import type { ChatMessage, ModelProvider } from "../providers/types";
 
-// 会话滚动摘要 agent。把「旧摘要 + 新近一批要折叠的原文轮次」合并成一份更新后的摘要,
-// 供对话 agent 读取以记住超出原文窗口的早期内容(见 docs/conversation-agent.md#滚动摘要)。
-// 纯文本、合并式增量(不从头重写)、目标语书写、长度受字符预算约束。
+// Conversation rolling-summary agent. Merges the "old summary + a recent batch of verbatim turns to fold in"
+// into an updated summary, read by the conversation agent to remember earlier content that has scrolled
+// out of the verbatim window (see docs/conversation-agent.md#rolling-summary).
+// Plain text, incremental merge (not rewritten from scratch), written in the target language, length constrained by character budget.
 
 export interface SummarizeInput {
   targetLanguage: string;
-  priorSummary: string; // 上一次的摘要,首次为空
-  newTurns: string; // 待折叠的原文轮次(User/Partner 文本,时间正序)
-  charBudget: number; // 输出摘要的字符上限(粗略对应 token 预算)
+  priorSummary: string; // the previous summary; empty on first run
+  newTurns: string; // verbatim turns to fold in (User/Partner text, chronological order)
+  charBudget: number; // character limit for the output summary (rough token budget proxy)
 }
 
-// 见 docs/conversation-agent.md#滚动摘要
+// See docs/conversation-agent.md#rolling-summary
 function systemPrompt(input: SummarizeInput): string {
   return `You maintain a running summary of an ongoing language-learning conversation,
 written in ${input.targetLanguage}. The summary is fed to a conversation partner so it
@@ -43,7 +44,7 @@ ${input.newTurns}
 Return the updated summary now.`;
 }
 
-// 去掉偶发的代码围栏(与 maintainer 同样的防御)。
+// Strip occasional code fences (same defensive measure as in maintainer).
 function stripFences(text: string): string {
   const t = text.trim();
   if (!t.startsWith("```")) return t;
@@ -53,7 +54,7 @@ function stripFences(text: string): string {
     .trim();
 }
 
-// 产出更新后的摘要文本。失败由调用方(summary-runner)兜底,不在此抛业务处理。
+// Produces the updated summary text. Failures are caught by the caller (summary-runner); no business error handling here.
 export async function summarizeConversation(
   provider: ModelProvider,
   input: SummarizeInput,

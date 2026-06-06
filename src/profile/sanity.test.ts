@@ -9,63 +9,63 @@ import {
 const oldMd = `# Learner Profile · Chinese → English · B1 · updated 2026-05-29
 
 ## About me
-- 前端工程师,最近换了新工作;在读在职研究生
+- Frontend engineer, recently started a new job; part-time postgraduate student
 
 ## AI preferences
 ### Global
-- 用澳大利亚英语。
+- Use Australian English.
 
 ### Conversation
 
 ### Correction
-- 忽略语音输入导致的纯标点问题。
+- Ignore pure punctuation issues caused by voice input.
 
 ### Lessons
 
 ### Reading help
 
 ## Working on
-- 冠词 a/an/the —— 抽象名词前尤其不稳
-- 一般过去时与现在完成时的区分
-- 介词搭配:depend on / good at
+- Articles a/an/the — especially unstable before abstract nouns
+- Distinguishing simple past from present perfect
+- Preposition collocations: depend on / good at
 
 ## Comfortable with
-- 一般现在时、基本疑问句、祈使句
-- 日常词汇、问候与寒暄、点餐与购物表达
+- Simple present, basic questions, imperatives
+- Everyday vocabulary, greetings, ordering food and shopping
 
 ## Avoids / rarely attempts
-- 条件句(尤其是虚拟语气)
-- 被动语态、定语从句
+- Conditionals (especially subjunctive mood)
+- Passive voice, relative clauses
 
 ## Interests
-- 做饭、徒步、前端开发、骑行、摄影、播客
+- Cooking, hiking, frontend dev, cycling, photography, podcasts
 
 ## Recently introduced
 - "look forward to", "pay attention to", "make sense", "by the way", "in the long run"
 
 ## Expression gaps
-- 委婉拒绝请求 → I'd rather not take this on right now.
+- Politely declining a request → I'd rather not take this on right now.
 
 ## My notes
-我自己记的:多练时态,周末复习介词搭配。
+My own notes: practise tenses more, review preposition collocations on weekends.
 `;
 
-const MY_NOTES = "我自己记的:多练时态,周末复习介词搭配。\n";
+const MY_NOTES = "My own notes: practise tenses more, review preposition collocations on weekends.\n";
 
-function withSections(myNotes: string, working = "- 冠词 a/an/the"): string {
+function withSections(myNotes: string, working = "- Articles a/an/the"): string {
   return `# Learner Profile · Chinese → English · B1 · updated 2026-05-30
 
 ## About me
-- 前端工程师
+- Frontend engineer
 
 ## AI preferences
 ### Global
-- 用澳大利亚英语。
+- Use Australian English.
 
 ### Conversation
 
 ### Correction
-- 忽略语音输入导致的纯标点问题。
+- Ignore pure punctuation issues caused by voice input.
 
 ### Lessons
 
@@ -75,63 +75,63 @@ function withSections(myNotes: string, working = "- 冠词 a/an/the"): string {
 ${working}
 
 ## Comfortable with
-- 一般过去时、现在完成时
+- Simple past, present perfect
 
 ## Avoids / rarely attempts
-- 条件句
+- Conditionals
 
 ## Interests
-- 做饭、徒步、前端
+- Cooking, hiking, frontend dev
 
 ## Recently introduced
 - "pay attention to"
 
 ## Expression gaps
-- 委婉拒绝请求
+- Politely declining a request
 
 ## My notes
 ${myNotes}`;
 }
 
 describe("sanityCheck", () => {
-  it("保留 My notes、含全部段落 → 通过", () => {
+  it("My notes preserved, all sections present → passes", () => {
     const newMd = withSections(MY_NOTES);
     expect(sanityCheck(oldMd, newMd).ok).toBe(true);
   });
 
-  it("缺段落 → 拒绝", () => {
+  it("missing sections → rejected", () => {
     const broken =
-      "# Learner Profile\n## Working on\n- x\n## My notes\n我自己记的:多练时态。\n";
+      "# Learner Profile\n## Working on\n- x\n## My notes\nMy own notes: practise tenses.\n";
     const r = sanityCheck(oldMd, broken);
     expect(r.ok).toBe(false);
-    expect(r.reason).toContain("缺少必需段落");
+    expect(r.reason).toContain("Missing required section");
   });
 
-  it("改了 My notes → 拒绝", () => {
-    const tampered = withSections("agent 偷偷改了用户的笔记\n");
+  it("My notes modified → rejected", () => {
+    const tampered = withSections("agent secretly changed the user's notes\n");
     const r = sanityCheck(oldMd, tampered);
     expect(r.ok).toBe(false);
     expect(r.reason).toContain("My notes");
   });
 
-  it("改了 AI preferences → 拒绝", () => {
+  it("AI preferences modified → rejected", () => {
     const tampered = withSections(MY_NOTES).replace(
-      "用澳大利亚英语",
-      "用美式英语",
+      "Use Australian English",
+      "Use American English",
     );
     const r = sanityCheck(oldMd, tampered);
     expect(r.ok).toBe(false);
     expect(r.reason).toContain("AI preferences");
   });
 
-  it("档案过长 → 拒绝(agent 未控制 bullet 数)", () => {
-    const bloated = withSections(MY_NOTES, `${"- 某个薄弱项\n".repeat(1500)}`);
+  it("profile too long → rejected (agent did not control bullet count)", () => {
+    const bloated = withSections(MY_NOTES, `${"- A weak point\n".repeat(1500)}`);
     const r = sanityCheck(oldMd, bloated);
     expect(r.ok).toBe(false);
-    expect(r.reason).toContain("过长");
+    expect(r.reason).toContain("too long");
   });
 
-  it("长度坍缩 → 拒绝(段落全、My notes 原样,但内容被吃掉)", () => {
+  it("length collapse → rejected (all sections present, My notes intact, but content lost)", () => {
     const collapsed = `## About me
 ${extractSectionBlock(oldMd, "AI preferences")}## Working on
 ## Comfortable with
@@ -142,28 +142,28 @@ ${extractSectionBlock(oldMd, "AI preferences")}## Working on
 ## My notes
 ${MY_NOTES}`;
     const longOld = oldMd.replace(
-      "- 做饭、徒步、前端开发、骑行、摄影、播客",
-      `${"- 一个很长的旧兴趣记录\n".repeat(80)}`,
+      "- Cooking, hiking, frontend dev, cycling, photography, podcasts",
+      `${"- A very long old interest entry\n".repeat(80)}`,
     );
     const r = sanityCheck(longOld, collapsed);
     expect(r.ok).toBe(false);
-    expect(r.reason).toContain("坍缩");
+    expect(r.reason).toContain("collapse");
   });
 });
 
 describe("applyPreservedMyNotes", () => {
-  it("把 LLM 改过的 My notes 贴回旧版", () => {
-    const llm = withSections("agent 偷偷改了\n");
+  it("restores LLM-modified My notes to the old version", () => {
+    const llm = withSections("agent secretly changed it\n");
     const fixed = applyPreservedMyNotes(oldMd, llm);
     expect(sanityCheck(oldMd, fixed).ok).toBe(true);
     expect(extractMyNotes(fixed)).toBe(extractMyNotes(oldMd));
   });
 
-  it("LLM 漏掉 My notes 时补上", () => {
+  it("restores My notes when the LLM omits it", () => {
     const without = `# Learner Profile
 
 ## About me
-- 前端工程师
+- Frontend engineer
 
 ## Working on
 - x
@@ -190,8 +190,8 @@ describe("applyPreservedMyNotes", () => {
 });
 
 describe("extractMyNotes", () => {
-  it("抽出 My notes 块", () => {
+  it("extracts the My notes block", () => {
     expect(extractMyNotes(oldMd)).toContain("## My notes");
-    expect(extractMyNotes(oldMd)).toContain("多练时态");
+    expect(extractMyNotes(oldMd)).toContain("practise tenses");
   });
 });

@@ -68,7 +68,7 @@ function parseClassification(raw: string): ClassifiedPreference[] {
   const validated = PreferenceClassification.safeParse(normalized);
   if (!validated.success) {
     throw new Error(
-      `偏好归类 JSON 校验失败:${formatZodError(validated.error)}`,
+      `Preference classification JSON validation failed: ${formatZodError(validated.error)}`,
     );
   }
   return validated.data.items;
@@ -99,7 +99,7 @@ export async function classifyProfilePreferenceInstruction(
       }),
     );
   } catch (e) {
-    console.warn("偏好归类 json_schema 失败,尝试 json_object:", e);
+    console.warn("Preference classification json_schema failed, retrying with json_object:", e);
   }
 
   return parseClassification(

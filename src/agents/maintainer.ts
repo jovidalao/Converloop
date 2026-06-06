@@ -23,7 +23,7 @@ function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-// 见 docs/profile-maintainer-agent.md#system-prompt
+// See docs/profile-maintainer-agent.md#system-prompt
 function systemPrompt(input: MaintainerInput): string {
   return `You maintain a learner's profile document for a ${input.nativeLanguage} speaker
 learning ${input.targetLanguage}. The profile is read by a conversation agent to
@@ -118,7 +118,7 @@ ${input.transcript || "(none)"}
 Produce the updated profile now.`;
 }
 
-// 偶尔会包 ``` 代码围栏,去掉。
+// Occasionally wraps in ``` code fences; strip them.
 function stripFences(md: string): string {
   const t = md.trim();
   if (!t.startsWith("```")) return t;
@@ -128,7 +128,7 @@ function stripFences(md: string): string {
     .trim();
 }
 
-// 后台跑:产出新 MD → sanity check → 通过才原子写入,否则保留旧 MD。
+// Runs in background: produce new MD → sanity check → atomically write only if passed, otherwise keep old MD.
 export async function runMaintainer(
   provider: ModelProvider,
   input: MaintainerInput,
@@ -145,14 +145,14 @@ export async function runMaintainer(
   } catch (e) {
     return {
       written: false,
-      reason: `LLM 调用失败:${e instanceof Error ? e.message : String(e)}`,
+      reason: `LLM call failed: ${e instanceof Error ? e.message : String(e)}`,
     };
   }
 
   newMd = applyPreservedUserSections(input.currentMd, newMd);
   const sane = sanityCheck(input.currentMd, newMd);
   if (!sane.ok)
-    return { written: false, reason: sane.reason ?? "sanity check 未通过" };
+    return { written: false, reason: sane.reason ?? "sanity check failed" };
 
   await writeProfile(newMd);
   return { written: true, reason: "updated", profile: newMd };

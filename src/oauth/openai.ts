@@ -1,9 +1,9 @@
-// OpenAI Codex(「Sign in with ChatGPT」)订阅登录:授权码 + PKCE。常量核对自 openclaw
-// (extensions/openai/openai-chatgpt-oauth-flow.runtime.ts)。登录后的 access 是 JWT,
-// 用法见 providers/openai-responses.ts(Responses API @ chatgpt.com/backend-api/codex)。
+// OpenAI Codex ("Sign in with ChatGPT") subscription login: authorization code + PKCE. Constants verified against openclaw
+// (extensions/openai/openai-chatgpt-oauth-flow.runtime.ts). The access token obtained after login is a JWT;
+// see providers/openai-responses.ts for usage (Responses API @ chatgpt.com/backend-api/codex).
 //
-// 注意:OpenAI token endpoint 要 application/x-www-form-urlencoded,所以走 Rust 的
-// oauth_token_post(表单编码),不能复用发 JSON 的 llm_request。
+// Note: the OpenAI token endpoint requires application/x-www-form-urlencoded, so we use the Rust
+// oauth_token_post command (form-encoded) instead of the JSON-sending llm_request.
 
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -17,11 +17,11 @@ const CALLBACK_PORT = 1455;
 const CALLBACK_PATH = "/auth/callback";
 const REDIRECT_URI = `http://localhost:${CALLBACK_PORT}${CALLBACK_PATH}`;
 const SCOPE = "openid profile email offline_access";
-// 与官方 Codex CLI 对齐,便于 chatgpt 后端把请求识别为 Codex 客户端。
+// Aligned with the official Codex CLI so the ChatGPT backend recognizes the request as a Codex client.
 const ORIGINATOR = "codex_cli_rs";
 const CALLBACK_TIMEOUT_SECS = 300;
 
-// base64url JWT 解码:取 access 中段 payload,读 ChatGPT account id(调用 Responses 时要带 header)。
+// Decode a base64url JWT: extract the middle-segment payload from the access token to read the ChatGPT account id (required as a header when calling Responses).
 function decodeAccountId(accessToken: string): string | undefined {
   const segment = accessToken.split(".")[1];
   if (!segment) return undefined;
@@ -53,7 +53,7 @@ function buildAuthorizeUrl(challenge: string, state: string): string {
   return `${AUTHORIZE_URL}?${params.toString()}`;
 }
 
-// 表单编码 POST 到 token endpoint;附带从新 access 解出的 accountId。
+// Form-encoded POST to the token endpoint; attaches the accountId extracted from the new access token.
 async function postToken(form: Record<string, string>): Promise<OAuthTokens> {
   const text = await invoke<string>("oauth_token_post", {
     url: TOKEN_URL,
@@ -63,7 +63,7 @@ async function postToken(form: Record<string, string>): Promise<OAuthTokens> {
   return { ...tokens, accountId: decodeAccountId(tokens.access) };
 }
 
-/** 走完整授权码 + PKCE 登录(回调端口 1455),返回令牌交给调用方落库。 */
+/** Full authorization code + PKCE login flow (callback port 1455); returns tokens for the caller to persist. */
 export async function loginOpenAICodex(): Promise<OAuthTokens> {
   const { verifier, challenge } = await generatePkce();
   const state = randomState();
@@ -77,7 +77,7 @@ export async function loginOpenAICodex(): Promise<OAuthTokens> {
   const result = await callback;
 
   if (result.state !== state) {
-    throw new Error("OAuth state 不匹配,可能存在风险,请重新登录。");
+    throw new Error("OAuth state mismatch; possible security risk — please log in again.");
   }
   return postToken({
     grant_type: "authorization_code",
@@ -88,7 +88,7 @@ export async function loginOpenAICodex(): Promise<OAuthTokens> {
   });
 }
 
-/** 用 refresh token 换一组新令牌(并重新解出 accountId)。 */
+/** Exchange a refresh token for a new set of tokens (and re-extract accountId). */
 export function refreshOpenAICodex(refreshToken: string): Promise<OAuthTokens> {
   return postToken({
     grant_type: "refresh_token",

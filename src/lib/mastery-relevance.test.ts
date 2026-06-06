@@ -6,12 +6,12 @@ describe("rankMasteryItemsForInput", () => {
     const items = [
       {
         key: "grammar:article_usage",
-        label: "冠词 a/an/the",
+        label: "Articles a/an/the",
         type: "grammar",
       },
       {
         key: "gap:push_back_deadline",
-        label: "把 deadline 往后推",
+        label: "Push a deadline back",
         type: "expression_gap",
         notes: "Could we push the deadline back a few days?",
       },

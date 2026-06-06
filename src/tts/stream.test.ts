@@ -21,7 +21,7 @@ describe("createReplySpeaker", () => {
     vi.clearAllMocks();
   });
 
-  it("整条回复一次性合成并播放", async () => {
+  it("synthesizes and plays the full reply in one request", async () => {
     const speaker = createReplySpeaker();
     const reply = "Hi. This is the whole reply. It plays as one piece.";
 
@@ -36,13 +36,13 @@ describe("createReplySpeaker", () => {
     });
   });
 
-  it("空回复不合成", () => {
+  it("empty reply is not synthesized", () => {
     const speaker = createReplySpeaker();
     speaker.finish("   ");
     expect(mocks.speakText).not.toHaveBeenCalled();
   });
 
-  it("中止后不再播放", async () => {
+  it("does not play after abort", async () => {
     const speaker = createReplySpeaker();
     speaker.finish("Some reply text.");
     speaker.abort();

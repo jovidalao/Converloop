@@ -15,14 +15,14 @@ const cfg: TtsConfig = {
 };
 
 describe("buildTtsCacheKey", () => {
-  it("相同文本与配置生成相同 key", async () => {
+  it("same text and config produce the same key", async () => {
     const a = await buildTtsCacheKey("Hello", cfg);
     const b = await buildTtsCacheKey("Hello", cfg);
     expect(a).toBe(b);
     expect(a).toHaveLength(64);
   });
 
-  it("文本或音色变化则 key 不同", async () => {
+  it("different text or voice produces a different key", async () => {
     const base = await buildTtsCacheKey("Hello", cfg);
     const otherText = await buildTtsCacheKey("Hi", cfg);
     const otherVoice = await buildTtsCacheKey("Hello", {

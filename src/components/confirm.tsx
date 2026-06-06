@@ -8,13 +8,15 @@ import {
 } from "react";
 
 import { Button } from "@/components/ui/button";
+import { useTranslation } from "@/i18n";
 
 /**
- * Promise 化的确认弹窗。替代原生 window.confirm()——后者在 Tauri 的 macOS WKWebView
- * 里不弹窗、直接返回 false,导致删除类操作「点了没反应」。用法:
+ * A promise-based confirmation dialog. Replaces the native window.confirm() —
+ * which in Tauri's macOS WKWebView doesn't show a dialog and just returns false,
+ * making delete-style actions feel like "nothing happened" on click. Usage:
  *
  *   const confirm = useConfirm();
- *   if (await confirm({ title: "删除对话「X」?", description: "此操作不可撤销。" })) { ... }
+ *   if (await confirm({ title: 'Delete conversation "X"?', description: "This can't be undone." })) { ... }
  */
 type ConfirmOptions = {
   title: string;
@@ -29,11 +31,13 @@ const ConfirmContext = createContext<
 
 export function useConfirm() {
   const confirm = useContext(ConfirmContext);
-  if (!confirm) throw new Error("useConfirm 必须在 <ConfirmProvider> 内使用");
+  if (!confirm)
+    throw new Error("useConfirm must be used within <ConfirmProvider>");
   return confirm;
 }
 
 export function ConfirmProvider({ children }: { children: React.ReactNode }) {
+  const { t } = useTranslation();
   const [options, setOptions] = useState<ConfirmOptions | null>(null);
   const resolverRef = useRef<((value: boolean) => void) | null>(null);
 
@@ -73,7 +77,7 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
             <div className="mt-5 flex justify-end gap-2">
               <AlertDialog.Cancel asChild>
                 <Button variant="ghost" size="sm">
-                  {options?.cancelText ?? "取消"}
+                  {options?.cancelText ?? t("common.cancel")}
                 </Button>
               </AlertDialog.Cancel>
               <AlertDialog.Action asChild>
@@ -82,7 +86,7 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
                   size="sm"
                   onClick={() => settle(true)}
                 >
-                  {options?.confirmText ?? "删除"}
+                  {options?.confirmText ?? t("common.delete")}
                 </Button>
               </AlertDialog.Action>
             </div>

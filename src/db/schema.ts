@@ -5,14 +5,14 @@ import {
   SIGNAL_KIND_VALUES,
 } from "./mastery-values";
 
-// 镜像 src-tauri 的 migration(create_mastery_item)。两边手动保持一致。
-// 字段语义见 docs/architecture.md#sqlitemastery_item。
+// Mirrors src-tauri's migration (create_mastery_item). Both sides kept in sync manually.
+// Field semantics: see docs/architecture.md#sqlitemastery_item.
 export const masteryItem = sqliteTable("mastery_item", {
   id: text("id").primaryKey(),
   type: text("type", {
     enum: MASTERY_TYPE_VALUES,
   }).notNull(),
-  key: text("key").notNull().unique(), // 稳定 upsert 键 = Issue.mastery_key
+  key: text("key").notNull().unique(), // stable upsert key = Issue.mastery_key
   label: text("label").notNull(),
   status: text("status", {
     enum: MASTERY_STATUS_VALUES,
@@ -27,7 +27,7 @@ export const masteryItem = sqliteTable("mastery_item", {
 export type MasteryItem = typeof masteryItem.$inferSelect;
 export type NewMasteryItem = typeof masteryItem.$inferInsert;
 
-// 每条导师观察信号的事件日志。mastery_item 是可查询快照;event 是可追溯证据。
+// Event log for each tutor observation signal. mastery_item is a queryable snapshot; event is traceable evidence.
 export const masteryEvent = sqliteTable("mastery_event", {
   id: text("id").primaryKey(),
   createdAt: integer("created_at").notNull(),
@@ -50,7 +50,7 @@ export const masteryEvent = sqliteTable("mastery_event", {
 
 export type MasteryEvent = typeof masteryEvent.$inferSelect;
 
-// 会话(左侧对话列表)。镜像 src-tauri migration v3(create_conversation)。
+// Conversation (left-side conversation list). Mirrors src-tauri migration v3 (create_conversation).
 export const conversation = sqliteTable("conversation", {
   id: text("id").primaryKey(),
   title: text("title").notNull(),
@@ -62,14 +62,15 @@ export const conversation = sqliteTable("conversation", {
     .notNull()
     .default("practice"),
   learningAgentId: text("learning_agent_id"),
-  // 滚动摘要(自动压缩):summary 是该会话老内容的目标语摘要;summaryThroughId 是已折叠
-  // 进摘要的最后一个 turn.id(水位)。NULL = 尚未压缩,退化为纯原文回放。
+  // Rolling summary (auto-compressed): summary is a target-language summary of older conversation content;
+  // summaryThroughId is the last turn.id folded into the summary (watermark). NULL = not yet compressed, falls back to pure verbatim replay.
   summary: text("summary"),
   summaryThroughId: text("summary_through_id"),
-  // 会话分支(Agent-first Phase 3,migration v23–v26)。分支是非破坏式动作:从原会话派生
-  // 出新会话,原会话不动。parentConversationId 指向来源会话;branchSourceTurnId 保留历史
-  // 来源 turn 水位;branchKind 标记动作类型;agentModifiersJson 是回复 Agent 要遵循的
-  // 会话级调节(难度 / 调换角色 / 第二天)。普通会话这几列全为 NULL。
+  // Conversation branching (Agent-first Phase 3, migration v23–v26). Branching is a non-destructive action:
+  // derives a new conversation from the source, source is untouched. parentConversationId points to the source;
+  // branchSourceTurnId holds the historical source turn watermark; branchKind marks the action type;
+  // agentModifiersJson is the session-level adjustments the reply agent should follow (difficulty / role swap / next day).
+  // All these columns are NULL for normal conversations.
   parentConversationId: text("parent_conversation_id"),
   branchSourceTurnId: text("branch_source_turn_id"),
   branchKind: text("branch_kind"),
@@ -78,7 +79,7 @@ export const conversation = sqliteTable("conversation", {
 
 export type Conversation = typeof conversation.$inferSelect;
 
-// 定制化学习 Agent。内置 Agent 也存在这里,允许用户微调 prompt。
+// Customized learning agent. Built-in agents also live here, allowing users to fine-tune prompts.
 export const learningAgent = sqliteTable("learning_agent", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
@@ -109,7 +110,7 @@ export const learningAgent = sqliteTable("learning_agent", {
 export type LearningAgent = typeof learningAgent.$inferSelect;
 export type NewLearningAgent = typeof learningAgent.$inferInsert;
 
-// 自定义 observer 的本轮可见产物。它不写 mastery;只把观察结果挂到某一轮,供 Coach Panel 展示。
+// Per-turn visible output from custom observers. Does not write mastery; only attaches observation results to a turn for display in the Coach Panel.
 export const turnAnnotation = sqliteTable("turn_annotation", {
   id: text("id").primaryKey(),
   turnId: text("turn_id").notNull(),
@@ -123,7 +124,7 @@ export const turnAnnotation = sqliteTable("turn_annotation", {
 export type TurnAnnotation = typeof turnAnnotation.$inferSelect;
 export type NewTurnAnnotation = typeof turnAnnotation.$inferInsert;
 
-// Agent 提出的学习数据写入建议。确认前只排队;确认后代码验证并执行有限操作。
+// Learning data write proposals raised by agents. Only queued until confirmed; after confirmation code validates and executes the limited operations.
 export const memoryProposal = sqliteTable("memory_proposal", {
   id: text("id").primaryKey(),
   createdAt: integer("created_at").notNull(),
@@ -141,8 +142,8 @@ export const memoryProposal = sqliteTable("memory_proposal", {
 export type MemoryProposal = typeof memoryProposal.$inferSelect;
 export type NewMemoryProposal = typeof memoryProposal.$inferInsert;
 
-// Agent 作业 / 运行日志。后台作业用它跟踪生命周期;热路径和按需 Agent
-// 也写入已完成运行记录(source="conversation"),供能力库审计。
+// Agent jobs / run log. Background jobs use it to track lifecycle; hot-path and on-demand agents
+// also write completed run records (source="conversation") for agent library auditing.
 export const agentJob = sqliteTable("agent_job", {
   id: text("id").primaryKey(),
   kind: text("kind").notNull(),
@@ -155,7 +156,7 @@ export const agentJob = sqliteTable("agent_job", {
   source: text("source", {
     enum: ["task_agent", "maintainer", "summary", "manual", "conversation"],
   }).notNull(),
-  // 热路径 Agent 运行日志关联的 turn(migration v22)。后台作业为 NULL。
+  // The turn associated with a hot-path agent run log entry (migration v22). NULL for background jobs.
   turnId: text("turn_id"),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
@@ -166,7 +167,7 @@ export const agentJob = sqliteTable("agent_job", {
 export type AgentJob = typeof agentJob.$inferSelect;
 export type NewAgentJob = typeof agentJob.$inferInsert;
 
-// 学习项目是 Task Agent 的主要产物:一个可读计划 + 由代码创建的专项课草案。
+// Learning projects are the main output of the Task Agent: a human-readable plan + a focused lesson draft created by code.
 export const learningProject = sqliteTable("learning_project", {
   id: text("id").primaryKey(),
   title: text("title").notNull(),
@@ -187,7 +188,7 @@ export const learningProject = sqliteTable("learning_project", {
 export type LearningProject = typeof learningProject.$inferSelect;
 export type NewLearningProject = typeof learningProject.$inferInsert;
 
-// 应用内部连续性标记。不是用户偏好,需要随数据库备份/迁移。
+// Internal application continuity markers. Not user preferences; must be backed up / migrated with the database.
 export const appState = sqliteTable("app_state", {
   key: text("key").primaryKey(),
   value: text("value").notNull(),
@@ -196,9 +197,9 @@ export const appState = sqliteTable("app_state", {
 
 export type AppState = typeof appState.$inferSelect;
 
-// 每轮持久化:输入 / 回复 / 导师分析(JSON,导师失败时为 null)。
-// conversation_id 由 migration v4 追加,旧数据为 NULL(启动时归档到默认会话)。
-// explain/bilingual_count(v5/v6):用户在这条回复上请求讲解/双语的次数 = 理解吃力信号。
+// Per-turn persistence: input / reply / tutor analysis (JSON, null when tutor fails).
+// conversation_id added by migration v4; old data is NULL (archived to default conversation on startup).
+// explain/bilingual_count (v5/v6): number of times the user requested explain/bilingual on this reply = comprehension difficulty signal.
 export const turn = sqliteTable("turn", {
   id: text("id").primaryKey(),
   createdAt: integer("created_at").notNull(),
@@ -208,7 +209,7 @@ export const turn = sqliteTable("turn", {
   conversationId: text("conversation_id"),
   explainCount: integer("explain_count").notNull().default(0),
   bilingualCount: integer("bilingual_count").notNull().default(0),
-  // 离档轮次(/btw):1 = 仍显示在记录里,但构建上下文 / 喂维护 agent 时跳过(migration v32)。
+  // Off-record turns (/btw): 1 = still displayed in history, but skipped when building context / feeding the maintainer agent (migration v32).
   excludeFromContext: integer("exclude_from_context").notNull().default(0),
 });
 

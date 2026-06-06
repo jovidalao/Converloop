@@ -1,5 +1,5 @@
-// Agent Runtime —— hook 派发缝隙的类型层。
-// 运行时现状见 docs/architecture.md;这里只定义类型与 hook 名,不含运行逻辑。
+// Agent Runtime — type layer for hook dispatch seams.
+// See docs/architecture.md for current runtime state; this file only defines types and hook names, no runtime logic.
 
 import type { TutorAnalysis } from "../agents/schema";
 import type { MasteryKeyHint, WeakItem } from "../agents/tutor";
@@ -13,8 +13,8 @@ import type { ProficiencySnapshot } from "../lib/proficiency";
 import type { CorrectionPreferenceFlags } from "../profile/preferences";
 import type { ModelProvider } from "../providers/types";
 
-// 运行阶段 hook。只登记实际接线、会写进 agent_job 运行日志的 hook(YAGNI:
-// 需要新挂载点时再加,不预留未接线常量)。
+// Runtime phase hooks. Only register hooks that are actually wired up and will be written to the agent_job run log
+// (YAGNI: add new mount points when needed, don't pre-reserve unwired constants).
 export const HOOKS = {
   conversationReply: "conversation.reply",
   conversationObserve: "conversation.observe",
@@ -34,26 +34,26 @@ export type AgentKind =
   | "action"
   | "background";
 
-// 能力库按「入口」分组:用户在哪触发它 / 它何时出现,而不是技术 kind。
+// Agent library grouped by "entry point": where the user triggers it / when it appears, not the technical kind.
 export type AgentEntry =
-  | "auto_turn" // 每轮自动(对话伙伴 / 批改导师 / 自定义 observer)
-  | "selection" // 选中文字时(划词解析)
-  | "reply_action" // 回复操作按钮(讲解 / 双语 / 推荐回复)
-  | "derive" // 衍生新对话(对话衍生动作 / 自定义 action)
-  | "lesson"; // 专项课(专项课老师)
+  | "auto_turn" // automatic every turn (conversation partner / correction tutor / custom observer)
+  | "selection" // when text is selected (selection explain/translate)
+  | "reply_action" // reply action buttons (explain / bilingual / reply suggestion)
+  | "derive" // derive a new conversation (conversation derivation action / custom action)
+  | "lesson"; // focused lesson (lesson teacher)
 
-// 能力库展示用的元信息(普通用户看「这个能力做什么/何时跑/读写什么」,而非 hook/schema)。
+// Metadata for agent library display (end users see "what this capability does / when it runs / what it reads/writes", not hooks/schema).
 export interface AgentCard {
   title: string;
   description: string;
-  entry: AgentEntry; // 入口分组(怎么用 / 何时出现)
-  timing: string; // 什么时候运行
-  reads: string; // 能读什么数据
-  writes: string; // 是否会提出写入学习记忆
-  canDisable: boolean; // 主回复不可关;observer / action 可关
+  entry: AgentEntry; // entry group (how to use / when it appears)
+  timing: string; // when it runs
+  reads: string; // what data it can read
+  writes: string; // whether it will propose writing to learning memory
+  canDisable: boolean; // main reply cannot be disabled; observers / actions can be
 }
 
-// 注册表导出给能力库的一条目录项。
+// One catalog entry exported by the registry to the agent library.
 export interface AgentCatalogEntry {
   id: string;
   kind: AgentKind;
@@ -70,10 +70,10 @@ export interface Langs {
   level: string;
 }
 
-// 主回复完成 / 批改到达时回推 UI 的回调(orchestrator 的 TurnCallbacks 即此形状)。
+// Callbacks pushed back to the UI when the main reply completes / correction arrives (orchestrator's TurnCallbacks has this shape).
 export interface ConversationCallbacks {
   onReplyDelta: (delta: string) => void;
-  /** 对话流式结束、可继续输入时触发;批改仍在后台进行。 */
+  /** Triggered when the conversation stream ends and the user can continue typing; correction is still running in the background. */
   onReplyComplete?: (reply: string) => void;
   onAnalysis: (
     analysis: TutorAnalysis | null,
@@ -81,11 +81,11 @@ export interface ConversationCallbacks {
   ) => void;
 }
 
-// 两种会话的共享上下文。所有 DB 查询在 orchestrator 里查好后塞进来,Agent 只读不查。
+// Shared context for both conversation kinds. All DB queries are resolved in the orchestrator and passed in; agents only read, never query.
 interface BaseContext {
   provider: ModelProvider;
   conversationId: string;
-  /** 本轮 id(UI 传入或本地生成),observer 写回挂这条 turn。 */
+  /** Current turn id (passed from UI or generated locally); observer writes back to this turn. */
   turnId: string;
   userInput: string;
   /** App-triggered hidden kickoff for an empty derived conversation. */
@@ -94,8 +94,8 @@ interface BaseContext {
   summary: string;
   history: string;
   callbacks: ConversationCallbacks;
-  /** turn 行落库后 resolve(= 可以安全写 analysis_json);落库失败则 reject。
-   *  observer 在写回前等它,避免往不存在的行写。 */
+  /** Resolves once the turn row is persisted (= safe to write analysis_json); rejects if persistence fails.
+   *  Observers wait for this before writing back, to avoid writing to a non-existent row. */
   turnPersisted: Promise<string>;
 }
 
@@ -105,14 +105,14 @@ export interface PracticeContext extends BaseContext {
   conversationPreferences: string;
   tutorPreferences: string;
   tutorFlags: CorrectionPreferenceFlags;
-  /** 导师只看直近几轮;对话看全部水位后原文。 */
+  /** Tutor only sees the most recent few turns; conversation sees all verbatim turns after the watermark. */
   tutorHistory: string;
   weakList: WeakItem[];
   keyHints: MasteryKeyHint[];
   comfortableItems: ComfortableItem[];
   reviewItems: ReviewItem[];
   proficiency: ProficiencySnapshot;
-  /** 会话级调节(分支带来的难度/角色/第二天等);普通会话为空对象。 */
+  /** Session-level adjustments (difficulty/role/next-day from branches); empty object for normal conversations. */
   agentModifiers: AgentModifiers;
 }
 
@@ -127,7 +127,7 @@ export interface LearningContext extends BaseContext {
 
 export type ConversationContext = PracticeContext | LearningContext;
 
-// reply_producer:每会话按 kind 唯一,流式产出主回复。
+// reply_producer: unique per conversation by kind, streams the main reply.
 export interface ReplyProducer {
   id: string;
   kind: "reply_producer";
@@ -139,8 +139,8 @@ export interface ReplyProducer {
   ) => Promise<string>;
 }
 
-// observer:与主回复并行,产出结构化信号并自行走代码记账(LLM 不碰计数)。
-// Phase 1 只在 practice 热路径运行,故只见 PracticeContext。
+// observer: runs in parallel with the main reply, produces structured signals and handles code bookkeeping itself (LLM does not touch counts).
+// Phase 1 only runs on the practice hot path, so only PracticeContext is seen.
 export interface Observer {
   id: string;
   kind: "observer";
@@ -148,9 +148,9 @@ export interface Observer {
   run: (ctx: PracticeContext) => Promise<void>;
 }
 
-// action(conversation.action hook):用户点击触发的会话动作(分支、调换角色、升降难度…)。
-// scope="session" 作用于整个会话(渲染在动作条);"turn" 作用于某条 turn(渲染在该轮按钮)。
-// 多数 action 只是「代码建分支 + 注入修饰符」,run 返回要跳转的新会话 id。
+// action (conversation.action hook): user-click-triggered conversation actions (branch, swap roles, adjust difficulty, etc.).
+// scope="session" affects the entire conversation (rendered in the action bar); "turn" affects a specific turn (rendered on that turn's buttons).
+// Most actions are just "code creates a branch + injects modifiers"; run returns the new conversation id to navigate to.
 export type ActionScope = "session" | "turn";
 
 export interface ActionContext {
@@ -165,7 +165,7 @@ export interface DerivationContext {
 }
 
 export interface ActionResult {
-  /** 新建分支会话的 id;UI 据此切换过去。 */
+  /** Id of the newly created branch conversation; UI navigates to it. */
   navigateTo?: string;
 }
 
@@ -184,8 +184,8 @@ export interface ActionAgent {
   run?: (ctx: ActionContext) => Promise<ActionResult>;
 }
 
-// 按需 transformer(讲解 / 双语 / 划词):由 orchestrator 在调用点直接跑 + 经 runLogged 记日志,
-// 不走热路径派发。这里只登记元信息供能力库展示(始终可用,不做开关)。
+// On-demand transformers (explain / bilingual / selection): run directly at the call site by the orchestrator + logged via runLogged,
+// not dispatched through the hot path. Only metadata is registered here for agent library display (always available, no toggle).
 export interface TransformerInfo {
   id: string;
   card: AgentCard;

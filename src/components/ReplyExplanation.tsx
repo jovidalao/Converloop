@@ -1,14 +1,17 @@
 import { BookOpenIcon, RefreshCwIcon } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
+import { useTranslation } from "@/i18n";
 import { explainReply, MissingApiKeyError } from "../orchestrator";
 import { isAgentHidden } from "../runtime";
 import { Markdown } from "./Markdown";
 import { Button } from "./ui/button";
 import { Spinner } from "./ui/spinner";
 
-// "讲解"按钮:点一下,按用户掌握情况流式讲解这条回复。
-// 状态留在组件内(临时,不持久化)——再点收起/展开,已生成的复用。
-// actions: 同一行靠前渲染的其它操作(复制 / 发音)。
+// The "Explain" button: one click streams an explanation of this reply tailored
+// to what the user has mastered. State stays inside the component (transient, not
+// persisted) — clicking again collapses/expands, and an already-generated
+// explanation is reused. `actions`: other actions rendered earlier on the same
+// row (copy / pronounce).
 export function ReplyExplanation({
   text,
   actions,
@@ -21,18 +24,22 @@ export function ReplyExplanation({
   actions?: ReactNode;
   trailingActions?: ReactNode;
   extraPanels?: ReactNode;
-  /** 用户首次点开讲解时触发一次(理解信号记账,见 db/turns)。 */
+  /** Fires once the first time the user opens the explanation (comprehension
+   * signal accounting, see db/turns). */
   onFirstOpen?: () => void;
-  /** 讲解展开或流式内容改变时通知父级滚动容器按需贴底。 */
+  /** Notify the parent scroll container to stick to the bottom when the
+   * explanation expands or its streaming content changes. */
   onLayoutChange?: () => void;
 }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [explanation, setExplanation] = useState("");
   const [error, setError] = useState<string | null>(null);
   const prevTextRef = useRef(text);
 
-  // 回复被「重新生成」替换后,旧讲解不再对应,收起重置。
+  // Once the reply is replaced by a "regenerate", the old explanation no longer
+  // matches, so collapse and reset.
   useEffect(() => {
     if (prevTextRef.current === text) return;
     prevTextRef.current = text;
@@ -72,7 +79,7 @@ export function ReplyExplanation({
     if (loading) return;
     if (!explanation && !error) {
       setOpen(true);
-      onFirstOpen?.(); // 用户主动请求讲解 → 理解吃力信号
+      onFirstOpen?.(); // user actively requested an explanation → struggling-to-understand signal
       void generate();
       return;
     }
@@ -80,7 +87,8 @@ export function ReplyExplanation({
   }
 
   const expanded = open && (explanation || error);
-  // 「回复讲解」被删除(隐藏)后,只藏掉讲解按钮,复制/朗读/双语等其它操作照常。
+  // When "Reply explanation" is removed (hidden), only the explain button is
+  // hidden; copy / read-aloud / bilingual and other actions stay as usual.
   const explainHidden = isAgentHidden("builtin:transformer:explain");
 
   return (
@@ -96,7 +104,7 @@ export function ReplyExplanation({
             onClick={handleClick}
             disabled={loading}
             aria-expanded={!!expanded}
-            title="根据你的掌握情况讲解这条回复"
+            title={t("replyExplanation.explainTooltip")}
           >
             <span className="inline-flex size-4 shrink-0 items-center justify-center">
               {loading ? (
@@ -105,7 +113,7 @@ export function ReplyExplanation({
                 <BookOpenIcon className="size-4" />
               )}
             </span>
-            <span>讲解</span>
+            <span>{t("replyExplanation.explain")}</span>
           </Button>
         )}
         {trailingActions}
@@ -129,7 +137,7 @@ export function ReplyExplanation({
                 onClick={() => void generate()}
               >
                 <RefreshCwIcon size={14} />
-                重试
+                {t("common.retry")}
               </Button>
             </div>
           ) : (

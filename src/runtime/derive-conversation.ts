@@ -1,7 +1,8 @@
-// 「对话衍生」的共享层:内置衍生动作(builtins)和自定义 action(custom-agents)
-// 都把一段源对话变成一个新的 NewConversationContext。两边的 system prompt 措辞不同
-// (内置走 ACTION/OBJECTIVE,自定义注入用户 agent prompt),但输出 schema、snake→camel
-// 解析、provider.generate 调用是同一套 —— 收在这里,避免两处 schema 静默漂移。
+// Shared layer for "conversation derivation": both built-in derivation actions (builtins) and custom
+// actions (custom-agents) turn a source conversation into a new NewConversationContext. The system
+// prompt wording differs on each side (builtins use ACTION/OBJECTIVE, custom injects user agent prompt),
+// but the output schema, snake→camel parsing, and provider.generate call are shared here — to prevent
+// silent schema drift between the two places.
 
 import { z } from "zod";
 import { toJsonSchema } from "../agents/json-schema";
@@ -26,7 +27,7 @@ function parseNewConversationContext(raw: string): NewConversationContext {
   const validated = NewConversationContextSchema.safeParse(parsed.value);
   if (!validated.success) {
     throw new Error(
-      `对话衍生上下文校验失败: ${formatZodError(validated.error)}`,
+      `Conversation derivation context validation failed: ${formatZodError(validated.error)}`,
     );
   }
   const data = validated.data;
@@ -42,8 +43,8 @@ function parseNewConversationContext(raw: string): NewConversationContext {
   };
 }
 
-// 跑衍生 LLM:调用方自带 messages(各自的 system/user prompt)与采样参数,
-// 这里统一挂衍生 schema、生成、解析成 NewConversationContext。
+// Run derivation LLM: caller provides messages (their own system/user prompts) and sampling params;
+// this function uniformly attaches the derivation schema, generates, and parses into NewConversationContext.
 export async function generateDerivedConversation(
   provider: ModelProvider,
   messages: ChatMessage[],

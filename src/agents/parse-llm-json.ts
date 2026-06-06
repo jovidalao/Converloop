@@ -4,7 +4,7 @@ import {
   MASTERY_UPDATE_SIGNAL_VALUES,
 } from "../db/mastery-values";
 
-/** 只去掉完整包裹 JSON 的 markdown fence;不从混合文本里猜测截取对象。 */
+/** Only strip markdown fences that fully wrap JSON; do not attempt to extract objects from mixed text. */
 export function extractJsonText(raw: string): string {
   const trimmed = raw.trim();
   if (!trimmed) return "";
@@ -65,7 +65,7 @@ function proseInsteadOfJsonHint(raw: string): string | null {
     t.includes("Signal: `") ||
     (t.includes("```") && !t.includes("{"))
   ) {
-    return "模型返回了推理过程而非 JSON;请确认代理支持结构化输出(tool/json_schema),或换用官方端点/模型。";
+    return "Model returned reasoning instead of JSON; confirm the provider supports structured output (tool/json_schema), or switch to an official endpoint/model.";
   }
   return null;
 }
@@ -79,7 +79,7 @@ export function parseLLMJson(
   | { ok: false; kind: JsonParseFailureKind; error: string } {
   const text = extractJsonText(raw);
   if (!text) {
-    return { ok: false, kind: "empty", error: "模型返回空内容" };
+    return { ok: false, kind: "empty", error: "Model returned empty content" };
   }
   try {
     return { ok: true, value: JSON.parse(text) };
@@ -89,16 +89,16 @@ export function parseLLMJson(
       try {
         return { ok: true, value: JSON.parse(repaired) };
       } catch {
-        // 继续返回原始错误,便于定位模型真正输出了什么。
+        // Continue returning the original error to help identify what the model actually output.
       }
     }
     const hint = e instanceof Error ? e.message : String(e);
     const prose = proseInsteadOfJsonHint(text);
-    const prefix = prose ?? `返回内容不是合法 JSON(${hint})`;
+    const prefix = prose ?? `Response is not valid JSON (${hint})`;
     return {
       ok: false,
       kind: "invalid_json",
-      error: `${prefix},开头: ${text.slice(0, 120)}…`,
+      error: `${prefix}, starts with: ${text.slice(0, 120)}…`,
     };
   }
 }
@@ -277,7 +277,7 @@ function unwrapTutorPayload(json: unknown): unknown {
   return isRecord(wrapped) ? wrapped : json;
 }
 
-/** 把模型常见的小偏差(大小写、缺数组)修到 Zod 能吃的形状,不捏造字段。 */
+/** Fix common minor deviations from models (casing, missing arrays) into a shape Zod can parse, without inventing fields. */
 export function normalizeTutorPayload(json: unknown): unknown {
   json = unwrapTutorPayload(json);
   if (!json || typeof json !== "object" || Array.isArray(json)) return json;
@@ -376,7 +376,7 @@ export function normalizeTutorPayload(json: unknown): unknown {
       })
     : [];
 
-  // expression_gap 可选:存在时把 key_items 的 mastery_type 规整到合法值。
+  // expression_gap is optional: when present, normalize key_items' mastery_type to valid values.
   let expression_gap = readAlias(o, ["expression_gap", "expressionGap", "gap"]);
   if (expression_gap === undefined || expression_gap === "")
     expression_gap = null;
@@ -510,5 +510,5 @@ export function formatZodError(error: {
   for (const [field, msgs] of Object.entries(flat.fieldErrors)) {
     if (msgs?.length) parts.push(`${field}: ${msgs.join(", ")}`);
   }
-  return parts.slice(0, 4).join("; ") || "字段不符合 schema";
+  return parts.slice(0, 4).join("; ") || "Fields do not match schema";
 }

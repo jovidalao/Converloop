@@ -73,7 +73,7 @@ import {
   runTransformer,
 } from "./runtime";
 
-// 回调形状统一定义在 runtime(ConversationCallbacks),这里别名导出保持既有引用。
+// Callback shape is defined centrally in runtime (ConversationCallbacks); this alias export preserves existing references.
 export type TurnCallbacks = ConversationCallbacks;
 
 export interface TurnResult {
@@ -81,13 +81,13 @@ export interface TurnResult {
   analysis: TutorAnalysis | null;
 }
 
-// 导师只需消歧最新一句的语境,给直近这么多轮即可;水位后的全部原文留给对话 agent。
+// The tutor only needs enough context to disambiguate the latest utterance; supply this many recent turns. All verbatim turns after the watermark go to the conversation agent.
 const TUTOR_HISTORY_TURNS = 8;
 const SUGGESTION_CONTEXT_CHARS = 12000;
 
 export class MissingApiKeyError extends Error {
   constructor() {
-    super("未配置 API key,请到设置页填写");
+    super("No API key configured, please fill it in on the settings page");
     this.name = "MissingApiKeyError";
   }
 }
@@ -108,9 +108,9 @@ function tailTurnsByChars<T extends { userInput: string; reply: string }>(
   return turns.slice(start);
 }
 
-// runTurn 与 startDerivedConversation 共享的每轮数据拉取:摘要 + 全局掌握表 + 档案,
-// 一次并行取好(彼此独立,避免叠加延迟)。各自的 rankMasteryItemsForInput(query /
-// context 因热路径 vs 衍生开场而不同)留在调用方。
+// Shared per-turn data fetching for runTurn and startDerivedConversation: summary + global mastery table + profile,
+// fetched once in parallel (all independent, avoids stacking latency). Per-caller rankMasteryItemsForInput
+// (whose query/context differs between hot path and derived opening) is handled by each caller.
 async function loadTurnContextData(conversationId: string, config: AppConfig) {
   const [
     summaryData,
@@ -145,7 +145,7 @@ async function loadTurnContextData(conversationId: string, config: AppConfig) {
   };
 }
 
-// 自动压缩水位用的「非历史动态块」token 估算:profile 切片 + 已掌握脚手架 + 复习候选。
+// Token estimate for the "non-history dynamic block" used by the auto-compression watermark: profile slice + mastered scaffold + review candidates.
 function estimateNonHistoryTokens(
   profileSlice: string,
   comfortableItems: {
@@ -257,18 +257,18 @@ export async function confirmLearningTurnMastery(
 
   const conversation = await getConversation(conversationId);
   if (conversation?.kind !== "learning_agent") {
-    throw new Error("只有专项课会话可以确认课堂掌握信号");
+    throw new Error("Only focused-lesson sessions can confirm lesson mastery signals");
   }
   const agentId = conversation.learningAgentId;
-  if (!agentId) throw new Error("这个专项课没有绑定学习 Agent");
+  if (!agentId) throw new Error("This focused lesson has no learning agent linked");
   const agent = await getLearningAgent(agentId);
-  if (!agent) throw new Error("找不到这个学习 Agent");
+  if (!agent) throw new Error("Learning agent not found");
   const turn = await getTurn(turnId);
   if (!turn || turn.conversationId !== conversationId) {
-    throw new Error("找不到这条专项课轮次");
+    throw new Error("Focused-lesson turn not found");
   }
   if (!turn.userInput.trim()) {
-    return { summary: "这一轮不是学习者产出,没有写入。", applied: 0 };
+    return { summary: "This turn is not learner output; nothing was written.", applied: 0 };
   }
 
   const config = loadConfig();
@@ -284,7 +284,7 @@ export async function confirmLearningTurnMastery(
     .slice(0, 40)
     .map(toLessonWritebackCandidate);
   if (candidates.length === 0) {
-    return { summary: "没有可回写的学习项。", applied: 0 };
+    return { summary: "No learning items to write back.", applied: 0 };
   }
   const idx = lessonTurns.findIndex((item) => item.id === turnId);
   const history = formatTurns(
@@ -363,8 +363,8 @@ export async function addSelectionToLearningData(
   return { key: draft.key, label: draft.label, type: draft.type };
 }
 
-// 端到端一轮:对话 ∥ 导师并行 → 对话流式秒回、批改稍后到 → 记账 + 持久化。
-// 导师崩了不影响对话(降级:analysis=null,本轮不更新 mastery)。
+// End-to-end single turn: conversation ∥ tutor in parallel → streaming reply immediately, correction arrives later → accounting + persistence.
+// A tutor crash does not affect the conversation (graceful degradation: analysis=null, mastery not updated this turn).
 export async function runTurn(
   userInput: string,
   conversationId: string,
@@ -372,7 +372,7 @@ export async function runTurn(
   turnId?: string,
   opts: { offRecord?: boolean } = {},
 ): Promise<TurnResult> {
-  // 离档轮(/btw「顺便问一句」):照常读上下文+流式回复,但不批改、不计入后续上下文、不压缩。
+  // Off-record turn (/btw "by the way"): reads context + streams a reply as normal, but no correction, not counted in future context, no compression.
   const offRecord = opts.offRecord ?? false;
   const conversation = await getConversation(conversationId);
   if (conversation?.kind === "learning_agent") {
@@ -396,9 +396,9 @@ export async function runTurn(
     level: config.level,
   };
 
-  // 共享上下文(两个 agent 都读),先查好再喂。彼此独立,并行取以免叠加延迟、拖慢首 token。
-  // 历史按当前会话隔离(话题不串);weakList / comfortableItems / reviewItems / proficiency 走全局掌握表。
-  // 自动压缩:对话上下文 = 滚动摘要(较早内容)+ 水位之后的全部原文。摘要为 NULL 时退化为纯原文。
+  // Shared context (read by both agents), fetched upfront before being fed in. Independent of each other — fetched in parallel to avoid stacking latency and delaying the first token.
+  // History is scoped to the current conversation (topics do not bleed); weakList / comfortableItems / reviewItems / proficiency come from the global mastery table.
+  // Auto-compression: conversation context = rolling summary (older content) + all verbatim turns after the watermark. Falls back to pure verbatim when summary is NULL.
   const {
     summaryData,
     weakListRaw,
@@ -410,7 +410,7 @@ export async function runTurn(
     verbatimTurns,
   } = await loadTurnContextData(conversationId, config);
   const history = formatTurns(verbatimTurns);
-  // 导师拿直近几轮即可,别把水位后的全部原文喂进结构化分析(省 token、缩短输入)。
+  // The tutor only needs the most recent turns; do not feed all verbatim turns after the watermark into the structured analysis (saves tokens, shortens input).
   const tutorHistory = formatTurns(verbatimTurns.slice(-TUTOR_HISTORY_TURNS));
   const weakList = rankMasteryItemsForInput(
     weakListRaw,
@@ -434,22 +434,22 @@ export async function runTurn(
   );
   const tutorPreferences = formatExperiencePreferences(profileMd, "tutor");
   const tutorFlags = correctionPreferenceFlags(profileMd);
-  // 会话级调节(分支带来的难度/角色/第二天);普通会话为空对象,回复 Agent 自然忽略。
+  // Session-level modifiers (difficulty/role/next-day from branching); normal conversations get an empty object, which the reply agent naturally ignores.
   const agentModifiers = parseAgentModifiers(
     conversation?.agentModifiersJson ?? null,
   );
 
-  // 复用前端乐观渲染时生成的 turnId(若提供):让 UI 这条气泡与持久化的 DB 行同 id,
-  // 这样「从此处开始」(按 id 截断)和「重新生成」(按 id 定位)在刷新前也能命中本轮。
+  // Reuse the turnId generated during optimistic rendering on the frontend (if provided): gives the UI bubble and the persisted DB row the same id,
+  // so "start from here" (truncate by id) and "regenerate" (locate by id) can target this turn even before a refresh.
   const id = turnId ?? crypto.randomUUID();
-  // observer 与日志都挂这条 turn;observer 写回前等 turnPersisted,避免往未落库的行写。
+  // Both observers and logs are attached to this turn; observers wait for turnPersisted before writing back, to avoid writing to a row not yet in the DB.
   let resolvePersisted!: (value: string) => void;
   let rejectPersisted!: (reason: unknown) => void;
   const turnPersisted = new Promise<string>((resolve, reject) => {
     resolvePersisted = resolve;
     rejectPersisted = reject;
   });
-  void turnPersisted.catch(() => {}); // observer 也会 catch;这里兜底防未处理 rejection
+  void turnPersisted.catch(() => {}); // observers also catch; this is a safety net to prevent unhandled rejection
 
   const ctx: PracticeContext = {
     kind: "practice",
@@ -475,8 +475,8 @@ export async function runTurn(
     turnPersisted,
   };
 
-  // 主回复 ∥ observer 并行触发。observer fire-and-forget,自行等 turnPersisted 后走代码记账。
-  // 离档轮不批改:不派发 observer,直接告诉 UI 本轮无批改(清掉「分析中」)。
+  // Reply ∥ observer triggered in parallel. Observers are fire-and-forget; they wait for turnPersisted themselves before running accounting.
+  // Off-record turns are not corrected: do not dispatch observers; instead tell the UI immediately that this turn has no correction (clears the "analyzing" state).
   const replyPromise = dispatchReply(ctx, cb.onReplyDelta);
   if (offRecord) cb.onAnalysis(null);
   else dispatchObservers(ctx);
@@ -485,7 +485,7 @@ export async function runTurn(
   try {
     reply = await replyPromise;
   } catch (e) {
-    rejectPersisted(e); // 回复失败 → turn 不落库,observer 放弃记账(与迁移前一致)
+    rejectPersisted(e); // reply failed → turn is not persisted, observers abandon accounting (consistent with pre-migration behavior)
     throw e;
   }
 
@@ -495,9 +495,9 @@ export async function runTurn(
   resolvePersisted(id);
   cb.onReplyComplete?.(reply);
 
-  // 自动压缩:逼近上下文上限时,后台把最老的原文折叠进滚动摘要。不阻塞下一轮输入。
-  // 非历史动态块 = profile + 复习列表,叠加到固定 reserve 上,让水位贴合本轮实际负载。
-  // 离档轮不进上下文,自然不增加压缩压力,跳过。
+  // Auto-compression: when approaching the context limit, fold the oldest verbatim turns into the rolling summary in the background. Does not block the next turn's input.
+  // Non-history dynamic block = profile + review list, added on top of the fixed reserve so the watermark reflects the actual load this turn.
+  // Off-record turns do not enter context and therefore add no compression pressure; skip.
   if (!offRecord) {
     void maybeCompressConversation(
       conversationId,
@@ -635,13 +635,13 @@ async function runLearningTurn(
 
   const conversation = await getConversation(conversationId);
   const agentId = conversation?.learningAgentId;
-  if (!agentId) throw new Error("这个专项课没有绑定学习 Agent");
+  if (!agentId) throw new Error("This focused lesson has no learning agent linked");
 
   const agent = await getLearningAgent(agentId);
-  if (!agent) throw new Error("找不到这个学习 Agent");
+  if (!agent) throw new Error("Learning agent not found");
 
   const config = loadConfig();
-  // 自动压缩:课程上下文 = 滚动摘要(较早内容)+ 水位之后的全部原文。摘要为 NULL 时退化为纯原文。
+  // Auto-compression: lesson context = rolling summary (older content) + all verbatim turns after the watermark. Falls back to pure verbatim when summary is NULL.
   const [summaryData, dataContext, profileMd] = await Promise.all([
     getSummary(conversationId),
     buildLearningDataContext(agent, config),
@@ -656,7 +656,7 @@ async function runLearningTurn(
   );
 
   const id = turnId ?? crypto.randomUUID();
-  // 专项课不跑 observer;turnPersisted 只为满足 ConversationContext 形状,落库后 resolve。
+  // Lesson turns do not run observers; turnPersisted exists only to satisfy the ConversationContext shape and resolves after persistence.
   let resolvePersisted!: (value: string) => void;
   const turnPersisted = new Promise<string>((resolve) => {
     resolvePersisted = resolve;
@@ -692,9 +692,9 @@ async function runLearningTurn(
   });
   resolvePersisted(id);
   cb.onReplyComplete?.(reply);
-  // 自动压缩:逼近上下文上限时,后台把最老的原文折叠进滚动摘要。不阻塞下一轮输入。
-  // 专项课的非历史动态块 = dataContext + agent prompt,通常比普通对话大得多,据此提高 reserve。
-  // 离档轮不进上下文,跳过压缩。
+  // Auto-compression: when approaching the context limit, fold the oldest verbatim turns into the rolling summary in the background. Does not block the next turn's input.
+  // Lesson non-history dynamic block = dataContext + agent prompt, which is typically much larger than a normal conversation, so the reserve is raised accordingly.
+  // Off-record turns do not enter context; skip compression.
   if (!offRecord) {
     const nonHistoryTokens =
       estimateTokens(dataContext) + estimateTokens(agent.prompt);
@@ -704,9 +704,9 @@ async function runLearningTurn(
   return { reply, analysis: null };
 }
 
-// 重新生成最新一条对话回复:用同样的用户输入和「该轮之前」的历史重跑对话 agent,
-// 流式产出新回复并覆盖持久化的 reply。批改不变(只换 AI 那句,不动用户那句的分析)。
-// 仅用于普通对话(practice);专项课不暴露此操作。
+// Regenerate the latest conversation reply: re-run the conversation agent with the same user input and the history "before this turn",
+// streaming a new reply and overwriting the persisted one. Correction is unchanged (only the AI sentence is replaced; the user's analysis is untouched).
+// Only available for normal practice conversations; lesson sessions do not expose this operation.
 export async function regenerateReply(
   conversationId: string,
   turnId: string,
@@ -719,7 +719,7 @@ export async function regenerateReply(
   if (!provider) throw new MissingApiKeyError();
 
   const config = loadConfig();
-  // 上下文构成与 runTurn 的对话侧一致:摘要 + 水位后原文,叠加 profile / 复习 / 校准 / 会话调节。
+  // Context composition matches the conversation side of runTurn: summary + verbatim turns after watermark, with profile / review / calibration / session modifiers layered on top.
   const [
     summaryData,
     profileMd,
@@ -740,9 +740,9 @@ export async function regenerateReply(
     summaryData.throughId,
   );
   const idx = verbatimTurns.findIndex((t) => t.id === turnId);
-  if (idx < 0) throw new Error("找不到要重新生成的回复");
+  if (idx < 0) throw new Error("Reply to regenerate not found");
   const target = verbatimTurns[idx];
-  // 历史只取「该轮之前」的原文:把被重生成的这轮及其之后排除,避免把旧回复喂回去。
+  // History uses only verbatim turns "before this turn": exclude the regenerated turn and everything after it, to avoid feeding the old reply back in.
   const history = formatTurns(verbatimTurns.slice(0, idx));
   const reviewItems = rankMasteryItemsForInput(
     reviewItemsRaw,
@@ -787,8 +787,8 @@ export async function regenerateReply(
   return reply;
 }
 
-// 按需讲解某条对话回复:读 MD 档案(和对话 agent 同源),流式输出母语讲解。
-// 不在热路径,不持久化——讲解便宜,需要时重新生成即可。
+// On-demand explanation for a conversation reply: reads the Markdown profile (same source as the conversation agent), streams a native-language explanation.
+// Not on the hot path; not persisted — explanations are cheap and can be regenerated on demand.
 export async function explainReply(
   reply: string,
   onDelta: (delta: string) => void,
@@ -827,8 +827,8 @@ export async function explainReply(
   );
 }
 
-// 双语阅读:把一条对话回复做成目标语言/母语逐句对照(双语 Markdown)。
-// 不读档案、不持久化——便宜,需要时重新生成即可。
+// Bilingual reading: convert a conversation reply into a target-language/native-language sentence-by-sentence interleave (bilingual Markdown).
+// Does not read the profile; not persisted — cheap, regenerated on demand.
 export async function bilingualReply(reply: string): Promise<string> {
   const provider = await getProvider();
   if (!provider) throw new MissingApiKeyError();
@@ -855,8 +855,8 @@ export async function bilingualReply(reply: string): Promise<string> {
   );
 }
 
-// 推荐回复:用户消息下=按已发送含义改写成地道目标语;AI 回复下=基于上下文生成下一句。
-// 按需 transformer,不进热路径、不持久化、不更新学习计数。
+// Suggested reply: under a user message = rewrite the sent meaning into idiomatic target language; under an AI reply = generate the next sentence based on context.
+// On-demand transformer; not on the hot path, not persisted, does not update learning counts.
 export async function suggestReply(
   conversationId: string,
   turnId: string,
@@ -872,7 +872,7 @@ export async function suggestReply(
     getTurnsAfterId(conversationId, null),
   ]);
   const idx = turns.findIndex((t) => t.id === turnId);
-  if (idx < 0) throw new Error("找不到要生成推荐回复的消息");
+  if (idx < 0) throw new Error("Message for reply suggestion not found");
 
   const target = turns[idx];
   const contextTurns =
@@ -916,8 +916,8 @@ export async function suggestReply(
   );
 }
 
-// 划词翻译/解析:对话里选中一段文字,结合所在语境流式输出母语解析。
-// 不读档案、不持久化——便宜,需要时重新生成即可。
+// Selection translation/analysis: stream a native-language explanation for a text selection in the conversation, using its surrounding context.
+// Does not read the profile; not persisted — cheap, regenerated on demand.
 export async function translateSelection(
   selection: string,
   context: string,

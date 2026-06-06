@@ -1,10 +1,10 @@
-// 双语阅读:把译文从 ⟦…⟧ 标记转成 mdast emphasis 节点,渲染时复用 em → .bi-tr 样式。
+// Bilingual reading: convert translated text from ⟦…⟧ markers into mdast emphasis nodes, reusing the em → .bi-tr style at render time.
 //
-// 为什么不用 Markdown 的 *单星号* 来标记译文:CommonMark 的 emphasis flanking
-// 规则在 CJK 字符/标点旁边非常脆弱——译文里若出现源文带过来的 **加粗**,或者
-// 关闭的 `*` 紧贴中文标点又没有空格,emphasis 就会断裂,导致部分译文以原文的
-// 大字号渲染(就是「文字大小不准确」的根因)。⟦ ⟧ 不是 Markdown 语法,会原样
-// 留在文本节点里,因此完全绕开 flanking 规则,CJK 安全。
+// Why not use Markdown's *single asterisk* to mark translations: CommonMark's emphasis flanking
+// rules are very fragile next to CJK characters/punctuation — if the translated text carries over **bold** from the source, or
+// a closing `*` is immediately adjacent to Chinese punctuation with no space, the emphasis breaks, causing part of the translation to render
+// at the source text's larger font size (this is the root cause of "incorrect text size"). ⟦ ⟧ is not Markdown syntax and is left as-is
+// in text nodes, so it completely bypasses the flanking rules and is CJK-safe.
 
 const OPEN = "⟦"; // ⟦
 const CLOSE = "⟧"; // ⟧
@@ -12,13 +12,13 @@ const SPAN = /⟦([^⟦⟧]*)⟧/g;
 
 type MdNode = { type: string; value?: string; children?: MdNode[] };
 
-// 去掉落单的(未配对的)标记字符,避免它们裸露在界面上。
+// Strip unpaired marker characters so they do not appear bare in the UI.
 function pushText(out: MdNode[], raw: string): void {
   const clean = raw.replace(/[⟦⟧]/g, "");
   if (clean) out.push({ type: "text", value: clean });
 }
 
-// 把一个含 ⟦…⟧ 的文本节点拆成 [text, emphasis(译文), text, …]。无标记则返回 null。
+// Split a text node containing ⟦…⟧ into [text, emphasis(translation), text, …]. Returns null if no markers are present.
 function splitTranslations(value: string): MdNode[] | null {
   if (!value.includes(OPEN) && !value.includes(CLOSE)) return null;
   const out: MdNode[] = [];
@@ -50,8 +50,8 @@ function walk(node: MdNode): void {
   node.children = next;
 }
 
-// remark transformer:就地改写 mdast。原文的 Markdown(加粗、列表等)照常解析,
-// 译文则在文本节点层面被替换为 emphasis 节点。
+// remark transformer: mutates the mdast in place. Source Markdown (bold, lists, etc.) is parsed normally;
+// translations are replaced at the text-node level with emphasis nodes.
 export function remarkBilingual() {
   return (tree: MdNode): void => walk(tree);
 }

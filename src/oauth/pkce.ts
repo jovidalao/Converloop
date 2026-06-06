@@ -1,5 +1,5 @@
-// PKCE(RFC 7636)+ state,跑在 webview 里用 Web Crypto。verifier 随机 32 字节 base64url,
-// challenge = base64url(SHA-256(verifier))。OAuth 授权码流程(订阅登录)用它防止授权码被截获。
+// PKCE (RFC 7636) + state, running in the webview using Web Crypto. verifier is 32 random bytes as base64url;
+// challenge = base64url(SHA-256(verifier)). Used in the OAuth authorization code flow (subscription login) to prevent authorization code interception.
 
 function base64url(bytes: Uint8Array): string {
   let binary = "";
@@ -26,7 +26,7 @@ export async function generatePkce(): Promise<{
   return { verifier, challenge: base64url(new Uint8Array(digest)) };
 }
 
-/** 随机 state,用于回调时校验防 CSRF。 */
+/** Random state value used to validate the callback and prevent CSRF. */
 export function randomState(): string {
   return randomBase64url(32);
 }

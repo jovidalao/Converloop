@@ -3,7 +3,7 @@ import type { GenerateOptions, ModelProvider } from "../providers/types";
 import { generateDerivedConversation } from "./derive-conversation";
 
 describe("generateDerivedConversation", () => {
-  it("传入共享 JSON schema,并把 snake_case 输出映射成新会话上下文", async () => {
+  it("passes the shared JSON schema and maps snake_case output to a new conversation context", async () => {
     let seen: GenerateOptions | undefined;
     const provider: ModelProvider = {
       generate: async (opts) => {

@@ -6,10 +6,10 @@ import type {
   ModelProvider,
 } from "./types";
 
-// 原生 Gemini 适配器(generateContent / streamGenerateContent)。
-// HTTP 走 Rust 的 llm_request / llm_stream(同 OpenAI 适配器,通用 HTTP)。
+// Native Gemini adapter (generateContent / streamGenerateContent).
+// HTTP uses Rust's llm_request / llm_stream (same as the OpenAI adapter, generic HTTP).
 export interface GeminiConfig {
-  baseUrl: string; // 如 https://generativelanguage.googleapis.com/v1beta
+  baseUrl: string; // e.g. https://generativelanguage.googleapis.com/v1beta
   apiKey: string;
   model: string;
 }
@@ -22,8 +22,8 @@ interface GeminiContent {
   parts: GeminiPart[];
 }
 
-// OpenAI 风格 messages → Gemini contents + systemInstruction。
-// 单条 user 与官方 REST 样例一致:只含 parts、不设 role;多轮再补 user/model。
+// OpenAI-style messages → Gemini contents + systemInstruction.
+// Single user turn consistent with official REST examples: only contains parts, no role set; multi-turn adds user/model.
 function toGeminiContents(messages: ChatMessage[]): {
   contents: GeminiContent[];
   systemInstruction?: { parts: GeminiPart[] };
@@ -58,8 +58,8 @@ const TYPE_MAP: Record<string, string> = {
   object: "OBJECT",
 };
 
-// JSON Schema(zod-to-json-schema 产出)→ Gemini responseSchema:
-// 类型大写、保留 enum/required/properties/items、丢掉 additionalProperties / $schema 等不支持键。
+// JSON Schema (produced by zod-to-json-schema) → Gemini responseSchema:
+// uppercase types, keep enum/required/properties/items, drop additionalProperties / $schema and other unsupported keys.
 function toGeminiSchema(node: unknown): unknown {
   if (node === null || typeof node !== "object") return node;
   const s = node as Record<string, unknown>;
@@ -98,7 +98,7 @@ function toGeminiSchema(node: unknown): unknown {
     const mapped: Record<string, unknown> = {};
     for (const k of Object.keys(props)) mapped[k] = toGeminiSchema(props[k]);
     out.properties = mapped;
-    out.propertyOrdering = Object.keys(props); // 稳定字段顺序
+    out.propertyOrdering = Object.keys(props); // stable field ordering
   }
   if (Array.isArray(s.required)) out.required = s.required;
   if (s.items) out.items = toGeminiSchema(s.items);
@@ -108,7 +108,7 @@ function toGeminiSchema(node: unknown): unknown {
 
 type Body = Record<string, unknown>;
 
-/** 与官方 generateContent 请求体一致;供适配器与单测共用。 */
+/** Matches the official generateContent request body; shared between the adapter and unit tests. */
 export function buildGeminiRequestBody(opts: GenerateOptions): Body {
   const { contents, systemInstruction } = toGeminiContents(opts.messages);
   const body: Body = { contents };
@@ -138,7 +138,7 @@ function baseModelsUrl(cfg: GeminiConfig): string {
   return `${cfg.baseUrl.replace(/\/+$/, "")}/models/${cfg.model}`;
 }
 
-/** 官方 REST 路径:…/v1beta/models/{model}:generateContent */
+/** Official REST path: …/v1beta/models/{model}:generateContent */
 export function geminiGenerateUrl(cfg: GeminiConfig): string {
   return `${baseModelsUrl(cfg)}:generateContent`;
 }
@@ -165,7 +165,7 @@ function finishReason(raw: string | null | undefined): FinishReason | null {
   return { kind, raw, provider: "gemini" };
 }
 
-// 从一个 GenerateContentResponse 里抽出所有 parts 的 text。
+// Extract the text from all parts of a GenerateContentResponse.
 function extractText(json: unknown): string {
   const res = json as {
     error?: { message?: string };
@@ -180,7 +180,7 @@ function extractText(json: unknown): string {
   return parts.map((p) => p.text ?? "").join("");
 }
 
-// 解析已按 \n 切好的 SSE 行,累加 candidates[].content.parts[].text。
+// Parse SSE lines already split by \n, accumulate candidates[].content.parts[].text.
 function consumeSseLines(
   lines: string[],
   onDelta: (delta: string) => void,
@@ -204,7 +204,7 @@ function consumeSseLines(
       finalReason =
         finishReason(json.candidates?.[0]?.finishReason) ?? finalReason;
     } catch {
-      // 半截 JSON,等后续 chunk 拼齐
+      // Partial JSON, wait for subsequent chunks to complete it
     }
   }
   return { text: acc, finishReason: finalReason };

@@ -29,13 +29,13 @@ describe("deriveTurnActivities", () => {
     expect(deriveTurnActivities(turn({ partnerText: "Hi there" }))).toEqual([]);
   });
 
-  it("pending analysis surfaces a 正在批改 tutor activity", () => {
+  it("pending analysis surfaces a Grading tutor activity", () => {
     const acts = deriveTurnActivities(turn({ analysisPending: true }));
     expect(acts).toHaveLength(1);
     expect(acts[0]).toMatchObject({ kind: "tutor", status: "pending" });
   });
 
-  it("clean analysis → 表达准确, no memory", () => {
+  it("clean analysis → accurate expression, no memory", () => {
     const acts = deriveTurnActivities(turn({ analysis: cleanAnalysis }));
     expect(acts).toHaveLength(1);
     expect(acts[0]).toMatchObject({ kind: "tutor", status: "ok" });
@@ -54,7 +54,7 @@ describe("deriveTurnActivities", () => {
           explanation: "subject-verb agreement",
           severity: "moderate",
           mastery_key: "grammar:subject_verb_agreement",
-          mastery_label: "主谓一致",
+          mastery_label: "Subject-verb agreement",
           mastery_type: "grammar",
         },
       ],
@@ -67,26 +67,26 @@ describe("deriveTurnActivities", () => {
     expect(acts[1]).toMatchObject({
       kind: "memory",
       count: 1,
-      label: "记下 1 项",
+      label: "Recorded 1 item",
     });
   });
 
-  it("expression gap → 表达缺口 tutor + a gap memory signal", () => {
+  it("expression gap → Expression gap tutor + a gap memory signal", () => {
     const analysis: TutorAnalysis = {
       ...cleanAnalysis,
       corrected: "",
       natural: "",
       expression_gap: {
         mastery_key: "gap:decline_politely",
-        mastery_label: "委婉拒绝",
-        original: "我不知道怎么委婉拒绝",
+        mastery_label: "Politely declining",
+        original: "I don't know how to decline politely",
         target_expression: "I'd rather not, if that's okay.",
-        explanation: "用 'I'd rather not' 软化拒绝",
+        explanation: "Use 'I'd rather not' to soften a refusal",
         key_items: [],
       },
     };
     const acts = deriveTurnActivities(turn({ analysis }));
-    expect(acts[0]).toMatchObject({ kind: "tutor", label: "表达缺口" });
+    expect(acts[0]).toMatchObject({ kind: "tutor", label: "Expression gap" });
     expect(acts.some((a) => a.kind === "memory")).toBe(true);
   });
 });

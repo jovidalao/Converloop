@@ -7,8 +7,8 @@ export type {
   SignalKind,
 } from "./mastery-values";
 
-// 纯逻辑:不碰 DB、不碰 Tauri,可单测。LLM 给离散信号,这里算计数/状态。
-// "gap" = 用户没能用目标语产出(母语/混说),区别于 "error"(产出了但错了)。
+// Pure logic: no DB, no Tauri, unit-testable. LLM provides discrete signals; this code computes counts/status.
+// "gap" = user could not produce in the target language (native language/mixed), distinct from "error" (produced but incorrectly).
 
 export interface Signal {
   key: string;
@@ -16,8 +16,8 @@ export interface Signal {
   type: MasteryType;
   kind: SignalKind;
   example?: string;
-  note?: string; // 额外存到 mastery_item.notes(如表达缺口的地道说法)
-  payload?: unknown; // 原始结构化证据,写入 mastery_event 供审计 / 重算
+  note?: string; // additionally stored in mastery_item.notes (e.g. the idiomatic phrasing for an expression gap)
+  payload?: unknown; // raw structured evidence, written to mastery_event for auditing / recomputation
 }
 
 export interface MasteryCounters {
@@ -40,16 +40,17 @@ function clamp(n: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, n));
 }
 
-// mastery_key 是掌握系统的地基:同一类错跨句必须同一个 key。LLM 偶尔会大小写/空格
-// 漂移(grammar:Article usage ↔ grammar:article_usage),不规整会悄悄分叉成两条记录、
-// 稀释计数。写入前在代码侧统一收口(deriveSignals 是所有信号的必经之路)。
+// mastery_key is the foundation of the mastery system: the same error type across sentences must use the same key.
+// LLMs occasionally drift in casing/spacing (grammar:Article usage ↔ grammar:article_usage);
+// without normalization this silently forks into two records and dilutes the counts.
+// Normalize at the code boundary before writing (deriveSignals is the mandatory path for all signals).
 export function normalizeKey(key: string): string {
   return key
     .trim()
     .toLowerCase()
     .replace(/\s+/g, "_")
     .replace(/_+/g, "_")
-    .replace(/_*:_*/g, ":") // 冒号(type 前缀分隔)两侧不留下划线
+    .replace(/_*:_*/g, ":") // no underscores around colons (type prefix separator)
     .replace(/^_|_$/g, "");
 }
 
@@ -103,14 +104,14 @@ export function dueReviewScore(
   return (1 - retention) * statusNeed + errorRate * 0.35;
 }
 
-// 见 docs/tutor-agent.md#代码侧记账。公式以后可调,关键是它在代码里、可测。
+// See docs/tutor-agent.md#accounting-in-code. Formulas can be tuned later; the key is that they live in code and are testable.
 export function applySignal(
   prev: Pick<MasteryCounters, "seenCount" | "errorCount">,
   kind: SignalKind,
   now: number = Date.now(),
 ): MasteryCounters {
-  // introduced = 老师/批改新引入,只是曝光证据,不是用户产出证据。
-  // 它更新 lastSeenAt、保留学习项,但不推动 struggling→known。
+  // introduced = newly surfaced by the teacher/correction — exposure evidence only, not user production evidence.
+  // It updates lastSeenAt and keeps the learning item alive, but does not push struggling→known.
   if (kind === "introduced") {
     return {
       seenCount: prev.seenCount,
@@ -121,21 +122,22 @@ export function applySignal(
   }
 
   const seenCount = prev.seenCount + 1;
-  // gap 与 error 一样算负面证据:用户没能产出 → 推向 struggling。
+  // gap counts as negative evidence just like error: user could not produce → pushes toward struggling.
   const errorCount =
     prev.errorCount + (kind === "error" || kind === "gap" ? 1 : 0);
   const status = statusFromCounts(seenCount, errorCount);
   return { seenCount, errorCount, status, lastSeenAt: now };
 }
 
-// issues[] → error 信号(span_original 当作真实出错证据);
-// mastery_updates[] → correct / introduced 信号。
-// 错误信号只从 issues 派生,绝不让 LLM 在 mastery_updates 里重复上报。
+// issues[] → error signals (span_original treated as real error evidence);
+// mastery_updates[] → correct / introduced signals.
+// Error signals are derived solely from issues; the LLM must never re-report them via mastery_updates.
 export function deriveSignals(analysis: TutorAnalysis): Signal[] {
   const signals: Signal[] = [];
-  // 同一轮里某个 key 一旦被负面证据(error/gap)或更早的信号占用,后续 correct/
-  // introduced 不得再为它计一次:否则同一条消息既报错又报对,会把 seenCount 多加、
-  // 把错误率冲淡。issues 之间不去重(重复出错 = 真实的重复证据)。
+  // Once a key in the same turn is claimed by negative evidence (error/gap) or an earlier signal,
+  // subsequent correct/introduced signals must not count it again: otherwise the same message would
+  // both report an error and report it correct, inflating seenCount and diluting the error rate.
+  // Issues are not deduplicated against each other (repeated error = genuine repeated evidence).
   const claimed = new Set<string>();
   for (const issue of analysis.issues) {
     const key = normalizeKey(issue.mastery_key);
@@ -151,7 +153,7 @@ export function deriveSignals(analysis: TutorAnalysis): Signal[] {
   }
   for (const update of analysis.mastery_updates) {
     const key = normalizeKey(update.key);
-    if (claimed.has(key)) continue; // error 优先;重复 update 也去重
+    if (claimed.has(key)) continue; // error takes priority; duplicate updates are also deduplicated
     signals.push({
       key,
       label: update.label,
@@ -162,7 +164,7 @@ export function deriveSignals(analysis: TutorAnalysis): Signal[] {
     });
     claimed.add(key);
   }
-  // 表达缺口:情景本身记一个 gap 信号(存原句 + 地道说法),关键词走 introduced。
+  // Expression gap: record a gap signal for the scenario itself (storing the original + idiomatic phrasing); key items go through introduced.
   const gap = analysis.expression_gap;
   if (gap) {
     const gapKey = normalizeKey(gap.mastery_key);
@@ -172,7 +174,7 @@ export function deriveSignals(analysis: TutorAnalysis): Signal[] {
         label: gap.mastery_label,
         type: "expression_gap",
         kind: "gap",
-        example: gap.original, // 最重要:用户说不出的原句
+        example: gap.original, // most important: the original utterance the user could not produce
         note: gap.target_expression,
         payload: { expression_gap: gap },
       });

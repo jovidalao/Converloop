@@ -22,8 +22,8 @@ async function statusCount(status: MasteryStatus): Promise<number> {
   return row?.n ?? 0;
 }
 
-// 从近期 turns(全局,水平是全局特征)+ 掌握表聚合出证据指标。
-// 缺口轮(母语回退)不计入产出长度/准确度,只计入 gapRate。
+// Aggregate evidence metrics from recent turns (global — proficiency is a global characteristic) + mastery table.
+// Gap turns (native-language fallback) are excluded from output length/accuracy metrics; they only count toward gapRate.
 export async function getProficiencyInput(
   limit = 20,
 ): Promise<ProficiencyMetrics> {

@@ -10,7 +10,7 @@ import {
 } from "./mastery-logic";
 
 describe("normalizeKey", () => {
-  it("大小写 / 空格漂移收敛到同一个 key", () => {
+  it("case and whitespace drift converges to the same key", () => {
     expect(normalizeKey("Grammar:Article_Usage")).toBe("grammar:article_usage");
     expect(normalizeKey("  grammar:article usage  ")).toBe(
       "grammar:article_usage",
@@ -20,7 +20,7 @@ describe("normalizeKey", () => {
     );
   });
 
-  it("冒号两侧不留下划线", () => {
+  it("no underscores left adjacent to the colon", () => {
     expect(normalizeKey("gap: decline request politely")).toBe(
       "gap:decline_request_politely",
     );
@@ -28,7 +28,7 @@ describe("normalizeKey", () => {
 });
 
 describe("applySignal", () => {
-  it("seen_count < 3 一律 learning", () => {
+  it("seen_count < 3 always yields learning", () => {
     const a = applySignal({ seenCount: 0, errorCount: 0 }, "error", 1);
     expect(a).toMatchObject({
       seenCount: 1,
@@ -39,8 +39,8 @@ describe("applySignal", () => {
     expect(b.status).toBe("learning");
   });
 
-  it("错误率高 → struggling", () => {
-    // 连错 3 次:seen=3 err=3 errRate=1 > 0.4
+  it("high error rate → struggling", () => {
+    // 3 consecutive errors: seen=3 err=3 errRate=1 > 0.4
     const c = { seenCount: 2, errorCount: 2 };
     const r = applySignal(c, "error", 1);
     expect(r).toMatchObject({
@@ -50,19 +50,19 @@ describe("applySignal", () => {
     });
   });
 
-  it("错误率低 → known", () => {
+  it("low error rate → known", () => {
     // seen=3 err=0 errRate=0 < 0.15
     const r = applySignal({ seenCount: 2, errorCount: 0 }, "correct", 1);
     expect(r).toMatchObject({ seenCount: 3, errorCount: 0, status: "known" });
   });
 
-  it("correct 不增 error_count", () => {
+  it("correct does not increment error_count", () => {
     expect(
       applySignal({ seenCount: 5, errorCount: 2 }, "correct").errorCount,
     ).toBe(2);
   });
 
-  it("introduced 只算曝光,不增加 seen_count/error_count,也不推动 known", () => {
+  it("introduced counts as an exposure only — does not increment seen_count/error_count and does not push to known", () => {
     const r = applySignal({ seenCount: 2, errorCount: 0 }, "introduced", 1);
     expect(r).toMatchObject({
       seenCount: 2,
@@ -72,7 +72,7 @@ describe("applySignal", () => {
     });
   });
 
-  it("gap 与 error 一样增 error_count", () => {
+  it("gap increments error_count just like error", () => {
     expect(applySignal({ seenCount: 5, errorCount: 2 }, "gap").errorCount).toBe(
       3,
     );
@@ -82,7 +82,7 @@ describe("applySignal", () => {
 describe("retention", () => {
   const day = 24 * 60 * 60 * 1000;
 
-  it("correct 证据越多,strength 越高", () => {
+  it("more correct evidence yields higher strength", () => {
     const weak = retentionStrengthDays({
       seenCount: 3,
       errorCount: 2,
@@ -98,7 +98,7 @@ describe("retention", () => {
     expect(strong).toBeGreaterThan(weak);
   });
 
-  it("随时间衰减", () => {
+  it("decays over time", () => {
     const input = {
       seenCount: 4,
       errorCount: 1,
@@ -110,7 +110,7 @@ describe("retention", () => {
     );
   });
 
-  it("同样久未复习时,错误率高的项 due score 更高", () => {
+  it("when equally overdue, the item with higher error rate has a higher due score", () => {
     const now = 1_000 + 7 * day;
     const correctLeaning = {
       seenCount: 6,
@@ -143,7 +143,7 @@ describe("deriveSignals", () => {
         explanation: "...",
         severity: "minor",
         mastery_key: "grammar:article_usage",
-        mastery_label: "冠词",
+        mastery_label: "Article usage",
         mastery_type: "grammar",
       },
     ],
@@ -158,7 +158,7 @@ describe("deriveSignals", () => {
     expression_gap: null,
   };
 
-  it("issues → error 信号,mastery_updates → 其声明的信号", () => {
+  it("issues → error signals; mastery_updates → their declared signals", () => {
     const sigs = deriveSignals(analysis);
     expect(sigs).toHaveLength(2);
     expect(sigs[0]).toMatchObject({
@@ -180,7 +180,7 @@ describe("deriveSignals", () => {
     });
   });
 
-  it("同一 key 既在 issues 又在 mastery_updates → error 优先,不重复计", () => {
+  it("same key in both issues and mastery_updates → error takes priority, no duplicate", () => {
     const dup: TutorAnalysis = {
       is_correct: false,
       corrected: "...",
@@ -193,14 +193,14 @@ describe("deriveSignals", () => {
           explanation: "...",
           severity: "minor",
           mastery_key: "grammar:article_usage",
-          mastery_label: "冠词",
+          mastery_label: "Article usage",
           mastery_type: "grammar",
         },
       ],
       mastery_updates: [
         {
-          key: "grammar:article_usage", // 同 key 又报 correct —— 应被丢弃
-          label: "冠词",
+          key: "grammar:article_usage", // same key reported correct again — should be discarded
+          label: "Article usage",
           type: "grammar",
           signal: "correct",
         },
@@ -211,7 +211,7 @@ describe("deriveSignals", () => {
           signal: "introduced",
         },
         {
-          key: "vocab:apple", // 重复 update —— 应去重
+          key: "vocab:apple", // duplicate update — should be deduplicated
           label: "apple",
           type: "vocab",
           signal: "introduced",
@@ -228,7 +228,7 @@ describe("deriveSignals", () => {
     expect(sigs[1]).toMatchObject({ key: "vocab:apple", kind: "introduced" });
   });
 
-  it("expression_gap → 情景记 gap 信号(存原句),key_items 走 introduced", () => {
+  it("expression_gap → records a gap signal (stores original sentence), key_items go as introduced", () => {
     const withGap: TutorAnalysis = {
       is_correct: true,
       corrected: "",
@@ -237,15 +237,15 @@ describe("deriveSignals", () => {
       mastery_updates: [],
       expression_gap: {
         mastery_key: "gap:decline_request_politely",
-        mastery_label: "委婉拒绝请求",
-        original: "我想委婉地拒绝这个请求",
+        mastery_label: "Politely declining a request",
+        original: "I want to decline this request politely",
         target_expression:
           "I'd rather not take this on right now, but I could help later.",
-        explanation: "用 'I'd rather not ___, but ___' 句式先婉拒再给替代。",
+        explanation: "Use 'I'd rather not ___, but ___' to soften the refusal and offer an alternative.",
         key_items: [
           {
             text: "I'd rather not",
-            gloss: "我不太想",
+            gloss: "I'd prefer not to",
             mastery_key: "collocation:would_rather_not",
             mastery_label: "would rather not",
             mastery_type: "collocation",
@@ -259,7 +259,7 @@ describe("deriveSignals", () => {
       key: "gap:decline_request_politely",
       type: "expression_gap",
       kind: "gap",
-      example: "我想委婉地拒绝这个请求",
+      example: "I want to decline this request politely",
       note: "I'd rather not take this on right now, but I could help later.",
       payload: {
         expression_gap: expect.objectContaining({

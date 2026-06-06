@@ -7,11 +7,11 @@ import {
 import { TutorAnalysis } from "./schema";
 
 describe("extractJsonText", () => {
-  it("去掉 markdown 围栏", () => {
+  it("strips markdown fences", () => {
     expect(extractJsonText('```json\n{"a":1}\n```')).toBe('{"a":1}');
   });
 
-  it("不从混合文本里猜测截取对象", () => {
+  it("does not guess-extract objects from mixed text", () => {
     expect(extractJsonText('Here:\n{"a":1}\nDone')).toBe(
       'Here:\n{"a":1}\nDone',
     );
@@ -19,7 +19,7 @@ describe("extractJsonText", () => {
 });
 
 describe("normalizeTutorPayload", () => {
-  it("修正枚举大小写", () => {
+  it("normalizes enum casing", () => {
     const normalized = normalizeTutorPayload({
       is_correct: false,
       corrected: "x",
@@ -42,7 +42,7 @@ describe("normalizeTutorPayload", () => {
     expect(parsed.success).toBe(true);
   });
 
-  it("兼容常见 wrapper、camelCase 和别名字段", () => {
+  it("handles common wrappers, camelCase, and alias fields", () => {
     const normalized = normalizeTutorPayload({
       analysis: {
         isCorrect: "no",
@@ -53,10 +53,10 @@ describe("normalizeTutorPayload", () => {
             category: "Grammar",
             spanOriginal: "go",
             spanCorrected: "went",
-            reason: "过去时间要用过去式。",
+            reason: "Past time requires past tense.",
             severity: "Moderate",
             masteryKey: "grammar:past_tense",
-            masteryLabel: "一般过去时",
+            masteryLabel: "Simple past tense",
             masteryType: "Grammar",
           },
         ],
@@ -72,7 +72,7 @@ describe("normalizeTutorPayload", () => {
     }
   });
 
-  it("兼容中文和混合枚举标签", () => {
+  it("handles Chinese and mixed enum labels", () => {
     const normalized = normalizeTutorPayload({
       is_correct: false,
       corrected: "Do you have any other flavor options?",
@@ -82,10 +82,10 @@ describe("normalizeTutorPayload", () => {
           category: "grammar:article_usage／代词",
           span_original: "another",
           span_corrected: "any other",
-          explanation: '"another" 用于单数可数名词。',
+          explanation: '"another" is used with singular countable nouns.',
           severity: "中等",
           mastery_key: "grammar:article_usage",
-          mastery_label: "冠词 a/an/the 的用法",
+          mastery_label: "Usage of articles a/an/the",
           mastery_type: "语法",
         },
       ],
@@ -105,19 +105,19 @@ describe("normalizeTutorPayload", () => {
 });
 
 describe("parseLLMJson", () => {
-  it("空字符串报错", () => {
+  it("errors on empty string", () => {
     expect(parseLLMJson("  ").ok).toBe(false);
   });
 
-  it("推理文本给出可读提示", () => {
+  it("gives a readable error hint for reasoning text", () => {
     const bad =
       "-> Type: `collocation`, Label: `介词搭配` (Signal: `introduced`)";
     const result = parseLLMJson(bad);
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error).toContain("推理过程");
+    if (!result.ok) expect(result.error).toContain("reasoning");
   });
 
-  it("容忍对象和数组结尾的多余逗号", () => {
+  it("tolerates trailing commas in objects and arrays", () => {
     const result = parseLLMJson('{"a":[1,2,],"b":true,}');
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.value).toEqual({ a: [1, 2], b: true });

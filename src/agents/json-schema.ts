@@ -1,9 +1,9 @@
 import type { ZodTypeAny } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
 
-// 把 Zod schema 转成喂 provider 结构化输出的 JSON schema:inline refs
-// ($refStrategy:"none")、去掉 $schema —— 让 OpenAI 兼容端点能直接吃。
-// 见 docs/architecture.md 踩坑记录(zod 钉 v3)。所有 agent 共用此处一份。
+// Convert a Zod schema to a JSON schema for provider structured output: inline refs
+// ($refStrategy:"none"), strip $schema — so OpenAI-compatible endpoints can consume it directly.
+// See docs/architecture.md pitfall notes (zod pinned at v3). Shared by all agents.
 export function toJsonSchema(
   name: string,
   schema: ZodTypeAny,

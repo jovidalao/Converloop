@@ -46,10 +46,10 @@ export async function createAgentJob(input: {
   return id;
 }
 
-// 一次性落一条「已完成」的 Agent 运行日志(= agent_run 语义)。热路径用:跑完后
-// fire-and-forget 写入,单次 insert,不在 LLM 调用前插行。token 暂不记(provider 接口未暴露)。
+// Write a single "completed" agent run log entry (semantically an agent_run). Used on the hot path:
+// fire-and-forget after the run finishes, single insert, no pre-LLM row insertion. Tokens not recorded yet (provider interface does not expose them).
 export async function recordAgentRun(run: {
-  kind: string; // hook 名,如 "conversation.reply"
+  kind: string; // hook name, e.g. "conversation.reply"
   source: AgentJobSource;
   agentId?: string;
   turnId?: string;
@@ -83,8 +83,8 @@ export async function listAgentJobs(limit = 50): Promise<AgentJob[]> {
     .limit(limit);
 }
 
-// 设置·日志页:按来源/状态筛选 + 分页(Drizzle limit/offset)。listAgentJobs 仍给
-// 旧的「最近 N 条」用法;分页查询和计数另立两个函数,避免改动现有签名。
+// Settings · Logs page: filter by source/status + pagination (Drizzle limit/offset). listAgentJobs still serves
+// the old "most recent N" use case; paged query and count are separate functions to avoid changing existing signatures.
 export async function listAgentJobsPage(opts: {
   limit: number;
   offset: number;

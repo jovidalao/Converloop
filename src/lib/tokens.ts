@@ -1,13 +1,13 @@
-// 粗略 token 估算(纯逻辑,可单测;不碰 DB/Tauri/tokenizer)。
-// 用途:判断「下一轮要发的整段 prompt」是否逼近上下文上限,触发自动压缩(见 summary-runner)。
-// 刻意不内置真 tokenizer:BYOK 下模型未知,tokenizer 对非目标模型也不准,且徒增体积。
-// 估算有误差没关系——70% 高水位本身留了 30% 余量;偏差靠这层 headroom 吸收。
+// Rough token estimation (pure logic, unit-testable; no DB/Tauri/tokenizer).
+// Purpose: determine whether "the full prompt for the next turn" is approaching the context limit, triggering auto-compression (see summary-runner).
+// Deliberately no real tokenizer: in BYOK mode the model is unknown, tokenizers are inaccurate for non-target models, and they add unnecessary bundle size.
+// Estimation errors are fine — the 70% high-water mark already leaves 30% headroom; deviations are absorbed by that buffer.
 //
-// 启发式:CJK 字符按 ~1 token/字(分词器对汉字通常 1~2 token,取 1 是略偏激进 = 提前压缩,安全);
-// 其余(拉丁字母/空格/标点)按 ~4 字符/token(与维护 agent 的 TRANSCRIPT_CHAR_BUDGET 假设一致)。
-// 宁可高估:低估会真的撑爆上下文报错,高估只是早一点压缩。
+// Heuristic: CJK characters at ~1 token/char (tokenizers typically use 1–2 tokens per Chinese character; taking 1 is slightly aggressive = compress earlier, which is safe);
+// everything else (Latin letters/spaces/punctuation) at ~4 chars/token (consistent with the TRANSCRIPT_CHAR_BUDGET assumption in the maintainer agent).
+// Prefer over-estimating: under-estimating can genuinely blow the context and cause errors; over-estimating just compresses slightly earlier.
 
-// CJK 统一表意文字 + 扩展A + 兼容 + 假名 + 谚文,覆盖中日韩常见字。
+// CJK Unified Ideographs + Extension A + Compatibility + Kana + Hangul, covering common CJK characters.
 const CJK_RE = /[぀-ヿ㐀-䶿一-鿿豈-﫿가-힯]/g;
 
 export function estimateTokens(text: string): number {
@@ -17,7 +17,7 @@ export function estimateTokens(text: string): number {
   return Math.ceil(cjk + rest / 4);
 }
 
-// 汇总一组消息文本的 token 估算。每条消息加少量固定开销(role/分隔符),粗略对齐真实协议。
+// Aggregate token estimates for a set of message texts. Each message gets a small fixed overhead (role/delimiter), roughly aligning with the actual protocol.
 const PER_MESSAGE_OVERHEAD = 4;
 
 export function estimatePromptTokens(parts: string[]): number {

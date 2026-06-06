@@ -7,7 +7,7 @@ const DB_VERSION = 1;
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onerror = () => reject(req.error ?? new Error("无法打开朗读缓存"));
+    req.onerror = () => reject(req.error ?? new Error("Failed to open TTS cache"));
     req.onupgradeneeded = () => {
       const db = req.result;
       if (!db.objectStoreNames.contains(STORE_NAME)) {
@@ -21,7 +21,7 @@ function openDb(): Promise<IDBDatabase> {
 function idbRequest<T>(req: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
     req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error ?? new Error("IndexedDB 操作失败"));
+    req.onerror = () => reject(req.error ?? new Error("IndexedDB operation failed"));
   });
 }
 
@@ -63,7 +63,7 @@ export async function getCachedSpeech(
     db.close();
     return entry?.audio ?? null;
   } catch (e) {
-    console.warn("读取朗读缓存失败:", e);
+    console.warn("Failed to read TTS cache:", e);
     return null;
   }
 }
@@ -78,11 +78,11 @@ export async function setCachedSpeech(
     tx.objectStore(STORE_NAME).put({ key, audio, createdAt: Date.now() });
     await new Promise<void>((resolve, reject) => {
       tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error ?? new Error("写入朗读缓存失败"));
+      tx.onerror = () => reject(tx.error ?? new Error("Failed to write TTS cache"));
     });
     db.close();
   } catch (e) {
-    console.warn("写入朗读缓存失败:", e);
+    console.warn("Failed to write TTS cache:", e);
   }
 }
 
@@ -105,7 +105,7 @@ export async function clearTtsCache(): Promise<number> {
   await idbRequest(tx.objectStore(STORE_NAME).clear());
   await new Promise<void>((resolve, reject) => {
     tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error ?? new Error("清空朗读缓存失败"));
+    tx.onerror = () => reject(tx.error ?? new Error("Failed to clear TTS cache"));
   });
   db.close();
   return count;

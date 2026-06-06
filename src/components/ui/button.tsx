@@ -19,8 +19,8 @@ const buttonVariants = cva(
           "bg-secondary text-secondary-foreground shadow-minimal-flat hover:bg-accent hover:text-accent-foreground",
         ghost: "text-foreground hover:bg-accent hover:text-foreground",
         link: "text-primary underline-offset-4 hover:underline",
-        // 聊天气泡下的扁平操作按钮(复制 / 讲解 / 双语 等)。
-        // data-active 表示该 toggle 处于展开状态。
+        // Flat action buttons below chat bubbles (copy / explain / bilingual, etc.).
+        // data-active indicates the toggle is in the expanded/active state.
         action:
           "text-foreground hover:bg-accent data-[active=true]:bg-accent data-[active=true]:text-foreground",
       },

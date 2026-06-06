@@ -1,10 +1,10 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import type { FinishReason, GenerateOptions, ModelProvider } from "./types";
 
-// OpenAI 兼容适配器:覆盖 OpenAI / OpenRouter / LM Studio 等。
-// HTTP 走 Rust 的 llm_request / llm_stream(绕过 CORS + 真流式)。
+// OpenAI-compatible adapter: covers OpenAI / OpenRouter / LM Studio and similar.
+// HTTP uses Rust's llm_request / llm_stream (bypasses CORS + true streaming).
 export interface OpenAIConfig {
-  baseUrl: string; // 如 https://api.openai.com/v1
+  baseUrl: string; // e.g. https://api.openai.com/v1
   apiKey: string;
   model: string;
 }
@@ -34,7 +34,7 @@ function buildBody(
   return body;
 }
 
-/** 兼容 content / parsed / 旧版 text 等字段。 */
+/** Compatible with content / parsed / legacy text fields and similar. */
 export function extractOpenAIMessageContent(json: unknown): string {
   const root = json as {
     error?: { message?: string };
@@ -92,7 +92,7 @@ function finishReason(raw: string | null | undefined): FinishReason | null {
   return { kind, raw, provider: "openai" };
 }
 
-// 从一批已按 \n 切好的 SSE 行里抽取 delta.content,累加并回调。
+// Extract delta.content from a batch of SSE lines already split by \n, accumulate and invoke callback.
 function consumeSseLines(
   lines: string[],
   onDelta: (delta: string) => void,
@@ -114,7 +114,7 @@ function consumeSseLines(
       finalReason =
         finishReason(json.choices?.[0]?.finish_reason) ?? finalReason;
     } catch {
-      // 半截 JSON 或 keep-alive,忽略(完整行会在后续 chunk 拼齐)
+      // Partial JSON or keep-alive, ignore (complete line will be assembled in subsequent chunks)
     }
   }
   return { text: acc, finishReason: finalReason };
@@ -141,7 +141,7 @@ export function createOpenAIProvider(cfg: OpenAIConfig): ModelProvider {
       channel.onmessage = (chunk) => {
         buffer += chunk;
         const parts = buffer.split("\n");
-        buffer = parts.pop() ?? ""; // 留下可能不完整的最后一行
+        buffer = parts.pop() ?? ""; // keep the possibly-incomplete last line
         const consumed = consumeSseLines(parts, onDelta);
         full += consumed.text;
         finalReason = consumed.finishReason ?? finalReason;
@@ -152,7 +152,7 @@ export function createOpenAIProvider(cfg: OpenAIConfig): ModelProvider {
         body: buildBody(cfg, opts, true),
         onChunk: channel,
       });
-      // 收尾:flush 残留 buffer 里的完整行(防止漏掉最后一块)
+      // Finalize: flush complete lines remaining in buffer (prevent missing the last chunk)
       if (buffer.trim()) {
         const consumed = consumeSseLines([buffer], onDelta);
         full += consumed.text;

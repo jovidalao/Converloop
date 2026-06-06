@@ -1,6 +1,6 @@
-// 极简集中日志。错误始终打印;debug 信息由开关控制(默认关闭 → 行为不变):
+// Minimal centralized logging. Errors are always printed; debug output is controlled by a flag (default off → no behavior change):
 //   localStorage["lang-agent.debug"] = "1"
-// 没有引第三方 logger:单进程前端,console + 一个 scope 标签足够。
+// No third-party logger: single-process frontend, console + a scope label is sufficient.
 export function isDebug(): boolean {
   try {
     return localStorage.getItem("lang-agent.debug") === "1";

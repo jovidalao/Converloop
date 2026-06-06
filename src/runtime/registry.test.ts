@@ -23,10 +23,10 @@ import type {
 import { HOOKS } from "./types";
 import { hideAgent } from "./visibility";
 
-// 本测试只验证注册表/派发机制,故直接 import ./registry(不经 ./index,内置 Agent 不会自注册)。
-// 运行日志写入走 DB,在 vitest 里会被 fire-and-forget 的 .catch 吞掉,不影响断言。
+// This test only verifies the registry/dispatch mechanism, so it imports ./registry directly (not ./index, so built-in agents do not self-register).
+// Agent run log writes go to the DB and are swallowed by fire-and-forget .catch in vitest — they do not affect assertions.
 function fakePracticeCtx(turnId = "t1"): PracticeContext {
-  // 测试桩:派发只读 turnId / turnPersisted,其余字段不构造。
+  // Test stub: dispatch only reads turnId / turnPersisted; other fields are not constructed.
   return {
     kind: "practice",
     turnId,
@@ -35,7 +35,7 @@ function fakePracticeCtx(turnId = "t1"): PracticeContext {
 }
 
 describe("agent runtime registry", () => {
-  it("新注册的 observer 进入 getObservers 并被 dispatchObservers 调用(无需改 runTurn)", async () => {
+  it("newly registered observer appears in getObservers and is called by dispatchObservers (no changes to runTurn needed)", async () => {
     let seenTurnId: string | null = null;
     let resolveRan!: () => void;
     const ran = new Promise<void>((r) => {
@@ -57,7 +57,7 @@ describe("agent runtime registry", () => {
     expect(seenTurnId).toBe("turn-x");
   });
 
-  it("dispatchReply 按 kind 取对应 reply producer 并回传其结果与流式增量", async () => {
+  it("dispatchReply gets the matching reply producer by kind and returns result and streaming deltas", async () => {
     const deltas: string[] = [];
     const producer: ReplyProducer = {
       id: "test:reply",
@@ -77,13 +77,13 @@ describe("agent runtime registry", () => {
     expect(deltas.join("")).toBe("hello");
   });
 
-  it("新注册的 action 按 scope 可取,runAction 调用它并回传结果(无需改 ChatView)", async () => {
+  it("newly registered action is retrievable by scope, runAction calls it and returns result (no ChatView changes needed)", async () => {
     let ranWith: string | null = null;
     const action: ActionAgent = {
       id: "test:action",
       kind: "action",
       scope: "session",
-      label: "测试动作",
+      label: "test action",
       run: async (ctx) => {
         ranWith = ctx.conversationId;
         return { navigateTo: "new-conv-id" };
@@ -100,12 +100,12 @@ describe("agent runtime registry", () => {
     expect(result.navigateTo).toBe("new-conv-id");
   });
 
-  it("隐藏的 action 从 getActions 与能力目录过滤掉(删除=永久隐藏)", () => {
+  it("hidden action is filtered out from getActions and the capability list (delete = permanent hide)", () => {
     const action: ActionAgent = {
       id: "test:hidden-action",
       kind: "action",
       scope: "session",
-      label: "会被隐藏的动作",
+      label: "action to be hidden",
       run: async () => ({}),
     };
     registerAction(action);
@@ -119,16 +119,16 @@ describe("agent runtime registry", () => {
     ).toBe(false);
   });
 
-  it("新注册的 transformer 进入能力目录,runTransformer 调用按需任务", async () => {
+  it("newly registered transformer appears in the capability list and runTransformer calls the on-demand task", async () => {
     const transformer: TransformerInfo = {
       id: "test:transformer",
       card: {
-        title: "测试转换",
-        description: "测试用",
+        title: "test transformer",
+        description: "for testing",
         entry: "reply_action",
-        timing: "按需",
-        reads: "测试输入",
-        writes: "无",
+        timing: "on demand",
+        reads: "test input",
+        writes: "none",
         canDisable: false,
       },
     };

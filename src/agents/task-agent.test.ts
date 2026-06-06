@@ -44,24 +44,24 @@ describe("Task Agent", () => {
     const provider = stubProvider((opts) => {
       calls.push(opts);
       return JSON.stringify({
-        title: "面试英语准备",
-        goal: "为前端岗位英语面试准备自我介绍和项目讲解。",
-        plan_markdown: "## Week 1\n练自我介绍和项目说明。",
-        notes_markdown: "先从最常见的问题开始。",
+        title: "English interview prep",
+        goal: "Prepare a self-introduction and project walkthrough for a frontend engineering interview.",
+        plan_markdown: "## Week 1\nPractise self-introduction and project description.",
+        notes_markdown: "Start with the most common interview questions.",
         suggested_lessons: [
           {
-            name: "项目讲解",
-            description: "练习讲清楚前端项目经历。",
+            name: "Project walkthrough",
+            description: "Practise explaining a frontend project clearly.",
             prompt:
               "Run an interview-style lesson. Ask the learner to explain one frontend project, give concise feedback, then ask a follow-up that forces clearer technical wording.",
             data_scopes: ["profile", "weak_all", "proficiency"],
           },
         ],
-        next_actions: ["开始项目讲解专项课"],
+        next_actions: ["Start the project walkthrough lesson"],
       });
     });
 
-    const plan = await planLearningProject(provider, "准备英语前端面试", {
+    const plan = await planLearningProject(provider, "Prepare for an English frontend engineering interview", {
       nativeLanguage: "Chinese",
       targetLanguage: "English",
       level: "B1",
@@ -69,9 +69,9 @@ describe("Task Agent", () => {
 
     expect(calls[0].jsonSchema?.name).toBe("GeneratedLearningProject");
     expect(calls[0].meta?.label).toBe("task_agent");
-    expect(plan.title).toBe("面试英语准备");
+    expect(plan.title).toBe("English interview prep");
     expect(plan.suggestedLessons[0]).toMatchObject({
-      name: "项目讲解",
+      name: "Project walkthrough",
       dataScopes: ["profile", "weak_all", "proficiency"],
       allowedTools: ["read_learning_data"],
       writebackPolicy: "none",

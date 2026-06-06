@@ -5,19 +5,19 @@ import { parseProfile, SECTION_TITLES } from "./parse";
 const base = `# Learner Profile · Chinese → English · B1 · updated 2026-05-31
 
 ## About me
-- 前端工程师
+- Frontend engineer
 
 ## Working on
-- 冠词 a/an/the
+- Articles a/an/the
 
 ## Comfortable with
-- 一般过去时
+- Simple past tense
 
 ## Avoids / rarely attempts
-- 条件句
+- Conditionals
 
 ## Interests
-- 做饭
+- Cooking
 
 ## Recently introduced
 - "look forward to"
@@ -26,7 +26,7 @@ const base = `# Learner Profile · Chinese → English · B1 · updated 2026-05-
 -
 
 ## My notes
-<!-- 用户手写区,agent 永不改动 -->
+<!-- User-written section — agents must never modify this -->
 `;
 
 function myNotesBody(md: string): string {
@@ -36,24 +36,24 @@ function myNotesBody(md: string): string {
 }
 
 describe("appendNoteToMd", () => {
-  it("空 My notes(仅占位注释)→ 追加为唯一 bullet,注释被清掉", () => {
-    const out = appendNoteToMd(base, "下周一有面试");
-    expect(myNotesBody(out)).toBe("- 下周一有面试");
+  it("empty My notes (placeholder comment only) → appended as sole bullet, comment stripped", () => {
+    const out = appendNoteToMd(base, "Interview next Monday");
+    expect(myNotesBody(out)).toBe("- Interview next Monday");
     expect(out).not.toContain("<!--");
   });
 
-  it("已有内容 → 追加新 bullet 到末尾", () => {
-    const once = appendNoteToMd(base, "下周一有面试");
-    const twice = appendNoteToMd(once, "喜欢用工程师的例子");
-    expect(myNotesBody(twice)).toBe("- 下周一有面试\n- 喜欢用工程师的例子");
+  it("existing content → new bullet appended at end", () => {
+    const once = appendNoteToMd(base, "Interview next Monday");
+    const twice = appendNoteToMd(once, "Prefer engineering examples");
+    expect(myNotesBody(twice)).toBe("- Interview next Monday\n- Prefer engineering examples");
   });
 
-  it("空白输入 → 原样返回", () => {
+  it("blank input → returned unchanged", () => {
     expect(appendNoteToMd(base, "   ")).toBe(base);
   });
 
-  it("结果仍含全部必需段标题(结构不破)", () => {
-    const out = appendNoteToMd(base, "记住我叫 Wei");
+  it("result still contains all required section titles (structure intact)", () => {
+    const out = appendNoteToMd(base, "My name is Wei");
     for (const title of SECTION_TITLES) {
       expect(out).toContain(`## ${title}`);
     }

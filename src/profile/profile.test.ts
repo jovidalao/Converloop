@@ -4,14 +4,14 @@ import { profileSliceForConversation } from "./profile";
 const md = `# Learner Profile · Chinese → English · B1 · updated 2026-05-31
 
 ## About me
-- 前端工程师
+- Frontend engineer
 
 ## AI preferences
 ### Global
-- 用澳大利亚英语。
+- Use Australian English.
 
 ### Conversation
-- 回复短一点。
+- Keep replies short.
 
 ### Correction
 
@@ -20,36 +20,36 @@ const md = `# Learner Profile · Chinese → English · B1 · updated 2026-05-31
 ### Reading help
 
 ## Working on
-- 冠词 a/an/the
+- Articles a/an/the
 
 ## Expression gaps
-- 委婉拒绝请求
+- Politely declining a request
 
 ## My notes
-<!-- 用户手写区,agent 永不改动 -->
-- 下周一有面试,多练自我介绍
+<!-- User-written section — agents must never modify this -->
+- Interview next Monday, practise self-introduction
 `;
 
 describe("profileSliceForConversation", () => {
-  it("保留 My notes 段及其内容(对话 agent 要读到)", () => {
+  it("preserves the My notes section and its content (the conversation agent must see it)", () => {
     const slice = profileSliceForConversation(md);
     expect(slice).toContain("## My notes");
-    expect(slice).toContain("下周一有面试");
+    expect(slice).toContain("Interview next Monday");
   });
 
-  it("剥掉占位 HTML 注释,避免模板噪声进 prompt", () => {
+  it("strips placeholder HTML comments to avoid template noise in the prompt", () => {
     const slice = profileSliceForConversation(md);
     expect(slice).not.toContain("<!--");
-    expect(slice).not.toContain("用户手写区");
+    expect(slice).not.toContain("User-written section");
   });
 
-  it("剥掉 AI preferences 段,避免未分流的偏好重复进档案上下文", () => {
+  it("strips the AI preferences section to avoid un-routed preferences repeating in profile context", () => {
     const slice = profileSliceForConversation(md);
     expect(slice).not.toContain("## AI preferences");
-    expect(slice).not.toContain("用澳大利亚英语");
+    expect(slice).not.toContain("Use Australian English");
   });
 
-  it("不留多余空行", () => {
+  it("leaves no excessive blank lines", () => {
     const slice = profileSliceForConversation(md);
     expect(slice).not.toMatch(/\n{3,}/);
   });

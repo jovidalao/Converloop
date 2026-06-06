@@ -1,28 +1,28 @@
 import { logDebug, logError } from "../lib/log";
 import type { GenerateOptions, ModelProvider } from "./types";
 
-// 极简插件管线:在 ModelProvider 外包一层,把横切关注点(日志、参数改写)从
-// agent / orchestrator 里抽出来,而不改动 provider 自身(HTTP 仍走 Rust)。
-// 钩子借鉴 Cherry Studio aiCore 的形状,但只取当前真正用得到的三个。
+// Minimal plugin pipeline: wraps a ModelProvider to extract cross-cutting concerns (logging, param rewriting)
+// from the agent / orchestrator without modifying the provider itself (HTTP still uses Rust).
+// Hook shape inspired by Cherry Studio aiCore, but only the three currently needed.
 export interface PluginContext {
-  /** 流式还是一次性生成。 */
+  /** Whether this is streaming or one-shot generation. */
   stream: boolean;
-  /** 调用方标签(如 "conversation" / "tutor"),来自 opts.meta.label。 */
+  /** Caller label (e.g. "conversation" / "tutor"), from opts.meta.label. */
   label: string;
-  /** 调用开始时间戳(ms),用于算时延。 */
+  /** Call start timestamp (ms), used to compute latency. */
   startTime: number;
 }
 
 export interface ProviderPlugin {
   name: string;
-  /** 链式改写请求参数(按数组顺序依次套用)。 */
+  /** Chain-transform request params (applied in array order). */
   transformParams?(
     opts: GenerateOptions,
     ctx: PluginContext,
   ): GenerateOptions | Promise<GenerateOptions>;
-  /** 成功拿到完整输出后(流式为拼好的全文)。 */
+  /** Called after successfully receiving the complete output (full assembled text for streaming). */
   onResult?(output: string, ctx: PluginContext): void;
-  /** 调用抛错时;插件不吞错,异常照常向上抛。 */
+  /** Called when the call throws; plugins do not swallow errors, exceptions propagate as normal. */
   onError?(error: unknown, ctx: PluginContext): void;
 }
 
@@ -53,7 +53,7 @@ async function runPipeline(
   }
 }
 
-/** 用插件管线包裹一个 provider;无插件时等价于原 provider。 */
+/** Wrap a provider with the plugin pipeline; equivalent to the original provider when there are no plugins. */
 export function withPlugins(
   provider: ModelProvider,
   plugins: ProviderPlugin[],
@@ -67,7 +67,7 @@ export function withPlugins(
   };
 }
 
-// 时延 / 结果长度走 debug 开关(见 lib/log);错误始终打印(集中替代散落的 console.error)。
+// Latency / output length go through the debug toggle (see lib/log); errors are always logged (centralized replacement for scattered console.error calls).
 export const loggingPlugin: ProviderPlugin = {
   name: "logging",
   onResult(output, ctx) {
@@ -84,7 +84,7 @@ export const loggingPlugin: ProviderPlugin = {
   },
 };
 
-/** getProvider 默认挂上的插件集。新增横切能力时往这里加。 */
+/** Default plugin set attached by getProvider. Add new cross-cutting capabilities here. */
 export function defaultPlugins(): ProviderPlugin[] {
   return [loggingPlugin];
 }

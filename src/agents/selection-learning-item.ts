@@ -110,7 +110,7 @@ ${input.selection}`,
   if (!parsed.ok) throw new Error(parsed.error);
   const validated = SelectionLearningItem.safeParse(parsed.value);
   if (!validated.success) {
-    throw new Error(`划词学习项校验失败: ${formatZodError(validated.error)}`);
+    throw new Error(`Word lookup item validation failed: ${formatZodError(validated.error)}`);
   }
   const data = validated.data;
   return {

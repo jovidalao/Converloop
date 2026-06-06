@@ -8,6 +8,8 @@ import {
   UploadIcon,
 } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
+import { useTranslation } from "@/i18n";
+import type { TFunction } from "@/i18n";
 import { cn } from "@/lib/utils";
 import {
   defaultAgentOutputSchema,
@@ -53,10 +55,9 @@ import {
 import { Switch } from "./ui/switch";
 import { Textarea } from "./ui/textarea";
 
-// 能力库:把 Agent Runtime 里注册的能力按【入口】分组展示(你在哪触发它 / 它何时出现),
-// 而不是技术 kind。每个能力可微调(追加补充指令)、启停、删除(内置=永久隐藏,自定义=真删)。
+// Capability library: displays registered capabilities grouped by entry point
+// (where/when they trigger), not by technical kind.
 
-// 入口分组:顺序 + 标题 + 一句话简介。
 const ENTRY_ORDER: AgentEntry[] = [
   "auto_turn",
   "selection",
@@ -65,40 +66,10 @@ const ENTRY_ORDER: AgentEntry[] = [
   "lesson",
 ];
 
-const ENTRY_META: Record<AgentEntry, { label: string; intro: string }> = {
-  auto_turn: {
-    label: "每轮自动",
-    intro: "你每说一句,这些能力自动在后台运行,结果出现在教练面板。",
-  },
-  selection: {
-    label: "选中文字时",
-    intro: "在消息里划选词或句子时浮出的学习动作。",
-  },
-  reply_action: {
-    label: "回复操作按钮",
-    intro: "每条回复下方的按钮,点一下即用。",
-  },
-  derive: {
-    label: "衍生新对话",
-    intro: "点击后基于当前会话生成一个全新对话,不改动原对话。",
-  },
-  lesson: {
-    label: "专项课",
-    intro: "在专项课会话里给你上课的老师。",
-  },
-};
-
-// 行级「输入 → 输出」摘要,按入口给一句普通话说明。
-const ENTRY_IO: Record<AgentEntry, string> = {
-  auto_turn: "你这一句 → 教练面板里的批改 / 注释",
-  selection: "选中的词句 + 上下文 → 母语解析",
-  reply_action: "当前这条回复 → 讲解 / 双语 / 推荐回复文本",
-  derive: "当前会话 → 一个全新对话",
-  lesson: "你的消息 → 老师型课堂回复",
-};
-
-function scopeName(scope: LearningDataScope): string {
-  return DATA_SCOPE_LABELS[scope].split(":")[0];
+// Returns the i18n scope-name (first word before ":" in DATA_SCOPE_LABELS is
+// the internal key; here we use the i18n label instead).
+function scopeName(scope: LearningDataScope, t: TFunction): string {
+  return t(`scopeLabel.${scope}.name` as Parameters<TFunction>[0]);
 }
 
 function hookForKind(kind: LearningAgentKind) {
@@ -108,12 +79,11 @@ function hookForKind(kind: LearningAgentKind) {
 }
 
 function entryOf(entry: AgentCatalogEntry): AgentEntry {
-  // 没有 card 的（理论上不会发生）兜底进「每轮自动」。
   return entry.card?.entry ?? "auto_turn";
 }
 
-// 内置能力微调:在官方基础设定之上【追加】补充指令(不替换基础 prompt)。
-// 对话衍生动作额外展示官方目标(只读)让用户知道在往什么后面追加。
+// Built-in capability fine-tune editor: appends supplemental instructions after
+// the official base prompt (does not replace it).
 function BuiltinTuneEditor({
   entry,
   onDone,
@@ -123,6 +93,7 @@ function BuiltinTuneEditor({
   onDone: (msg: string) => void;
   onCancel: () => void;
 }) {
+  const { t } = useTranslation();
   const id = entry.id;
   const ov = getBuiltinAgentOverride(id);
   const [instructions, setInstructions] = useState(ov?.instructions ?? "");
@@ -134,21 +105,21 @@ function BuiltinTuneEditor({
     setBuiltinAgentOverride(id, { instructions });
     onDone(
       instructions.trim()
-        ? "补充指令已保存。"
-        : "补充指令已清空,恢复官方默认。",
+        ? t("agentLibrary.supplementalSaved")
+        : t("agentLibrary.supplementalCleared"),
     );
   }
 
   function reset() {
     clearBuiltinAgentOverride(id);
-    onDone("已恢复官方默认。");
+    onDone(t("agentLibrary.restoredDefaults"));
   }
 
   return (
     <div className="mt-1 flex flex-col gap-2 rounded-md border bg-background p-3">
       <div className="flex flex-col gap-1">
         <span className="text-ui-caption text-ui-muted">
-          官方基础设定(只读)
+          {t("agentLibrary.officialBase")}
         </span>
         <p className="m-0 text-ui-caption leading-relaxed text-foreground-80">
           {entry.card?.description}
@@ -161,26 +132,26 @@ function BuiltinTuneEditor({
       </div>
       <div className="flex flex-col gap-1">
         <span className="text-ui-caption text-ui-muted">
-          补充指令(追加在官方设定之后,不替换基础 prompt)
+          {t("agentLibrary.supplemental")}
         </span>
         <Textarea
           value={instructions}
           onChange={(e) => setInstructions(e.target.value)}
-          placeholder="例如:讲解时多举一个我所在行业的例子;语气更简短直接。"
+          placeholder={t("agentLibrary.supplementalPlaceholder")}
           className="min-h-24 resize-y text-ui-caption leading-relaxed"
         />
       </div>
       {isTutor && (
         <p className="m-0 text-ui-caption leading-relaxed text-warning">
-          提示:给批改导师写与系统相冲突的指令可能降低批改质量。随时可「恢复默认」。
+          {t("agentLibrary.tutorWarning")}
         </p>
       )}
       <div className="flex flex-wrap gap-2">
         <Button type="button" size="sm" onClick={save}>
-          保存
+          {t("common.save")}
         </Button>
         <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
-          取消
+          {t("common.cancel")}
         </Button>
         {overridden && (
           <Button
@@ -190,7 +161,7 @@ function BuiltinTuneEditor({
             className="ml-auto text-ui-muted"
             onClick={reset}
           >
-            恢复默认
+            {t("agentLibrary.restoreDefaults")}
           </Button>
         )}
       </div>
@@ -219,12 +190,16 @@ function AgentRow({
   onExport: (id: string) => void;
   onDelete: (entry: AgentCatalogEntry) => void;
 }) {
+  const { t } = useTranslation();
   const card = entry.card;
   const custom = entry.id.startsWith("custom:");
   const isReplyProducer = entry.kind === "reply_producer";
-  // 主回复(对话伙伴 / 专项课老师)不可删;其余内置可永久隐藏,自定义走 DB 真删。
+  // Main reply producers (conversation partner / lesson teacher) cannot be deleted;
+  // other built-ins can be permanently hidden; custom agents are truly deleted from DB.
   const canDelete = custom || !isReplyProducer;
-  const io = card ? ENTRY_IO[card.entry] : null;
+  const io = card
+    ? t(`agentLibrary.entryIo.${card.entry}` as Parameters<TFunction>[0])
+    : null;
 
   return (
     <div className="flex flex-col gap-2.5 rounded-lg border bg-card p-3.5">
@@ -234,16 +209,18 @@ function AgentRow({
             <span className="font-semibold">{card?.title ?? entry.id}</span>
             {custom && (
               <span className="rounded bg-primary/10 px-1.5 py-0.5 text-ui-caption text-primary">
-                自定义
+                {t("agentLibrary.custom")}
               </span>
             )}
             {!entry.enabled && (
               <span className="rounded bg-muted px-1.5 py-0.5 text-ui-caption text-ui-muted">
-                已停用
+                {t("agentLibrary.disabled")}
               </span>
             )}
             {!card?.canDisable && !custom && (
-              <span className="text-ui-caption text-ui-muted">常驻</span>
+              <span className="text-ui-caption text-ui-muted">
+                {t("agentLibrary.alwaysOn")}
+              </span>
             )}
           </div>
           {card?.description && (
@@ -260,8 +237,8 @@ function AgentRow({
                 variant="ghost"
                 size="icon"
                 className="size-8 text-ui-muted hover:text-foreground"
-                title="编辑"
-                aria-label="编辑"
+                title={t("agentLibrary.tuneTitle")}
+                aria-label={t("agentLibrary.tuneTitle")}
                 onClick={() => onEditCustom(entry.id)}
               >
                 <PencilIcon size={15} />
@@ -271,8 +248,8 @@ function AgentRow({
                 variant="ghost"
                 size="icon"
                 className="size-8 text-ui-muted hover:text-foreground"
-                title="导出包"
-                aria-label="导出包"
+                title={t("agentLibrary.exportTitle")}
+                aria-label={t("agentLibrary.exportTitle")}
                 onClick={() => onExport(entry.id)}
               >
                 <DownloadIcon size={15} />
@@ -289,8 +266,8 @@ function AgentRow({
                   ? "bg-accent text-foreground"
                   : "text-ui-muted hover:text-foreground",
               )}
-              title="微调"
-              aria-label="微调"
+              title={t("agentLibrary.tuneTitle")}
+              aria-label={t("agentLibrary.tuneTitle")}
               onClick={() => onTune(entry.id)}
             >
               <PencilIcon size={15} />
@@ -302,8 +279,8 @@ function AgentRow({
               variant="ghost"
               size="icon"
               className="size-8 text-ui-muted hover:text-destructive"
-              title="删除"
-              aria-label="删除"
+              title={t("agentLibrary.deleteTitle")}
+              aria-label={t("agentLibrary.deleteTitle")}
               onClick={() => onDelete(entry)}
             >
               <Trash2Icon size={15} />
@@ -313,7 +290,7 @@ function AgentRow({
             <Switch
               checked={entry.enabled}
               onCheckedChange={(v) => onToggle(entry.id, v)}
-              aria-label={entry.enabled ? "禁用" : "启用"}
+              aria-label={entry.enabled ? t("agentLibrary.disabled") : t("agentLibrary.alwaysOn")}
               className="ml-1"
             />
           )}
@@ -323,15 +300,15 @@ function AgentRow({
         <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-ui-caption">
           {io && (
             <>
-              <dt className="text-ui-muted">输入 → 输出</dt>
+              <dt className="text-ui-muted">{t("agentLibrary.inputOutput")}</dt>
               <dd className="m-0 text-foreground">{io}</dd>
             </>
           )}
-          <dt className="text-ui-muted">运行时机</dt>
+          <dt className="text-ui-muted">{t("agentLibrary.timing")}</dt>
           <dd className="m-0 text-foreground">{card.timing}</dd>
-          <dt className="text-ui-muted">读取</dt>
+          <dt className="text-ui-muted">{t("agentLibrary.reads")}</dt>
           <dd className="m-0 text-foreground">{card.reads}</dd>
-          <dt className="text-ui-muted">写入</dt>
+          <dt className="text-ui-muted">{t("agentLibrary.writes")}</dt>
           <dd className="m-0 text-foreground">{card.writes}</dd>
         </dl>
       )}
@@ -346,26 +323,27 @@ function AgentRow({
   );
 }
 
-// 创建/编辑自定义 Agent 时按所选 kind 给出的输出预览(教练面板里长什么样 / 会做什么)。
+// Output preview: shows expected output shape for observer vs action agents.
 function OutputPreview({ kind }: { kind: LearningAgentKind }) {
+  const { t } = useTranslation();
   const example =
     kind === "observer"
       ? `{
-  "title": "面试表达观察",
-  "body_md": "你把「负责」说成了 ...,更自然的说法是 ...",
-  "memory_proposals": [ /* 需你确认后才写入学习数据 */ ]
+  "title": "Interview expression observation",
+  "body_md": "You said \"负责\" but a more natural phrasing is ...",
+  "memory_proposals": [ /* written only after your confirmation */ ]
 }`
       : `{
-  "title": "咖啡店点单",
-  "scenario": "你在一家忙碌的咖啡店点单 ...",
-  "opening_instruction": "用目标语言主动跟店员打招呼并点单"
+  "title": "Coffee shop order",
+  "scenario": "You are at a busy coffee shop ordering ...",
+  "opening_instruction": "Greet the barista and place your order in your target language"
 }`;
   return (
     <div className="flex flex-col gap-1">
       <span className="text-ui-caption text-ui-muted">
         {kind === "observer"
-          ? "输出 → 教练面板里的一条注释(memory_proposals 需你确认后才写入)"
-          : "输出 → 一个新对话上下文,自动开一个新对话"}
+          ? t("agentLibrary.outputPreviewObserver")
+          : t("agentLibrary.outputPreviewAction")}
       </span>
       <pre className="m-0 overflow-x-auto rounded-md bg-muted px-2.5 py-2 font-mono text-ui-caption leading-relaxed text-ui-muted">
         {example}
@@ -396,6 +374,7 @@ export function AgentLibraryView({
 }: {
   onOpenView?: (view: MainView) => void;
 }) {
+  const { t } = useTranslation();
   const confirm = useConfirm();
   const [catalog, setCatalog] = useState<AgentCatalogEntry[]>(() =>
     listAgentCatalog(),
@@ -460,7 +439,7 @@ export function AgentLibraryView({
     try {
       const agent = await getLearningAgent(entryId.replace(/^custom:/, ""));
       if (!agent) {
-        setError("找不到这个自定义 Agent。");
+        setError(t("agentLibrary.agentNotFound"));
         return;
       }
       setEditingId(agent.id);
@@ -495,7 +474,7 @@ export function AgentLibraryView({
         });
         resetForm();
         await refreshCatalog();
-        setMessage("自定义 Agent 已更新。");
+        setMessage(t("agentLibrary.customUpdated"));
       } else {
         await createLearningAgent({
           name,
@@ -511,7 +490,7 @@ export function AgentLibraryView({
         });
         resetForm();
         await refreshCatalog();
-        setMessage("自定义 Agent 已创建并启用。");
+        setMessage(t("agentLibrary.customCreated"));
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -525,15 +504,15 @@ export function AgentLibraryView({
     if (entry.id.startsWith("custom:")) {
       if (
         !(await confirm({
-          title: `删除自定义 Agent「${title}」?`,
-          description: "会从数据库永久删除,不可恢复。已有会话不受影响。",
+          title: t("agentLibrary.deleteCustomTitle", { name: title }),
+          description: t("agentLibrary.deleteCustomDesc"),
         }))
       )
         return;
       try {
         await deleteLearningAgent(entry.id.replace(/^custom:/, ""));
         await refreshCatalog();
-        setMessage(`已删除「${title}」。`);
+        setMessage(t("agentLibrary.deleted", { name: title }));
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
       }
@@ -541,16 +520,15 @@ export function AgentLibraryView({
     }
     if (
       !(await confirm({
-        title: `删除能力「${title}」?`,
-        description:
-          "永久隐藏这个内置能力,不可恢复——需要清空应用数据才能找回。",
+        title: t("agentLibrary.deleteBuiltinTitle", { name: title }),
+        description: t("agentLibrary.deleteBuiltinDesc"),
       }))
     )
       return;
     hideAgent(entry.id);
     if (tuneId === entry.id) setTuneId(null);
     setCatalog(listAgentCatalog());
-    setMessage(`已删除「${title}」。`);
+    setMessage(t("agentLibrary.deleted", { name: title }));
   }
 
   async function exportPackage(entryId: string) {
@@ -561,7 +539,7 @@ export function AgentLibraryView({
       const text = await exportAgentPackage(agentId);
       setPackageText(text);
       setAdvancedOpen(true);
-      setMessage("已导出到下方「高级」里的包文本框。");
+      setMessage(t("agentLibrary.exportedTo"));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -579,7 +557,10 @@ export function AgentLibraryView({
       });
       await refreshCatalog();
       setMessage(
-        `包已导入: ${result.runtimeSkillCount} 个技能、${result.lessonCount} 个专项课。`,
+        t("agentLibrary.importedPackage", {
+          skills: String(result.runtimeSkillCount),
+          lessons: String(result.lessonCount),
+        }),
       );
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -602,55 +583,52 @@ export function AgentLibraryView({
     items: catalog.filter((e) => entryOf(e) === entry),
   })).filter((g) => g.items.length > 0);
 
+  const typeOptions: { v: LearningAgentKind; title: string; desc: string }[] =
+    [
+      {
+        v: "observer",
+        title: t("agentLibrary.observerTitle"),
+        desc: t("agentLibrary.observerDesc"),
+      },
+      {
+        v: "action",
+        title: t("agentLibrary.actionTitle"),
+        desc: t("agentLibrary.actionDesc"),
+      },
+    ];
+
   return (
     <div className="flex h-full max-w-5xl flex-col overflow-y-auto px-6 pt-14 pb-6">
-      <h2 className="mt-0 mb-1 text-ui-title font-semibold">能力库</h2>
+      <h2 className="mt-0 mb-1 text-ui-title font-semibold">
+        {t("agentLibrary.title")}
+      </h2>
       <p className="mt-0 mb-5 text-ui-body text-ui-muted">
-        按【入口】组织的全部能力——每组告诉你在哪触发、何时出现。可以微调(追加补充指令)、启用/禁用,或删除不用的能力。
-        删除内置能力是永久隐藏,删除自定义 Agent
-        会真正删掉,都不影响你的学习数据。
+        {t("agentLibrary.description")}
       </p>
 
       <section ref={formRef} className="mb-6 rounded-lg border bg-card p-4">
         <h3 className="m-0 mb-3 text-ui-body font-semibold">
-          {editingId ? "编辑自定义 Agent" : "创建自定义 Agent"}
+          {editingId ? t("agentLibrary.editCustom") : t("agentLibrary.createCustom")}
         </h3>
         <div className="flex flex-col gap-4">
-          <FormSection title="基本信息">
+          <FormSection title={t("agentLibrary.basicInfo")}>
             <div className="grid gap-2 md:grid-cols-2">
               <Input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="名称,例如:面试表达观察"
+                placeholder={t("agentLibrary.namePlaceholder")}
               />
               <Input
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="一句话说明它做什么"
+                placeholder={t("agentLibrary.descPlaceholder")}
               />
             </div>
           </FormSection>
 
-          <FormSection title="类型">
+          <FormSection title={t("agentLibrary.type")}>
             <div className="grid gap-2 sm:grid-cols-2">
-              {(
-                [
-                  {
-                    v: "observer" as const,
-                    title: "观察 Agent",
-                    desc: "每轮自动在后台观察你的输入,在教练面板留一条注释。",
-                  },
-                  {
-                    v: "action" as const,
-                    title: "对话衍生 Agent",
-                    desc: "点击后基于当前会话生成一个全新对话。",
-                  },
-                ] satisfies {
-                  v: LearningAgentKind;
-                  title: string;
-                  desc: string;
-                }[]
-              ).map((opt) => (
+              {typeOptions.map((opt) => (
                 <button
                   key={opt.v}
                   type="button"
@@ -671,7 +649,7 @@ export function AgentLibraryView({
             </div>
           </FormSection>
 
-          <FormSection title="可读数据">
+          <FormSection title={t("agentLibrary.readableData")}>
             <div className="flex flex-wrap gap-1.5">
               {LEARNING_DATA_SCOPES.map((scope) => (
                 <button
@@ -686,7 +664,7 @@ export function AgentLibraryView({
                   onClick={() => toggleScope(scope)}
                   title={DATA_SCOPE_LABELS[scope]}
                 >
-                  {scopeName(scope)}
+                  {scopeName(scope, t)}
                 </button>
               ))}
             </div>
@@ -695,12 +673,12 @@ export function AgentLibraryView({
               className="self-start text-ui-caption text-ui-muted hover:text-foreground"
               onClick={openDataScopeGuide}
             >
-              数据范围怎么选？
+              {t("agentLibrary.howToChooseScopes")}
             </button>
           </FormSection>
 
           {kind === "observer" && (
-            <FormSection title="写入策略">
+            <FormSection title={t("agentLibrary.writebackPolicy")}>
               <Select
                 value={writebackPolicy}
                 onValueChange={(v) =>
@@ -711,9 +689,9 @@ export function AgentLibraryView({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">只展示,不提议写入</SelectItem>
+                  <SelectItem value="none">{t("agentLibrary.writebackNone")}</SelectItem>
                   <SelectItem value="propose_review_signals">
-                    可提议学习数据修改(需你确认)
+                    {t("agentLibrary.writebackPropose")}
                   </SelectItem>
                 </SelectContent>
               </Select>
@@ -726,8 +704,8 @@ export function AgentLibraryView({
               onChange={(e) => setPrompt(e.target.value)}
               placeholder={
                 kind === "observer"
-                  ? "说明每轮要观察什么、如何反馈、何时提出 memory_proposals。"
-                  : "说明点击按钮后要如何基于当前对话生成新的对话上下文。"
+                  ? t("agentLibrary.observerPromptPlaceholder")
+                  : t("agentLibrary.actionPromptPlaceholder")
               }
               className="min-h-28 resize-y font-mono text-ui-caption leading-relaxed"
             />
@@ -742,7 +720,7 @@ export function AgentLibraryView({
               disabled={busy || !name.trim() || !prompt.trim()}
             >
               {editingId ? <PencilIcon size={14} /> : <PlusIcon size={14} />}
-              {editingId ? "保存修改" : "创建并启用"}
+              {editingId ? t("agentLibrary.saveChanges") : t("agentLibrary.createAndEnable")}
             </Button>
             {editingId && (
               <Button
@@ -752,7 +730,7 @@ export function AgentLibraryView({
                 onClick={resetForm}
                 disabled={busy}
               >
-                取消
+                {t("common.cancel")}
               </Button>
             )}
           </div>
@@ -764,10 +742,10 @@ export function AgentLibraryView({
           <section key={group.entry} className="flex flex-col gap-2">
             <div>
               <h3 className="m-0 text-ui-caption font-semibold uppercase tracking-wide text-ui-muted">
-                {ENTRY_META[group.entry].label}
+                {t(`agentLibrary.entryMeta.${group.entry}.label` as Parameters<TFunction>[0])}
               </h3>
               <p className="mt-0.5 mb-0 text-ui-caption text-ui-muted">
-                {ENTRY_META[group.entry].intro}
+                {t(`agentLibrary.entryMeta.${group.entry}.intro` as Parameters<TFunction>[0])}
               </p>
             </div>
             {group.items.map((entry) => (
@@ -802,22 +780,22 @@ export function AgentLibraryView({
             size={15}
             className={cn("transition-transform", advancedOpen && "rotate-180")}
           />
-          高级 · 分享包导入导出
+          {t("agentLibrary.advanced")}
         </button>
         {advancedOpen && (
           <div className="border-t px-3.5 py-3">
             <Textarea
               value={packageText}
               onChange={(e) => setPackageText(e.target.value)}
-              placeholder="粘贴 lang-agent.package JSON;旧的 lang-agent.agent-package 也兼容。导出包会出现在这里。"
+              placeholder={t("agentLibrary.packagePlaceholder")}
               className="min-h-32 resize-y font-mono text-ui-caption leading-relaxed"
             />
             {packageReview && (
               <div className="mt-2 rounded-md bg-muted px-2.5 py-2 text-ui-caption leading-relaxed">
                 <div className="font-medium">{packageReview.name}</div>
                 <div className="text-ui-muted">
-                  {packageReview.itemSummary} · 读取: {packageReview.reads} ·
-                  写入: {packageReview.writes}
+                  {packageReview.itemSummary} · {t("agentLibrary.reads")}: {packageReview.reads} ·
+                  {t("agentLibrary.writes")}: {packageReview.writes}
                 </div>
               </div>
             )}
@@ -830,7 +808,7 @@ export function AgentLibraryView({
               disabled={busy || !packageText.trim() || !packageReview}
             >
               <UploadIcon size={14} />
-              导入包
+              {t("agentLibrary.importPackage")}
             </Button>
           </div>
         )}
@@ -842,7 +820,7 @@ export function AgentLibraryView({
         onClick={() => onOpenView?.("settings-logs")}
       >
         <ScrollTextIcon size={13} />
-        运行日志已移到「设置 → 日志」
+        {t("agentLibrary.logsLink")}
       </button>
 
       {message && (

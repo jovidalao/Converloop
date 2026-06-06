@@ -6,38 +6,38 @@ import {
 } from "./commands";
 
 describe("parseSlashInput", () => {
-  it("解析 message 命令并取出参数", () => {
+  it("parses a message command and extracts arguments", () => {
     const p = parseSlashInput("/btw what does 'gist' mean?");
     expect(p?.command.name).toBe("btw");
     expect(p?.command.kind).toBe("message");
     expect(p?.rest).toBe("what does 'gist' mean?");
   });
 
-  it("无参数的命令 rest 为空串", () => {
+  it("command with no arguments has empty rest", () => {
     expect(parseSlashInput("/btw")?.rest).toBe("");
     expect(parseSlashInput("/btw   ")?.rest).toBe("");
   });
 
-  it("解析 action 命令", () => {
+  it("parses an action command", () => {
     const p = parseSlashInput("/harder");
     expect(p?.command.kind).toBe("action");
     expect(p?.command.actionId).toBe("builtin:action:harder");
   });
 
-  it("命令名大小写不敏感", () => {
+  it("command name is case-insensitive", () => {
     expect(parseSlashInput("/BTW hi")?.command.name).toBe("btw");
   });
 
-  it("带连字符的命令名", () => {
+  it("command name with hyphen", () => {
     expect(parseSlashInput("/next-day")?.command.name).toBe("next-day");
   });
 
-  it("未知命令返回 null(当普通文本)", () => {
+  it("unknown command returns null (treated as plain text)", () => {
     expect(parseSlashInput("/unknown")).toBeNull();
     expect(parseSlashInput("/btwx")).toBeNull();
   });
 
-  it("非行首斜杠 / 普通文本 / 裸斜杠返回 null", () => {
+  it("non-leading slash / plain text / bare slash returns null", () => {
     expect(parseSlashInput("hello /btw")).toBeNull();
     expect(parseSlashInput("  /btw")).toBeNull();
     expect(parseSlashInput("just text")).toBeNull();
@@ -46,35 +46,35 @@ describe("parseSlashInput", () => {
 });
 
 describe("slashMenuToken", () => {
-  it("裸斜杠 → 空 token(展示全部)", () => {
+  it("bare slash → empty token (show all)", () => {
     expect(slashMenuToken("/")).toBe("");
   });
 
-  it("正在输入命令词 → 返回该词", () => {
+  it("typing a command word → returns that word", () => {
     expect(slashMenuToken("/ha")).toBe("ha");
     expect(slashMenuToken("/next-day")).toBe("next-day");
   });
 
-  it("命令词后出现空格(进入参数态)→ null", () => {
+  it("space after command word (entering argument mode) → null", () => {
     expect(slashMenuToken("/btw ")).toBeNull();
     expect(slashMenuToken("/btw hello")).toBeNull();
   });
 
-  it("不以斜杠开头 → null", () => {
+  it("does not start with slash → null", () => {
     expect(slashMenuToken("hello")).toBeNull();
     expect(slashMenuToken("")).toBeNull();
   });
 });
 
 describe("matchSlashCommands", () => {
-  it("空 token 返回全部可用命令(canDerive)", () => {
+  it("empty token returns all available commands (canDerive)", () => {
     const r = matchSlashCommands("", { canDerive: true });
     expect(r.map((c) => c.name)).toEqual(
       expect.arrayContaining(["btw", "help", "harder", "swap", "next-day"]),
     );
   });
 
-  it("不能衍生时隐藏 action 类命令,仍保留 btw/help", () => {
+  it("hides action commands when cannot derive, keeps btw/help", () => {
     const r = matchSlashCommands("", { canDerive: false }).map((c) => c.name);
     expect(r).toContain("btw");
     expect(r).toContain("help");
@@ -82,13 +82,13 @@ describe("matchSlashCommands", () => {
     expect(r).not.toContain("swap");
   });
 
-  it("按前缀过滤", () => {
+  it("filters by prefix", () => {
     const r = matchSlashCommands("ha", { canDerive: true });
     expect(r.map((c) => c.name)).toEqual(["harder"]);
   });
 
-  it("startsWith 命中排在 includes 命中前面", () => {
-    // "e" 同时出现在 "easier"(前缀)和 "harder"/"help"/"next-day"(包含)里。
+  it("startsWith matches ranked before includes matches", () => {
+    // "e" appears in "easier" (prefix match) and "harder"/"help"/"next-day" (substring match).
     const r = matchSlashCommands("e", { canDerive: true });
     expect(r[0]?.name).toBe("easier");
   });

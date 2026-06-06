@@ -1,22 +1,22 @@
-// 订阅登录(OAuth)令牌的本地存取。令牌 {access,refresh,expires} 序列化成 JSON,
-// 走和 API key 同一条设备绑定加密通道(keychain → Rust secrets.rs),account key 由
-// config.oauthAccount(type) 给出。这里不依赖 config(避免循环),按裸字符串 account 存取。
+// Local storage for subscription login (OAuth) tokens. Tokens {access,refresh,expires} are serialized to JSON
+// and stored through the same device-bound encrypted channel as API keys (keychain → Rust secrets.rs); the account key is
+// provided by config.oauthAccount(type). This module does not depend on config (to avoid circular imports) — it accesses by raw account string.
 
 import { deleteSecret, getSecret, setSecret } from "../keychain";
 
 export interface OAuthTokens {
   access: string;
   refresh: string;
-  /** epoch ms,已减去刷新提前量(REFRESH_SKEW_MS);Date.now() >= expires 即应刷新。 */
+  /** Epoch ms with the refresh skew (REFRESH_SKEW_MS) already subtracted; when Date.now() >= expires, refresh. */
   expires: number;
-  /** OpenAI Codex 用:从 access JWT 解出的 ChatGPT account id。Anthropic 不需要。 */
+  /** Used by OpenAI Codex: the ChatGPT account id extracted from the access JWT. Not needed by Anthropic. */
   accountId?: string;
 }
 
-// 令牌真实到期前这么久就主动刷新,避免热路径上正好用到一个刚过期的 access。
+// Proactively refresh this far before the real token expiry, to avoid hitting a just-expired access token on the hot path.
 export const REFRESH_SKEW_MS = 5 * 60 * 1000;
 
-/** token endpoint 的标准响应(access_token/refresh_token/expires_in)→ 内部 OAuthTokens。 */
+/** Standard token endpoint response (access_token/refresh_token/expires_in) → internal OAuthTokens. */
 export function tokensFromResponse(
   responseText: string,
   extra?: Partial<OAuthTokens>,
@@ -32,7 +32,7 @@ export function tokensFromResponse(
     typeof data.expires_in !== "number"
   ) {
     throw new Error(
-      "OAuth token 响应缺少 access_token / refresh_token / expires_in 字段",
+      "OAuth token response missing access_token / refresh_token / expires_in fields",
     );
   }
   return {

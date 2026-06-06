@@ -1,13 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { AppConfig } from "../config";
 
-// Rust 侧原子读写。
+// Atomic read/write on the Rust side.
 export const readProfileRaw = () => invoke<string | null>("read_profile");
 
 export const writeProfile = (content: string) =>
   invoke<void>("write_profile", { content });
 
-// AI 刷新前快照当前档案;restore 撤销到快照(返回恢复后的内容,无备份返回 null)。
+// Snapshot the current profile before an AI refresh; restore reverts to the snapshot (returns the restored content, or null if there is no backup).
 export const snapshotProfile = () => invoke<void>("snapshot_profile");
 export const restoreProfile = () => invoke<string | null>("restore_profile");
 
@@ -15,7 +15,7 @@ function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-// 见 docs/profile-maintainer-agent.md#learner-profilemd-模板
+// See docs/profile-maintainer-agent.md#learner-profilemd-template
 export function defaultProfile(config: AppConfig): string {
   return `# Learner Profile  ·  ${config.nativeLanguage} → ${config.targetLanguage} · ${config.level} · updated ${today()}
 
@@ -52,19 +52,19 @@ export function defaultProfile(config: AppConfig): string {
 -
 
 ## My notes
-<!-- 用户手写区,agent 永不改动 -->
+<!-- User-written section — agents must never modify this -->
 `;
 }
 
-// 读 MD;不存在或被异常写空则返回默认模板(不落盘,等维护 agent 或用户首次写入)。
+// Read the profile MD; if it does not exist or was accidentally emptied, return the default template (not written to disk — waits for the maintainer agent or the user's first write).
 export async function readProfile(config: AppConfig): Promise<string> {
   const raw = await readProfileRaw();
   return raw?.trim() ? raw : defaultProfile(config);
 }
 
-// 对话 agent 的切片:整份档案,含 ## My notes —— 那是用户手写的记忆/指示,
-// 对话要尊重(用户唯一能完全掌控、AI 逐字保留的一块)。只剥掉占位 HTML 注释,
-// 避免把模板噪声塞进每轮 prompt。
+// Profile slice for the conversation agent: the full profile including ## My notes — that is user-authored memory/instructions
+// that the conversation must respect (the one section the user has full control over and the AI preserves verbatim). Only placeholder HTML comments are stripped
+// to avoid injecting template noise into every turn's prompt.
 export function profileSliceForConversation(md: string): string {
   return md
     .replace(/^##\s+AI preferences\s*$[\s\S]*?(?=^##\s+)/m, "")

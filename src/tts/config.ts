@@ -11,18 +11,18 @@ export const MIMO_TTS_DEFAULTS = {
 };
 
 export const MIMO_VOICES: { id: string; label: string }[] = [
-  { id: "mimo_default", label: "MiMo 默认" },
-  { id: "冰糖", label: "冰糖 (中文 · 女)" },
-  { id: "茉莉", label: "茉莉 (中文 · 女)" },
-  { id: "苏打", label: "苏打 (中文 · 男)" },
-  { id: "白桦", label: "白桦 (中文 · 男)" },
+  { id: "mimo_default", label: "MiMo default" },
+  { id: "冰糖", label: "冰糖 (Chinese · Female)" },
+  { id: "茉莉", label: "茉莉 (Chinese · Female)" },
+  { id: "苏打", label: "苏打 (Chinese · Male)" },
+  { id: "白桦", label: "白桦 (Chinese · Male)" },
   { id: "Mia", label: "Mia (English · Female)" },
   { id: "Chloe", label: "Chloe (English · Female)" },
   { id: "Milo", label: "Milo (English · Male)" },
   { id: "Dean", label: "Dean (English · Male)" },
 ];
 
-// 免费微软 Edge「朗读」:无 API key,合成走 Rust WebSocket(edge_tts_synthesize)。
+// Free Microsoft Edge "Read Aloud": no API key; synthesis goes through the Rust WebSocket (edge_tts_synthesize).
 export const EDGE_TTS_DEFAULTS = {
   voice: "en-US-EmmaMultilingualNeural",
   rate: "+0%",
@@ -30,39 +30,39 @@ export const EDGE_TTS_DEFAULTS = {
 };
 
 export const EDGE_VOICES: { id: string; label: string }[] = [
-  { id: "en-US-EmmaMultilingualNeural", label: "Emma (English · 多语女)" },
-  { id: "en-US-AvaMultilingualNeural", label: "Ava (English · 多语女)" },
-  { id: "en-US-AndrewMultilingualNeural", label: "Andrew (English · 多语男)" },
-  { id: "en-US-BrianMultilingualNeural", label: "Brian (English · 多语男)" },
-  { id: "en-US-AriaNeural", label: "Aria (English · 美式女)" },
-  { id: "en-US-GuyNeural", label: "Guy (English · 美式男)" },
-  { id: "en-GB-SoniaNeural", label: "Sonia (English · 英式女)" },
-  { id: "en-GB-RyanNeural", label: "Ryan (English · 英式男)" },
-  { id: "en-AU-NatashaNeural", label: "Natasha (English · 澳式女)" },
-  { id: "zh-CN-XiaoxiaoNeural", label: "晓晓 (中文 · 女)" },
-  { id: "zh-CN-YunxiNeural", label: "云希 (中文 · 男)" },
-  { id: "zh-CN-YunyangNeural", label: "云扬 (中文 · 男)" },
-  { id: "ja-JP-NanamiNeural", label: "Nanami (日本語 · 女)" },
-  { id: "ko-KR-SunHiNeural", label: "SunHi (한국어 · 女)" },
+  { id: "en-US-EmmaMultilingualNeural", label: "Emma (English · Multilingual Female)" },
+  { id: "en-US-AvaMultilingualNeural", label: "Ava (English · Multilingual Female)" },
+  { id: "en-US-AndrewMultilingualNeural", label: "Andrew (English · Multilingual Male)" },
+  { id: "en-US-BrianMultilingualNeural", label: "Brian (English · Multilingual Male)" },
+  { id: "en-US-AriaNeural", label: "Aria (English · US Female)" },
+  { id: "en-US-GuyNeural", label: "Guy (English · US Male)" },
+  { id: "en-GB-SoniaNeural", label: "Sonia (English · UK Female)" },
+  { id: "en-GB-RyanNeural", label: "Ryan (English · UK Male)" },
+  { id: "en-AU-NatashaNeural", label: "Natasha (English · AU Female)" },
+  { id: "zh-CN-XiaoxiaoNeural", label: "晓晓 (Chinese · Female)" },
+  { id: "zh-CN-YunxiNeural", label: "云希 (Chinese · Male)" },
+  { id: "zh-CN-YunyangNeural", label: "云扬 (Chinese · Male)" },
+  { id: "ja-JP-NanamiNeural", label: "Nanami (Japanese · Female)" },
+  { id: "ko-KR-SunHiNeural", label: "SunHi (Korean · Female)" },
 ];
 
 export type TtsProvider = "mimo" | "edge";
 
 export interface TtsConfig {
-  /** 朗读引擎:mimo(需 key)/ edge(免费,无 key)。 */
+  /** TTS engine: mimo (requires key) / edge (free, no key). */
   ttsProvider: TtsProvider;
   // —— MiMo ——
   baseUrl: string;
   model: string;
   voice: string;
   stylePrompt: string;
-  // —— Edge(免费)——
+  // —— Edge (free) ——
   edgeVoice: string;
-  /** 语速,如 "+0%" / "-20%" / "+25%"。 */
+  /** Playback speed, e.g. "+0%" / "-20%" / "+25%". */
   edgeRate: string;
-  /** 音高,如 "+0Hz" / "-5Hz"。 */
+  /** Pitch, e.g. "+0Hz" / "-5Hz". */
   edgePitch: string;
-  /** 新 AI 回复边收流边自动分句朗读。 */
+  /** Automatically speak new AI replies as they stream in, sentence by sentence. */
   autoSpeak: boolean;
 }
 
@@ -103,7 +103,7 @@ export async function getMimoTtsApiKey(): Promise<string | null> {
 
 export class MissingTtsApiKeyError extends Error {
   constructor() {
-    super("请先在设置 → 朗读 中配置 MiMo API key。");
+    super("Please configure the MiMo API key in Settings → Text-to-Speech first.");
     this.name = "MissingTtsApiKeyError";
   }
 }

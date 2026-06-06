@@ -12,13 +12,13 @@ const base: ProficiencyMetrics = {
 };
 
 describe("computeProficiency", () => {
-  it("证据不足 → hasEvidence=false、无提示", () => {
+  it("insufficient evidence → hasEvidence=false, empty calibration hint", () => {
     const r = computeProficiency({ ...base, sampleTurns: 2 });
     expect(r.hasEvidence).toBe(false);
     expect(r.calibrationHint).toBe("");
   });
 
-  it("长句、少错、少回退 → consolidating", () => {
+  it("long sentences, few errors, low fallback → consolidating", () => {
     const r = computeProficiency({
       ...base,
       avgInputWords: 15,
@@ -28,7 +28,7 @@ describe("computeProficiency", () => {
     expect(r.productionBand).toBe("consolidating");
   });
 
-  it("短句或高回退 → emerging", () => {
+  it("short sentences or high fallback → emerging", () => {
     expect(
       computeProficiency({ ...base, avgInputWords: 4 }).productionBand,
     ).toBe("emerging");
@@ -37,11 +37,11 @@ describe("computeProficiency", () => {
     );
   });
 
-  it("中间情形 → developing", () => {
+  it("intermediate case → developing", () => {
     expect(computeProficiency(base).productionBand).toBe("developing");
   });
 
-  it("理解吃力度按 assistRate 分档", () => {
+  it("comprehension strain bands by assistRate", () => {
     expect(
       computeProficiency({ ...base, assistRate: 0.6 }).comprehensionStrain,
     ).toBe("high");
@@ -53,7 +53,7 @@ describe("computeProficiency", () => {
     ).toBe("low");
   });
 
-  it("有证据时给出非空校准提示", () => {
+  it("gives a non-empty calibration hint when there is evidence", () => {
     expect(computeProficiency(base).calibrationHint.length).toBeGreaterThan(0);
   });
 });

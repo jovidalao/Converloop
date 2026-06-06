@@ -5,7 +5,7 @@ import { type Conversation, conversation, turn } from "./schema";
 export type ConversationMeta = Conversation;
 export type ConversationKind = Conversation["kind"];
 
-// 会话分支(Phase 3)。分支是非破坏式动作:从原会话派生新会话,原会话保持不变。
+// Conversation branching (Phase 3). Branching is a non-destructive action: derives a new conversation from the source; source remains unchanged.
 export type BranchKind =
   | "branch_from"
   | "restart"
@@ -17,14 +17,14 @@ export type BranchKind =
   | "custom_action";
 
 export const BRANCH_KIND_LABEL: Record<BranchKind, string> = {
-  branch_from: "分支",
-  restart: "重新开始",
-  harder: "更高难度",
-  easier: "更简单",
-  swap_roles: "调换角色",
-  next_day: "第二天",
-  change_scene: "换个场景",
-  custom_action: "自定义动作",
+  branch_from: "Branch",
+  restart: "Restart",
+  harder: "Harder",
+  easier: "Easier",
+  swap_roles: "Swap roles",
+  next_day: "Next day",
+  change_scene: "Change scene",
+  custom_action: "Custom action",
 };
 
 export interface NewConversationContext {
@@ -48,12 +48,12 @@ export interface ConversationDerivationState {
   error?: string | null;
 }
 
-// 会话级调节:回复 Agent 要遵循的行为变化。LLM 观察,行为由代码注入(格式化成指令)。
+// Session-level adjustments: behavior changes the reply agent should follow. LLM observes; behavior is injected by code (formatted as instructions).
 export interface AgentModifiers {
-  difficultyDelta?: number; // +1 更难 / -1 更简单
+  difficultyDelta?: number; // +1 harder / -1 easier
   swapRoles?: boolean;
   nextDay?: boolean;
-  note?: string; // 自由补充指令
+  note?: string; // free-form supplementary instruction
   derivation?: ConversationDerivationState;
   derivedContext?: NewConversationContext;
 }
@@ -66,12 +66,12 @@ export function parseAgentModifiers(json: string | null): AgentModifiers {
       return raw as AgentModifiers;
     }
   } catch {
-    // 损坏的 JSON 退化为无调节
+    // Corrupted JSON falls back to no adjustments
   }
   return {};
 }
 
-// 把会话级调节转成喂给对话 Agent 的英文指令;无调节返回空串。
+// Convert session-level adjustments into English instructions fed to the conversation agent; returns empty string when there are no adjustments.
 export function formatModifierInstructions(mods: AgentModifiers): string {
   const lines: string[] = [];
   if (mods.difficultyDelta && mods.difficultyDelta > 0)
@@ -108,8 +108,8 @@ export function formatModifierInstructions(mods: AgentModifiers): string {
   return lines.join("\n");
 }
 
-// 新会话的占位标题;首条消息发出后由 ChatView 改成截断的输入内容(ChatGPT 式)。
-export const DEFAULT_CONVERSATION_TITLE = "新对话";
+// Placeholder title for new conversations; ChatView changes it to truncated input content after the first message is sent (ChatGPT style).
+export const DEFAULT_CONVERSATION_TITLE = "New conversation";
 
 const ACTIVE_KEY = "lang-agent.activeConversation";
 
@@ -125,7 +125,7 @@ export function clearActiveConversationId(): void {
   localStorage.removeItem(ACTIVE_KEY);
 }
 
-// 最近活动在前(updated_at 倒序),给侧边栏列表用。
+// Most recently active first (updated_at descending), for the sidebar list.
 export async function listConversations(): Promise<ConversationMeta[]> {
   return db.select().from(conversation).orderBy(desc(conversation.updatedAt));
 }
@@ -180,7 +180,7 @@ export async function createPendingDerivedConversation(opts: {
   };
   await db.insert(conversation).values({
     id,
-    title: `${opts.actionLabel} · 生成中`,
+    title: `${opts.actionLabel} · generating`,
     createdAt: now,
     updatedAt: now,
     kind: "practice",
@@ -190,7 +190,7 @@ export async function createPendingDerivedConversation(opts: {
     branchKind: opts.branchKind,
     agentModifiersJson: JSON.stringify(modifiers),
   });
-  // 衍生是非破坏式动作:原会话保持不变,不更新其修改时间/排序。
+  // Derivation is a non-destructive action: the source conversation is unchanged, do not update its modified time / sort order.
   return id;
 }
 
@@ -228,12 +228,12 @@ export async function failDerivedConversation(
 ): Promise<void> {
   const conv = await getConversation(id);
   const modifiers = parseAgentModifiers(conv?.agentModifiersJson ?? null);
-  // 标题随状态改为「… · 生成失败」,避免侧栏永远停在「生成中」。
-  const label = modifiers.derivation?.actionLabel ?? "衍生对话";
+  // Update title to "… · generation failed" to prevent the sidebar from being stuck at "generating".
+  const label = modifiers.derivation?.actionLabel ?? "derived conversation";
   await db
     .update(conversation)
     .set({
-      title: `${label} · 生成失败`,
+      title: `${label} · generation failed`,
       updatedAt: Date.now(),
       agentModifiersJson: JSON.stringify({
         ...modifiers,
@@ -255,7 +255,7 @@ export async function renameConversation(
     .where(eq(conversation.id, id));
 }
 
-// 把 updated_at 推到现在,使刚发过消息的会话排到列表顶部。
+// Push updated_at to now so the conversation where a message was just sent sorts to the top.
 export async function touchConversation(id: string): Promise<void> {
   await db
     .update(conversation)
@@ -263,8 +263,8 @@ export async function touchConversation(id: string): Promise<void> {
     .where(eq(conversation.id, id));
 }
 
-// 滚动摘要读写(自动压缩用)。summary 是会话老内容的目标语摘要,throughId 是已折叠进
-// 摘要的最后一个 turn.id(水位)。代码维护,LLM 只产出摘要文本。
+// Rolling summary read/write (for auto-compression). summary is a target-language summary of older conversation content;
+// throughId is the last turn.id folded into the summary (watermark). Maintained by code; LLM only produces the summary text.
 export async function getSummary(
   id: string,
 ): Promise<{ summary: string | null; throughId: string | null }> {
@@ -290,9 +290,9 @@ export async function setSummary(
     .where(eq(conversation.id, id));
 }
 
-// 「从此处开始」:舍弃某会话里「从 fromId 起(含)」的所有 turn——这条之后的对话全部丢弃。
-// 只删 turn:掌握/档案是全局且独立存储的,不在此处理——已记入学习记忆的内容保留。
-// 若删除范围越过滚动摘要水位(throughId 也被删),清空摘要,让上下文从剩余原文重建。
+// "Start from here": discard all turns in a conversation starting from fromId (inclusive) — everything after that point is dropped.
+// Only turns are deleted: mastery/profile is globally and independently stored, not handled here — content already recorded in learning memory is preserved.
+// If the deleted range crosses the rolling summary watermark (throughId is also deleted), clear the summary so context rebuilds from the remaining verbatim turns.
 export async function truncateConversationFrom(
   id: string,
   fromId: string,
@@ -328,14 +328,14 @@ export async function truncateConversationFrom(
   }
 }
 
-// 删除会话连同它的所有 turn。掌握/档案是全局的,不在此处理。
+// Delete a conversation along with all its turns. Mastery/profile is global, not handled here.
 export async function deleteConversation(id: string): Promise<void> {
   await db.delete(turn).where(eq(turn.conversationId, id));
   await db.delete(conversation).where(eq(conversation.id, id));
 }
 
-// 启动时调用:返回应激活的会话 id。没有任何历史时返回 null,由前端显示未落库的新对话草稿。
-// multi-conversation 之前遗留的 conversation_id 为 NULL 的旧 turn 仍会归档进一个默认会话。
+// Called at startup: returns the conversation id to activate. Returns null when there is no history; the frontend then displays an unsaved new conversation draft.
+// Legacy turns from before multi-conversation support (conversation_id = NULL) are still archived into a default conversation.
 export async function ensureActiveConversation(): Promise<string | null> {
   let convs = await listConversations();
 
@@ -349,7 +349,7 @@ export async function ensureActiveConversation(): Promise<string | null> {
     const id = await createConversation(DEFAULT_CONVERSATION_TITLE);
     const adopted = await adoptOrphanTurns(id);
     if (adopted > 0) {
-      // 旧历史:用第一条输入做标题,并把时间对齐到最后一轮。
+      // Legacy history: use the first input as the title and align the time to the last turn.
       const first = await firstOrphanAdoptedUserInput(id);
       if (first) await renameConversation(id, titleFromInput(first));
     }
@@ -364,7 +364,7 @@ export async function ensureActiveConversation(): Promise<string | null> {
     return null;
   }
 
-  const active = convs[0].id; // 最近活动的会话
+  const active = convs[0].id; // most recently active conversation
   setActiveConversationId(active);
   return active;
 }
@@ -377,7 +377,7 @@ async function countOrphanTurns(): Promise<number> {
   return row?.n ?? 0;
 }
 
-// 把所有 conversation_id 为 NULL 的 turn 归到指定会话。返回归档条数。
+// Archive all turns with conversation_id = NULL into the specified conversation. Returns the number archived.
 async function adoptOrphanTurns(conversationId: string): Promise<number> {
   const n = await countOrphanTurns();
   if (n > 0) {
@@ -401,7 +401,7 @@ async function firstOrphanAdoptedUserInput(
   return row?.userInput ?? null;
 }
 
-// 首条消息后自动命名:仅当标题仍是占位符时才改(用户手动改过的不动)。
+// Auto-title after the first message: only updates if the title is still the placeholder (user-edited titles are left alone).
 export async function maybeAutoTitle(
   id: string,
   userInput: string,
@@ -416,7 +416,7 @@ export async function maybeAutoTitle(
   }
 }
 
-// 从用户首条输入派生会话标题:压缩空白、截断。
+// Derive conversation title from the user's first input: collapse whitespace and truncate.
 export function titleFromInput(text: string, max = 30): string {
   const clean = text.replace(/\s+/g, " ").trim();
   if (!clean) return DEFAULT_CONVERSATION_TITLE;

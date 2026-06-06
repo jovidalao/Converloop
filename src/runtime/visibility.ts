@@ -1,7 +1,8 @@
-// 内置能力「删除」= 永久隐藏(无恢复)。哪些 Agent 被用户隐藏,存 localStorage
-// (与 enablement 同款前端偏好,不进 SQLite)。运行时在能力目录 / 动作菜单 / 按需 transformer
-// 处实时过滤;隐藏与「禁用」语义不同——禁用可开回,隐藏不提供恢复入口。
-// 自定义 Agent 的「删除」走 DB 真删,不走这里。
+// Built-in capability "delete" = permanently hidden (no recovery). Which agents the user has hidden
+// is stored in localStorage (same frontend preference as enablement, not in SQLite). Filtered at
+// runtime in the agent library / action menu / on-demand transformers; "hidden" has different semantics
+// from "disabled" — disabled can be re-enabled, hidden has no recovery entry point.
+// Custom agent "delete" goes through a real DB delete, not here.
 
 const KEY = "hiddenAgents";
 let cache: Set<string> | null = null;
@@ -27,6 +28,6 @@ export function hideAgent(id: string): void {
   try {
     localStorage.setItem(KEY, JSON.stringify([...set]));
   } catch {
-    // 测试环境无 localStorage:仅内存缓存生效
+    // No localStorage in test environment: only in-memory cache takes effect
   }
 }

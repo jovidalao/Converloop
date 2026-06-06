@@ -42,7 +42,7 @@ function parseStructured<T>(
   const validated = schema.safeParse(parsed.value);
   if (!validated.success)
     throw new Error(
-      `${label} 输出校验失败: ${validated.error.issues
+      `${label} output validation failed: ${validated.error.issues
         .map((issue) => `${issue.path.join(".") || "root"}: ${issue.message}`)
         .join("; ")}`,
     );
@@ -140,7 +140,7 @@ async function runCustomAction(
   ctx: DerivationContext,
 ): Promise<NewConversationContext> {
   const provider = await getProvider();
-  if (!provider) throw new Error("未配置 API key,请到设置页填写");
+  if (!provider) throw new Error("No API key configured, please fill it in on the settings page");
 
   const config = loadConfig();
   const [conversation, turns, dataContext] = await Promise.all([
@@ -148,7 +148,7 @@ async function runCustomAction(
     getTurnsAfterId(ctx.sourceConversationId, null),
     buildLearningDataContext(agent, config),
   ]);
-  const title = conversation?.title?.trim() || "对话";
+  const title = conversation?.title?.trim() || "conversation";
   const messages: ChatMessage[] = [
     {
       role: "system",
@@ -201,12 +201,12 @@ function observerFromAgent(agent: LearningAgentMeta): Observer {
       title: agent.name,
       description: agent.description,
       entry: "auto_turn",
-      timing: "每轮普通练习后 · 自定义观察",
-      reads: "当前输入 · 近期对话 · 授权学习数据",
+      timing: "After every practice turn · custom observer",
+      reads: "Current input · recent conversation · authorized learning data",
       writes:
         agent.writebackPolicy === "propose_review_signals"
-          ? "可提出学习数据写入建议(需用户确认)"
-          : "只写本轮 annotation",
+          ? "Can propose learning data write-backs (requires user confirmation)"
+          : "Writes this turn's annotation only",
       canDisable: true,
     },
     run: (ctx) => runCustomObserver(agent, ctx),
@@ -225,9 +225,9 @@ function actionFromAgent(agent: LearningAgentMeta): ActionAgent {
       title: agent.name,
       description: agent.description,
       entry: "derive",
-      timing: "用户点击",
-      reads: "当前会话 · 授权学习数据",
-      writes: "衍生一个新对话上下文并新建会话(不改计数 / 密钥 / 设置)",
+      timing: "User clicks",
+      reads: "Current conversation · authorized learning data",
+      writes: "Derives a new conversation context and opens a new session (does not change counts / keys / settings)",
       canDisable: true,
     },
     deriveContext: (ctx) => runCustomAction(agent, ctx),

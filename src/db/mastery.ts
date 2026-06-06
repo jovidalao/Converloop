@@ -43,7 +43,7 @@ async function insertMasteryEvent(
   });
 }
 
-// 按 mastery_key upsert,并跑 applySignal。计数/状态全归代码。
+// Upsert by mastery_key and run applySignal. Counts/status are entirely managed by code.
 async function upsertSignal(sig: Signal, now: number): Promise<void> {
   const [existing] = await db
     .select()
@@ -66,8 +66,8 @@ async function upsertSignal(sig: Signal, now: number): Promise<void> {
         status: next.status,
         lastSeenAt: now,
         example: sig.example ?? existing.example,
-        // notes 是用户可编辑字段(尤其表达缺口的地道说法)。一旦有内容就别用新信号
-        // 覆盖,否则会清掉用户的手改;只在为空时填充。
+        // notes is a user-editable field (especially the idiomatic phrasing for expression gaps).
+        // Once it has content, don't overwrite it with a new signal — that would erase the user's manual edits; only fill it when empty.
         notes: existing.notes?.trim()
           ? existing.notes
           : (sig.note ?? existing.notes),
@@ -90,7 +90,7 @@ async function upsertSignal(sig: Signal, now: number): Promise<void> {
   }
 }
 
-// 一轮记账:派生信号 → 逐个 upsert + 事件落库。同一 key 第二次是 update,不新增。
+// One turn of bookkeeping: derive signals → upsert one by one + persist events. A second occurrence of the same key is an update, not an insert.
 async function recordAnalysisInner(
   analysis: TutorAnalysis,
   turnId?: string,
@@ -111,9 +111,9 @@ async function recordSignalsInner(
   }
 }
 
-// 串行化:批改在后台 fire-and-forget 跑(见 orchestrator),多轮可并发;
-// 而 upsert 是「读计数 → 改 → 写」,并发会丢增量(后写覆盖先写)。代码是计数的
-// 地面真相,必须确定性 —— 把所有记账串到一条 promise 链上,逐轮顺序执行。
+// Serialization: correction runs fire-and-forget in the background (see orchestrator), multiple turns can run concurrently;
+// but upsert is "read count → modify → write" — concurrent access loses increments (later write overwrites earlier write).
+// Code is the ground truth for counts, must be deterministic — chain all bookkeeping onto a single promise chain, execute one turn at a time.
 let recordQueue: Promise<unknown> = Promise.resolve();
 
 export function recordAnalysis(
@@ -121,7 +121,7 @@ export function recordAnalysis(
   turnId?: string,
 ): Promise<void> {
   const next = recordQueue.then(() => recordAnalysisInner(analysis, turnId));
-  // 链本身不能因某轮抛错而断(否则后续记账永远卡住);调用方仍拿到真实结果。
+  // The chain must not break due to one turn throwing (otherwise subsequent bookkeeping is stuck forever); caller still receives the real result.
   recordQueue = next.catch(() => {});
   return next;
 }
@@ -142,7 +142,7 @@ export function recordSignals(
   return next;
 }
 
-// 导师 agent 的薄弱表:优先 struggling、错得多、最近见过。见 architecture.md#选-top-n。
+// Weak-items table for the tutor agent: prioritize struggling, high error rate, recently seen. See architecture.md#select-top-n.
 export async function getWeakList(limit = 15): Promise<WeakItem[]> {
   const rows = await db
     .select({
@@ -156,8 +156,8 @@ export async function getWeakList(limit = 15): Promise<WeakItem[]> {
     .from(masteryItem)
     .where(ne(masteryItem.status, "known"))
     .orderBy(
-      // 分母 +2 收缩:把样本极少的项往下压,免得「错 1/1 = 100%」的噪音盖过
-      // 真正反复出错的 6/9 老问题(6/11≈0.55 > 1/3≈0.33)。
+      // +2 denominator shrinkage: pushes sparse items down so that "1/1 error = 100%" noise
+      // doesn't outrank a genuinely recurring problem like 6/9 (6/11≈0.55 > 1/3≈0.33).
       sql`(${masteryItem.errorCount} * 1.0 / (${masteryItem.seenCount} + 2)) DESC`,
       desc(masteryItem.lastSeenAt),
     )
@@ -390,9 +390,10 @@ export async function markMasteryKnown(key: string): Promise<void> {
   );
 }
 
-// 复习候选(代码选,对话 agent 自然复用)。与薄弱表互补:薄弱表给「最近最常错」,
-// 这里给「学过 / 练过但最久没重温」的非 known 项——最适合在闲聊里 interleave 一两个。
-// 这把「复习靠被动复用」从「指望维护 agent 写进 prose」变成代码可控的定向选取(L1)。
+// Review candidates (selected by code, naturally reused by the conversation agent). Complements the weak-items table:
+// weak-items gives "recently and most frequently wrong"; this gives non-known items "learned/practiced but not reviewed longest" —
+// best suited for interleaving one or two into casual conversation.
+// This moves "review via passive reuse" from "hoping the maintainer agent writes it into prose" to a code-controlled, targeted selection (L1).
 export interface ReviewItem {
   key: string;
   label: string;
@@ -477,7 +478,7 @@ export async function getComfortableList(
     .limit(limit);
 }
 
-// 维护 agent 的聚合输入(代码查好再喂,别让 LLM 自己算)。见 profile-maintainer-agent.md#输入。
+// Aggregated input for the maintainer agent (queried by code and fed in; don't let the LLM compute it). See profile-maintainer-agent.md#input.
 export interface MaintainerData {
   weak: {
     label: string;
@@ -509,8 +510,8 @@ export async function getMaintainerData(): Promise<MaintainerData> {
     .from(masteryItem)
     .where(ne(masteryItem.status, "known"))
     .orderBy(
-      // 分母 +2 收缩:把样本极少的项往下压,免得「错 1/1 = 100%」的噪音盖过
-      // 真正反复出错的 6/9 老问题(6/11≈0.55 > 1/3≈0.33)。
+      // +2 denominator shrinkage: pushes sparse items down so that "1/1 error = 100%" noise
+      // doesn't outrank a genuinely recurring problem like 6/9 (6/11≈0.55 > 1/3≈0.33).
       sql`(${masteryItem.errorCount} * 1.0 / (${masteryItem.seenCount} + 2)) DESC`,
       desc(masteryItem.lastSeenAt),
     )

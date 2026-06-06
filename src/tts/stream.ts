@@ -2,14 +2,14 @@ import { playSpeech } from "./playback";
 import { MissingTtsApiKeyError, speakText } from "./speak";
 
 export interface ReplySpeaker {
-  /** 回复结束时调用,fullText 为最终回复;整条一次性合成并播放。 */
+  /** Called when the reply is complete; fullText is the final reply. The full text is synthesized and played at once. */
   finish(fullText: string): void;
-  /** 中止(出错或换了轮次);放弃本轮合成结果,不再播放。 */
+  /** Abort (error or new turn started); discard this turn's synthesis result and do not play it. */
   abort(): void;
 }
 
-// 自动朗读:回复完成后,把整条回复作为一次 TTS 请求合成并播放。
-// 与朗读按钮共用同一缓存键(整条文本),手动重播可直接命中缓存。无 TTS key 时静默跳过。
+// Auto-speak: after the reply is complete, synthesize the full reply as a single TTS request and play it.
+// Shares the same cache key (full text) with the speak button, so manual replay can hit the cache directly. Silently skips if no TTS key is configured.
 export function createReplySpeaker(): ReplySpeaker {
   let aborted = false;
   return {
@@ -22,8 +22,8 @@ export function createReplySpeaker(): ReplySpeaker {
           if (!aborted) void playSpeech(audio, text);
         })
         .catch((e) => {
-          if (e instanceof MissingTtsApiKeyError) return; // 没配 key,静默跳过。
-          console.warn("朗读合成失败:", e);
+          if (e instanceof MissingTtsApiKeyError) return; // No key configured; silently skip.
+          console.warn("TTS synthesis failed:", e);
         });
     },
     abort() {

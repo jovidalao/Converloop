@@ -6,12 +6,12 @@ describe("playback snapshot", () => {
     stopSpeech();
   });
 
-  it("空闲时快照为空", () => {
+  it("snapshot is empty when idle", () => {
     stopSpeech();
     expect(getPlaybackSnapshot()).toEqual({ key: null, phase: null });
   });
 
-  it("stopSpeech 会通知订阅者并清空快照", () => {
+  it("stopSpeech notifies subscribers and clears the snapshot", () => {
     let notified = 0;
     const unsubscribe = subscribePlayback(() => {
       notified += 1;

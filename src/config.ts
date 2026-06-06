@@ -11,7 +11,7 @@ import { createOpenAICodexProvider } from "./providers/openai-responses";
 import { defaultPlugins, withPlugins } from "./providers/plugins";
 import type { ModelProvider } from "./providers/types";
 
-// claude-oauth / codex-oauth:用订阅(Claude Pro/Max、ChatGPT)浏览器登录,而非 API key。
+// claude-oauth / codex-oauth: sign in via subscription (Claude Pro/Max, ChatGPT) browser login instead of an API key.
 export const PROVIDER_TYPES = [
   "openai",
   "gemini",
@@ -21,20 +21,20 @@ export const PROVIDER_TYPES = [
 ] as const;
 export type ProviderType = (typeof PROVIDER_TYPES)[number];
 
-// 单个 provider 的连接配置:每个 provider 各存一份,切换时互不覆盖。
+// Per-provider connection settings: one copy stored per provider; switching providers does not overwrite others.
 const ProviderSettingsSchema = z.object({
   baseUrl: z.string(),
   model: z.string(),
-  /** 手动覆盖模型上下文窗口(token)。留空则按 model 名查表猜测(见 inferContextLimit)。 */
+  /** Manual override for the model context window (tokens). Leave unset to infer from the model name (see inferContextLimit). */
   contextTokens: z.number().int().positive().optional(),
 });
 
 export type ProviderSettings = z.infer<typeof ProviderSettingsSchema>;
 
-// 非密配置存 localStorage;API key 走设备绑定加密文件(见 keychain.ts → Rust secrets.rs)。
+// Non-secret config is stored in localStorage; API keys go into a device-bound encrypted file (see keychain.ts → Rust secrets.rs).
 const AppConfigSchema = z.object({
   providerType: z.enum(PROVIDER_TYPES),
-  /** 每个 provider 的 baseUrl/模型/上下文,按 provider 分别持久化。 */
+  /** Per-provider baseUrl/model/context settings, persisted separately per provider. */
   providers: z.object({
     openai: ProviderSettingsSchema,
     gemini: ProviderSettingsSchema,
@@ -45,17 +45,17 @@ const AppConfigSchema = z.object({
   nativeLanguage: z.string(),
   targetLanguage: z.string(),
   level: z.string(),
-  /** 新 AI 回复自动展开双语对照。 */
+  /** Automatically expand bilingual reading for new AI replies. */
   autoBilingual: z.boolean(),
 });
 
 export type AppConfig = z.infer<typeof AppConfigSchema>;
 
-// 已知模型的上下文窗口(token),按 model 名前缀匹配。BYOK 下 model 是自由串,命中不了
-// 就回退 DEFAULT_CONTEXT_TOKENS;用户也可在设置里用 contextTokens 手动覆盖。
+// Context window (tokens) for known models, matched by model name prefix. In BYOK mode the model is a free-form string; if no prefix matches,
+// fall back to DEFAULT_CONTEXT_TOKENS. Users can also override manually with contextTokens in settings.
 const DEFAULT_CONTEXT_TOKENS = 128_000;
 const CONTEXT_WINDOW_TABLE: { prefix: string; tokens: number }[] = [
-  // 长前缀在前,确保 gpt-4o-mini 不被 gpt-4 之类短前缀抢先。
+  // Longer prefixes first, so gpt-4o-mini is not captured by a shorter prefix like gpt-4.
   { prefix: "claude-opus-4-8", tokens: 1_000_000 },
   { prefix: "claude-sonnet-4-6", tokens: 1_000_000 },
   { prefix: "claude-haiku-4-5", tokens: 200_000 },
@@ -77,32 +77,32 @@ const CONTEXT_WINDOW_TABLE: { prefix: string; tokens: number }[] = [
   { prefix: "o3", tokens: 200_000 },
 ];
 
-// 按模型名猜测上下文上限(token);命中不了回退默认。
+// Infer the context limit (tokens) from the model name; falls back to the default if no prefix matches.
 export function inferContextLimit(model: string): number {
   const m = model.toLowerCase().trim();
   const hit = CONTEXT_WINDOW_TABLE.find((e) => m.startsWith(e.prefix));
   return hit?.tokens ?? DEFAULT_CONTEXT_TOKENS;
 }
 
-// 当前 provider 的上下文上限(token)。优先用户手填的 contextTokens,否则按模型名猜测。
+// Context limit (tokens) for the active provider. Uses the user-supplied contextTokens override if present, otherwise infers from the model name.
 export function getContextLimit(config: AppConfig): number {
   const active = config.providers[config.providerType];
   return active.contextTokens ?? inferContextLimit(active.model);
 }
 
-// 每个 provider 的 key 单独存,切换不丢另一个。
+// Each provider's key is stored separately so switching providers does not lose the other.
 export function apiKeyAccount(type: ProviderType): string {
   return `${type}_api_key`;
 }
 
-// 订阅登录 provider 的令牌 account(JSON {access,refresh,expires}),与 API key 分开存。
+// Token account for subscription-login providers (JSON {access,refresh,expires}), stored separately from the API key.
 export function oauthAccount(type: ProviderType): string {
   return `${type}_oauth`;
 }
 
 const OAUTH_PROVIDERS = new Set<ProviderType>(["claude-oauth", "codex-oauth"]);
 
-// 是否走订阅 OAuth 登录(而非填 API key)。SettingsView 据此切换登录 UI。
+// Whether the provider uses subscription OAuth login (rather than an API key). SettingsView uses this to toggle the login UI.
 export function isOAuthProvider(type: ProviderType): boolean {
   return OAUTH_PROVIDERS.has(type);
 }
@@ -116,16 +116,16 @@ interface ProviderPreset {
   label: string;
   shortLabel: string;
   baseUrl: string;
-  /** 默认模型:切换 provider 时使用,也作为模型列表的第一项。 */
+  /** Default model: used when switching to this provider and also the first item in the model list. */
   model: string;
   models: ProviderModelOption[];
 }
 
-// 切换 provider 时给设置页/聊天输入区共用的预设(baseUrl + 可选模型)。
+// Presets shared between the settings page and chat input when switching providers (baseUrl + optional model list).
 export const PROVIDER_PRESETS: Record<ProviderType, ProviderPreset> = {
   openai: {
-    label: "OpenAI 兼容(OpenAI / OpenRouter / LM Studio)",
-    shortLabel: "OpenAI 兼容",
+    label: "OpenAI Compatible (OpenAI / OpenRouter / LM Studio)",
+    shortLabel: "OpenAI Compatible",
     baseUrl: "http://192.168.31.154:8045/v1",
     model: "gpt-4o-mini",
     models: [
@@ -137,7 +137,7 @@ export const PROVIDER_PRESETS: Record<ProviderType, ProviderPreset> = {
     ],
   },
   gemini: {
-    label: "Gemini (原生 API)",
+    label: "Gemini (Native API)",
     shortLabel: "Gemini",
     baseUrl: "http://192.168.31.154:8045/v1beta",
     model: "gemini-2.0-flash",
@@ -158,9 +158,9 @@ export const PROVIDER_PRESETS: Record<ProviderType, ProviderPreset> = {
       { label: "Claude Haiku 3.5", model: "claude-3-5-haiku-20241022" },
     ],
   },
-  // 订阅登录:令牌直连 Anthropic 官方 API(非代理),模型可在设置里改成订阅可用的型号。
+  // Subscription login: token connects directly to the official Anthropic API (no proxy); model can be changed in settings to any model available under the subscription.
   "claude-oauth": {
-    label: "Claude (Pro/Max 登录)",
+    label: "Claude (Pro/Max Login)",
     shortLabel: "Claude Code",
     baseUrl: "https://api.anthropic.com/v1",
     model: "claude-sonnet-4-6",
@@ -170,9 +170,9 @@ export const PROVIDER_PRESETS: Record<ProviderType, ProviderPreset> = {
       { label: "Claude Haiku 4.5", model: "claude-haiku-4-5-20251001" },
     ],
   },
-  // Codex 订阅登录:走 ChatGPT 后端 Responses API,模型用 codex 系列。
+  // Codex subscription login: uses the ChatGPT backend Responses API; model is from the codex family.
   "codex-oauth": {
-    label: "ChatGPT (Codex 登录)",
+    label: "ChatGPT (Codex Login)",
     shortLabel: "ChatGPT Codex",
     baseUrl: "https://chatgpt.com/backend-api",
     model: "gpt-5.5",
@@ -196,13 +196,13 @@ export function findProviderModelOption(
 export function providerModelLabel(type: ProviderType, model: string): string {
   const preset = PROVIDER_PRESETS[type];
   const modelLabel =
-    findProviderModelOption(type, model)?.label || model.trim() || "自定义模型";
+    findProviderModelOption(type, model)?.label || model.trim() || "Custom Model";
   return `${preset.shortLabel} · ${modelLabel}`;
 }
 
 const STORAGE_KEY = "lang-agent.config";
 
-// 用 provider 预设填某个 provider 的初始连接配置。
+// Fill a provider's initial connection settings from its preset.
 function presetSettings(type: ProviderType): ProviderSettings {
   const p = PROVIDER_PRESETS[type];
   return { baseUrl: p.baseUrl, model: p.model };
@@ -218,12 +218,12 @@ function defaultProviders(): Record<ProviderType, ProviderSettings> {
   };
 }
 
-// 当前激活 provider 的连接配置。
+// Connection settings for the currently active provider.
 export function activeProvider(config: AppConfig): ProviderSettings {
   return config.providers[config.providerType];
 }
 
-// 选模型:切到该 provider 并设其模型(保留该 provider 已存的 baseUrl/上下文覆盖)。
+// Select a model: switch to the given provider and set its model (preserving the provider's existing baseUrl/context override).
 export function withActiveModel(
   config: AppConfig,
   providerType: ProviderType,
@@ -252,13 +252,13 @@ function freshDefault(): AppConfig {
   return { ...DEFAULT_CONFIG, providers: defaultProviders() };
 }
 
-// 缓存当前配置(useSyncExternalStore 要求 getSnapshot 返回稳定引用),
-// 仅在 saveConfig 时替换并通知订阅者。
+// Cache of the current config (useSyncExternalStore requires getSnapshot to return a stable reference);
+// replaced and subscribers notified only on saveConfig.
 let cached: AppConfig | null = null;
 const listeners = new Set<() => void>();
 
-// 把存储里的 providers 还原成完整映射;旧版扁平配置(顶层 baseUrl/model/contextTokens)
-// 迁移到当时激活 provider 那一项。
+// Restore providers from storage into a complete map; old flat configs (top-level baseUrl/model/contextTokens)
+// are migrated into the entry for the then-active provider.
 function migrateProviders(
   obj: Record<string, unknown>,
 ): Record<ProviderType, ProviderSettings> {
@@ -294,7 +294,7 @@ function readFromStorage(): AppConfig {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return freshDefault();
     const obj = JSON.parse(raw) as Record<string, unknown>;
-    // 脏数据(版本迁移 / 手改)校验失败时回落默认,不把非法值带进运行时。
+    // When dirty data (version migration / hand-edit) fails validation, fall back to defaults rather than letting invalid values enter the runtime.
     const parsed = AppConfigSchema.safeParse({
       ...DEFAULT_CONFIG,
       ...obj,
@@ -322,17 +322,17 @@ function subscribeConfig(listener: () => void): () => void {
   return () => listeners.delete(listener);
 }
 
-// 响应式读取配置:设置页 saveConfig 后,所有用 useConfig 的组件即时更新
-// (不再需要重挂载或切会话)。
+// Reactive config read: after saveConfig in the settings page, all components using useConfig update immediately
+// (no need to remount or switch sessions).
 export function useConfig(): AppConfig {
   return useSyncExternalStore(subscribeConfig, loadConfig);
 }
 
-// OAuth provider 的令牌刷新单飞:热路径上对话 ∥ 导师几乎同时取 provider,
-// 不去重会把同一次刷新打两遍(其中一个换来的 refresh token 随即失效)。
+// Single-flight token refresh for OAuth providers: on the hot path, the conversation and tutor both fetch the provider almost simultaneously,
+// and without deduplication the same refresh would be fired twice (one of the resulting refresh tokens would immediately become invalid).
 const refreshInFlight = new Map<ProviderType, Promise<OAuthTokens>>();
 
-// 取当前令牌;过期则刷新并回写。无令牌(未登录)返回 null。
+// Fetch the current tokens; refresh and write back if expired. Returns null when there are no tokens (not logged in).
 async function ensureFreshTokens(
   type: ProviderType,
   refreshFn: (refresh: string) => Promise<OAuthTokens>,
@@ -345,7 +345,7 @@ async function ensureFreshTokens(
   if (!inflight) {
     inflight = refreshFn(tokens.refresh)
       .then(async (fresh) => {
-        // 刷新响应若没带回某些字段(如 Codex accountId),沿用旧值。
+        // If the refresh response omits some fields (e.g. Codex accountId), retain the old values.
         const merged: OAuthTokens = { ...tokens, ...fresh };
         await setTokens(oauthAccount(type), merged);
         return merged;
@@ -356,7 +356,7 @@ async function ensureFreshTokens(
   return inflight;
 }
 
-// 用指定 provider 的配置 + keychain 组装 provider。无 key / 未登录时返回 null。
+// Build a provider from the given provider type's config + keychain. Returns null when there is no key or the user is not logged in.
 async function buildProviderFor(
   config: AppConfig,
   type: ProviderType,
@@ -401,13 +401,13 @@ async function buildProviderFor(
   return withPlugins(provider, defaultPlugins());
 }
 
-// 从配置 + keychain 组装当前激活 provider。无 key / 未登录时返回 null,调用方据此提示去设置页。
+// Build the currently active provider from config + keychain. Returns null when there is no key or the user is not logged in; callers use this to prompt the user to visit settings.
 export async function getProvider(): Promise<ModelProvider | null> {
   const config = loadConfig();
   return buildProviderFor(config, config.providerType);
 }
 
-// 设置页用:构建指定 provider(可能不是当前激活的)以测试其连接。
+// Used by the settings page: build the specified provider (which may not be the active one) to test its connection.
 export function getProviderFor(
   type: ProviderType,
 ): Promise<ModelProvider | null> {

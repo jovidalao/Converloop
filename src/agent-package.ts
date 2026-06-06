@@ -175,13 +175,13 @@ function scopeLabels(scopes: readonly string[]): string {
         scope in DATA_SCOPE_LABELS,
     )
     .map((scope) => DATA_SCOPE_LABELS[scope].split(":")[0]);
-  return [...new Set(labels)].join(" / ") || "无学习数据";
+  return [...new Set(labels)].join(" / ") || "No learning data";
 }
 
 function writePolicyLabel(policies: readonly string[]): string {
   return policies.includes("propose_review_signals")
-    ? "可提出学习数据写入建议(需确认)"
-    : "不写学习数据";
+    ? "Can propose learning data write-backs (requires confirmation)"
+    : "No learning data writes";
 }
 
 function itemCounts(items: readonly SharePackageItem[]) {
@@ -334,7 +334,7 @@ function packageFromAgent(agent: LearningAgentMeta): ShareAgentPackage {
 export async function exportAgentPackage(agentId: string): Promise<string> {
   const { getLearningAgent } = await import("./db/learning-agents");
   const agent = await getLearningAgent(agentId);
-  if (!agent) throw new Error("找不到这个 Agent");
+  if (!agent) throw new Error("Agent not found");
   return JSON.stringify(packageFromAgent(agent), null, 2);
 }
 
@@ -345,7 +345,7 @@ function reviewLegacy(raw: string): AgentPackageReview {
     kind: parsed.agent.kind,
     reads: scopeLabels(parsed.agent.dataScopes),
     writes: writePolicyLabel([parsed.agent.writebackPolicy]),
-    itemSummary: "1 个技能",
+    itemSummary: "1 skill",
     runtimeSkillCount: 1,
     lessonCount: 0,
     courseCount: 0,
@@ -369,16 +369,16 @@ function reviewShare(raw: string): AgentPackageReview {
     policies.push(item.writebackPolicy);
   }
   const parts = [
-    counts.runtimeSkillCount ? `${counts.runtimeSkillCount} 个技能` : null,
-    counts.lessonCount ? `${counts.lessonCount} 个专项课` : null,
-    counts.courseCount ? `${counts.courseCount} 个课程项目` : null,
+    counts.runtimeSkillCount ? `${counts.runtimeSkillCount} skill(s)` : null,
+    counts.lessonCount ? `${counts.lessonCount} lesson(s)` : null,
+    counts.courseCount ? `${counts.courseCount} course item(s)` : null,
   ].filter(Boolean);
   return {
     name: parsed.package.name,
     kind: "package",
     reads: scopeLabels(scopes),
     writes: writePolicyLabel(policies),
-    itemSummary: parts.join(" · ") || "空包",
+    itemSummary: parts.join(" · ") || "empty package",
     ...counts,
   };
 }

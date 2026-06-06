@@ -43,15 +43,15 @@ export async function applyDataEditOperations(
   for (const op of operations) {
     if (op.action === "merge") {
       if (!op.target_key) {
-        skipped.push(`合并 ${op.key} 缺少 target_key`);
+        skipped.push(`merge ${op.key}: missing target_key`);
         continue;
       }
       if (!existingKeys.has(op.key)) {
-        skipped.push(`找不到 ${op.key}`);
+        skipped.push(`${op.key}: not found`);
         continue;
       }
       if (!existingKeys.has(op.target_key)) {
-        skipped.push(`找不到 ${op.target_key}`);
+        skipped.push(`${op.target_key}: not found`);
         continue;
       }
       await mergeMasteryItems(op.key, op.target_key);
@@ -62,7 +62,7 @@ export async function applyDataEditOperations(
 
     if (op.action === "delete") {
       if (!existingKeys.has(op.key)) {
-        skipped.push(`找不到 ${op.key}`);
+        skipped.push(`${op.key}: not found`);
         continue;
       }
       await deleteMasteryItem(op.key);
@@ -73,7 +73,7 @@ export async function applyDataEditOperations(
 
     if (op.action === "create") {
       if (!op.label || !validType(op.type)) {
-        skipped.push(`创建 ${op.key} 缺少 label 或 type`);
+        skipped.push(`create ${op.key}: missing label or type`);
         continue;
       }
       await createManualMasteryItem({
@@ -90,11 +90,11 @@ export async function applyDataEditOperations(
     }
 
     if (!existingKeys.has(op.key)) {
-      skipped.push(`找不到 ${op.key}`);
+      skipped.push(`${op.key}: not found`);
       continue;
     }
     if (op.status && !validStatus(op.status)) {
-      skipped.push(`${op.key} 状态无效:${op.status}`);
+      skipped.push(`${op.key}: invalid status ${op.status}`);
       continue;
     }
     await updateMasteryItem(op.key, {

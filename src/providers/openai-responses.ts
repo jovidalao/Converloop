@@ -6,15 +6,15 @@ import type {
   ModelProvider,
 } from "./types";
 
-// OpenAI Codex(ChatGPT 订阅登录)适配器:走 Responses API,而非 chat/completions。
-// 端点 https://chatgpt.com/backend-api/codex/responses,body 用 instructions+input、store:false,
-// SSE 事件是 response.output_text.delta / response.completed(核对自 openclaw)。
-// HTTP 仍复用 Rust 的 llm_stream(JSON POST + 流式),只是 TS 侧按 Responses 事件解析。
+// OpenAI Codex (ChatGPT subscription login) adapter: uses the Responses API, not chat/completions.
+// Endpoint https://chatgpt.com/backend-api/codex/responses, body uses instructions+input, store:false,
+// SSE events are response.output_text.delta / response.completed (verified against openclaw).
+// HTTP still reuses Rust's llm_stream (JSON POST + streaming), only the TS side parses Responses events.
 export interface OpenAICodexConfig {
-  baseUrl: string; // 如 https://chatgpt.com/backend-api
-  apiKey: string; // 订阅 access token(JWT)
+  baseUrl: string; // e.g. https://chatgpt.com/backend-api
+  apiKey: string; // subscription access token (JWT)
   model: string;
-  accountId?: string; // 从 access JWT 解出的 chatgpt_account_id
+  accountId?: string; // chatgpt_account_id decoded from the access JWT
 }
 
 const ORIGINATOR = "codex_cli_rs";
@@ -45,7 +45,7 @@ function authHeaders(cfg: OpenAICodexConfig): Record<string, string> {
   return headers;
 }
 
-/** system → 顶层 instructions;user/assistant → Responses input 条目(content 用带类型的块)。 */
+/** system → top-level instructions; user/assistant → Responses input entries (content uses typed blocks). */
 function splitMessages(messages: ChatMessage[]): {
   instructions: string;
   input: unknown[];
@@ -74,12 +74,12 @@ function buildBody(cfg: OpenAICodexConfig, opts: GenerateOptions): Body {
   const { instructions, input } = splitMessages(opts.messages);
   const body: Body = {
     model: cfg.model,
-    store: false, // Codex 后端强制:store 必须 false
-    stream: true, // 后端只支持流式;generate 内部累加
+    store: false, // Codex backend enforces: store must be false
+    stream: true, // backend only supports streaming; generate accumulates internally
     instructions,
     input,
   };
-  // 结构化输出走 Responses 的 text.format。
+  // Structured output uses Responses' text.format.
   if (opts.jsonSchema) {
     body.text = {
       format: {
@@ -105,8 +105,8 @@ function finishFromType(type: string): FinishReason {
   };
 }
 
-// 从已按 \n 切好的 SSE 行抽取 Responses 事件:累加 output_text.delta,记结束/错误。
-// 每条 data: 行本身是完整事件 JSON(带 type 字段),逐行解析即可。
+// Extract Responses events from SSE lines already split by \n: accumulate output_text.delta, record completion/errors.
+// Each data: line is a complete event JSON (with a type field), parse line by line.
 function consumeResponsesSseLines(
   lines: string[],
   onDelta: (delta: string) => void,
@@ -139,16 +139,16 @@ function consumeResponsesSseLines(
       ) {
         finalReason = finishFromType(ev.type);
       } else if (ev.type === "response.failed" || ev.type === "error") {
-        error = ev.response?.error?.message ?? ev.message ?? "Codex 响应失败";
+        error = ev.response?.error?.message ?? ev.message ?? "Codex response failed";
       }
     } catch {
-      // 半截 JSON,等后续 chunk 拼齐
+      // Partial JSON, wait for subsequent chunks to complete it
     }
   }
   return { text: acc, finishReason: finalReason, error };
 }
 
-// 发一次流式请求,逐块解析;generate / stream 共用(generate 传空 onDelta)。
+// Send one streaming request, parse chunk by chunk; shared by generate / stream (generate passes a no-op onDelta).
 async function runStream(
   url: string,
   cfg: OpenAICodexConfig,

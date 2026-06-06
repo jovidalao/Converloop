@@ -5,15 +5,15 @@ export interface LearningAgentContext {
   nativeLanguage: string;
   targetLanguage: string;
   level: string;
-  experiencePreferences: string; // 用户在设置页显式配置的体验偏好
+  experiencePreferences: string; // experience preferences explicitly configured by the user on the settings page
   agentName: string;
   agentPrompt: string;
   dataContext: string;
-  summary: string; // 滚动摘要:较早课程对话的 recap(自动压缩产出;无则为空)
+  summary: string; // rolling summary: recap of earlier lesson conversation (auto-compressed; empty if none)
   history: string;
   userInput: string;
   kickoff: boolean;
-  customInstructions?: string; // 用户在能力库追加的补充指令(专项课老师)
+  customInstructions?: string; // additional instructions appended by the user in the agent library (lesson teacher)
 }
 
 function systemPrompt(ctx: LearningAgentContext): string {
@@ -49,7 +49,7 @@ function userPrompt(ctx: LearningAgentContext): string {
   const latest = ctx.kickoff
     ? "Start this customized lesson now. Proactively summarize the relevant learner data and begin the first exercise."
     : ctx.userInput;
-  // STORY SO FAR = 较早课程对话的摘要(自动压缩产出),让长课程不丢前文;无摘要则整段省略。
+  // STORY SO FAR = summary of earlier lesson conversation (auto-compressed), so long lessons don't lose earlier context; omit the whole block if there is no summary.
   const storyBlock = ctx.summary
     ? `=== STORY SO FAR (earlier in this lesson) ===
 ${ctx.summary}

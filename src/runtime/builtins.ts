@@ -1,6 +1,7 @@
-// 内置 Agent(Phase 1):把现有 converse / runLearningAgent / tutor 包成 Runtime Agent
-// 并在本模块求值时自注册。行为与迁移前的 orchestrator 一致,只是「谁调用它」换成了 Runtime。
-// 从 ./index 的副作用 import 触发注册。
+// Built-in agents (Phase 1): wrap existing converse / runLearningAgent / tutor as Runtime agents
+// and self-register when this module is evaluated. Behavior is the same as before migration, just
+// the caller changed from orchestrator to Runtime.
+// Registration triggered by the side-effect import from ./index.
 
 import { converse } from "../agents/conversation";
 import { appendUserInstructions } from "../agents/custom-instructions";
@@ -47,13 +48,13 @@ async function deriveConversationContext(
   },
 ): Promise<NewConversationContext> {
   const provider = await getProvider();
-  if (!provider) throw new Error("未配置 API key,请到设置页填写");
+  if (!provider) throw new Error("No API key configured, please fill it in on the settings page");
   const config = loadConfig();
   const [sourceConversation, turns] = await Promise.all([
     getConversation(ctx.sourceConversationId),
     getTurnsAfterId(ctx.sourceConversationId, null),
   ]);
-  const sourceTitle = sourceConversation?.title?.trim() || "当前对话";
+  const sourceTitle = sourceConversation?.title?.trim() || "current conversation";
   const selectedTurn = ctx.sourceTurnId
     ? turns.find((t) => t.id === ctx.sourceTurnId)
     : null;
@@ -105,18 +106,18 @@ ${formatTurns(turns) || "(empty conversation)"}`,
   });
 }
 
-// 普通对话主回复。读 MD 切片 + 复习候选 + 校准,流式秒回。
+// Main reply for normal practice conversation. Reads MD slice + review candidates + calibration, streams instantly.
 const conversationReply: ReplyProducer = {
   id: "builtin:conversation",
   kind: "reply_producer",
   conversationKind: "practice",
   card: {
-    title: "对话伙伴",
-    description: "用目标语言自然回复、延续对话,不纠错(纠错交给导师)。",
+    title: "Conversation Partner",
+    description: "Replies naturally in the target language, continuing the conversation — correction is the tutor's job.",
     entry: "auto_turn",
-    timing: "每轮 · 热路径 · 流式",
-    reads: "MD 档案切片 · 已掌握脚手架 · 复习候选 · 难度校准 · 会话调节",
-    writes: "无(只产出回复文本)",
+    timing: "Every turn · hot path · streaming",
+    reads: "MD profile slice · mastered scaffolds · review candidates · difficulty calibration · session adjustments",
+    writes: "None (reply text only)",
     canDisable: false,
   },
   run: (ctx, onDelta) => {
@@ -143,18 +144,18 @@ const conversationReply: ReplyProducer = {
   },
 };
 
-// 专项课主回复。老师型 prompt + 有界数据 scope;不跑导师。
+// Main reply for focused lessons. Teacher-style prompt + bounded data scope; tutor does not run.
 const learningReply: ReplyProducer = {
   id: "builtin:learning",
   kind: "reply_producer",
   conversationKind: "learning_agent",
   card: {
-    title: "专项课老师",
-    description: "按课程 prompt 和有界学习数据,上老师型专项课。",
+    title: "Focused Lesson Teacher",
+    description: "Runs a teacher-style focused lesson using the course prompt and bounded learning data.",
     entry: "lesson",
-    timing: "专项课每轮 · 流式",
-    reads: "授权的学习数据 scope · 课程 prompt",
-    writes: "无",
+    timing: "Every focused-lesson turn · streaming",
+    reads: "Authorized learning data scope · course prompt",
+    writes: "None",
     canDisable: false,
   },
   run: (ctx, onDelta) => {
@@ -179,18 +180,18 @@ const learningReply: ReplyProducer = {
   },
 };
 
-// 导师 observer:与主回复并行做结构化批改,turn 落库后走代码记账。
-// LLM 只观察(给离散信号),计数由 recordAnalysis 算 —— 不在此处改任何 mastery 数字。
+// Tutor observer: runs structured correction in parallel with the main reply; code bookkeeping runs after the turn is persisted.
+// LLM only observes (emits discrete signals); counts are computed by recordAnalysis — no mastery numbers are changed here.
 const tutorObserver: Observer = {
   id: "builtin:tutor",
   kind: "observer",
   card: {
-    title: "批改导师",
-    description: "并行批改每句:纠错、更自然说法、表达缺口,信号交给代码记账。",
+    title: "Correction Tutor",
+    description: "Corrects in parallel per sentence — errors, natural alternatives, expression gaps — signals fed to code bookkeeping.",
     entry: "auto_turn",
-    timing: "每轮 · 热路径 · 与回复并行",
-    reads: "SQLite 薄弱表 · 当前输入",
-    writes: "error/correct/introduced/gap 信号 → 代码记账(LLM 不碰计数)",
+    timing: "Every turn · hot path · parallel with reply",
+    reads: "SQLite weakness table · current input",
+    writes: "error/correct/introduced/gap signals → code bookkeeping (LLM does not touch counts)",
     canDisable: true,
   },
   run: async (ctx: PracticeContext) => {
@@ -210,7 +211,7 @@ const tutorObserver: Observer = {
       },
     );
 
-    // 等本轮 turn 行落库再写回;落库失败(reply 出错)则放弃记账,与迁移前一致。
+    // Wait for the current turn row to be persisted before writing back; if persistence fails (reply errored) abandon bookkeeping, same as before migration.
     let turnId: string;
     try {
       turnId = await ctx.turnPersisted;
@@ -226,16 +227,16 @@ const tutorObserver: Observer = {
         void maybeRunMaintainer();
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
-        logError("turn", "批改记账失败", e);
+        logError("turn", "Correction bookkeeping failed", e);
         ctx.callbacks.onAnalysis(analysis, {
-          error: `批改已显示但保存失败: ${msg}`,
+          error: `Correction shown but save failed: ${msg}`,
         });
       }
     } else if (proseFeedback) {
       try {
         await updateTurnAnalysis(turnId, null, proseFeedback, diagnostic);
       } catch (e) {
-        logError("turn", "纯文本批改保存失败", e);
+        logError("turn", "Plain-text correction save failed", e);
       }
       ctx.callbacks.onAnalysis(null, {
         proseFeedback,
@@ -255,48 +256,48 @@ const transformers: TransformerInfo[] = [
   {
     id: "builtin:transformer:explain",
     card: {
-      title: "回复讲解",
-      description: "按需用母语解释对话回复里可能卡住的结构、习语和地道用法。",
+      title: "Reply Explanation",
+      description: "Explains on demand in native language the structures, idioms, and usage that might trip up the learner.",
       entry: "reply_action",
-      timing: "用户点「讲解」",
-      reads: "当前回复 · MD 档案切片 · 阅读偏好",
-      writes: "无(只产出讲解文本)",
+      timing: "User clicks Explain",
+      reads: "Current reply · MD profile slice · reading preferences",
+      writes: "None (explanation text only)",
       canDisable: false,
     },
   },
   {
     id: "builtin:transformer:bilingual",
     card: {
-      title: "双语阅读",
-      description: "把一条回复重排成目标语言/母语逐句对照,方便读懂长回复。",
+      title: "Bilingual Reading",
+      description: "Rearranges a reply into interleaved target-language / native-language sentences for easier reading.",
       entry: "reply_action",
-      timing: "用户点「双语」",
-      reads: "当前回复 · 阅读偏好",
-      writes: "无(只产出双语 Markdown)",
+      timing: "User clicks Bilingual",
+      reads: "Current reply · reading preferences",
+      writes: "None (bilingual Markdown only)",
       canDisable: false,
     },
   },
   {
     id: "builtin:transformer:translate",
     card: {
-      title: "划词解析",
-      description: "结合上下文解释用户选中的词、短语或句子。",
+      title: "Word/Phrase Lookup",
+      description: "Explains selected words, phrases, or sentences in context.",
       entry: "selection",
-      timing: "用户划选文本",
-      reads: "选中文本 · 所在上下文 · 阅读偏好",
-      writes: "无(只产出解析文本)",
+      timing: "User selects text",
+      reads: "Selected text · surrounding context · reading preferences",
+      writes: "None (analysis text only)",
       canDisable: false,
     },
   },
   {
     id: "builtin:transformer:reply_suggestion",
     card: {
-      title: "推荐回复",
-      description: "按需基于某条消息和上下文生成学习者可以发送的地道回复。",
+      title: "Reply Suggestion",
+      description: "Generates on-demand native-sounding replies the learner can send, based on a message and context.",
       entry: "reply_action",
-      timing: "用户点「推荐回复」",
-      reads: "当前消息 · 会话上下文 · MD 档案切片 · 表达偏好",
-      writes: "无(只产出建议文本)",
+      timing: "User clicks Suggest Reply",
+      reads: "Current message · conversation context · MD profile slice · expression preferences",
+      writes: "None (suggestion text only)",
       canDisable: false,
     },
   },
@@ -304,8 +305,8 @@ const transformers: TransformerInfo[] = [
 
 for (const transformer of transformers) registerTransformer(transformer);
 
-// 对话衍生 Agent:点击后先创建 pending 新会话,新页面再运行 deriveContext 生成上下文并开场。
-// 原会话始终不动(非破坏式),区别于「从此处开始」(截断)。
+// Conversation derivation agents: clicking first creates a pending new conversation; the new page then runs deriveContext to generate context and open the conversation.
+// The original conversation is always untouched (non-destructive), unlike "start from here" (which truncates).
 interface DerivationSpec {
   id: string;
   scope: ActionAgent["scope"];
@@ -329,12 +330,12 @@ function makeDerivationAction(spec: DerivationSpec): ActionAgent {
       title: spec.label,
       description: spec.description,
       entry: "derive",
-      timing: "用户点击",
-      reads: spec.scope === "turn" ? "当前会话 + 选中的这一轮" : "当前会话",
-      writes: "衍生一个新对话上下文并新建会话(不改计数 / 密钥 / 设置)",
+      timing: "User clicks",
+      reads: spec.scope === "turn" ? "Current conversation + selected turn" : "Current conversation",
+      writes: "Derives a new conversation context and opens a new session (does not change counts / keys / settings)",
       canDisable: true,
     },
-    // 名称改写 + 在官方 objective 之后追加补充指令(不替换基础 prompt),点击时实时读取。
+    // Name override + append supplementary instructions after the official objective (does not replace the base prompt); read at click time.
     deriveContext: (ctx) => {
       const ov = getBuiltinAgentOverride(spec.id);
       return deriveConversationContext(ctx, {
@@ -349,8 +350,8 @@ const derivationSpecs: DerivationSpec[] = [
   {
     id: "builtin:action:branch_from",
     scope: "turn",
-    label: "从此处分支",
-    description: "基于这条之前的上下文,另开一个新对话继续探索。",
+    label: "Branch from here",
+    description: "Open a new conversation continuing from the context before this turn.",
     kind: "branch_from",
     objective:
       "Create a fresh continuation based on the selected source turn. Preserve the useful setup before that point, but start the new conversation cleanly without copying visible history.",
@@ -358,8 +359,8 @@ const derivationSpecs: DerivationSpec[] = [
   {
     id: "builtin:action:restart",
     scope: "session",
-    label: "重新开始",
-    description: "保留核心设定,生成一个空白的新对话重练。",
+    label: "Restart",
+    description: "Keep the core setup; open a blank new conversation for re-practice.",
     kind: "restart",
     objective:
       "Restart the same useful scenario/persona from a clean beginning. Keep the learning purpose, but do not continue as if previous turns already happened.",
@@ -367,8 +368,8 @@ const derivationSpecs: DerivationSpec[] = [
   {
     id: "builtin:action:harder",
     scope: "session",
-    label: "提高难度",
-    description: "生成同一练习的高难度新对话。",
+    label: "Increase difficulty",
+    description: "Generate a harder version of the same practice.",
     kind: "harder",
     modifiers: { difficultyDelta: 1 },
     objective:
@@ -377,8 +378,8 @@ const derivationSpecs: DerivationSpec[] = [
   {
     id: "builtin:action:easier",
     scope: "session",
-    label: "降低难度",
-    description: "生成同一练习的简单版新对话。",
+    label: "Decrease difficulty",
+    description: "Generate an easier version of the same practice.",
     kind: "easier",
     modifiers: { difficultyDelta: -1 },
     objective:
@@ -387,8 +388,8 @@ const derivationSpecs: DerivationSpec[] = [
   {
     id: "builtin:action:swap_roles",
     scope: "session",
-    label: "调换角色",
-    description: "生成一个角色互换的新对话。",
+    label: "Swap roles",
+    description: "Generate a role-reversed version of the conversation.",
     kind: "swap_roles",
     modifiers: { swapRoles: true },
     objective:
@@ -397,8 +398,8 @@ const derivationSpecs: DerivationSpec[] = [
   {
     id: "builtin:action:next_day",
     scope: "session",
-    label: "第二天继续",
-    description: "生成一个承接当前剧情的第二天新对话。",
+    label: "Continue next day",
+    description: "Generate a new-day continuation following the current story.",
     kind: "next_day",
     modifiers: { nextDay: true },
     objective:
@@ -407,8 +408,8 @@ const derivationSpecs: DerivationSpec[] = [
   {
     id: "builtin:action:change_scene",
     scope: "session",
-    label: "换个场景",
-    description: "保留练习目标,换一个更合适的新场景。",
+    label: "Change scene",
+    description: "Keep the practice goal; switch to a more fitting scene.",
     kind: "change_scene",
     objective:
       "Create a new scenario that practices the same useful language goals from the current conversation, but changes the setting so the learner can transfer the skill.",
@@ -417,8 +418,8 @@ const derivationSpecs: DerivationSpec[] = [
 
 const LESSON_FROM_CONVERSATION_ID = "builtin:action:lesson_from_conversation";
 const LESSON_FROM_CONVERSATION_DEFAULTS = {
-  label: "变成专项课",
-  description: "把当前聊天里的问题和目标整理成一个可复用专项课。",
+  label: "Turn into focused lesson",
+  description: "Extract the issues and goals from this chat into a reusable focused lesson.",
   objective:
     "Create a focused lesson agent from this conversation. Identify the most useful practice theme, recurring mistakes, and next drill. Keep it practical and interactive.",
 };
@@ -428,19 +429,19 @@ const lessonFromConversation: ActionAgent = {
   kind: "action",
   scope: "session",
   label: LESSON_FROM_CONVERSATION_DEFAULTS.label,
-  description: "基于当前会话生成一个专项课,并新开课堂继续练。",
+  description: "Generate a focused lesson from this conversation and open a new lesson session.",
   card: {
     title: LESSON_FROM_CONVERSATION_DEFAULTS.label,
     description: LESSON_FROM_CONVERSATION_DEFAULTS.description,
     entry: "derive",
-    timing: "用户点击",
-    reads: "当前会话历史 · 语言配置",
-    writes: "创建一个专项课 Agent + 一个专项课会话",
+    timing: "User clicks",
+    reads: "Current conversation history · language config",
+    writes: "Creates a focused-lesson agent + a focused-lesson session",
     canDisable: true,
   },
   run: async (ctx) => {
     const provider = await getProvider();
-    if (!provider) throw new Error("未配置 API key,请到设置页填写");
+    if (!provider) throw new Error("No API key configured, please fill it in on the settings page");
     const config = loadConfig();
     const turns = await getTurnsAfterId(ctx.conversationId, null);
     const history = formatTurns(turns);
@@ -473,8 +474,8 @@ const branchActions: ActionAgent[] = [
 
 for (const action of branchActions) registerAction(action);
 
-// 能力库可编辑的内置对话衍生动作:默认 label/description/objective,供 UI 预填与「恢复默认」。
-// objective 即喂给衍生 Agent 的 prompt(专项课则是生成课程草案的指令)。
+// Editable built-in conversation derivation actions in the agent library: default label/description/objective for UI pre-fill and "restore defaults".
+// objective is the prompt fed to the derivation agent (for lesson creation it is the instruction to generate the lesson draft).
 export interface BuiltinActionDefault {
   label: string;
   description: string;

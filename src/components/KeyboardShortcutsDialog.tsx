@@ -1,5 +1,6 @@
 import { XIcon } from "lucide-react";
 import { useEffect } from "react";
+import { useTranslation } from "@/i18n";
 import { APP_ACTIONS } from "@/lib/app-actions";
 import { Button } from "./ui/button";
 
@@ -18,6 +19,7 @@ export function KeyboardShortcutsDialog({
   open: boolean;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   useEffect(() => {
     if (!open) return;
     function onKeyDown(e: KeyboardEvent) {
@@ -32,20 +34,22 @@ export function KeyboardShortcutsDialog({
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="键盘快捷键"
+      aria-label={t("shortcutsDialog.ariaLabel")}
       className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-[12vh]"
       onMouseDown={onClose}
     >
-      {/* biome-ignore lint/a11y/noStaticElementInteractions: 只阻止背景关闭 */}
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: only stops the backdrop-close handler */}
       <div
         className="w-full max-w-lg overflow-hidden rounded-xl border bg-card shadow-modal-small"
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-3 border-b px-4 py-3">
           <div className="min-w-0 flex-1">
-            <h2 className="m-0 text-ui-body font-semibold">键盘快捷键</h2>
+            <h2 className="m-0 text-ui-body font-semibold">
+              {t("shortcutsDialog.title")}
+            </h2>
             <p className="mt-0.5 mb-0 text-ui-caption text-ui-muted">
-              常用操作都可以从键盘完成。
+              {t("shortcutsDialog.subtitle")}
             </p>
           </div>
           <Button
@@ -54,7 +58,7 @@ export function KeyboardShortcutsDialog({
             size="icon"
             className="size-8"
             onClick={onClose}
-            aria-label="关闭"
+            aria-label={t("common.close")}
           >
             <XIcon size={15} />
           </Button>
@@ -62,11 +66,11 @@ export function KeyboardShortcutsDialog({
         <div className="grid gap-1 p-2">
           {APP_ACTIONS.map((shortcut) => (
             <div
-              key={`${shortcut.keys.join("+")}:${shortcut.label}`}
+              key={shortcut.id}
               className="flex items-center gap-3 rounded-lg px-2 py-2 text-ui-body"
             >
               <span className="min-w-0 flex-1 text-foreground">
-                {shortcut.label}
+                {t(`actions.${shortcut.id}`)}
               </span>
               <span className="flex shrink-0 items-center gap-1">
                 {shortcut.keys.map((key) => (

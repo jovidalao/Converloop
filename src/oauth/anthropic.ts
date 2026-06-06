@@ -1,8 +1,8 @@
-// Anthropic Claude Pro/Max 订阅登录(「Claude Code」式 OAuth,授权码 + PKCE)。
-// 常量核对自 openclaw(src/llm/utils/oauth/anthropic.ts)。登录后拿到的 access 形如
-// sk-ant-oat01-…,用法见 providers/anthropic.ts 的 oauth 分支(Bearer + beta + 身份 system 块)。
+// Anthropic Claude Pro/Max subscription login ("Claude Code"-style OAuth, authorization code + PKCE).
+// Constants verified against openclaw (src/llm/utils/oauth/anthropic.ts). The access token obtained after login looks like
+// sk-ant-oat01-…; see the oauth branch in providers/anthropic.ts for usage (Bearer + beta header + identity system block).
 //
-// token 交换/刷新复用 Rust 的 llm_request(通用 POST→文本,绕过 webview CORS)。
+// Token exchange/refresh reuses the Rust llm_request command (generic POST→text, bypasses webview CORS).
 
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -33,7 +33,7 @@ function buildAuthorizeUrl(challenge: string, state: string): string {
   return `${AUTHORIZE_URL}?${params.toString()}`;
 }
 
-// POST JSON 到 token endpoint;llm_request 非 2xx 会抛 "HTTP <code>: <body>",含错误体便于排查。
+// POST JSON to the token endpoint; llm_request throws "HTTP <code>: <body>" on non-2xx, including the error body for debugging.
 async function postToken(body: Record<string, string>): Promise<OAuthTokens> {
   const text = await invoke<string>("llm_request", {
     url: TOKEN_URL,
@@ -44,14 +44,14 @@ async function postToken(body: Record<string, string>): Promise<OAuthTokens> {
 }
 
 /**
- * 走完整授权码 + PKCE 登录:生成 PKCE → 先在 Rust 侧开始监听 127.0.0.1:53692 回调
- * → 打开浏览器授权 → 捕获 code/state → 交换 token。返回令牌交给调用方落库。
+ * Full authorization code + PKCE login flow: generate PKCE → start listening on the Rust side for a 127.0.0.1:53692 callback
+ * → open browser for authorization → capture code/state → exchange for tokens. Returns the tokens for the caller to persist.
  */
 export async function loginAnthropic(): Promise<OAuthTokens> {
   const { verifier, challenge } = await generatePkce();
   const state = randomState();
 
-  // 先挂监听再开浏览器:避免极端情况下重定向早于监听就绪。invoke 立即开始绑定端口。
+  // Register the listener before opening the browser: avoids the edge case where the redirect arrives before the listener is ready. invoke begins binding the port immediately.
   const callback = invoke<{ code: string; state: string }>("oauth_listen", {
     port: CALLBACK_PORT,
     path: CALLBACK_PATH,
@@ -61,7 +61,7 @@ export async function loginAnthropic(): Promise<OAuthTokens> {
   const result = await callback;
 
   if (result.state !== state) {
-    throw new Error("OAuth state 不匹配,可能存在风险,请重新登录。");
+    throw new Error("OAuth state mismatch; possible security risk — please log in again.");
   }
   return postToken({
     grant_type: "authorization_code",
@@ -73,7 +73,7 @@ export async function loginAnthropic(): Promise<OAuthTokens> {
   });
 }
 
-/** 用 refresh token 换一组新令牌。 */
+/** Exchange a refresh token for a new set of tokens. */
 export function refreshAnthropic(refreshToken: string): Promise<OAuthTokens> {
   return postToken({
     grant_type: "refresh_token",

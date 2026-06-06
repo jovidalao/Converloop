@@ -79,14 +79,14 @@ export interface LearningAgentMeta extends LearningAgent {
 }
 
 export const DATA_SCOPE_LABELS: Record<LearningDataScope, string> = {
-  profile: "学习者档案: 兴趣、偏好、最近在练什么",
-  comfortable: "已掌握脚手架: 可放心复用和迁移的表达、语法、搭配",
-  weak_all: "薄弱项: 仍未掌握的词汇、语法、搭配、错误模式",
-  weak_grammar: "语法/错误模式: 最近错过或仍薄弱的语法点",
-  expression_gaps: "表达缺口: 用母语/混说时暴露出的“想说但说不出”",
-  today_turns: "今日对话: 今天或最近 24 小时的练习内容和批改",
-  due_review: "到期复习: 很久没重温的学习项",
-  proficiency: "难度读数: 最近表现推断出的难度校准",
+  profile: "Learner profile: interests, preferences, what they are currently practising",
+  comfortable: "Mastered scaffolding: expressions, grammar, collocations safe to reuse and transfer",
+  weak_all: "Weak points: vocabulary, grammar, collocations, and error patterns not yet mastered",
+  weak_grammar: "Grammar / error patterns: recently missed or still-weak grammar points",
+  expression_gaps: "Expression gaps: things wanted to say but fell back to native language or mixed speech",
+  today_turns: "Today's conversations: practice content and corrections from the last 24 hours",
+  due_review: "Due for review: learning items not revisited for a long time",
+  proficiency: "Difficulty reading: difficulty calibration inferred from recent performance",
 };
 
 export const LEARNING_DATA_SCOPES = [...LEARNING_DATA_SCOPE_VALUES];
@@ -114,16 +114,16 @@ function normalizeHook(
 
 interface BuiltInAgent extends LearningAgentDraft {
   id: string;
-  // 这个内置课替换掉的、历史上发布过的版本。启动时若用户的行仍等于其中之一
-  // (没改过),就升级到最新种子;若都不匹配(用户微调过),保持不动。
+  // Previously published versions that this built-in supersedes. On startup, if the user's row still
+  // matches one of these (i.e. it was never edited), upgrade to the latest seed; if none match (user has customized), leave it untouched.
   supersedes?: LearningAgentDraft[];
 }
 
 const BUILT_INS: BuiltInAgent[] = [
   {
     id: "builtin:daily_review",
-    name: "今日复盘",
-    description: "先给一份今日练习报告,再带你复习最该补的几个点。",
+    name: "Daily review",
+    description: "Opens with a today's practice report, then guides you through the top points to revisit.",
     dataScopes: [
       "profile",
       "comfortable",
@@ -144,8 +144,8 @@ Keep the report accurate to the data shown; do not invent practice that is not t
 AFTER the report, transition into practice: take the first of the Top 3 points, give 1-2 target-language examples, and ask the learner to produce one short sentence. From then on keep it focused and conversational — give feedback directly in the chat.`,
     supersedes: [
       {
-        name: "今日复盘",
-        description: "总结今天练过的内容,抓出最值得马上复习的 3 个点。",
+        name: "Daily review",
+        description: "Summarizes what you practised today and picks the 3 points most worth reviewing right now.",
         dataScopes: [
           "profile",
           "comfortable",
@@ -167,8 +167,8 @@ Keep the lesson focused. Do not turn this into a long report; make it actionable
   },
   {
     id: "builtin:grammar_review",
-    name: "语法专项复习",
-    description: "把最近几次的语法问题逐个讲清楚,再一个一个练到会。",
+    name: "Grammar drill",
+    description: "Explains each recent grammar mistake one by one, then drills them until they stick.",
     dataScopes: [
       "profile",
       "comfortable",
@@ -186,8 +186,8 @@ Keep the report grounded in the data shown; do not invent mistakes. If there is 
 AFTER the report, drill the issues ONE AT A TIME (逐个击破): start with the first, give 1-2 target-language examples, then ask for 2-3 short sentences that force the learner to use it. Only move on to the next issue once the current one is solid, and tell the learner when you do (e.g. "✅ 第 1 个搞定,下一个"). Give feedback directly in the chat rather than using the normal correction panel.`,
     supersedes: [
       {
-        name: "语法专项复习",
-        description: "先给一份语法体检报告,再针对最该练的点做专项练习。",
+        name: "Grammar drill",
+        description: "Opens with a grammar diagnostic report, then runs a focused drill on the highest-priority point.",
         dataScopes: [
           "profile",
           "comfortable",
@@ -205,8 +205,8 @@ Keep the report grounded in the data shown; do not invent mistakes. If there is 
 AFTER the report, run a small drill on the top-priority pattern: ask for 2-3 short target-language sentences that force the learner to use it. Give feedback directly in the chat rather than using the normal correction panel.`,
       },
       {
-        name: "语法专项复习",
-        description: "按错误模式归纳最近错过的语法,给解释、例句和即时练习。",
+        name: "Grammar drill",
+        description: "Groups recent grammar mistakes by error pattern, with explanations, examples, and immediate practice.",
         dataScopes: [
           "profile",
           "comfortable",
@@ -224,8 +224,8 @@ After the explanation, run a small drill: ask for 2-3 short target-language sent
   },
   {
     id: "builtin:expression_gap_review",
-    name: "表达缺口训练",
-    description: "把“想说但说不出”的母语/混说内容变成可复用句型。",
+    name: "Expression gap training",
+    description: "Turns native-language or mixed-language fallback moments into reusable target-language patterns.",
     dataScopes: [
       "profile",
       "comfortable",
@@ -366,8 +366,8 @@ function hydrate(row: LearningAgent): LearningAgentMeta {
   };
 }
 
-// 一个内置课「发布版本」的指纹:name/description/prompt/scope 全等才算同一版。
-// 用它判断用户有没有改过这行——改过就不覆盖,没改过(等于某个历史版)就升级。
+// Fingerprint of a built-in's "release version": name/description/prompt/scope must all match to count as the same version.
+// Used to determine whether the user has edited the row — if so, do not overwrite; if not (matches a historical version), upgrade.
 function seedSignature(draft: LearningAgentDraft): string {
   return JSON.stringify([
     draft.name,
@@ -415,12 +415,12 @@ export async function ensureBuiltInLearningAgents(): Promise<void> {
 
     const current = seedSignature(item);
     const row = rowSignature(existing);
-    if (row === current) continue; // 已是最新
+    if (row === current) continue; // already up to date
 
     const retired = (item.supersedes ?? []).map(seedSignature);
-    if (!retired.includes(row)) continue; // 用户微调过,保持不动
+    if (!retired.includes(row)) continue; // user has customized it, leave it alone
 
-    // 还停留在某个旧发布版,没被改过 → 升级到最新种子。
+    // Still on an old release version, not edited → upgrade to the latest seed.
     await db
       .update(learningAgent)
       .set({

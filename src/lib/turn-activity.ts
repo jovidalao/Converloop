@@ -23,7 +23,7 @@ export interface TurnActivity {
 
 function tutorActivity(turn: ChatTurn): TurnActivity | null {
   if (turn.analysisPending) {
-    return { kind: "tutor", status: "pending", label: "正在批改…" };
+    return { kind: "tutor", status: "pending", label: "Grading…" };
   }
   const a = turn.analysis;
   if (!a) {
@@ -32,7 +32,7 @@ function tutorActivity(turn: ChatTurn): TurnActivity | null {
       return {
         kind: "tutor",
         status: "ok",
-        label: "本轮批改",
+        label: "This turn's feedback",
         preview: prose.slice(0, 80),
       };
     }
@@ -46,7 +46,7 @@ function tutorActivity(turn: ChatTurn): TurnActivity | null {
     return {
       kind: "tutor",
       status: "info",
-      label: "表达缺口",
+      label: "Expression gap",
       preview: gap.target_expression.trim() || gap.original.trim(),
     };
   }
@@ -56,13 +56,13 @@ function tutorActivity(turn: ChatTurn): TurnActivity | null {
   const showCorrected = !!corrected && corrected !== turn.userText.trim();
   const showNatural = !!natural && natural !== corrected;
   if (issues === 0 && !showCorrected && !showNatural) {
-    return { kind: "tutor", status: "ok", label: "表达准确,无需修改" };
+    return { kind: "tutor", status: "ok", label: "Accurate, no changes needed" };
   }
   if (issues > 0) {
     return {
       kind: "tutor",
       status: "info",
-      label: `批改 · ${issues} 处修改`,
+      label: `Correction · ${issues} change${issues === 1 ? "" : "s"}`,
       count: issues,
       preview: showCorrected ? corrected : undefined,
     };
@@ -70,7 +70,7 @@ function tutorActivity(turn: ChatTurn): TurnActivity | null {
   return {
     kind: "tutor",
     status: "ok",
-    label: "更自然的说法",
+    label: "More natural phrasing",
     preview: showNatural ? natural : showCorrected ? corrected : undefined,
   };
 }
@@ -81,7 +81,7 @@ function memoryActivity(analysis: TutorAnalysis): TurnActivity | null {
   return {
     kind: "memory",
     status: "info",
-    label: `记下 ${signals.length} 项`,
+    label: `Recorded ${signals.length} item${signals.length === 1 ? "" : "s"}`,
     count: signals.length,
     preview: signals
       .slice(0, 3)

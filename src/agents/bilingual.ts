@@ -5,13 +5,15 @@ export interface BilingualContext {
   nativeLanguage: string;
   targetLanguage: string;
   experiencePreferences: string;
-  reply: string; // 要做双语对照的对话回复
-  customInstructions?: string; // 用户在能力库追加的补充指令
+  reply: string; // the conversation reply to render in bilingual view
+  customInstructions?: string; // additional instructions appended by the user in the agent library
 }
 
-// 双语阅读:把一条回复重排成 Markdown——原文逐句保留(含其自带格式),
-// 每句后内联母语译文,译文用 ⟦…⟧ 标记。⟦⟧ 不是 Markdown 语法,会原样留在文本里,
-// 渲染端(remark-bilingual)再把它转成译文样式,避免 *星号* 在 CJK 旁断裂。
+// Bilingual reading: rearrange a reply into Markdown — original text preserved sentence by sentence
+// (including its own formatting), with native-language translation inlined after each sentence,
+// wrapped in ⟦…⟧ markers. ⟦⟧ is not Markdown syntax and stays as-is in the text;
+// the render layer (remark-bilingual) converts it to translation styling, avoiding * asterisks
+// breaking next to CJK characters.
 function systemPrompt(ctx: BilingualContext): string {
   const base = `You produce an interlinear bilingual reading view of a ${ctx.targetLanguage}
 message for a ${ctx.nativeLanguage} speaker learning ${ctx.targetLanguage}.
@@ -45,7 +47,7 @@ function userPrompt(ctx: BilingualContext): string {
 ${ctx.reply}`;
 }
 
-// 去掉模型偶尔套上的 ``` 代码围栏。
+// Strip ``` code fences that the model occasionally wraps around the output.
 function stripFences(text: string): string {
   const t = text.trim();
   const fenced = t.match(/^```(?:\w+)?\s*\n?([\s\S]*?)\n?```\s*$/);
@@ -54,7 +56,7 @@ function stripFences(text: string): string {
 
 const MAX_OUTPUT_TOKENS = 4096;
 
-// 一次性返回完整的双语 Markdown(不流式)。渲染交给 Markdown 组件 + em 覆盖。
+// Returns the complete bilingual Markdown in one shot (not streaming). Rendering is handled by the Markdown component + em override.
 export async function bilingual(
   provider: ModelProvider,
   ctx: BilingualContext,
@@ -70,6 +72,6 @@ export async function bilingual(
   });
 
   const md = stripFences(raw);
-  if (!md.trim()) throw new Error("双语对照生成失败,请重试");
+  if (!md.trim()) throw new Error("Bilingual layout generation failed, please retry");
   return md;
 }

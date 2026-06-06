@@ -9,7 +9,7 @@ import {
 } from "../db/turns";
 import { readProfile } from "./profile";
 
-// 单飞:同一时间只允许一个维护任务。新触发在跑则直接跳过(下次再合并)。
+// Single-flight: only one maintenance job may run at a time. If a new trigger arrives while one is running, skip it (it will be picked up next time).
 let running = false;
 let dirty = false;
 let dirtyVersion = 0;
@@ -18,10 +18,10 @@ let idleTimer: ReturnType<typeof setTimeout> | null = null;
 const EVERY_N_TURNS = 10;
 const IDLE_DELAY_MS = 10 * 60 * 1000;
 
-// 转写字符预算(粗略对应 ~1500 token;中英混排按 ~4 字符/token 留余量)。
+// Transcript character budget (roughly ~1500 tokens; mixed CJK/Latin at ~4 chars/token with some headroom).
 const TRANSCRIPT_CHAR_BUDGET = 6000;
 
-// 上次成功维护的时间戳(内部连续性标记,非用户配置)。下次只喂这之后的 turns。
+// Timestamp of the last successful maintenance run (internal continuity marker, not user config). Only turns after this point are fed next time.
 const WATERMARK_KEY = "lang-agent.lastMaintainedAt";
 
 function parseTimestamp(raw: string | null): number {
@@ -42,10 +42,10 @@ async function setLastMaintainedAt(ts: number): Promise<void> {
 
 async function runJob(): Promise<MaintainerResult> {
   const provider = await getProvider();
-  if (!provider) return { written: false, reason: "未配置 API key" };
+  if (!provider) return { written: false, reason: "No API key configured" };
 
   const config = loadConfig();
-  // 先于查询取水位,避免漏掉运行期间到达的 turn(它们 > watermark,下次再喂)。
+  // Capture the watermark before querying to avoid missing turns that arrive during the run (they are > watermark and will be fed next time).
   const watermark = Date.now();
   const currentMd = await readProfile(config);
   const data = await getMaintainerData();
@@ -64,14 +64,14 @@ async function runJob(): Promise<MaintainerResult> {
     recentlyIntroduced,
     transcript,
   });
-  // 只在真正写入后推进水位;失败保留旧水位,下次连同这批 turn 一起重试。
+  // Advance the watermark only after a successful write; on failure, keep the old watermark and retry with this batch of turns next time.
   if (result.written) await setLastMaintainedAt(watermark);
   return result;
 }
 
-// 手动触发(档案页"刷新档案")。单飞。
+// Manual trigger (profile page "Refresh profile"). Single-flight.
 export async function runMaintainerNow(): Promise<MaintainerResult> {
-  if (running) return { written: false, reason: "维护任务进行中" };
+  if (running) return { written: false, reason: "Maintenance job already running" };
   running = true;
   const startedDirtyVersion = dirtyVersion;
   try {
@@ -106,7 +106,7 @@ export function flushMaintainerSoon(): void {
   void runMaintainerNow().catch(() => {});
 }
 
-// 每 N 轮立即触发一次;其它时候排一个空闲刷新。后台跑,绝不阻塞热路径、绝不抛。
+// Trigger immediately once every N turns; otherwise schedule an idle refresh. Runs in the background; never blocks the hot path; never throws.
 export async function maybeRunMaintainer(): Promise<void> {
   dirty = true;
   dirtyVersion++;

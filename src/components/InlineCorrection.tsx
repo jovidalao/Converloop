@@ -5,32 +5,17 @@ import {
   SparklesIcon,
 } from "lucide-react";
 import { type ReactNode, useState } from "react";
+import { useTranslation } from "@/i18n";
 import { cn } from "@/lib/utils";
 import type { Issue, TutorAnalysis } from "../agents/schema";
 import { SpeakableText } from "./SpeakButton";
 import { Button } from "./ui/button";
 import { Spinner } from "./ui/spinner";
 
-export const CATEGORY_LABEL: Record<Issue["category"], string> = {
-  grammar: "语法",
-  word_choice: "用词",
-  collocation: "搭配",
-  spelling: "拼写",
-  punctuation: "标点",
-  register: "语体",
-  naturalness: "自然度",
-};
-
 export const SEVERITY_COLOR: Record<Issue["severity"], string> = {
   minor: "text-ui-muted",
   moderate: "text-warning",
   major: "text-destructive",
-};
-
-export const SEVERITY_LABEL: Record<Issue["severity"], string> = {
-  minor: "轻微",
-  moderate: "中等",
-  major: "严重",
 };
 
 type DiffSegment =
@@ -40,8 +25,10 @@ type DiffSegment =
 const isWordChar = (ch: string | undefined): boolean =>
   !!ch && /[\p{L}\p{N}]/u.test(ch);
 
-// 按词边界查找 span:两端是字母/数字时要求是独立单词,避免短 span(如 "is")
-// 命中更大单词的内部(如 "th[is]")。找不到合规位置返回 -1(交由调用方跳过)。
+// Find a span on word boundaries: when an end is a letter/digit, require a
+// standalone word, so a short span (like "is") doesn't match inside a bigger
+// word (like "th[is]"). Returns -1 when no valid position is found (the caller
+// skips it).
 function indexOfWord(hay: string, needle: string, from: number): number {
   if (!needle) return -1;
   const guardStart = isWordChar(needle[0]);
@@ -57,8 +44,10 @@ function indexOfWord(hay: string, needle: string, from: number): number {
   return -1;
 }
 
-// 把原句按 issues 重建成 inline diff:错的 span 标红删除线,后面跟绿色改写。
-// 定位不到的 issue 直接跳过(仍会出现在「语法详解」里),所以永远能渲染。
+// Rebuild the original sentence into an inline diff from the issues: wrong spans
+// get a red strikethrough followed by the green correction. Issues that can't be
+// located are skipped (they still appear under "Grammar details"), so it always
+// renders.
 export function buildDiffSegments(
   original: string,
   issues: Issue[],
@@ -80,7 +69,7 @@ export function buildDiffSegments(
   const segments: DiffSegment[] = [];
   let cursor = 0;
   for (const p of placed) {
-    if (p.idx < cursor) continue; // 重叠,丢弃
+    if (p.idx < cursor) continue; // overlaps, discard
     if (p.idx > cursor)
       segments.push({ kind: "same", text: original.slice(cursor, p.idx) });
     segments.push({
@@ -95,7 +84,8 @@ export function buildDiffSegments(
   return segments;
 }
 
-// 用户气泡里的句子:有可定位的批改时显示 inline diff,否则纯文本。
+// A sentence in the user's bubble: shows an inline diff when there's a locatable
+// correction, otherwise plain text.
 export function UserSentence({
   text,
   analysis,
@@ -105,16 +95,18 @@ export function UserSentence({
   analysis: TutorAnalysis | null;
   nativeLanguage?: string;
 }) {
-  // 母语/混说轮:原样显示 + 角标(直接标出母语名),不做红绿 diff。
+  const { t } = useTranslation();
+  // Native-language / mixed turn: show as-is + a badge (with the native language
+  // name), without the red/green diff.
   if (analysis?.expression_gap) {
     return (
       <span className="align-middle">
         <span
           className="mr-1.5 inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-accent px-1.5 py-0.5 align-middle text-ui-caption font-semibold leading-none text-primary"
-          title="用母语/混说输入"
+          title={t("corrections.nativeInputTitle")}
         >
           <LanguagesIcon size={12} />
-          {nativeLanguage?.trim() || "母语"}
+          {nativeLanguage?.trim() || t("corrections.nativeFallback")}
         </span>
         {text}
       </span>
@@ -154,20 +146,21 @@ export function InlineCorrection({
   error,
   leading,
   natural,
-  compact = false,
 }: {
   analysis: TutorAnalysis | null;
   proseFeedback?: string | null;
   pending: boolean;
   error?: string | null;
-  // 同一行靠前渲染的其它操作(复制 / 播放),放在切换按钮左边。
+  // Other actions rendered earlier on the same row (copy / play), to the left of
+  // the toggle buttons.
   leading?: ReactNode;
-  // 「地道表达」切换:内容显示在用户气泡内(见 ChatView),此处只给开关按钮。
+  // "Natural expression" toggle: the content shows inside the user's bubble (see
+  // ChatView); here we only provide the toggle button.
   natural?: { open: boolean; onToggle: () => void };
-  // 教练面板可见时:气泡内只保留行内 diff 摘要,讲解/详解收进右栏,避免双份。
-  compact?: boolean;
 }) {
-  // 讲解默认展开,语法详解默认收起;各 icon 各自切换。
+  const { t } = useTranslation();
+  // Explanation expanded by default, grammar details collapsed by default; each
+  // icon toggles its own.
   const [gapOpen, setGapOpen] = useState(true);
   const [grammarOpen, setGrammarOpen] = useState(false);
 
@@ -187,16 +180,16 @@ export function InlineCorrection({
             aria-live="polite"
           >
             <Spinner />
-            正在分析…
+            {t("corrections.analyzing")}
           </span>
         )}
         {allCorrect && (
           <span className="inline-flex items-center gap-1 px-1.5 py-1 text-ui-caption text-success">
             <CheckIcon size={14} />
-            表达正确
+            {t("corrections.correct")}
           </span>
         )}
-        {gap && !compact && (
+        {gap && (
           <Button
             type="button"
             variant="action"
@@ -206,7 +199,7 @@ export function InlineCorrection({
             onClick={() => setGapOpen((v) => !v)}
           >
             <LanguagesIcon size={15} />
-            讲解
+            {t("corrections.explain")}
           </Button>
         )}
         {natural && (
@@ -219,10 +212,10 @@ export function InlineCorrection({
             onClick={natural.onToggle}
           >
             <SparklesIcon size={15} />
-            地道表达
+            {t("corrections.naturalExpression")}
           </Button>
         )}
-        {hasIssues && !compact && (
+        {hasIssues && (
           <Button
             type="button"
             variant="action"
@@ -232,30 +225,25 @@ export function InlineCorrection({
             onClick={() => setGrammarOpen((v) => !v)}
           >
             <BookOpenIcon size={15} />
-            语法详解
+            {t("corrections.grammarDetails")}
             <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-background px-1 text-ui-caption font-bold text-ui-muted">
               {analysis?.issues.length ?? 0}
             </span>
           </Button>
         )}
-        {compact && (gap || hasIssues || showProse) && (
-          <span className="px-1.5 py-1 text-ui-caption text-ui-muted">
-            详见教练面板 →
-          </span>
-        )}
       </div>
 
-      {gap && gapOpen && !compact && (
+      {gap && gapOpen && (
         <div className="flex w-full animate-in flex-col gap-2.5 rounded-lg border bg-card p-3 text-ui-body leading-normal shadow-sm fade-in-0 slide-in-from-bottom-1 duration-200">
           <div className="flex flex-col gap-1">
             <span className="text-ui-caption font-semibold uppercase tracking-wide text-ui-muted">
-              地道表达
+              {t("corrections.naturalExpression")}
             </span>
             <SpeakableText text={gap.target_expression} />
           </div>
           <div className="flex flex-col gap-1">
             <span className="text-ui-caption font-semibold uppercase tracking-wide text-ui-muted">
-              讲解
+              {t("corrections.explanationHeader")}
             </span>
             <p className="m-0 leading-relaxed text-foreground">
               {gap.explanation}
@@ -264,7 +252,7 @@ export function InlineCorrection({
           {gap.key_items.length > 0 && (
             <div className="flex flex-col gap-1">
               <span className="text-ui-caption font-semibold uppercase tracking-wide text-ui-muted">
-                关键词 / 句式
+                {t("corrections.keyItems")}
               </span>
               <div className="flex flex-wrap gap-1.5">
                 {gap.key_items.map((it, i) => (
@@ -292,7 +280,7 @@ export function InlineCorrection({
         </div>
       )}
 
-      {hasIssues && grammarOpen && analysis && !compact && (
+      {hasIssues && grammarOpen && analysis && (
         <div className="w-full animate-in rounded-lg border bg-card p-3 text-ui-body shadow-sm fade-in-0 slide-in-from-bottom-1 duration-200">
           <ul className="m-0 flex list-none flex-col p-0">
             {analysis.issues.map((iss, i) => (
@@ -302,7 +290,7 @@ export function InlineCorrection({
               >
                 <div className="mb-1.5 flex items-center gap-1.5">
                   <span className="rounded bg-accent px-1.5 py-0.5 text-ui-caption font-semibold uppercase tracking-wide text-primary">
-                    {CATEGORY_LABEL[iss.category]}
+                    {t(`corrections.category.${iss.category}`)}
                   </span>
                   <span
                     className={cn(
@@ -310,7 +298,7 @@ export function InlineCorrection({
                       SEVERITY_COLOR[iss.severity],
                     )}
                   >
-                    {SEVERITY_LABEL[iss.severity]}
+                    {t(`corrections.severity.${iss.severity}`)}
                   </span>
                 </div>
                 <p className="m-0 text-ui-body">
@@ -336,7 +324,7 @@ export function InlineCorrection({
         </div>
       )}
 
-      {showProse && !compact && (
+      {showProse && (
         <div className="w-full animate-in rounded-lg border bg-card p-3 text-ui-body shadow-sm fade-in-0 slide-in-from-bottom-1 duration-200">
           <pre className="m-0 whitespace-pre-wrap break-words font-sans text-foreground">
             {proseFeedback!.trim()}

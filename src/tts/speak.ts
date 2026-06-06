@@ -14,12 +14,12 @@ const inflight = new Map<string, Promise<ArrayBuffer>>();
 
 export async function speakText(text: string): Promise<ArrayBuffer> {
   const trimmed = text.trim();
-  if (!trimmed) throw new Error("没有可朗读的文本");
+  if (!trimmed) throw new Error("No text to speak");
 
   const cfg = loadTtsConfig();
 
-  // 选引擎:edge 免费无 key;mimo 需要 key。把「如何合成」收敛成一个 thunk,
-  // 缓存 / 单飞去重对两种引擎共用。
+  // Choose engine: edge is free with no key; mimo requires a key. Collapse "how to synthesize" into a single thunk
+  // so caching / single-flight deduplication is shared by both engines.
   let synth: () => Promise<ArrayBuffer>;
   if (cfg.ttsProvider === "edge") {
     synth = () =>

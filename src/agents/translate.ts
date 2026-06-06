@@ -5,13 +5,13 @@ export interface TranslateContext {
   nativeLanguage: string;
   targetLanguage: string;
   experiencePreferences: string;
-  selection: string; // 用户选中的词/短语/句子
-  context: string; // 选中文字所在的整句/整段(给 LLM 判断语境)
-  customInstructions?: string; // 用户在能力库追加的补充指令
+  selection: string; // word/phrase/sentence selected by the user
+  context: string; // full sentence/paragraph containing the selection (for LLM context inference)
+  customInstructions?: string; // additional instructions appended by the user in the agent library
 }
 
-// 划词翻译/解析:在对话里选中一段文字,按需给出母语解析。
-// 选中的是词/短语 → 结合当前语境讲它的意思和用法;选中的是整句 → 给自然译文。
+// Selection translate/explain: select text in a conversation and get on-demand native-language explanation.
+// If selection is a word/phrase → explain its meaning and usage in the current context; if a full sentence → give a natural translation.
 function systemPrompt(ctx: TranslateContext): string {
   const base = `You help a ${ctx.nativeLanguage} speaker learning ${ctx.targetLanguage}
 understand a fragment they selected inside a message they are reading.
@@ -47,7 +47,7 @@ ${ctx.context}
 ${ctx.selection}`;
 }
 
-// 纯文本流式。onDelta 边收边推 UI;返回完整文本。
+// Plain-text streaming. onDelta pushes to the UI as chunks arrive; returns the full text.
 export async function translate(
   provider: ModelProvider,
   ctx: TranslateContext,

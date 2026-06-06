@@ -26,11 +26,11 @@ export interface ProfilePreferences {
 }
 
 export const PREFERENCE_SCOPE_LABEL: Record<PreferenceScope, string> = {
-  global: "全局",
-  conversation: "对话",
-  tutor: "批改",
-  learning: "专项课",
-  reading: "讲解 / 翻译 / 双语阅读",
+  global: "Global",
+  conversation: "Conversation",
+  tutor: "Correction",
+  learning: "Lessons",
+  reading: "Reading / translation / bilingual",
 };
 
 export const PREFERENCE_SCOPE_HEADING: Record<PreferenceScope, string> = {

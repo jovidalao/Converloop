@@ -26,6 +26,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import { type Locale, staticT, useTranslation } from "@/i18n";
 import { actionShortcutLabel, getAppAction } from "@/lib/app-actions";
 import type { ConversationMeta } from "../db/conversations";
 import {
@@ -51,21 +52,24 @@ export type MainView =
   | "settings-llm"
   | "settings-tts";
 
-// 相对时间:1 分钟内「刚刚」,然后分钟→小时→天→周→月→年逐级进位。
-export function formatRelativeTime(ts: number): string {
+// Relative time: "just now" within the first minute, then stepping up through
+// minutes → hours → days → weeks → months → years. Number/unit wording is
+// localized via Intl.RelativeTimeFormat.
+export function formatRelativeTime(ts: number, locale: Locale): string {
   const sec = Math.max(0, Math.floor((Date.now() - ts) / 1000));
-  if (sec < 60) return "刚刚";
+  if (sec < 60) return staticT("sidebar.justNow");
+  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: "always" });
   const min = Math.floor(sec / 60);
-  if (min < 60) return `${min} 分钟前`;
+  if (min < 60) return rtf.format(-min, "minute");
   const hour = Math.floor(min / 60);
-  if (hour < 24) return `${hour} 小时前`;
+  if (hour < 24) return rtf.format(-hour, "hour");
   const day = Math.floor(hour / 24);
-  if (day < 7) return `${day} 天前`;
+  if (day < 7) return rtf.format(-day, "day");
   const week = Math.floor(day / 7);
-  if (day < 30) return `${week} 周前`;
+  if (day < 30) return rtf.format(-week, "week");
   const month = Math.floor(day / 30);
-  if (month < 12) return `${month} 个月前`;
-  return `${Math.floor(day / 365)} 年前`;
+  if (month < 12) return rtf.format(-month, "month");
+  return rtf.format(-Math.floor(day / 365), "year");
 }
 
 interface SidebarProps {
@@ -114,6 +118,7 @@ export function Sidebar({
   onResizeEnd,
 }: SidebarProps) {
   const confirm = useConfirm();
+  const { t, locale } = useTranslation();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [learningCollapsed, setLearningCollapsed] = useState(false);
@@ -156,7 +161,8 @@ export function Sidebar({
     };
   }, [conversationMenu]);
 
-  // 右键:在鼠标处弹出衍生菜单(重命名/删除走行内按钮,不重复)。
+  // Right-click: open the derivation menu at the cursor (rename/delete stay on
+  // the inline buttons, so they're not duplicated here).
   function openConversationMenu(e: ReactMouseEvent, c: ConversationMeta) {
     if (c.kind !== "practice" || derivationActions.length === 0) return;
     e.preventDefault();
@@ -168,7 +174,8 @@ export function Sidebar({
     });
   }
 
-  // 「衍生」按钮:键盘/触控板可达的同一菜单,锚定到按钮下方。
+  // "Derive" button: the same menu reachable via keyboard/trackpad, anchored
+  // just below the button.
   function openMenuFromButton(e: ReactMouseEvent, c: ConversationMeta) {
     e.preventDefault();
     e.stopPropagation();
@@ -190,8 +197,8 @@ export function Sidebar({
     if (agent.builtIn) return;
     if (
       !(await confirm({
-        title: `删除专项课「${agent.name}」?`,
-        description: "已有会话不会被删除。",
+        title: t("sidebar.deleteLessonTitle", { name: agent.name }),
+        description: t("sidebar.deleteLessonDescription"),
       }))
     )
       return;
@@ -262,7 +269,7 @@ export function Sidebar({
       actions={
         <>
           <EntityRowAction
-            label="编辑"
+            label={t("common.edit")}
             icon={<PencilIcon className="size-3.5" />}
             onClick={(e) => {
               e.stopPropagation();
@@ -271,7 +278,7 @@ export function Sidebar({
           />
           {!agent.builtIn && (
             <EntityRowAction
-              label="删除"
+              label={t("common.delete")}
               icon={<Trash2Icon className="size-3.5" />}
               onClick={(e) => {
                 e.stopPropagation();
@@ -284,7 +291,8 @@ export function Sidebar({
     />
   );
 
-  // 设置子菜单的行:与「新对话」「设置」入口同款 .codex-sidebar-action,选中态走 data-active。
+  // A row in the settings sub-menu: same .codex-sidebar-action style as the
+  // "New chat" / "Settings" entries, with the selected state driven by data-active.
   const renderSettingsItem = (v: MainView, icon: ReactNode, label: string) => (
     <button
       key={v}
@@ -305,7 +313,8 @@ export function Sidebar({
           className="codex-sidebar-track"
           data-mode={settingsMode ? "settings" : "main"}
         >
-          {/* Pane 1:会话 inbox。drilled into settings 时滑出并 inert。 */}
+          {/* Pane 1: conversation inbox. Slides out and goes inert when
+              drilled into settings. */}
           <div className="codex-sidebar-pane" inert={settingsMode || undefined}>
             <div className="codex-sidebar-actions">
               <button
@@ -313,13 +322,15 @@ export function Sidebar({
                 className="codex-sidebar-action group"
                 data-active={newChatActive}
                 onClick={onNewChat}
-                title={`${newChatAction.label} ${actionShortcutLabel("new-chat")}`}
+                title={t("sidebar.newChatTooltip", {
+                  shortcut: actionShortcutLabel("new-chat"),
+                })}
                 aria-keyshortcuts={newChatAction.ariaKeyshortcuts}
               >
                 <span className="codex-sidebar-leading-icon">
                   <SquarePenIcon className="size-4" />
                 </span>
-                <span>新对话</span>
+                <span>{t("sidebar.newChat")}</span>
                 <kbd className="ml-auto rounded border border-border/60 bg-muted px-1.5 py-0.5 font-sans text-ui-caption text-ui-muted opacity-0 transition-opacity group-hover:opacity-100">
                   {actionShortcutLabel("new-chat")}
                 </kbd>
@@ -329,7 +340,7 @@ export function Sidebar({
             <nav className="codex-sidebar-scroll">
               <EntitySection
                 icon={<GraduationCapIcon className="size-4 shrink-0" />}
-                label="定制化学习"
+                label={t("sidebar.customLearning")}
                 collapsed={learningCollapsed}
                 onToggle={() => setLearningCollapsed((v) => !v)}
               >
@@ -337,12 +348,12 @@ export function Sidebar({
                 <EntityRow
                   className="codex-sidebar-child-row"
                   icon={<PlusIcon className="size-3.5 shrink-0" />}
-                  title="创建专项课"
+                  title={t("sidebar.createLesson")}
                   onSelect={() => onOpenView("learning")}
                 />
               </EntitySection>
 
-              <div className="codex-section-label">最近</div>
+              <div className="codex-section-label">{t("sidebar.recent")}</div>
               {conversations.map((c) => {
                 const active = view === "chat" && c.id === activeId;
                 if (editingId === c.id) {
@@ -372,14 +383,14 @@ export function Sidebar({
                       ) : undefined
                     }
                     title={c.title}
-                    meta={formatRelativeTime(c.updatedAt)}
+                    meta={formatRelativeTime(c.updatedAt, locale)}
                     onSelect={() => onSelect(c.id)}
                     onContextMenu={(e) => openConversationMenu(e, c)}
                     onDoubleClick={() => startEdit(c)}
                     actions={
                       <>
                         <EntityRowAction
-                          label="重命名"
+                          label={t("common.rename")}
                           icon={<PencilIcon className="size-3.5" />}
                           onClick={(e) => {
                             e.stopPropagation();
@@ -387,14 +398,18 @@ export function Sidebar({
                           }}
                         />
                         <EntityRowAction
-                          label="删除"
+                          label={t("common.delete")}
                           icon={<Trash2Icon className="size-3.5" />}
                           onClick={async (e) => {
                             e.stopPropagation();
                             if (
                               await confirm({
-                                title: `删除对话「${c.title}」?`,
-                                description: "此操作不可撤销。",
+                                title: t("sidebar.deleteConversationTitle", {
+                                  title: c.title,
+                                }),
+                                description: t(
+                                  "sidebar.deleteConversationDescription",
+                                ),
                               })
                             ) {
                               onDelete(c.id);
@@ -404,7 +419,7 @@ export function Sidebar({
                         {c.kind === "practice" &&
                           derivationActions.length > 0 && (
                             <EntityRowAction
-                              label="衍生新对话"
+                              label={t("sidebar.deriveNewConversation")}
                               icon={<SparklesIcon className="size-3.5" />}
                               onClick={(e) => openMenuFromButton(e, c)}
                             />
@@ -416,7 +431,7 @@ export function Sidebar({
               })}
               {conversations.length === 0 && (
                 <div className="px-3 py-2 text-ui-body text-[color:var(--codex-sidebar-muted)]">
-                  还没有对话
+                  {t("sidebar.noConversations")}
                 </div>
               )}
             </nav>
@@ -426,66 +441,73 @@ export function Sidebar({
                 type="button"
                 className="codex-sidebar-action group"
                 onClick={() => onOpenView("settings-general")}
-                title={`设置 ${actionShortcutLabel("settings")}`}
-                aria-label="设置"
+                title={t("sidebar.settingsTooltip", {
+                  shortcut: actionShortcutLabel("settings"),
+                })}
+                aria-label={t("sidebar.settings")}
               >
                 <span className="codex-sidebar-leading-icon">
                   <SettingsIcon size={17} />
                 </span>
-                <span>设置</span>
+                <span>{t("sidebar.settings")}</span>
                 <ChevronRightIcon className="ml-auto size-4 text-ui-muted transition-transform group-hover:translate-x-0.5" />
               </button>
             </div>
           </div>
 
-          {/* Pane 2:设置子菜单。drilled out 时滑出并 inert。 */}
+          {/* Pane 2: settings sub-menu. Slides out and goes inert when
+              drilled back out. */}
           <div
             className="codex-sidebar-pane"
             inert={!settingsMode || undefined}
           >
             <nav className="codex-sidebar-scroll">
-              <div className="codex-section-label">设置内容</div>
+              <div className="codex-section-label">
+                {t("sidebar.sectionSettings")}
+              </div>
               {renderSettingsItem(
                 "settings-general",
                 <SlidersHorizontalIcon className="size-4" />,
-                "通用设置",
+                t("sidebar.general"),
               )}
               {renderSettingsItem(
                 "settings-llm",
                 <BotIcon className="size-4" />,
-                "LLM 提供商",
+                t("sidebar.llmProviders"),
               )}
               {renderSettingsItem(
                 "settings-tts",
                 <Volume2Icon className="size-4" />,
-                "TTS 提供商",
+                t("sidebar.ttsProviders"),
               )}
 
-              <div className="codex-section-label">档案数据库</div>
+              <div className="codex-section-label">
+                {t("sidebar.sectionProfileDatabase")}
+              </div>
               {renderSettingsItem(
                 "design",
                 <PencilRulerIcon className="size-4" />,
-                "设计说明",
+                t("sidebar.designNotes"),
               )}
               {renderSettingsItem(
                 "mastery",
                 <ListChecksIcon className="size-4" />,
-                "数据",
+                t("sidebar.data"),
               )}
               {renderSettingsItem(
                 "agents",
                 <BlocksIcon className="size-4" />,
-                "能力库",
+                t("sidebar.capabilities"),
               )}
               {renderSettingsItem(
                 "settings-logs",
                 <ScrollTextIcon className="size-4" />,
-                "日志",
+                t("sidebar.logs"),
               )}
               {renderSettingsItem(
                 "profile",
                 <UserRoundIcon className="size-4" />,
-                "档案",
+                t("sidebar.profile"),
               )}
             </nav>
 
@@ -494,12 +516,12 @@ export function Sidebar({
                 type="button"
                 className="codex-sidebar-action group"
                 onClick={onExitSettings}
-                aria-label="返回"
+                aria-label={t("sidebar.back")}
               >
                 <span className="codex-sidebar-leading-icon">
                   <ArrowLeftIcon className="size-4 text-ui-muted transition-transform group-hover:-translate-x-0.5" />
                 </span>
-                <span>返回</span>
+                <span>{t("sidebar.back")}</span>
               </button>
             </div>
           </div>
@@ -509,7 +531,7 @@ export function Sidebar({
       <div
         className="codex-sidebar-resizer"
         onPointerDown={startResize}
-        title="拖动调整宽度"
+        title={t("sidebar.resizeTooltip")}
       />
 
       {conversationMenu && (
@@ -525,7 +547,7 @@ export function Sidebar({
         >
           <div className="flex shrink-0 items-center gap-2 px-2 py-1.5 text-ui-caption font-medium text-ui-muted">
             <SparklesIcon size={13} />
-            衍生新对话
+            {t("sidebar.deriveNewConversation")}
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto">
             {derivationActions.map((action) => (

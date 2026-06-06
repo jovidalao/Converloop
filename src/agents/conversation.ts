@@ -6,20 +6,20 @@ export interface ConversationContext {
   nativeLanguage: string;
   targetLanguage: string;
   level: string;
-  profileSlice: string; // MD 档案切片(Task 7 前用占位)
-  experiencePreferences: string; // 用户在设置页显式配置的体验偏好
-  comfortableItems: ComfortableItem[]; // 已掌握项,可作为解释/对话脚手架
-  reviewItems: ReviewItem[]; // 代码选的复习候选,自然复用(见 db/mastery getReviewDueList)
-  calibrationHint: string; // 证据驱动的难度校准(见 lib/proficiency;证据不足时为空)
-  sessionAdjustments: string; // 会话级调节指令(分支带来的难度/角色/第二天等;无则为空)
-  summary: string; // 滚动摘要:较早内容的目标语 recap(自动压缩产出;无则为空)
+  profileSlice: string; // MD profile slice (placeholder before Task 7)
+  experiencePreferences: string; // experience preferences explicitly configured by the user on the settings page
+  comfortableItems: ComfortableItem[]; // mastered items, usable as explanation/conversation scaffolds
+  reviewItems: ReviewItem[]; // review candidates selected by code for natural reuse (see db/mastery getReviewDueList)
+  calibrationHint: string; // evidence-driven difficulty calibration (see lib/proficiency; empty when insufficient evidence)
+  sessionAdjustments: string; // session-level adjustment instructions (difficulty/role/next-day from branches; empty if none)
+  summary: string; // rolling summary: target-language recap of earlier content (auto-compressed; empty if none)
   history: string;
   userInput: string;
-  openingInstruction?: string; // App 触发的隐藏开场指令(对话衍生)
-  customInstructions?: string; // 用户在能力库追加的补充指令
+  openingInstruction?: string; // hidden opening instruction triggered by the app (conversation derivation)
+  customInstructions?: string; // additional instructions appended by the user in the agent library
 }
 
-// 折叠空白并截到 max 字符,防止过长 example 撑大热路径 prompt(与 learning-data 一致)。
+// Collapse whitespace and truncate to max characters, to prevent overly long examples from bloating the hot-path prompt (consistent with learning-data).
 function oneLine(s: string, max: number): string {
   const clean = s.replace(/\s+/g, " ").trim();
   return clean.length > max ? `${clean.slice(0, max)}...` : clean;
@@ -53,13 +53,13 @@ function formatComfortableItems(items: ComfortableItem[]): string {
     .join("\n");
 }
 
-// 见 docs/conversation-agent.md#system-prompt
+// See docs/conversation-agent.md#system-prompt
 function systemPrompt(ctx: ConversationContext): string {
-  // 证据足够时,把动态读数作为额外一行校准提示;不足则只用静态 level。
+  // When evidence is sufficient, include a dynamic reading as an extra calibration line; otherwise use only the static level.
   const calibrationLine = ctx.calibrationHint
     ? `\n- Current read on this learner from recent activity: ${ctx.calibrationHint} Let this fine-tune your difficulty and reply length.`
     : "";
-  // 会话级调节(分支)优先于默认行为;无调节时整段省略。
+  // Session-level adjustments (from branches) take priority over default behavior; omit the entire block when there are no adjustments.
   const adjustmentsBlock = ctx.sessionAdjustments
     ? `\n\n=== SESSION ADJUSTMENTS (apply on top of everything above) ===\n${ctx.sessionAdjustments}`
     : "";
@@ -117,7 +117,7 @@ ${formatReviewItems(ctx.reviewItems)}`;
 }
 
 function userPrompt(ctx: ConversationContext): string {
-  // STORY SO FAR = 较早对话的摘要(自动压缩产出),让长对话不丢前文;无摘要则整段省略。
+  // STORY SO FAR = summary of earlier conversation (auto-compressed), so long conversations don't lose earlier context; omit the entire block when there is no summary.
   const storyBlock = ctx.summary
     ? `=== STORY SO FAR (earlier in this conversation) ===
 ${ctx.summary}
@@ -134,7 +134,7 @@ ${ctx.history || "(none)"}
 ${latest}`;
 }
 
-// 纯文本流式回复。onDelta 边收边推 UI;返回完整文本用于持久化。
+// Plain-text streaming reply. onDelta pushes to the UI as chunks arrive; returns the full text for persistence.
 export async function converse(
   provider: ModelProvider,
   ctx: ConversationContext,

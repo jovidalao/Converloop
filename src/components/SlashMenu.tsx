@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { useTranslation } from "@/i18n";
 import type { SlashCommand } from "../commands";
 
 interface SlashMenuProps {
@@ -8,18 +9,21 @@ interface SlashMenuProps {
   onActivate: (command: SlashCommand) => void;
 }
 
-// 对话栏斜杠命令菜单:输入框正上方的悬浮列表。键盘导航(↑↓ / Enter / Tab / Esc)由 ChatView
-// 在 textarea 上拦截处理(activedescendant 范式,焦点留在输入框);本组件只渲染 + 处理鼠标。
+// Chat-bar slash command menu: a floating list right above the input. Keyboard
+// navigation (↑↓ / Enter / Tab / Esc) is intercepted by ChatView on the textarea
+// (activedescendant pattern, focus stays in the input); this component only
+// renders and handles the mouse.
 export function SlashMenu({
   commands,
   selected,
   onHover,
   onActivate,
 }: SlashMenuProps) {
+  const { t } = useTranslation();
   const listRef = useRef<HTMLDivElement>(null);
 
-  // 让选中行始终可见。
-  // biome-ignore lint/correctness/useExhaustiveDependencies: 选中项变化即滚动到可见,不直接引用 selected
+  // Keep the selected row in view.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: scroll into view whenever the selection changes; `selected` isn't referenced directly
   useEffect(() => {
     listRef.current
       ?.querySelector('[data-selected="true"]')
@@ -32,13 +36,13 @@ export function SlashMenu({
     <div
       ref={listRef}
       role="listbox"
-      aria-label="斜杠命令"
+      aria-label={t("slashMenu.ariaLabel")}
       className="absolute inset-x-0 bottom-full z-40 mb-1.5 max-h-[40vh] overflow-y-auto rounded-xl border bg-card py-1 shadow-minimal"
     >
       {commands.map((command, idx) => {
         const isSelected = idx === selected;
         return (
-          // biome-ignore lint/a11y/useFocusableInteractive: option 不单独获焦,焦点留在输入框
+          // biome-ignore lint/a11y/useFocusableInteractive: options aren't individually focused; focus stays in the input
           <div
             key={command.name}
             role="option"
@@ -47,7 +51,7 @@ export function SlashMenu({
             className="mx-1 flex items-baseline gap-2.5 rounded-md px-2.5 py-1.5 text-ui-body data-[selected=true]:bg-accent"
             onMouseMove={() => onHover(idx)}
             onMouseDown={(e) => {
-              // 不让输入框失焦;在 mousedown 即激活(常见自动完成范式)。
+              // Don't blur the input; activate on mousedown (common autocomplete pattern).
               e.preventDefault();
               onActivate(command);
             }}

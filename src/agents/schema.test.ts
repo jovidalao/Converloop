@@ -10,7 +10,7 @@ import {
   tutorJsonSchema,
 } from "./schema";
 
-// 模拟 LLM 对一个真实错句的结构化输出:
+// Simulated LLM structured output for a real erroneous sentence:
 // "I have a apple and I go to school yesterday."
 const sampleAnalysis = {
   is_correct: false,
@@ -21,27 +21,27 @@ const sampleAnalysis = {
       category: "grammar",
       span_original: "a apple",
       span_corrected: "an apple",
-      explanation: "元音音素开头的词前用 an。",
+      explanation: "Use 'an' before words starting with a vowel sound.",
       severity: "minor",
       mastery_key: "grammar:article_usage",
-      mastery_label: "冠词 a/an/the 的用法",
+      mastery_label: "Articles a/an/the",
       mastery_type: "grammar",
     },
     {
       category: "grammar",
       span_original: "I go to school yesterday",
       span_corrected: "I went to school yesterday",
-      explanation: "yesterday 表示过去,动词要用过去式。",
+      explanation: "'yesterday' implies past tense; use the past form of the verb.",
       severity: "moderate",
       mastery_key: "grammar:past_tense",
-      mastery_label: "一般过去时",
+      mastery_label: "Simple past tense",
       mastery_type: "grammar",
     },
   ],
   mastery_updates: [
     {
       key: "grammar:past_tense",
-      label: "一般过去时",
+      label: "Simple past tense",
       type: "grammar",
       signal: "introduced",
     },
@@ -50,14 +50,14 @@ const sampleAnalysis = {
 };
 
 describe("TutorAnalysis schema", () => {
-  it("复用 DB 层 mastery 枚举,避免校验口径漂移", () => {
+  it("reuses DB-layer mastery enums to prevent validation drift", () => {
     expect(MasteryType.options).toEqual([...MASTERY_TYPE_VALUES]);
     expect(MasteryUpdate.shape.signal.options).toEqual([
       ...MASTERY_UPDATE_SIGNAL_VALUES,
     ]);
   });
 
-  it("通过 Zod 校验,issues 的 mastery_key 合理", () => {
+  it("passes Zod validation and issues have well-formed mastery_key", () => {
     const parsed = TutorAnalysis.safeParse(sampleAnalysis);
     expect(parsed.success).toBe(true);
     if (parsed.success) {
@@ -68,14 +68,14 @@ describe("TutorAnalysis schema", () => {
     }
   });
 
-  it("拒绝缺字段/错枚举的脏数据(降级靠它)", () => {
+  it("rejects missing fields and invalid enums (fallback relies on this)", () => {
     expect(TutorAnalysis.safeParse({ is_correct: true }).success).toBe(false);
     expect(
       TutorAnalysis.safeParse({ ...sampleAnalysis, is_correct: "yes" }).success,
     ).toBe(false);
   });
 
-  it("evidence 可选", () => {
+  it("evidence is optional", () => {
     const r = TutorAnalysis.safeParse({
       ...sampleAnalysis,
       mastery_updates: [
@@ -85,18 +85,18 @@ describe("TutorAnalysis schema", () => {
     expect(r.success).toBe(true);
   });
 
-  it("expression_gap 可带可复用 template", () => {
+  it("expression_gap can include a reusable template", () => {
     const r = TutorAnalysis.safeParse({
       ...sampleAnalysis,
       issues: [],
       mastery_updates: [],
       expression_gap: {
         mastery_key: "gap:decline_request_politely",
-        mastery_label: "委婉拒绝请求",
-        original: "我想委婉拒绝这个请求",
+        mastery_label: "Declining requests politely",
+        original: "I want to decline this request politely",
         target_expression: "I'd rather not take this on right now.",
         template: "I'd rather not ___ right now.",
-        explanation: "用 I'd rather not 表达委婉拒绝。",
+        explanation: "Use 'I'd rather not' to express a polite refusal.",
         key_items: [],
       },
     });
@@ -105,7 +105,7 @@ describe("TutorAnalysis schema", () => {
 });
 
 describe("tutorJsonSchema", () => {
-  it("产出干净的 JSON schema(无 $schema,含 properties)", () => {
+  it("produces a clean JSON schema (no $schema field, has properties)", () => {
     const { name, schema } = tutorJsonSchema();
     expect(name).toBe("TutorAnalysis");
     expect(schema.$schema).toBeUndefined();

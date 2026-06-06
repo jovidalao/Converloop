@@ -6,19 +6,19 @@ import type {
   ModelProvider,
 } from "./types";
 
-// 原生 Anthropic Messages API。结构化输出走 tool_use + input_schema。
+// Native Anthropic Messages API. Structured output uses tool_use + input_schema.
 export interface AnthropicConfig {
-  baseUrl: string; // 如 https://api.anthropic.com/v1
+  baseUrl: string; // e.g. https://api.anthropic.com/v1
   apiKey: string;
   model: string;
   maxTokens?: number;
-  /** 订阅登录(Claude Pro/Max)模式:apiKey 是 sk-ant-oat… 访问令牌,走 Bearer + Claude Code 身份头。 */
+  /** Subscription login (Claude Pro/Max) mode: apiKey is an sk-ant-oat… access token, uses Bearer + Claude Code identity headers. */
   oauth?: boolean;
 }
 
 export const ANTHROPIC_API_VERSION = "2023-06-01";
 
-// OAuth 令牌要求请求「看起来像 Claude Code」:首个 system 块是这句身份声明,且带这套头(核对自 openclaw)。
+// OAuth tokens require the request to "look like Claude Code": the first system block must be this identity declaration, with these headers (verified against openclaw).
 const OAUTH_SYSTEM_IDENTITY =
   "You are Claude Code, Anthropic's official CLI for Claude.";
 const CLAUDE_CODE_USER_AGENT = "claude-cli/2.1.75";
@@ -34,7 +34,7 @@ interface AnthropicMessage {
   content: string;
 }
 
-/** OpenAI 风格 messages → Anthropic system + messages。稳定 system 段打 cache 断点。 */
+/** OpenAI-style messages → Anthropic system + messages. Stable system section gets a cache breakpoint. */
 export function toAnthropicMessages(messages: ChatMessage[]): {
   system?: SystemBlock[];
   messages: AnthropicMessage[];
@@ -75,7 +75,7 @@ function modelRejectsSamplingParams(model: string): boolean {
   return match ? Number.parseInt(match[1], 10) >= 7 : false;
 }
 
-/** 与官方 POST /v1/messages 请求体一致;供适配器与单测共用。 */
+/** Matches the official POST /v1/messages request body; shared between the adapter and unit tests. */
 export function buildAnthropicRequestBody(
   cfg: AnthropicConfig,
   opts: GenerateOptions,
@@ -89,7 +89,7 @@ export function buildAnthropicRequestBody(
     stream,
   };
   if (cfg.oauth) {
-    // 订阅令牌要求首个 system 块为 Claude Code 身份声明,否则被服务端拒绝。
+    // Subscription token requires the first system block to be the Claude Code identity declaration, otherwise the server rejects the request.
     body.system = [
       { type: "text", text: OAUTH_SYSTEM_IDENTITY },
       ...(system ?? []),
@@ -137,7 +137,7 @@ export function anthropicMessagesUrl(cfg: AnthropicConfig): string {
 
 export function authHeaders(cfg: AnthropicConfig): Record<string, string> {
   if (cfg.oauth) {
-    // 订阅令牌:Bearer 鉴权 + Claude Code 身份头,不发 x-api-key。
+    // Subscription token: Bearer auth + Claude Code identity headers, no x-api-key sent.
     return {
       "Content-Type": "application/json",
       Authorization: `Bearer ${cfg.apiKey}`,
@@ -172,7 +172,7 @@ type ContentBlock =
   | { type: "redacted_thinking" }
   | { type: "tool_use"; name: string; input: unknown };
 
-/** 从 Messages 响应抽取文本;tool_use 时返回 JSON 字符串(供导师 agent 解析)。 */
+/** Extract text from a Messages response; returns a JSON string for tool_use (for the tutor agent to parse). */
 export function extractAnthropicContent(json: unknown): string {
   const res = json as {
     error?: { message?: string };
@@ -225,7 +225,7 @@ function consumeAnthropicSseLines(
         finalReason = finishReason(json.delta?.stop_reason) ?? finalReason;
       }
     } catch {
-      // 半截 JSON,等后续 chunk 拼齐
+      // Partial JSON, wait for subsequent chunks to complete it
     }
   }
   return { text: acc, finishReason: finalReason };

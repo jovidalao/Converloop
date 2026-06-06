@@ -35,6 +35,6 @@ export async function synthesizeMimo(opts: {
     choices?: { message?: { audio?: { data?: string } } }[];
   };
   const b64 = json.choices?.[0]?.message?.audio?.data;
-  if (!b64) throw new Error("MiMo TTS 响应中没有音频数据");
+  if (!b64) throw new Error("No audio data in MiMo TTS response");
   return base64ToArrayBuffer(b64);
 }

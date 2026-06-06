@@ -1,14 +1,15 @@
-// 内置 Agent 的用户改写(通用,Phase 4+)。用户可以改内置能力的展示名/说明,并【追加】
-// 补充指令(不替换官方基础 prompt)。改写存 localStorage(与 enablement 一致,属前端偏好,
-// 不进 SQLite),空字段表示沿用默认。运行时在能力库目录与各能力调用点实时合并;
-// 改写不动计数 / 密钥 / provider 设置。
+// User overrides for built-in agents (general, Phase 4+). Users can change the display name/description
+// of built-in capabilities and APPEND supplementary instructions (does not replace the official base prompt).
+// Overrides stored in localStorage (consistent with enablement, a frontend preference, not in SQLite);
+// empty fields mean use the default. Merged at runtime in the agent library and at each capability call site;
+// overrides do not touch counts / keys / provider settings.
 
 const KEY = "builtinAgentOverrides";
 
 export interface BuiltinAgentOverride {
   label?: string;
   description?: string;
-  /** 追加在官方基础 prompt 之后的补充指令(不替换基础 prompt)。 */
+  /** Supplementary instructions appended after the official base prompt (does not replace the base prompt). */
   instructions?: string;
 }
 
@@ -32,7 +33,7 @@ function persist(map: Record<string, BuiltinAgentOverride>): void {
   try {
     localStorage.setItem(KEY, JSON.stringify(map));
   } catch {
-    // 测试环境无 localStorage:仅内存缓存生效
+    // No localStorage in test environment: only in-memory cache takes effect
   }
 }
 

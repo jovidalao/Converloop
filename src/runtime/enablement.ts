@@ -1,6 +1,7 @@
-// Agent 启用/禁用(Phase 4)。哪些 observer / action 被用户关掉,存 localStorage(与 config
-// 等前端偏好一致,不进 SQLite)。运行时在派发处实时查询;能力库 UI 切换。
-// 缓存一份在内存,避免热路径每轮反复读 localStorage + JSON.parse。
+// Agent enable/disable (Phase 4). Which observers / actions the user has turned off are stored in
+// localStorage (consistent with config and other frontend preferences, not in SQLite). Queried at
+// runtime at the dispatch point; toggled via the agent library UI.
+// Cached in memory to avoid repeatedly reading localStorage + JSON.parse on every hot-path turn.
 
 const KEY = "disabledAgents";
 let cache: Set<string> | null = null;
@@ -27,6 +28,6 @@ export function setAgentEnabled(id: string, enabled: boolean): void {
   try {
     localStorage.setItem(KEY, JSON.stringify([...set]));
   } catch {
-    // 测试环境无 localStorage:仅内存缓存生效
+    // No localStorage in test environment: only in-memory cache takes effect
   }
 }

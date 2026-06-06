@@ -12,7 +12,6 @@ export type AppActionId =
 
 export interface AppAction {
   id: AppActionId;
-  label: string;
   keys: string[];
   event?: {
     key: string;
@@ -22,65 +21,58 @@ export interface AppAction {
   ariaKeyshortcuts?: string;
 }
 
+// Human-readable labels live in i18n under the `actions` namespace, keyed by id.
 export const APP_ACTIONS: AppAction[] = [
   {
     id: "new-chat",
-    label: "新对话",
     keys: ["⌘", "N"],
     event: { key: "n", meta: true },
     ariaKeyshortcuts: "Meta+N",
   },
   {
     id: "command-palette",
-    label: "搜索对话与专项课",
     keys: ["⌘", "K"],
     event: { key: "k", meta: true },
     ariaKeyshortcuts: "Meta+K",
   },
   {
     id: "toggle-sidebar",
-    label: "显示 / 隐藏侧栏",
     keys: ["⌘", "B"],
     event: { key: "b", meta: true },
     ariaKeyshortcuts: "Meta+B",
   },
   {
     id: "settings",
-    label: "打开设置",
     keys: ["⌘", ","],
     event: { key: ",", meta: true },
     ariaKeyshortcuts: "Meta+,",
   },
   {
     id: "focus-sidebar",
-    label: "聚焦侧栏",
     keys: ["⌘", "1"],
     event: { key: "1", meta: true },
     ariaKeyshortcuts: "Meta+1",
   },
   {
     id: "focus-chat",
-    label: "聚焦对话输入",
     keys: ["⌘", "2"],
     event: { key: "2", meta: true },
     ariaKeyshortcuts: "Meta+2",
   },
   {
     id: "focus-coach",
-    label: "聚焦教练面板",
     keys: ["⌘", "3"],
     event: { key: "3", meta: true },
     ariaKeyshortcuts: "Meta+3",
   },
   {
     id: "shortcuts",
-    label: "显示快捷键",
     keys: ["⌘", "/"],
     event: { key: "/", meta: true },
     ariaKeyshortcuts: "Meta+/",
   },
-  { id: "slash-command", label: "输入命令", keys: ["/"] },
-  { id: "dismiss", label: "关闭菜单或弹窗", keys: ["Esc"] },
+  { id: "slash-command", keys: ["/"] },
+  { id: "dismiss", keys: ["Esc"] },
 ];
 
 export function getAppAction(id: AppActionId): AppAction {

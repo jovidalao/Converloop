@@ -2,11 +2,11 @@ import { describe, expect, it } from "vitest";
 import { degradedRate, getTutorStats, recordTutorOutcome } from "./tutor-stats";
 
 describe("degradedRate", () => {
-  it("空 → 0", () => {
+  it("empty stats → 0", () => {
     expect(degradedRate({ structured: 0, prose: 0, failed: 0 })).toBe(0);
   });
 
-  it("prose + failed 占比", () => {
+  it("prose + failed ratio", () => {
     expect(degradedRate({ structured: 6, prose: 2, failed: 2 })).toBeCloseTo(
       0.4,
     );
@@ -14,7 +14,7 @@ describe("degradedRate", () => {
 });
 
 describe("recordTutorOutcome", () => {
-  it("累加到进程内计数", () => {
+  it("increments in-process counters", () => {
     const before = { ...getTutorStats() };
     recordTutorOutcome("structured");
     recordTutorOutcome("prose");

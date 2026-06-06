@@ -1,5 +1,6 @@
 import { SaveIcon, XIcon } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useTranslation } from "@/i18n";
 import {
   DATA_SCOPE_LABELS,
   LEARNING_DATA_SCOPES,
@@ -15,7 +16,8 @@ function scopeName(scope: LearningDataScope): string {
   return DATA_SCOPE_LABELS[scope].split(":")[0];
 }
 
-// 编辑层(悬浮窗):从侧栏某节专项课的「编辑」打开,微调名称/数据范围/prompt。Esc 关闭。
+// Edit layer (floating dialog): opened from a lesson's "Edit" in the sidebar to
+// tweak the name / data scopes / prompt. Esc closes.
 export function LearningAgentEditDialog({
   agent,
   onSave,
@@ -25,6 +27,7 @@ export function LearningAgentEditDialog({
   onSave: (patch: Partial<LearningAgentDraft>) => void;
   onCancel: () => void;
 }) {
+  const { t } = useTranslation();
   const [name, setName] = useState(agent.name);
   const [description, setDescription] = useState(agent.description);
   const [prompt, setPrompt] = useState(agent.prompt);
@@ -48,20 +51,24 @@ export function LearningAgentEditDialog({
     <div
       role="dialog"
       aria-modal="true"
-      aria-label={`编辑专项课 ${agent.name}`}
+      aria-label={t("learningAgentDialog.editAria", { name: agent.name })}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
       onMouseDown={onCancel}
     >
-      {/* biome-ignore lint/a11y/noStaticElementInteractions: 仅阻止冒泡到背景关闭,非交互控件 */}
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: only stops propagation to the backdrop-close handler; not an interactive control */}
       <div
         className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-xl border bg-card p-4 shadow-lg"
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="mb-3 flex items-center justify-between gap-2">
           <div>
-            <h3 className="text-ui-title font-semibold">编辑专项课</h3>
+            <h3 className="text-ui-title font-semibold">
+              {t("learningAgentDialog.title")}
+            </h3>
             <div className="text-ui-caption text-ui-muted">
-              {agent.builtIn ? "内置专项课" : "自定义专项课"}
+              {agent.builtIn
+                ? t("learningAgentDialog.builtIn")
+                : t("learningAgentDialog.custom")}
             </div>
           </div>
           <Button
@@ -69,7 +76,7 @@ export function LearningAgentEditDialog({
             size="icon"
             className="size-7"
             onClick={onCancel}
-            aria-label="关闭"
+            aria-label={t("common.close")}
           >
             <XIcon size={16} />
           </Button>
@@ -107,7 +114,7 @@ export function LearningAgentEditDialog({
 
         <div className="mt-3 flex justify-end gap-2">
           <Button type="button" variant="ghost" onClick={onCancel}>
-            取消
+            {t("common.cancel")}
           </Button>
           <Button
             type="button"
@@ -117,7 +124,7 @@ export function LearningAgentEditDialog({
             disabled={!name.trim() || !prompt.trim()}
           >
             <SaveIcon size={15} />
-            保存
+            {t("common.save")}
           </Button>
         </div>
       </div>

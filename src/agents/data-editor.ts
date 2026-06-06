@@ -8,8 +8,8 @@ import type { ChatMessage, ModelProvider } from "../providers/types";
 import { toJsonSchema } from "./json-schema";
 import { formatZodError, parseLLMJson } from "./parse-llm-json";
 
-// 学习数据「有限操作」的唯一 schema 真相源:data-edit / memory-proposal / 自定义
-// observer 都从这里 import,新增掌握类型只改这一处(再同步 db/schema.ts 的 enum)。
+// Single source of truth for learning-data "limited operations" schema: data-edit / memory-proposal / custom
+// observers all import from here; adding a new mastery type only requires changing this one place (plus syncing the enum in db/schema.ts).
 export const DataEditOperation = z.object({
   action: z.enum(["update", "delete", "create", "merge"]),
   key: z.string().min(1),
@@ -96,7 +96,7 @@ ${instruction}`,
   if (!parsed.ok) throw new Error(parsed.error);
   const validated = DataEditPlan.safeParse(parsed.value);
   if (!validated.success) {
-    throw new Error(`数据修改计划校验失败: ${formatZodError(validated.error)}`);
+    throw new Error(`Data edit plan validation failed: ${formatZodError(validated.error)}`);
   }
   return validated.data;
 }

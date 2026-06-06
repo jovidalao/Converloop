@@ -19,7 +19,7 @@ export async function createTurnAnnotation(input: {
     id,
     turnId: input.turnId,
     agentId: input.agentId,
-    title: input.title.trim() || "观察结果",
+    title: input.title.trim() || "Observation",
     bodyMd: input.bodyMd.trim(),
     payloadJson: payloadJson(input.payload),
     createdAt: Date.now(),

@@ -1,14 +1,14 @@
-// 证据驱动的水平快照(纯逻辑,可单测;不碰 DB/Tauri)。
-// config.level 是用户自填、一次性的;这里从近期真实表现派生一个动态读数,用来微调
-// 对话 agent 的难度与回复长度(见 conversation agent)。仍是「代码记账,LLM 不碰」:
-// 阈值/分档在代码里、可调可测,LLM 只拿到一句自然语言提示。
+// Evidence-driven proficiency snapshot (pure logic, unit-testable; no DB/Tauri).
+// config.level is user-supplied and set once; this derives a dynamic reading from recent real performance to fine-tune
+// the conversation agent's difficulty and reply length (see conversation agent). Still "code does the accounting, LLM does not touch it":
+// thresholds/bands live in code, are adjustable and testable, and the LLM only receives a single natural-language hint.
 
 export interface ProficiencyMetrics {
-  sampleTurns: number; // 有批改的轮次数(证据量)
-  avgInputWords: number; // 非缺口轮的平均输入词数(产出长度)
-  errorsPer100Words: number; // 每百词错误数(产出准确度)
-  gapRate: number; // 有 expression_gap 的轮次占比(母语回退频率)
-  assistRate: number; // 每轮请求讲解/双语的次数(理解吃力)
+  sampleTurns: number; // number of corrected turns (evidence volume)
+  avgInputWords: number; // average input word count for non-gap turns (production length)
+  errorsPer100Words: number; // errors per 100 words (production accuracy)
+  gapRate: number; // fraction of turns with an expression_gap (native-language fallback rate)
+  assistRate: number; // number of explain/bilingual requests per turn (comprehension difficulty)
   knownCount: number;
   strugglingCount: number;
 }
@@ -17,14 +17,14 @@ export type ProductionBand = "emerging" | "developing" | "consolidating";
 export type ComprehensionStrain = "low" | "moderate" | "high";
 
 export interface ProficiencySnapshot {
-  hasEvidence: boolean; // 证据不足时为 false,不要干扰静态 level
+  hasEvidence: boolean; // false when there is insufficient evidence; do not override the static level
   productionBand: ProductionBand;
   comprehensionStrain: ComprehensionStrain;
-  calibrationHint: string; // 给对话 agent 的一句话(证据不足则为空)
+  calibrationHint: string; // one-sentence hint for the conversation agent (empty when evidence is insufficient)
   metrics: ProficiencyMetrics;
 }
 
-// 证据太少就别瞎调难度,交给用户自填的 level。
+// Too little evidence — don't adjust difficulty; defer to the user-supplied level.
 const MIN_SAMPLE = 3;
 
 function bandOf(m: ProficiencyMetrics): ProductionBand {

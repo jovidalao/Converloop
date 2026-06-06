@@ -1,5 +1,6 @@
 import { ChevronLeftIcon, ChevronRightIcon, RefreshCwIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "@/i18n";
 import { cn } from "@/lib/utils";
 import {
   type AgentJobSource,
@@ -17,25 +18,12 @@ import {
   SelectValue,
 } from "./ui/select";
 
-// 设置·日志页:所有 Agent 运行(对话 / 任务规划 / 档案维护 / 摘要 / 手动)都落 agent_job 表,
-// 这里按来源/状态筛选 + 分页查看。普通用户看「跑了什么、成功还是失败、用了多久」。
+// Settings · Logs page: every agent run (conversation / task planning / profile
+// maintenance / summary / manual) lands in the agent_job table; here you filter
+// by source/status and page through it. Regular users see "what ran, whether it
+// succeeded or failed, and how long it took".
 
 const PAGE_SIZE = 25;
-
-const SOURCE_LABEL: Record<AgentJobSource, string> = {
-  conversation: "对话",
-  task_agent: "任务规划",
-  maintainer: "档案维护",
-  summary: "摘要",
-  manual: "手动",
-};
-
-const STATUS_LABEL: Record<AgentJobStatus, string> = {
-  succeeded: "成功",
-  failed: "失败",
-  running: "运行中",
-  pending: "待运行",
-};
 
 const STATUS_CLASS: Record<AgentJobStatus, string> = {
   succeeded: "bg-success/10 text-success",
@@ -44,8 +32,19 @@ const STATUS_CLASS: Record<AgentJobStatus, string> = {
   pending: "bg-muted text-ui-muted",
 };
 
-const SOURCE_VALUES = Object.keys(SOURCE_LABEL) as AgentJobSource[];
-const STATUS_VALUES = Object.keys(STATUS_LABEL) as AgentJobStatus[];
+const SOURCE_VALUES: AgentJobSource[] = [
+  "conversation",
+  "task_agent",
+  "maintainer",
+  "summary",
+  "manual",
+];
+const STATUS_VALUES: AgentJobStatus[] = [
+  "succeeded",
+  "failed",
+  "running",
+  "pending",
+];
 
 const ALL = "all";
 
@@ -70,6 +69,7 @@ function timeLabel(ts: number): string {
 }
 
 export function LogsView() {
+  const { t } = useTranslation();
   const [source, setSource] = useState<AgentJobSource | typeof ALL>(ALL);
   const [status, setStatus] = useState<AgentJobStatus | typeof ALL>(ALL);
   const [page, setPage] = useState(0);
@@ -104,8 +104,8 @@ export function LogsView() {
     void load();
   }, [load]);
 
-  // 改筛选条件时回到第一页。
-  // biome-ignore lint/correctness/useExhaustiveDependencies: 只在筛选变化时重置页码
+  // Return to the first page when the filters change.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: only reset the page when the filters change
   useEffect(() => {
     setPage(0);
   }, [source, status]);
@@ -116,10 +116,11 @@ export function LogsView() {
 
   return (
     <div className="flex h-full max-w-5xl flex-col overflow-y-auto px-6 pt-14 pb-6">
-      <h2 className="mt-0 mb-1 text-ui-title font-semibold">日志</h2>
+      <h2 className="mt-0 mb-1 text-ui-title font-semibold">
+        {t("logs.title")}
+      </h2>
       <p className="mt-0 mb-4 text-ui-body text-ui-muted">
-        所有 Agent
-        的运行记录——对话、任务规划、档案维护、摘要、手动都在这里,可按来源和状态筛选。
+        {t("logs.description")}
       </p>
 
       <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -131,10 +132,10 @@ export function LogsView() {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value={ALL}>全部来源</SelectItem>
+            <SelectItem value={ALL}>{t("logs.allSources")}</SelectItem>
             {SOURCE_VALUES.map((s) => (
               <SelectItem key={s} value={s}>
-                {SOURCE_LABEL[s]}
+                {t(`logs.source.${s}`)}
               </SelectItem>
             ))}
           </SelectContent>
@@ -147,10 +148,10 @@ export function LogsView() {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value={ALL}>全部状态</SelectItem>
+            <SelectItem value={ALL}>{t("logs.allStatuses")}</SelectItem>
             {STATUS_VALUES.map((s) => (
               <SelectItem key={s} value={s}>
-                {STATUS_LABEL[s]}
+                {t(`logs.status.${s}`)}
               </SelectItem>
             ))}
           </SelectContent>
@@ -164,13 +165,13 @@ export function LogsView() {
           disabled={loading}
         >
           <RefreshCwIcon size={13} />
-          刷新
+          {t("logs.refresh")}
         </Button>
       </div>
 
       {jobs.length === 0 ? (
         <p className="m-0 text-ui-body text-ui-muted">
-          {loading ? "加载中…" : "没有符合条件的运行记录。"}
+          {loading ? t("common.loading") : t("logs.empty")}
         </p>
       ) : (
         <ul className="m-0 flex list-none flex-col gap-1 p-0">
@@ -185,14 +186,14 @@ export function LogsView() {
                   STATUS_CLASS[job.status],
                 )}
               >
-                {STATUS_LABEL[job.status]}
+                {t(`logs.status.${job.status}`)}
               </span>
               <span className="font-medium text-foreground">
                 {agentIdOf(job) ?? job.kind}
               </span>
               <span className="text-ui-muted">{job.kind}</span>
               <span className="text-ui-muted">
-                {SOURCE_LABEL[job.source] ?? job.source}
+                {t(`logs.source.${job.source}`)}
               </span>
               <span className="text-ui-muted">{durationLabel(job)}</span>
               <span className="ml-auto text-ui-muted">
@@ -208,7 +209,11 @@ export function LogsView() {
 
       <div className="mt-4 flex items-center gap-3 text-ui-caption text-ui-muted">
         <span>
-          第 {total === 0 ? 0 : page + 1} 页 / 共 {pageCount} 页 · {total} 条
+          {t("logs.pageInfo", {
+            page: total === 0 ? 0 : page + 1,
+            pages: pageCount,
+            total,
+          })}
         </span>
         <div className="ml-auto flex items-center gap-1">
           <Button
@@ -220,7 +225,7 @@ export function LogsView() {
             onClick={() => setPage((p) => Math.max(0, p - 1))}
           >
             <ChevronLeftIcon size={14} />
-            上一页
+            {t("logs.prev")}
           </Button>
           <Button
             type="button"
@@ -230,7 +235,7 @@ export function LogsView() {
             disabled={!hasNext || loading}
             onClick={() => setPage((p) => p + 1)}
           >
-            下一页
+            {t("logs.next")}
             <ChevronRightIcon size={14} />
           </Button>
         </div>

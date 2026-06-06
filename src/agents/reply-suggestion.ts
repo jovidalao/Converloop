@@ -17,7 +17,7 @@ export interface ReplySuggestionContext {
   source: ReplySuggestionSource;
   userMessage?: string;
   partnerReply?: string;
-  customInstructions?: string; // 用户在能力库追加的补充指令
+  customInstructions?: string; // additional instructions appended by the user in the agent library
 }
 
 export interface ReplySuggestionResult {
@@ -96,6 +96,6 @@ export async function suggestReplyText(
     onDelta,
   );
   const text = reply.trim();
-  if (!text) throw new Error("推荐回复生成失败,请重试");
+  if (!text) throw new Error("Reply suggestion generation failed, please retry");
   return { text, finishReason: finish };
 }

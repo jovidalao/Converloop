@@ -1,11 +1,11 @@
-// 把一条用户笔记追加到档案的 ## My notes(用户主笔、AI 逐字保留、对话 agent 会读到)。
-// 纯代码写 MD(用户动作触发,无 LLM)——记忆捕获的确定性路径。
+// Append a user note to the ## My notes section of the profile (user-authored; AI preserves it verbatim; conversation agent reads it).
+// Pure code writing MD (triggered by user action, no LLM) — the deterministic path for memory capture.
 
 import { loadConfig } from "../config";
 import { ensureSections, parseProfile, serializeProfile } from "./parse";
 import { readProfile, writeProfile } from "./profile";
 
-// 纯函数(可测):在 My notes 末尾追加一条 bullet,标题结构由序列化保证。
+// Pure function (testable): append a bullet to the end of My notes; section structure is guaranteed by serialization.
 export function appendNoteToMd(md: string, line: string): string {
   const trimmed = line.trim();
   if (!trimmed) return md;

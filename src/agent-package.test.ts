@@ -25,7 +25,7 @@ describe("agent package", () => {
     expect(reviewAgentPackage(raw)).toMatchObject({
       name: "Interview observer",
       kind: "observer",
-      writes: "可提出学习数据写入建议(需确认)",
+      writes: "Can propose learning data write-backs (requires confirmation)",
     });
   });
 
@@ -131,8 +131,8 @@ describe("agent package", () => {
     expect(reviewAgentPackage(raw)).toMatchObject({
       name: "B1 Interview Pack",
       kind: "package",
-      itemSummary: "1 个技能 · 2 个专项课 · 1 个课程项目",
-      writes: "可提出学习数据写入建议(需确认)",
+      itemSummary: "1 skill(s) · 2 lesson(s) · 1 course item(s)",
+      writes: "Can propose learning data write-backs (requires confirmation)",
     });
   });
 });

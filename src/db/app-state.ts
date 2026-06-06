@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { db } from "./client";
 import { appState } from "./schema";
 
-// 内部连续性标记。用 SQLite 而不是 localStorage,确保随主数据备份/迁移。
+// Internal continuity markers. Stored in SQLite rather than localStorage to ensure they travel with main data backups/migrations.
 export async function getAppState(key: string): Promise<string | null> {
   const [row] = await db
     .select({ value: appState.value })

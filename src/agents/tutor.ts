@@ -8,7 +8,7 @@ import {
 } from "./parse-llm-json";
 import { type Issue, TutorAnalysis, tutorJsonSchema } from "./schema";
 
-// SQLite 薄弱表喂给导师的行(由 mastery 查询提供)。
+// Rows from the SQLite weak-items table fed to the tutor (provided by mastery queries).
 export interface WeakItem {
   label: string;
   key: string;
@@ -29,21 +29,21 @@ export interface TutorContext {
   nativeLanguage: string;
   targetLanguage: string;
   level: string;
-  experiencePreferences: string; // 用户在设置页显式配置的体验偏好
+  experiencePreferences: string; // experience preferences explicitly configured by the user on the settings page
   ignoreCapitalizationIssues: boolean;
   ignorePunctuationIssues: boolean;
   weakList: WeakItem[];
   keyHints?: MasteryKeyHint[];
-  history: string; // 最近几轮对话,纯文本
+  history: string; // last few conversation turns, plain text
   userInput: string;
-  customInstructions?: string; // 用户在能力库追加的补充指令
+  customInstructions?: string; // additional instructions appended by the user in the agent library
 }
 
 export interface AnalyzeResult {
   analysis: TutorAnalysis | null;
-  /** 结构化 JSON 失败时,第二套 prompt 的自然语言批改(直接展示,不入 mastery 账)。 */
+  /** When structured JSON fails, the natural-language correction from the fallback prompt (shown directly, not recorded in mastery). */
   proseFeedback?: string;
-  /** 开发期诊断:结构化/修复失败原因和 raw preview。 */
+  /** Development diagnostic: reason for structured/repair failure and raw preview. */
   diagnostic?: string;
   error?: string;
 }
@@ -86,7 +86,7 @@ function formatKeyHints(items: MasteryKeyHint[] | undefined): string {
     .join("\n");
 }
 
-// 见 docs/tutor-agent.md#system-prompt
+// See docs/tutor-agent.md#system-prompt
 function systemPrompt(ctx: TutorContext): string {
   const base = `You are a precise language tutor analyzing a single message from a
 ${ctx.nativeLanguage} speaker learning ${ctx.targetLanguage} at ${ctx.level} level. You give
@@ -113,7 +113,11 @@ A) ERRORS — the user DID produce ${ctx.targetLanguage} but got it wrong.
   If one is the same underlying problem, use that exact key even if the current
   wording is different.
 - If the message is fully correct: is_correct=true, issues=[].
-- "natural" = a more idiomatic rendering (may equal "corrected").
+- "natural" = a more idiomatic rendering of the user's message (may equal
+  "corrected"). The user's message is a reply in the conversation above, so read
+  the partner's most recent line in RECENT CONVERSATION and make "natural" flow
+  as a natural response to it (right register, connectives, and references to
+  what the partner just said) — not just a sentence fixed in isolation.
 
 B) EXPRESSION GAP — the message is wholly or partly in ${ctx.nativeLanguage}, or the
    user signals they don't know how to say something. Do NOT grammar-correct
@@ -172,7 +176,7 @@ ${ctx.history || "(none)"}
 ${ctx.userInput}`;
 }
 
-// 第二套:不依赖 JSON schema,固定版式纯文本,供 UI 直接渲染。
+// Fallback: does not rely on JSON schema; fixed plain-text format for direct UI rendering.
 function proseSystemPrompt(ctx: TutorContext): string {
   const base = `You are a precise language tutor. A separate agent handles chat;
 you only analyze the user's latest message in ${ctx.targetLanguage}.
@@ -278,7 +282,7 @@ function parseTutorRaw(raw: string, ctx: TutorContext): TutorParseResult {
     analysis: null,
     error: {
       kind: "schema",
-      message: `JSON 字段校验失败: ${formatZodError(validated.error)}`,
+      message: `JSON field validation failed: ${formatZodError(validated.error)}`,
     },
   };
 }
@@ -315,9 +319,9 @@ async function requestStructuredTutorRaw(
   try {
     const raw = await provider.generate({ ...base, jsonSchema: schema });
     if (raw.trim()) return raw;
-    console.warn("json_schema 模式返回空内容,尝试 json_object 回退");
+    console.warn("json_schema mode returned empty content, trying json_object fallback");
   } catch (e) {
-    console.warn("json_schema 模式请求失败,尝试 json_object 回退:", e);
+    console.warn("json_schema mode request failed, trying json_object fallback:", e);
   }
 
   return provider.generate({
@@ -416,7 +420,7 @@ function rawPreview(raw: string, max = 1200): string {
 function formatTutorDiagnostic(
   attempts: { label: string; failure: string; raw?: string }[],
 ): string {
-  const lines = ["结构化批改已降级为纯文本;本轮未写入 mastery。", "开发诊断:"];
+  const lines = ["Structured correction degraded to plain text; mastery not written this turn.", "Development diagnostics:"];
   for (const [i, attempt] of attempts.entries()) {
     lines.push(`${i + 1}. ${attempt.label}: ${attempt.failure}`);
     if (attempt.raw !== undefined) {
@@ -427,7 +431,7 @@ function formatTutorDiagnostic(
   return lines.join("\n");
 }
 
-// 结构化分析;JSON 失败时自动走第二套纯文本 prompt 并直接展示,不向用户暴露解析错误。
+// Structured analysis; automatically falls back to the plain-text prompt on JSON failure and displays it directly, without exposing parse errors to the user.
 export async function analyze(
   provider: ModelProvider,
   ctx: TutorContext,
@@ -455,9 +459,9 @@ export async function analyze(
     });
 
     console.warn(
-      "导师结构化解析失败,启用纯文本第二套:",
+      "Tutor structured parse failed, enabling plain-text fallback:",
       parseFailureText(structured.error),
-      "原始:",
+      "raw:",
       raw.slice(0, 400),
     );
 
@@ -479,9 +483,9 @@ export async function analyze(
         raw: repairedRaw,
       });
       console.warn(
-        "导师 JSON 修复仍失败,启用纯文本第二套:",
+        "Tutor JSON repair still failed, enabling plain-text fallback:",
         parseFailureText(repaired.error),
-        "原始:",
+        "raw:",
         repairedRaw.slice(0, 400),
       );
     } catch (e) {
@@ -489,13 +493,13 @@ export async function analyze(
         label: "repair json_schema",
         failure: `request_failed: ${e instanceof Error ? e.message : String(e)}`,
       });
-      console.warn("导师 JSON 修复请求失败,启用纯文本第二套:", e);
+      console.warn("Tutor JSON repair request failed, enabling plain-text fallback:", e);
     }
 
     const proseRaw = await requestProseFeedback(provider, ctx);
     const proseFeedback = stripModelFences(proseRaw);
     if (proseFeedback.trim()) {
-      recordTutorOutcome("prose"); // 展示了批改,但本轮不入 mastery 账
+      recordTutorOutcome("prose"); // correction shown, but not recorded in mastery this turn
       const diagnostic = formatTutorDiagnostic(diagnosticAttempts);
       return { analysis: null, proseFeedback, diagnostic, error: diagnostic };
     }
@@ -512,12 +516,12 @@ export async function analyze(
     return {
       analysis: null,
       diagnostic,
-      error: `批改未能生成内容,请重试或检查模型设置。\n${diagnostic}`,
+      error: `Correction failed to generate content, please retry or check model settings.\n${diagnostic}`,
     };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    console.error("导师请求失败:", e);
+    console.error("Tutor request failed:", e);
     recordTutorOutcome("failed");
-    return { analysis: null, error: `API 请求失败: ${msg}` };
+    return { analysis: null, error: `API request failed: ${msg}` };
   }
 }

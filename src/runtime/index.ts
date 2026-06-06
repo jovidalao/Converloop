@@ -1,5 +1,5 @@
-// Agent Runtime 入口。import 本模块即触发内置 Agent 自注册(副作用 import),
-// 因此消费方(orchestrator)只需 `import { ... } from "./runtime"` 就能拿到已注册的注册表。
+// Agent Runtime entry point. Importing this module triggers built-in agent self-registration (side-effect import),
+// so consumers (orchestrator) only need `import { ... } from "./runtime"` to get the populated registry.
 import "./builtins";
 
 export * from "./builtin-overrides";

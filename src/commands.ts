@@ -1,64 +1,64 @@
-// 对话栏斜杠命令(/btw、/help 及现有会话动作的薄入口)。
-// 这里只做「命令定义 + 解析/匹配」的纯逻辑;UI 在 SlashMenu,落地在 ChatView。
-// 刻意不接入 Agent Runtime 的 hook 体系:斜杠命令是输入层关注点,先做轻量独立层。
-// 依赖只取 enablement 这一叶子模块(纯 localStorage,无 db/provider 副作用),保持可测。
+// Chat-bar slash commands (/btw, /help, and thin entry points into existing conversation actions).
+// This file only handles pure logic for "command definition + parsing/matching"; the UI is in SlashMenu and the dispatch happens in ChatView.
+// Intentionally not wired into the Agent Runtime hook system: slash commands are an input-layer concern, kept as a lightweight independent layer.
+// The only dependency is the enablement leaf module (pure localStorage, no db/provider side effects), keeping it testable.
 
 import { isAgentEnabled } from "./runtime/enablement";
 
 export type SlashCommandKind = "message" | "action" | "meta";
 
 export interface SlashCommand {
-  /** 不含斜杠的命令名,小写,如 "btw"。 */
+  /** Command name without the slash, lowercase, e.g. "btw". */
   name: string;
   description: string;
-  /** 参数提示(message 类才有),如 "<想问 AI 的话>"。 */
+  /** Argument hint (only for "message" kind), e.g. "<something to ask the AI>". */
   argsHint?: string;
   kind: SlashCommandKind;
-  /** action 类:复用现有 conversation.action Agent 的 id。 */
+  /** For "action" kind: the id of the existing conversation.action Agent to reuse. */
   actionId?: string;
 }
 
-// 命令清单。message/meta 是新增行为;action 类是现有会话动作(builtin:action:*)的薄入口,
-// 不引入新后端逻辑——执行时仍走 ChatView 的 runConversationAction → beginAction。
+// Command list. message/meta are new behaviors; action kinds are thin entry points into existing conversation actions (builtin:action:*),
+// introducing no new backend logic — execution still goes through ChatView's runConversationAction → beginAction.
 export const SLASH_COMMANDS: SlashCommand[] = [
   {
     name: "btw",
-    description: "顺便问一句:本轮不计入上下文,也不批改",
-    argsHint: "<想问 AI 的话>",
+    description: "Side question: excluded from context and grading",
+    argsHint: "<ask the AI anything>",
     kind: "message",
   },
   {
     name: "help",
-    description: "查看所有可用命令",
+    description: "Show all available commands",
     kind: "meta",
   },
   {
     name: "harder",
-    description: "提高难度:基于当前对话另开一个更难的分支",
+    description: "Increase difficulty: branch into a harder version of the current conversation",
     kind: "action",
     actionId: "builtin:action:harder",
   },
   {
     name: "easier",
-    description: "降低难度:另开一个更简单的分支",
+    description: "Decrease difficulty: branch into an easier version",
     kind: "action",
     actionId: "builtin:action:easier",
   },
   {
     name: "swap",
-    description: "调换角色:另开一个角色互换的分支",
+    description: "Swap roles: branch into a role-reversed version",
     kind: "action",
     actionId: "builtin:action:swap_roles",
   },
   {
     name: "restart",
-    description: "重新开始:保留设定,另开一个空白分支重练",
+    description: "Restart: keep the setup, open a blank branch for re-practice",
     kind: "action",
     actionId: "builtin:action:restart",
   },
   {
     name: "next-day",
-    description: "第二天继续:另开一个承接剧情的新一天分支",
+    description: "Continue next day: branch into a new-day continuation of the current story",
     kind: "action",
     actionId: "builtin:action:next_day",
   },
@@ -66,11 +66,11 @@ export const SLASH_COMMANDS: SlashCommand[] = [
 
 export interface ParsedSlash {
   command: SlashCommand;
-  /** 命令词之后的参数(已去首尾空白);无参数为空串。 */
+  /** Arguments after the command word (leading/trailing whitespace stripped); empty string if no arguments. */
   rest: string;
 }
 
-// 提交时的命令路由:必须行首即 /,首词为已知命令名。未知命令返回 null(当普通文本发送)。
+// Command routing on submit: must start with /, first word must be a known command name. Unknown commands return null (sent as plain text).
 export function parseSlashInput(raw: string): ParsedSlash | null {
   const m = /^\/([a-zA-Z][\w-]*)(?:\s+([\s\S]*))?$/.exec(raw);
   if (!m) return null;
@@ -79,20 +79,20 @@ export function parseSlashInput(raw: string): ParsedSlash | null {
   return { command, rest: (m[2] ?? "").trim() };
 }
 
-// 菜单态判定:输入以 / 开头、命令词还在编辑(尚无空格)时返回正在输入的命令词(可空串)。
-// 一旦命令词后出现空格(进入「输入参数」态)或不以 / 开头,返回 null(菜单关闭)。
+// Menu state detection: returns the command token being typed (possibly empty) when input starts with / and the command word is still being edited (no space yet).
+// Returns null (menu closed) once a space appears after the command word (entering the "enter arguments" state) or the input does not start with /.
 export function slashMenuToken(input: string): string | null {
   const m = /^\/([a-zA-Z][\w-]*)?$/.exec(input);
   return m ? (m[1] ?? "") : null;
 }
 
 export interface SlashMenuContext {
-  /** 能否衍生分支(practice 且非草稿);为假时隐藏 action 类命令。 */
+  /** Whether branching is available (practice conversation and not a draft); when false, action-kind commands are hidden. */
   canDerive: boolean;
 }
 
-// 给菜单用的过滤+排序:按命令词前缀/包含匹配,startsWith 优先;
-// action 类在不能衍生或对应 Agent 被禁用时不出现。
+// Filter + sort for the menu: match by command word prefix or substring, startsWith ranked first;
+// action-kind commands are excluded when branching is unavailable or the corresponding agent is disabled.
 export function matchSlashCommands(
   token: string,
   ctx: SlashMenuContext,

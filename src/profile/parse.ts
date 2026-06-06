@@ -1,21 +1,21 @@
-// learner-profile.md 的结构化解析 / 序列化(纯逻辑,可测)。
-// 用于结构化档案编辑器:按段编辑,标题由序列化保证,用户改不坏结构。
-// 段标题与 sanity.ts 的 REQUIRED_SECTIONS 一致。
+// Structured parsing / serialization of learner-profile.md (pure logic, testable).
+// Used by the structured profile editor: edit by section; section titles are enforced by serialization so users cannot break the structure.
+// Section titles match REQUIRED_SECTIONS in sanity.ts.
 
 import { REQUIRED_SECTIONS } from "./sanity";
 
-// 规范段顺序(不含 "## " 前缀),序列化时按此顺序输出。
+// Canonical section order (without the "## " prefix); sections are output in this order during serialization.
 export const SECTION_TITLES = REQUIRED_SECTIONS.map((h) =>
   h.replace(/^##\s+/, ""),
 );
 
 export interface ProfileSection {
-  title: string; // 不含 "## ",如 "About me"
-  body: string; // 标题行之后到下一个标题之间的正文(去掉首尾空行)
+  title: string; // without "## ", e.g. "About me"
+  body: string; // body text between this title line and the next heading (leading/trailing blank lines stripped)
 }
 
 export interface ParsedProfile {
-  header: string; // 第一个 "## " 之前的内容(通常是 "# Learner Profile …" 行)
+  header: string; // content before the first "## " (typically the "# Learner Profile …" line)
   sections: ProfileSection[];
 }
 
@@ -52,7 +52,7 @@ function trimBlank(lines: string[]): string {
   return lines.join("\n").replace(/^\n+/, "").replace(/\s+$/, "");
 }
 
-// 保证规范段都在、且按规范顺序;缺的补空段,未知段保留在末尾。
+// Ensure all canonical sections are present in canonical order; missing sections are filled with an empty body, unknown sections are appended at the end.
 export function ensureSections(p: ParsedProfile): ParsedProfile {
   const byTitle = new Map(p.sections.map((s) => [s.title, s]));
   const ordered: ProfileSection[] = SECTION_TITLES.map(
