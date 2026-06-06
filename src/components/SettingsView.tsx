@@ -66,8 +66,8 @@ function Field({
   className?: string;
 }) {
   return (
-    <div className={cn("mb-3.5 flex flex-col gap-1.5", className)}>
-      <span className="text-ui-body text-ui-muted">{label}</span>
+    <div className={cn("flex min-w-0 flex-col gap-2", className)}>
+      <span className="text-ui-meta font-medium text-ui-muted">{label}</span>
       {children}
     </div>
   );
@@ -83,7 +83,7 @@ function ToggleField({
   children: ReactNode;
 }) {
   return (
-    <label className="mb-3.5 flex items-center gap-2.5 text-ui-body">
+    <label className="flex min-h-11 items-center gap-3 rounded-lg border border-border/70 bg-card/70 px-3.5 py-2.5 text-ui-body">
       <Switch checked={checked} onCheckedChange={onChange} />
       <span>{children}</span>
     </label>
@@ -98,7 +98,13 @@ const THEMES: { value: Theme; label: string }[] = [
 // 主题色:swatch 用浅色模式下的 --brand 取值,仅作选择标识。
 const ACCENTS: { value: Accent; label: string; swatch: string }[] = [
   { value: "gray", label: "灰色", swatch: "oklch(0.44 0.006 286)" },
+  { value: "blue", label: "蓝色", swatch: "oklch(0.5729 0.2337 264.3664)" },
   { value: "purple", label: "紫色", swatch: "oklch(0.55 0.2 292)" },
+  {
+    value: "claude",
+    label: "Claude 橙",
+    swatch: "oklch(0.6171 0.1375 39.0427)",
+  },
 ];
 const CUSTOM_MODEL_VALUE = "__custom_model__";
 export type SettingsSection = "general" | "llm" | "tts";
@@ -156,15 +162,15 @@ function ProviderCard({
   return (
     <div
       className={cn(
-        "overflow-hidden rounded-lg border transition-colors",
-        active ? "border-primary/60 bg-primary/[0.03]" : "border-border",
+        "overflow-hidden rounded-xl border bg-card/80 shadow-minimal-flat transition-colors",
+        active ? "border-primary/50 bg-primary/[0.04]" : "border-border/80",
       )}
     >
       <button
         type="button"
         onClick={onToggle}
         aria-expanded={expanded}
-        className="flex w-full items-center gap-3 px-3.5 py-3 text-left transition-colors hover:bg-accent/40"
+        className="flex w-full items-center gap-3.5 px-4 py-4 text-left transition-colors hover:bg-accent/45"
       >
         {icon}
         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
@@ -203,17 +209,17 @@ function ProviderCard({
       </button>
 
       {expanded && (
-        <div className="border-t px-3.5 pt-3.5 pb-1">
+        <div className="border-t border-border/70 bg-background/45 px-5 py-5">
           {active ? (
-            <p className="mb-3.5 text-ui-caption text-ui-muted">
+            <p className="mb-5 text-ui-caption text-ui-muted">
               ✓ 这是当前正在使用的 provider。
             </p>
           ) : (
-            <Button size="sm" className="mb-3.5" onClick={onActivate}>
+            <Button size="sm" className="mb-5" onClick={onActivate}>
               设为当前 provider
             </Button>
           )}
-          {children}
+          <div className="space-y-5">{children}</div>
         </div>
       )}
     </div>
@@ -223,14 +229,14 @@ function ProviderCard({
 function ThemeToggle() {
   const { theme, setTheme } = useTheme();
   return (
-    <div className="inline-flex w-fit rounded-md border p-0.5">
+    <div className="inline-flex max-w-full flex-wrap rounded-lg border bg-card/70 p-1">
       {THEMES.map((t) => (
         <button
           key={t.value}
           type="button"
           onClick={() => setTheme(t.value)}
           className={cn(
-            "rounded-sm px-3 py-1 text-ui-body transition-colors",
+            "rounded-md px-3 py-1.5 text-ui-body transition-colors",
             theme === t.value
               ? "bg-accent text-foreground"
               : "text-ui-muted hover:text-foreground",
@@ -246,14 +252,14 @@ function ThemeToggle() {
 function AccentToggle() {
   const { accent, setAccent } = useTheme();
   return (
-    <div className="inline-flex w-fit rounded-md border p-0.5">
+    <div className="inline-flex max-w-full flex-wrap rounded-lg border bg-card/70 p-1">
       {ACCENTS.map((a) => (
         <button
           key={a.value}
           type="button"
           onClick={() => setAccent(a.value)}
           className={cn(
-            "flex items-center gap-2 rounded-sm px-3 py-1 text-ui-body transition-colors",
+            "flex items-center gap-2 rounded-md px-3 py-1.5 text-ui-body transition-colors",
             accent === a.value
               ? "bg-accent text-foreground"
               : "text-ui-muted hover:text-foreground",
@@ -267,6 +273,15 @@ function AccentToggle() {
         </button>
       ))}
     </div>
+  );
+}
+
+function GlassToggle() {
+  const { glassEnabled, setGlassEnabled } = useTheme();
+  return (
+    <ToggleField checked={glassEnabled} onChange={setGlassEnabled}>
+      开启 macOS 玻璃效果
+    </ToggleField>
   );
 }
 
@@ -612,7 +627,7 @@ export function SettingsView({ section }: { section: SettingsSection }) {
           </Field>
         ) : (
           selectedModel && (
-            <p className="-mt-2 mb-3.5 break-all text-ui-caption text-ui-muted">
+            <p className="-mt-3 break-all text-ui-caption text-ui-muted">
               模型 ID: {selectedModel.model}
             </p>
           )
@@ -633,8 +648,8 @@ export function SettingsView({ section }: { section: SettingsSection }) {
         </Field>
 
         {oauth ? (
-          <div className="mb-3.5 flex flex-col gap-2">
-            <span className="text-ui-body text-ui-muted">
+          <div className="flex flex-col gap-2.5">
+            <span className="text-ui-meta font-medium text-ui-muted">
               订阅登录 {tokens ? "· 已登录" : "· 未登录"}
             </span>
             <div className="flex flex-wrap items-center gap-2">
@@ -720,36 +735,47 @@ export function SettingsView({ section }: { section: SettingsSection }) {
   }
 
   return (
-    <div className="h-full overflow-y-auto px-6 pt-14 pb-6">
-      <div className="max-w-3xl">
+    <div className="h-full overflow-y-auto px-8 pt-10 pb-12">
+      <div className="mx-auto w-full max-w-4xl">
         {section === "general" && (
-          <section>
-            <h2 className="mb-4 mt-0 text-ui-title font-semibold tracking-tight">
-              通用设置
-            </h2>
+          <section className="space-y-7">
+            <div className="space-y-2 border-b border-border/70 pb-5">
+              <h2 className="mt-0 text-ui-title font-semibold tracking-tight">
+                通用设置
+              </h2>
+              <p className="max-w-2xl text-ui-body leading-relaxed text-ui-muted">
+                调整应用外观和学习语言。这里的设置会立即保存到本地。
+              </p>
+            </div>
 
-            <Field label="主题">
-              <ThemeToggle />
-            </Field>
+            <div className="grid gap-5 rounded-xl border border-border/70 bg-card/75 p-5 shadow-minimal-flat md:grid-cols-2">
+              <Field label="主题">
+                <ThemeToggle />
+              </Field>
 
-            <Field label="主题色">
-              <AccentToggle />
-            </Field>
+              <Field label="主题色">
+                <AccentToggle />
+              </Field>
 
-            <div className="mb-3.5 flex flex-wrap items-end gap-2">
-              <Field label="母语" className="mb-0 min-w-28 flex-1">
+              <div className="md:col-span-2">
+                <GlassToggle />
+              </div>
+            </div>
+
+            <div className="grid gap-4 rounded-xl border border-border/70 bg-card/75 p-5 shadow-minimal-flat sm:grid-cols-3">
+              <Field label="母语">
                 <Input
                   value={cfg.nativeLanguage}
                   onChange={(e) => update("nativeLanguage", e.target.value)}
                 />
               </Field>
-              <Field label="目标语言" className="mb-0 min-w-28 flex-1">
+              <Field label="目标语言">
                 <Input
                   value={cfg.targetLanguage}
                   onChange={(e) => update("targetLanguage", e.target.value)}
                 />
               </Field>
-              <Field label="水平" className="mb-0 min-w-28 flex-1">
+              <Field label="水平">
                 <Input
                   value={cfg.level}
                   onChange={(e) => update("level", e.target.value)}
@@ -767,31 +793,35 @@ export function SettingsView({ section }: { section: SettingsSection }) {
         )}
 
         {section === "llm" && (
-          <section>
-            <h2 className="mb-1 mt-0 text-ui-title font-semibold tracking-tight">
-              LLM 提供商
-            </h2>
-            <p className="mb-4 text-ui-body leading-snug text-ui-muted">
-              下面列出全部提供商,每个都可单独配置并保存。点开任意一个修改连接信息,
-              「设为当前 provider」决定聊天实际使用哪个。
-            </p>
+          <section className="space-y-6">
+            <div className="space-y-2 border-b border-border/70 pb-5">
+              <h2 className="mt-0 text-ui-title font-semibold tracking-tight">
+                LLM 提供商
+              </h2>
+              <p className="max-w-2xl text-ui-body leading-relaxed text-ui-muted">
+                下面列出全部提供商,每个都可单独配置并保存。点开任意一个修改连接信息,
+                「设为当前 provider」决定聊天实际使用哪个。
+              </p>
+            </div>
 
-            <div className="flex flex-col gap-2.5">
+            <div className="flex flex-col gap-4">
               {PROVIDER_TYPES.map(renderLlmCard)}
             </div>
           </section>
         )}
 
         {section === "tts" && (
-          <section>
-            <h2 className="mb-1 mt-0 text-ui-title font-semibold tracking-tight">
-              TTS 提供商
-            </h2>
-            <p className="mb-4 text-ui-body leading-snug text-ui-muted">
-              聊天中 AI
-              回复、改正和更地道句子旁的小喇叭会调用语音合成。相同句子会缓存音频,避免重复请求。
-              {ttsCacheCount !== null && ` 当前缓存 ${ttsCacheCount} 条。`}
-            </p>
+          <section className="space-y-6">
+            <div className="space-y-2 border-b border-border/70 pb-5">
+              <h2 className="mt-0 text-ui-title font-semibold tracking-tight">
+                TTS 提供商
+              </h2>
+              <p className="max-w-2xl text-ui-body leading-relaxed text-ui-muted">
+                聊天中 AI
+                回复、改正和更地道句子旁的小喇叭会调用语音合成。相同句子会缓存音频,避免重复请求。
+                {ttsCacheCount !== null && ` 当前缓存 ${ttsCacheCount} 条。`}
+              </p>
+            </div>
 
             <ToggleField
               checked={ttsCfg.autoSpeak}
@@ -800,7 +830,7 @@ export function SettingsView({ section }: { section: SettingsSection }) {
               AI 回复自动朗读(关掉后仍可点小喇叭手动朗读)
             </ToggleField>
 
-            <div className="flex flex-col gap-2.5">
+            <div className="flex flex-col gap-4">
               <ProviderCard
                 icon={<SparklesIcon className="size-5 shrink-0 text-brand" />}
                 title="MiMo(神经语音 · 需 API key)"
@@ -851,8 +881,8 @@ export function SettingsView({ section }: { section: SettingsSection }) {
                   />
                 </Field>
 
-                <div className="mb-3.5 flex flex-wrap items-end gap-2">
-                  <Field label="音色" className="mb-0 min-w-28 flex-1">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field label="音色">
                     <Select
                       value={ttsCfg.voice}
                       onValueChange={(v) => updateTts("voice", v)}
@@ -869,7 +899,7 @@ export function SettingsView({ section }: { section: SettingsSection }) {
                       </SelectContent>
                     </Select>
                   </Field>
-                  <Field label="模型" className="mb-0 min-w-28 flex-1">
+                  <Field label="模型">
                     <Input
                       value={ttsCfg.model}
                       onChange={(e) => updateTts("model", e.target.value)}
@@ -910,12 +940,12 @@ export function SettingsView({ section }: { section: SettingsSection }) {
                 }
                 onActivate={() => updateTts("ttsProvider", "edge")}
               >
-                <p className="mb-3.5 text-ui-body leading-snug text-ui-muted">
+                <p className="text-ui-body leading-relaxed text-ui-muted">
                   使用微软 Edge 在线神经语音,免费、无需 API key(合成走本地后端
                   WebSocket)。
                 </p>
-                <div className="mb-3.5 flex flex-wrap items-end gap-2">
-                  <Field label="音色" className="mb-0 min-w-40 flex-1">
+                <div className="grid gap-4 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]">
+                  <Field label="音色">
                     <Select
                       value={ttsCfg.edgeVoice}
                       onValueChange={(v) => updateTts("edgeVoice", v)}
@@ -932,14 +962,14 @@ export function SettingsView({ section }: { section: SettingsSection }) {
                       </SelectContent>
                     </Select>
                   </Field>
-                  <Field label="语速" className="mb-0 min-w-24 flex-1">
+                  <Field label="语速">
                     <Input
                       value={ttsCfg.edgeRate}
                       onChange={(e) => updateTts("edgeRate", e.target.value)}
                       placeholder="+0%"
                     />
                   </Field>
-                  <Field label="音高" className="mb-0 min-w-24 flex-1">
+                  <Field label="音高">
                     <Input
                       value={ttsCfg.edgePitch}
                       onChange={(e) => updateTts("edgePitch", e.target.value)}
@@ -963,7 +993,7 @@ export function SettingsView({ section }: { section: SettingsSection }) {
               </ProviderCard>
             </div>
 
-            <div className="mt-4 flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-3">
               <Button
                 variant="secondary"
                 onClick={() => void handleClearTtsCache()}

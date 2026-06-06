@@ -10,7 +10,7 @@
    .dark (toggled by the theme provider).
 
    6 base colors → learning semantics:
-     brand (→ primary)  AI 教练 / 主能力 / 主动作 (purple)
+     brand (→ primary)  AI 教练 / 主能力 / 主动作 (blue)
      info               表达缺口 / 待确认 (amber)
      success            说对 / 已掌握 (green)
      destructive        错误 / 失败 / 删除 (red)
@@ -35,18 +35,18 @@
   --font-size-title: 16px;
 
   /* === 6 base colors === */
-  --background: oklch(0.985 0.0025 286);
-  --foreground: oklch(0.21 0.012 285);
-  --foreground-rgb: 42, 40, 48; /* for shadow border rings */
-  --brand: oklch(0.55 0.2 292); /* purple — brand / primary action */
-  --brand-foreground: oklch(0.985 0.004 286);
-  --brand-rgb: 104, 78, 168;
-  --info: oklch(0.72 0.14 71); /* amber — expression gap / pending */
-  --info-rgb: 184, 124, 38;
-  --success: oklch(0.58 0.13 153); /* green — correct / mastered */
-  --success-rgb: 40, 120, 70;
-  --destructive: oklch(0.577 0.245 27.325); /* red — error / delete */
-  --destructive-rgb: 184, 60, 50;
+  --background: oklch(0.9911 0 0);
+  --foreground: oklch(0.1994 0.047 270.6494);
+  --foreground-rgb: 35, 32, 52; /* for shadow border rings */
+  --brand: oklch(0.5729 0.2337 264.3664); /* blue — brand / primary action */
+  --brand-foreground: oklch(1 0 0);
+  --brand-rgb: 46, 106, 255;
+  --info: oklch(0.7058 0.1918 39.576); /* amber — expression gap / pending */
+  --info-rgb: 204, 118, 42;
+  --success: oklch(0.62 0.16 169.5646); /* green — correct / mastered */
+  --success-rgb: 35, 143, 113;
+  --destructive: oklch(0.6411 0.2446 28.5713); /* red-orange — error / delete */
+  --destructive-rgb: 208, 70, 52;
 
   /* === text variants (mixed toward foreground for readable labels) === */
   --info-text: color-mix(in oklab, var(--info) 52%, var(--foreground));
@@ -81,15 +81,28 @@
   --success-foreground: oklch(0.985 0 0);
   --warning: var(--info); /* back-compat alias → info amber */
   --warning-foreground: oklch(0.985 0 0);
-  --card: var(--background);
+  --card: oklch(0.9851 0 0);
   --card-foreground: var(--foreground);
-  --popover: var(--background);
+  --popover: oklch(1 0 0);
   --popover-foreground: var(--foreground);
   --border: var(--foreground-10);
   --input: var(--foreground-10);
   --ring: color-mix(in srgb, var(--foreground) 26%, transparent);
   --ring-width: 1px;
   --ring-offset: 0px;
+  --sidebar: oklch(0.9851 0 0);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
+
+  /* === app shell surfaces (desktop chrome / panels) === */
+  --app-shell: color-mix(in oklab, var(--background) 96%, var(--brand) 4%);
+  --app-topbar: var(--app-shell);
+  --app-sidebar: var(--sidebar);
+  --app-main: var(--card);
+  --app-main-material: color-mix(in srgb, var(--app-main) 96%, transparent);
 
   /* === shadows === */
   --shadow-border-opacity: 0.08;
@@ -125,19 +138,19 @@
 }
 
 .dark {
-  /* === 6 base colors (brighter for dark surfaces) === */
-  --background: oklch(0.185 0.012 286);
-  --foreground: oklch(0.92 0.006 286);
-  --foreground-rgb: 226, 224, 232;
-  --brand: oklch(0.67 0.18 293);
-  --brand-foreground: oklch(0.16 0.012 286);
-  --brand-rgb: 124, 96, 188;
-  --info: oklch(0.74 0.14 72);
-  --info-rgb: 200, 142, 56;
-  --success: oklch(0.66 0.14 156);
-  --success-rgb: 50, 145, 90;
-  --destructive: oklch(0.704 0.191 22.216);
-  --destructive-rgb: 200, 84, 70;
+  /* === 6 base colors (tweakcn-inspired blue on dark surfaces) === */
+  --background: oklch(0 0 0);
+  --foreground: oklch(1 0 0);
+  --foreground-rgb: 255, 255, 255;
+  --brand: oklch(0.5683 0.2366 264.2478);
+  --brand-foreground: oklch(1 0 0);
+  --brand-rgb: 46, 106, 255;
+  --info: oklch(0.7058 0.1918 39.576);
+  --info-rgb: 204, 118, 42;
+  --success: oklch(0.8439 0.1679 169.5646);
+  --success-rgb: 72, 210, 168;
+  --destructive: oklch(0.7058 0.1918 39.576);
+  --destructive-rgb: 218, 100, 58;
 
   /* === text variants === */
   --info-text: color-mix(in oklab, var(--info) 52%, var(--foreground));
@@ -172,15 +185,26 @@
   --success-foreground: oklch(0.205 0 0);
   --warning: var(--info);
   --warning-foreground: oklch(0.205 0 0);
-  --card: oklch(0.205 0.012 286);
+  --card: oklch(0.1684 0 0);
   --card-foreground: var(--foreground);
-  --popover: oklch(0.225 0.012 286);
+  --popover: oklch(0.1684 0 0);
   --popover-foreground: var(--foreground);
-  --border: color-mix(in srgb, var(--foreground) 12%, transparent);
-  --input: color-mix(in srgb, var(--foreground) 15%, transparent);
+  --border: oklch(0.2746 0.013 279.0717);
+  --input: oklch(0.2697 0.0888 269.7716);
   --ring: color-mix(in srgb, var(--foreground) 30%, transparent);
   --ring-width: 1px;
   --ring-offset: 0px;
+  --sidebar: oklch(0.105 0 0);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
+  --app-shell: color-mix(in oklab, var(--background) 92%, var(--brand) 8%);
+  --app-topbar: var(--app-shell);
+  --app-sidebar: var(--sidebar);
+  --app-main: var(--card);
+  --app-main-material: color-mix(in srgb, var(--app-main) 92%, transparent);
 
   /* === shadows (stronger in dark) === */
   --shadow-border-opacity: 0.15;
@@ -188,23 +212,185 @@
 }
 
 /* ============================================================
-   Accent (theme color) presets. The default brand is purple
+   Full theme accents. Blue uses the root theme variables above. Claude is
+   a full tweakcn theme, so selecting the Claude accent also swaps
+   the surface system (background, cards, borders, sidebar).
+   ============================================================ */
+:root[data-accent="claude"] {
+  --radius: 1rem;
+  --background: oklch(0.9818 0.0054 95.0986);
+  --foreground: oklch(0.3438 0.0269 95.7226);
+  --foreground-rgb: 77, 66, 53;
+  --brand: oklch(0.6171 0.1375 39.0427);
+  --brand-foreground: oklch(1 0 0);
+  --brand-rgb: 181, 92, 38;
+  --card: oklch(0.9665 0.0067 97.3521);
+  --card-foreground: oklch(0.1908 0.002 106.5859);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.2671 0.0196 98.939);
+  --secondary: oklch(0.9245 0.0138 92.9892);
+  --secondary-foreground: oklch(0.4334 0.0177 98.6048);
+  --muted: oklch(0.9341 0.0153 90.239);
+  --muted-foreground: oklch(0.5341 0.0078 97.4503);
+  --accent: oklch(0.9245 0.0138 92.9892);
+  --accent-foreground: oklch(0.2671 0.0196 98.939);
+  --border: oklch(0.8847 0.0069 97.3627);
+  --input: oklch(0.7621 0.0156 98.3528);
+  --ring: color-mix(in srgb, var(--brand) 62%, var(--foreground));
+  --sidebar: oklch(0.9663 0.008 98.8792);
+  --sidebar-foreground: oklch(0.359 0.0051 106.6524);
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: oklch(0.325 0 0);
+  --sidebar-border: oklch(0.9401 0 0);
+  --sidebar-ring: oklch(0.7731 0 0);
+  --radius-panel: 16px;
+  --panel-gap: 6px;
+  --panel-inset: 8px;
+  --app-shell: oklch(0.953 0.009 96);
+  --app-topbar: var(--app-shell);
+  --app-sidebar: var(--sidebar);
+  --app-main: color-mix(in oklab, var(--card) 92%, white 8%);
+  --app-main-material: color-mix(in srgb, var(--app-main) 97%, transparent);
+  --shadow-border-opacity: 0.1;
+  --shadow-blur-opacity: 0.08;
+}
+
+.dark[data-accent="claude"] {
+  --background: oklch(0.2679 0.0036 106.6427);
+  --foreground: oklch(0.9576 0.0027 106.4494);
+  --foreground-rgb: 244, 244, 240;
+  --brand: oklch(0.6724 0.1308 38.7559);
+  --brand-foreground: oklch(0.1908 0.002 106.5859);
+  --brand-rgb: 212, 117, 55;
+  --card: oklch(0.2928 0.0018 106.5092);
+  --card-foreground: oklch(0.9818 0.0054 95.0986);
+  --popover: oklch(0.3085 0.0035 106.6039);
+  --popover-foreground: oklch(0.9211 0.004 106.4781);
+  --secondary: oklch(0.355 0.004 106.6);
+  --secondary-foreground: oklch(0.9576 0.0027 106.4494);
+  --muted: oklch(0.2213 0.0038 106.707);
+  --muted-foreground: oklch(0.7713 0.0169 99.0657);
+  --accent: oklch(0.213 0.0078 95.4245);
+  --accent-foreground: oklch(0.9663 0.008 98.8792);
+  --border: oklch(0.3618 0.0101 106.8928);
+  --input: oklch(0.4336 0.0113 100.2195);
+  --ring: color-mix(in srgb, var(--brand) 68%, var(--foreground));
+  --sidebar: oklch(0.2357 0.0024 67.7077);
+  --sidebar-foreground: oklch(0.8074 0.0142 93.0137);
+  --sidebar-accent: oklch(0.168 0.002 106.6177);
+  --sidebar-accent-foreground: oklch(0.8074 0.0142 93.0137);
+  --sidebar-border: oklch(0.3618 0.0101 106.8928);
+  --sidebar-ring: oklch(0.7731 0 0);
+  --app-shell: oklch(0.215 0.003 86);
+  --app-topbar: var(--app-shell);
+  --app-sidebar: var(--sidebar);
+  --app-main: var(--card);
+  --app-main-material: color-mix(in srgb, var(--app-main) 94%, transparent);
+}
+
+/* ============================================================
+   Accent (theme color) presets. The default brand is blue
    (defined in :root / .dark above). "gray" neutralizes the brand
-   to a slate gray for primary actions / brand highlights, while
-   keeping the info / success / destructive semantics untouched.
-   Applied via [data-accent] on <html> by the theme provider;
-   data-accent="purple" simply falls back to the defaults above.
+   to a slate gray and "purple" restores the original brand purple
+   for primary actions / brand highlights, while keeping the info /
+   success / destructive semantics untouched. Applied via [data-accent]
+   on <html> by the theme provider; data-accent="blue" simply falls
+   back to the defaults above.
    ============================================================ */
 :root[data-accent="gray"] {
   --brand: oklch(0.44 0.006 286);
   --brand-foreground: oklch(0.985 0.004 286);
   --brand-rgb: 96, 95, 101;
+  --background: oklch(0.982 0.002 286);
+  --foreground: oklch(0.22 0.012 286);
+  --foreground-rgb: 39, 38, 44;
+  --card: oklch(0.995 0 0);
+  --popover: oklch(1 0 0);
+  --secondary: oklch(0.94 0.003 286);
+  --muted: oklch(0.94 0.003 286);
+  --accent: oklch(0.93 0.004 286);
+  --border: oklch(0.88 0.004 286);
+  --input: oklch(0.84 0.005 286);
+  --sidebar: oklch(0.955 0.004 286);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-border: oklch(0.875 0.004 286);
+  --app-shell: oklch(0.945 0.004 286);
+  --app-topbar: var(--app-shell);
+  --app-sidebar: var(--sidebar);
+  --app-main: var(--card);
+  --app-main-material: color-mix(in srgb, var(--app-main) 88%, transparent);
 }
 
 .dark[data-accent="gray"] {
   --brand: oklch(0.72 0.006 286);
   --brand-foreground: oklch(0.18 0.012 286);
   --brand-rgb: 172, 171, 178;
+  --background: oklch(0.145 0.004 286);
+  --foreground: oklch(0.92 0.004 286);
+  --foreground-rgb: 226, 225, 231;
+  --card: oklch(0.19 0.005 286);
+  --popover: oklch(0.21 0.005 286);
+  --secondary: oklch(0.24 0.006 286);
+  --muted: oklch(0.24 0.006 286);
+  --accent: oklch(0.265 0.007 286);
+  --border: oklch(0.305 0.007 286);
+  --input: oklch(0.33 0.008 286);
+  --sidebar: oklch(0.13 0.004 286);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-border: oklch(0.29 0.007 286);
+  --app-shell: oklch(0.105 0.004 286);
+  --app-topbar: var(--app-shell);
+  --app-sidebar: var(--sidebar);
+  --app-main: var(--card);
+  --app-main-material: color-mix(in srgb, var(--app-main) 82%, transparent);
+}
+
+:root[data-accent="purple"] {
+  --brand: oklch(0.55 0.2 292);
+  --brand-foreground: oklch(0.985 0.004 286);
+  --brand-rgb: 104, 78, 168;
+  --background: oklch(0.982 0.004 286);
+  --foreground: oklch(0.21 0.018 286);
+  --foreground-rgb: 38, 35, 48;
+  --card: oklch(0.994 0.002 286);
+  --popover: oklch(1 0 0);
+  --secondary: oklch(0.94 0.006 286);
+  --muted: oklch(0.94 0.006 286);
+  --accent: color-mix(in oklab, var(--brand) 10%, var(--background));
+  --border: oklch(0.875 0.006 286);
+  --input: oklch(0.835 0.008 286);
+  --sidebar: oklch(0.953 0.006 286);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-border: oklch(0.872 0.006 286);
+  --app-shell: oklch(0.943 0.006 286);
+  --app-topbar: var(--app-shell);
+  --app-sidebar: var(--sidebar);
+  --app-main: var(--card);
+  --app-main-material: color-mix(in srgb, var(--app-main) 88%, transparent);
+}
+
+.dark[data-accent="purple"] {
+  --brand: oklch(0.67 0.18 293);
+  --brand-foreground: oklch(0.16 0.012 286);
+  --brand-rgb: 124, 96, 188;
+  --background: oklch(0.145 0.006 286);
+  --foreground: oklch(0.92 0.006 286);
+  --foreground-rgb: 226, 224, 232;
+  --card: oklch(0.19 0.007 286);
+  --popover: oklch(0.21 0.007 286);
+  --secondary: oklch(0.24 0.009 286);
+  --muted: oklch(0.24 0.009 286);
+  --accent: color-mix(in oklab, var(--brand) 20%, var(--background));
+  --border: oklch(0.305 0.011 286);
+  --input: oklch(0.33 0.012 286);
+  --sidebar: oklch(0.13 0.006 286);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-border: oklch(0.29 0.011 286);
+  --app-shell: oklch(0.105 0.006 286);
+  --app-topbar: var(--app-shell);
+  --app-sidebar: var(--sidebar);
+  --app-main: var(--card);
+  --app-main-material: color-mix(in srgb, var(--app-main) 82%, transparent);
 }
 
 @theme inline {
@@ -231,6 +417,12 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
 
   /* brand + craft semantic extensions */
   --color-brand: var(--brand);
@@ -291,7 +483,7 @@
   body {
     @apply text-foreground;
     font-family: var(--font-sans);
-    accent-color: var(--foreground);
+    accent-color: var(--primary);
   }
   ::selection {
     background: var(--foreground-20);
@@ -441,19 +633,23 @@
   --codex-sidebar-width-current: var(--sidebar-width);
   --codex-coach-width: var(--coach-width, 360px);
   --codex-coach-width-current: 0px;
-  --codex-main-bg: var(--background);
-  --codex-main-material: color-mix(
+  --codex-main-bg: var(--app-main);
+  --codex-main-material: var(--app-main-material);
+  --codex-topbar-bg: var(--app-topbar);
+  --codex-sidebar-bg: var(--app-sidebar);
+  --codex-sidebar-fg: var(--sidebar-foreground);
+  --codex-sidebar-muted: color-mix(
     in srgb,
-    var(--codex-main-bg) 84%,
+    var(--sidebar-foreground) 72%,
     transparent
   );
-  --codex-topbar-bg: var(--background);
-  --codex-sidebar-bg: var(--background);
-  --codex-sidebar-fg: var(--foreground);
-  --codex-sidebar-muted: var(--foreground-80);
   --codex-sidebar-hover: color-mix(in srgb, var(--foreground) 4%, transparent);
-  --codex-sidebar-active: color-mix(in srgb, var(--foreground) 7%, transparent);
-  --codex-sidebar-active-fg: var(--foreground);
+  --codex-sidebar-active: color-mix(
+    in srgb,
+    var(--sidebar-foreground) 10%,
+    transparent
+  );
+  --codex-sidebar-active-fg: var(--sidebar-foreground);
   --codex-border: var(--border);
   --codex-titlebar-fg: var(--foreground);
   --codex-chrome-fg: var(--foreground);
@@ -465,9 +661,9 @@
     var(--foreground) 6%,
     transparent
   );
-  --codex-sidebar-edit-border: var(--foreground-20);
-  --codex-sidebar-edit-bg: color-mix(in srgb, var(--background) 70%, transparent);
-  --codex-sidebar-footer-border: var(--foreground-10);
+  --codex-sidebar-edit-border: var(--sidebar-border);
+  --codex-sidebar-edit-bg: color-mix(in srgb, var(--sidebar) 70%, transparent);
+  --codex-sidebar-footer-border: var(--sidebar-border);
   --codex-sidebar-resizer-hover: color-mix(
     in srgb,
     var(--foreground) 6%,
@@ -483,19 +679,18 @@
   height: 100%;
   min-height: 100vh;
   overflow: hidden;
-  /* 透明:让侧栏/标题栏/教练栏透出窗口毛玻璃;主对话区作为独立 material panel。 */
-  background: transparent;
+  background: var(--app-shell);
   color: var(--foreground);
   transition: grid-template-columns 0.22s cubic-bezier(0.2, 0, 0, 1);
 }
 .dark .codex-shell {
-  --codex-main-material: color-mix(
+  --codex-main-material: var(--app-main-material);
+  --codex-sidebar-active: color-mix(
     in srgb,
-    var(--codex-main-bg) 78%,
+    var(--sidebar-foreground) 12%,
     transparent
   );
-  --codex-sidebar-active: color-mix(in srgb, var(--foreground) 10%, transparent);
-  --codex-sidebar-edit-bg: color-mix(in srgb, var(--foreground) 4%, transparent);
+  --codex-sidebar-edit-bg: color-mix(in srgb, var(--sidebar) 70%, transparent);
 }
 .codex-shell[data-sidebar-collapsed="true"] {
   --codex-sidebar-width-current: 0px;
@@ -516,8 +711,9 @@
   grid-template-columns: 132px minmax(0, 1fr) 132px;
   align-items: center;
   height: var(--codex-topbar-h);
-  /* 透明标题栏:统一工具栏区透出毛玻璃,像原生 unified toolbar。 */
-  background: transparent;
+  background: var(--codex-topbar-bg);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 .codex-topbar-left {
   position: absolute;
@@ -572,8 +768,9 @@
   position: relative;
   min-width: 0;
   overflow: hidden;
-  /* 透明:半透明侧栏透出毛玻璃(Mail/Notes/Finder 式)。hover/active 用半透明叠层。 */
-  background: transparent;
+  background: var(--codex-sidebar-bg);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   color: var(--codex-sidebar-fg);
 }
 .codex-sidebar-content {
@@ -617,11 +814,12 @@
   grid-row: 2;
   min-width: 0;
   margin: 0 var(--panel-inset) var(--panel-inset) var(--panel-gap);
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
   border-radius: var(--radius-panel);
-  background: var(--codex-main-material);
+  background: var(--codex-main-bg);
   box-shadow: var(--shadow-minimal);
-  backdrop-filter: saturate(180%) blur(28px);
-  -webkit-backdrop-filter: saturate(180%) blur(28px);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 .codex-secondary-view {
   min-height: 0;
@@ -635,12 +833,31 @@
   min-width: 0;
   overflow: hidden;
   margin: 0 var(--panel-inset) var(--panel-inset) 0;
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
   border-radius: var(--radius-panel);
-  background: var(--codex-main-material);
+  background: var(--codex-main-bg);
   box-shadow: var(--shadow-minimal);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  color: var(--codex-sidebar-fg);
+}
+
+:root[data-glass="on"] .codex-shell {
+  background: transparent;
+}
+
+:root[data-glass="on"] .codex-topbar,
+:root[data-glass="on"] .codex-sidebar {
+  background: transparent;
+  backdrop-filter: saturate(160%) blur(22px);
+  -webkit-backdrop-filter: saturate(160%) blur(22px);
+}
+
+:root[data-glass="on"] .codex-main,
+:root[data-glass="on"] .codex-coach {
+  background: var(--codex-main-material);
   backdrop-filter: saturate(180%) blur(28px);
   -webkit-backdrop-filter: saturate(180%) blur(28px);
-  color: var(--codex-sidebar-fg);
 }
 .codex-coach-content {
   width: 100%;
