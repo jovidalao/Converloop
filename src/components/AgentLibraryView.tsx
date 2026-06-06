@@ -252,13 +252,72 @@ function AgentRow({
             </p>
           )}
         </div>
-        {card?.canDisable && (
-          <Switch
-            checked={entry.enabled}
-            onCheckedChange={(v) => onToggle(entry.id, v)}
-            aria-label={entry.enabled ? "禁用" : "启用"}
-          />
-        )}
+        <div className="flex shrink-0 items-center gap-0.5">
+          {custom ? (
+            <>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-8 text-ui-muted hover:text-foreground"
+                title="编辑"
+                aria-label="编辑"
+                onClick={() => onEditCustom(entry.id)}
+              >
+                <PencilIcon size={15} />
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-8 text-ui-muted hover:text-foreground"
+                title="导出包"
+                aria-label="导出包"
+                onClick={() => onExport(entry.id)}
+              >
+                <DownloadIcon size={15} />
+              </Button>
+            </>
+          ) : (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className={cn(
+                "size-8",
+                tuning
+                  ? "bg-accent text-foreground"
+                  : "text-ui-muted hover:text-foreground",
+              )}
+              title="微调"
+              aria-label="微调"
+              onClick={() => onTune(entry.id)}
+            >
+              <PencilIcon size={15} />
+            </Button>
+          )}
+          {canDelete && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="size-8 text-ui-muted hover:text-destructive"
+              title="删除"
+              aria-label="删除"
+              onClick={() => onDelete(entry)}
+            >
+              <Trash2Icon size={15} />
+            </Button>
+          )}
+          {card?.canDisable && (
+            <Switch
+              checked={entry.enabled}
+              onCheckedChange={(v) => onToggle(entry.id, v)}
+              aria-label={entry.enabled ? "禁用" : "启用"}
+              className="ml-1"
+            />
+          )}
+        </div>
       </div>
       {card && (
         <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-ui-caption">
@@ -276,54 +335,6 @@ function AgentRow({
           <dd className="m-0 text-foreground">{card.writes}</dd>
         </dl>
       )}
-      <div className="flex flex-wrap gap-2">
-        {custom ? (
-          <>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => onEditCustom(entry.id)}
-            >
-              <PencilIcon size={14} />
-              编辑
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => onExport(entry.id)}
-            >
-              <DownloadIcon size={14} />
-              导出包
-            </Button>
-          </>
-        ) : (
-          !tuning && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => onTune(entry.id)}
-            >
-              <PencilIcon size={14} />
-              微调
-            </Button>
-          )
-        )}
-        {canDelete && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="text-ui-muted hover:text-destructive"
-            onClick={() => onDelete(entry)}
-          >
-            <Trash2Icon size={14} />
-            删除
-          </Button>
-        )}
-      </div>
       {!custom && tuning && (
         <BuiltinTuneEditor
           entry={entry}
