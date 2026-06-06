@@ -65,6 +65,8 @@ export const en = {
     nativeFallback: "Native",
     analyzing: "Analyzing…",
     correct: "Looks correct",
+    noChanges: "No corrections needed",
+    unavailable: "Correction unavailable",
     explain: "Explain",
     naturalExpression: "Natural expression",
     grammarDetails: "Grammar details",

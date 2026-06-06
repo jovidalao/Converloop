@@ -1,6 +1,7 @@
 import {
   BookOpenIcon,
   CheckIcon,
+  InfoIcon,
   LanguagesIcon,
   SparklesIcon,
 } from "lucide-react";
@@ -169,6 +170,18 @@ export function InlineCorrection({
   const allCorrect = !!analysis && !gap && analysis.is_correct && !hasIssues;
   const showPending = pending && !analysis && !proseFeedback;
   const showProse = !analysis && !!proseFeedback?.trim();
+  // Catch-all so the row is never silently blank. Two real states fall through
+  // the cases above: analysis arrived with nothing actionable (no issues, gap,
+  // or natural rewrite — a model sometimes returns is_correct=false yet lists no
+  // issues), or no analysis came back at all without an error. Surface each.
+  const showFallback =
+    !showPending &&
+    !allCorrect &&
+    !gap &&
+    !hasIssues &&
+    !natural &&
+    !showProse &&
+    !error;
 
   return (
     <div className="flex w-full flex-col items-end gap-1.5">
@@ -187,6 +200,14 @@ export function InlineCorrection({
           <span className="inline-flex items-center gap-1 px-1.5 py-1 text-ui-caption text-success">
             <CheckIcon size={14} />
             {t("corrections.correct")}
+          </span>
+        )}
+        {showFallback && (
+          <span className="inline-flex items-center gap-1 px-1.5 py-1 text-ui-caption text-ui-muted">
+            {analysis ? <CheckIcon size={14} /> : <InfoIcon size={14} />}
+            {analysis
+              ? t("corrections.noChanges")
+              : t("corrections.unavailable")}
           </span>
         )}
         {gap && (

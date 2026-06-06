@@ -66,6 +66,8 @@ export const zh: Messages = {
     nativeFallback: "母语",
     analyzing: "正在分析…",
     correct: "表达正确",
+    noChanges: "无需改动",
+    unavailable: "未生成纠错",
     explain: "讲解",
     naturalExpression: "地道表达",
     grammarDetails: "语法详解",
