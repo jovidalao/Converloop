@@ -1,6 +1,7 @@
 // Agent Runtime — type layer for hook dispatch seams.
 // See docs/architecture.md for current runtime state; this file only defines types and hook names, no runtime logic.
 
+import type { HistoryTurn } from "../agents/history-messages";
 import type { TutorAnalysis } from "../agents/schema";
 import type { MasteryKeyHint, WeakItem } from "../agents/tutor";
 import type {
@@ -92,7 +93,8 @@ interface BaseContext {
   openingInstruction?: string;
   langs: Langs;
   summary: string;
-  history: string;
+  /** Verbatim recent turns after the summary watermark, sent to the reply agents as real alternating user/assistant messages. */
+  historyTurns: HistoryTurn[];
   callbacks: ConversationCallbacks;
   /** Resolves once the turn row is persisted (= safe to write analysis_json); rejects if persistence fails.
    *  Observers wait for this before writing back, to avoid writing to a non-existent row. */

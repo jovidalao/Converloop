@@ -48,6 +48,7 @@ import {
   getTurn,
   getTurnsAfterId,
   persistTurn,
+  toHistoryTurns,
   updateTurnReply,
 } from "./db/turns";
 import { buildLearningDataContext } from "./learning-data";
@@ -410,6 +411,8 @@ export async function runTurn(
     verbatimTurns,
   } = await loadTurnContextData(conversationId, config);
   const history = formatTurns(verbatimTurns);
+  // The conversation agent sees these recent turns as real alternating messages; the string `history` above is still used for mastery-relevance ranking and the tutor.
+  const historyTurns = toHistoryTurns(verbatimTurns);
   // The tutor only needs the most recent turns; do not feed all verbatim turns after the watermark into the structured analysis (saves tokens, shortens input).
   const tutorHistory = formatTurns(verbatimTurns.slice(-TUTOR_HISTORY_TURNS));
   const weakList = rankMasteryItemsForInput(
@@ -463,7 +466,7 @@ export async function runTurn(
     tutorPreferences,
     tutorFlags,
     summary: summaryData.summary ?? "",
-    history,
+    historyTurns,
     tutorHistory,
     weakList,
     keyHints,
@@ -598,7 +601,7 @@ export async function startDerivedConversation(
       ignorePunctuationIssues: false,
     },
     summary: summaryData.summary ?? "",
-    history,
+    historyTurns: toHistoryTurns(verbatimTurns),
     tutorHistory: "",
     weakList,
     keyHints,
@@ -651,7 +654,7 @@ async function runLearningTurn(
     profileMd,
     "learning",
   );
-  const history = formatTurns(
+  const historyTurns = toHistoryTurns(
     await getTurnsAfterId(conversationId, summaryData.throughId),
   );
 
@@ -679,7 +682,7 @@ async function runLearningTurn(
     agentPrompt: agent.prompt,
     dataContext,
     summary: summaryData.summary ?? "",
-    history,
+    historyTurns,
     kickoff,
     callbacks: cb,
     turnPersisted,
@@ -774,7 +777,7 @@ export async function regenerateReply(
         parseAgentModifiers(conv?.agentModifiersJson ?? null),
       ),
       summary: summaryData.summary ?? "",
-      history,
+      historyTurns: toHistoryTurns(verbatimTurns.slice(0, idx)),
       userInput: target.userInput,
       customInstructions: getBuiltinAgentOverride("builtin:conversation")
         ?.instructions,

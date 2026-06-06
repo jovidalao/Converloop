@@ -1,4 +1,5 @@
 import { and, count, desc, eq, gt, gte, sql } from "drizzle-orm";
+import type { HistoryTurn } from "../agents/history-messages";
 import type { TutorAnalysis } from "../agents/schema";
 import { db } from "./client";
 import { normalizeKey } from "./mastery-logic";
@@ -193,6 +194,16 @@ export function formatTurns(turns: Turn[]): string {
         : `Partner: ${t.reply}`;
     })
     .join("\n\n");
+}
+
+// Structured history for the reply agents: the conversation/lesson partner sees
+// real alternating user/assistant turns (see buildHistoryMessages) instead of the
+// flattened transcript above, so it doesn't lose track of whose turn it is.
+export function toHistoryTurns(turns: Turn[]): HistoryTurn[] {
+  return turns.map((t) => ({
+    user: userLineForHistory(t).trim(),
+    reply: t.reply,
+  }));
 }
 
 // Fetch all verbatim turns after the "watermark" for a conversation (chronological order). afterId = summary_through_id:

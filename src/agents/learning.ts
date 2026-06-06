@@ -1,5 +1,6 @@
 import type { ChatMessage, ModelProvider } from "../providers/types";
 import { appendUserInstructions } from "./custom-instructions";
+import { buildHistoryMessages, type HistoryTurn } from "./history-messages";
 
 export interface LearningAgentContext {
   nativeLanguage: string;
@@ -10,7 +11,7 @@ export interface LearningAgentContext {
   agentPrompt: string;
   dataContext: string;
   summary: string; // rolling summary: recap of earlier lesson conversation (auto-compressed; empty if none)
-  history: string;
+  historyTurns: HistoryTurn[]; // verbatim recent lesson turns, sent as real alternating user/assistant messages
   userInput: string;
   kickoff: boolean;
   customInstructions?: string; // additional instructions appended by the user in the agent library (lesson teacher)
@@ -41,26 +42,24 @@ CUSTOM LESSON PROMPT
 ${ctx.agentPrompt}
 
 === AVAILABLE LEARNER DATA ===
-${ctx.dataContext || "(no learner data available yet)"}`;
+${ctx.dataContext || "(no learner data available yet)"}${storyBlock(ctx)}`;
   return appendUserInstructions(base, ctx.customInstructions);
 }
 
-function userPrompt(ctx: LearningAgentContext): string {
-  const latest = ctx.kickoff
+// STORY SO FAR = rolling summary of earlier lesson content (auto-compressed). It
+// lives in the system prompt now that recent turns are real chat messages; omit
+// the block entirely when there is no summary.
+function storyBlock(ctx: LearningAgentContext): string {
+  return ctx.summary
+    ? `\n\n=== STORY SO FAR (earlier in this lesson) ===\n${ctx.summary}`
+    : "";
+}
+
+// The latest learner message (or the hidden kickoff cue that opens a lesson).
+function latestUserMessage(ctx: LearningAgentContext): string {
+  return ctx.kickoff
     ? "Start this customized lesson now. Proactively summarize the relevant learner data and begin the first exercise."
     : ctx.userInput;
-  // STORY SO FAR = summary of earlier lesson conversation (auto-compressed), so long lessons don't lose earlier context; omit the whole block if there is no summary.
-  const storyBlock = ctx.summary
-    ? `=== STORY SO FAR (earlier in this lesson) ===
-${ctx.summary}
-
-`
-    : "";
-  return `${storyBlock}=== RECENT LESSON CONVERSATION ===
-${ctx.history || "(none)"}
-
-=== LATEST LEARNER MESSAGE ===
-${latest}`;
 }
 
 export async function runLearningAgent(
@@ -70,7 +69,8 @@ export async function runLearningAgent(
 ): Promise<string> {
   const messages: ChatMessage[] = [
     { role: "system", content: systemPrompt(ctx) },
-    { role: "user", content: userPrompt(ctx) },
+    ...buildHistoryMessages(ctx.historyTurns),
+    { role: "user", content: latestUserMessage(ctx) },
   ];
   return provider.stream(
     { messages, temperature: 0.5, meta: { label: "learning_agent" } },

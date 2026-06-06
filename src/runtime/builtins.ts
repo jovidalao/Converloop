@@ -133,7 +133,7 @@ const conversationReply: ReplyProducer = {
         calibrationHint: c.proficiency.calibrationHint,
         sessionAdjustments: formatModifierInstructions(c.agentModifiers),
         summary: ctx.summary,
-        history: ctx.history,
+        historyTurns: ctx.historyTurns,
         userInput: ctx.userInput,
         openingInstruction: ctx.openingInstruction,
         customInstructions: getBuiltinAgentOverride("builtin:conversation")
@@ -169,7 +169,7 @@ const learningReply: ReplyProducer = {
         agentPrompt: l.agentPrompt,
         dataContext: l.dataContext,
         summary: ctx.summary,
-        history: ctx.history,
+        historyTurns: ctx.historyTurns,
         userInput: ctx.userInput,
         kickoff: l.kickoff,
         customInstructions:

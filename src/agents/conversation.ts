@@ -1,6 +1,7 @@
 import type { ComfortableItem, ReviewItem } from "../db/mastery";
 import type { ChatMessage, ModelProvider } from "../providers/types";
 import { appendUserInstructions } from "./custom-instructions";
+import { buildHistoryMessages, type HistoryTurn } from "./history-messages";
 
 export interface ConversationContext {
   nativeLanguage: string;
@@ -13,7 +14,7 @@ export interface ConversationContext {
   calibrationHint: string; // evidence-driven difficulty calibration (see lib/proficiency; empty when insufficient evidence)
   sessionAdjustments: string; // session-level adjustment instructions (difficulty/role/next-day from branches; empty if none)
   summary: string; // rolling summary: target-language recap of earlier content (auto-compressed; empty if none)
-  history: string;
+  historyTurns: HistoryTurn[]; // verbatim recent turns, sent as real alternating user/assistant messages
   userInput: string;
   openingInstruction?: string; // hidden opening instruction triggered by the app (conversation derivation)
   customInstructions?: string; // additional instructions appended by the user in the agent library
@@ -62,6 +63,12 @@ function systemPrompt(ctx: ConversationContext): string {
   // Session-level adjustments (from branches) take priority over default behavior; omit the entire block when there are no adjustments.
   const adjustmentsBlock = ctx.sessionAdjustments
     ? `\n\n=== SESSION ADJUSTMENTS (apply on top of everything above) ===\n${ctx.sessionAdjustments}`
+    : "";
+  // STORY SO FAR = rolling summary of earlier content (auto-compressed). It lives
+  // in the system prompt now that the recent turns are real chat messages; omit
+  // the block entirely when there is no summary.
+  const storyBlock = ctx.summary
+    ? `\n\n=== STORY SO FAR (earlier in this conversation) ===\n${ctx.summary}`
     : "";
   const base = `You are a warm, natural conversation partner for a ${ctx.nativeLanguage} speaker
 learning ${ctx.targetLanguage} at roughly ${ctx.level} level. Your only job here is to
@@ -112,26 +119,15 @@ ${ctx.profileSlice || "(no profile yet)"}
 ${formatComfortableItems(ctx.comfortableItems)}
 
 === DUE FOR REVIEW (weave in at most one, only if it fits) ===
-${formatReviewItems(ctx.reviewItems)}`;
+${formatReviewItems(ctx.reviewItems)}${storyBlock}`;
   return appendUserInstructions(base, ctx.customInstructions);
 }
 
-function userPrompt(ctx: ConversationContext): string {
-  // STORY SO FAR = summary of earlier conversation (auto-compressed), so long conversations don't lose earlier context; omit the entire block when there is no summary.
-  const storyBlock = ctx.summary
-    ? `=== STORY SO FAR (earlier in this conversation) ===
-${ctx.summary}
-
-`
-    : "";
-  const latest = ctx.openingInstruction?.trim()
+// The latest learner message (or the hidden app kickoff for a derived conversation).
+function latestUserMessage(ctx: ConversationContext): string {
+  return ctx.openingInstruction?.trim()
     ? `APP INSTRUCTION: ${ctx.openingInstruction.trim()}`
     : ctx.userInput;
-  return `${storyBlock}=== RECENT CONVERSATION ===
-${ctx.history || "(none)"}
-
-=== USER ===
-${latest}`;
 }
 
 // Plain-text streaming reply. onDelta pushes to the UI as chunks arrive; returns the full text for persistence.
@@ -142,7 +138,8 @@ export async function converse(
 ): Promise<string> {
   const messages: ChatMessage[] = [
     { role: "system", content: systemPrompt(ctx) },
-    { role: "user", content: userPrompt(ctx) },
+    ...buildHistoryMessages(ctx.historyTurns),
+    { role: "user", content: latestUserMessage(ctx) },
   ];
   return provider.stream(
     { messages, temperature: 0.7, meta: { label: "conversation" } },
