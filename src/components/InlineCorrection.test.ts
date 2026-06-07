@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Issue } from "../agents/schema";
-import { buildDiffSegments } from "./InlineCorrection";
+import { buildDiffSegments, buildWholeSentenceDiff } from "./InlineCorrection";
 
 function issue(span_original: string, span_corrected: string): Issue {
   return {
@@ -38,5 +38,47 @@ describe("buildDiffSegments", () => {
       original: "has",
       corrected: "have",
     });
+  });
+});
+
+describe("buildWholeSentenceDiff", () => {
+  // The main-page fallback when the tutor returns a corrected sentence but no
+  // locatable issue spans — mirrors what the coach panel shows via corrected.
+  it("diffs a single replaced word", () => {
+    const segments = buildWholeSentenceDiff("I has a cat", "I have a cat");
+    expect(segments).toContainEqual({
+      kind: "change",
+      original: "has",
+      corrected: "have",
+    });
+  });
+
+  it("captures an inserted word without losing sentence spacing", () => {
+    const segments = buildWholeSentenceDiff("I a cat", "I have a cat");
+    expect(segments).toContainEqual({
+      kind: "change",
+      original: "",
+      corrected: "have",
+    });
+    // Reconstructing same + corrected text yields the corrected sentence (no
+    // dropped or doubled spaces).
+    const rebuilt = segments
+      .map((s) => (s.kind === "same" ? s.text : s.corrected))
+      .join("");
+    expect(rebuilt).toBe("I have a cat");
+  });
+
+  it("captures a deleted word", () => {
+    const segments = buildWholeSentenceDiff("I do have a cat", "I have a cat");
+    expect(segments).toContainEqual({
+      kind: "change",
+      original: "do",
+      corrected: "",
+    });
+  });
+
+  it("has no change segment when the sentences match", () => {
+    const segments = buildWholeSentenceDiff("I have a cat", "I have a cat");
+    expect(segments.some((s) => s.kind === "change")).toBe(false);
   });
 });

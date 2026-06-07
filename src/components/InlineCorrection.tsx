@@ -86,8 +86,111 @@ export function buildDiffSegments(
   return segments;
 }
 
-// A sentence in the user's bubble: shows an inline diff when there's a locatable
-// correction, otherwise plain text.
+// Word-level diff between the original sentence and a whole corrected sentence.
+// Fallback for when the tutor returns a corrected sentence but no locatable issue
+// spans (empty issues, or spans that aren't verbatim substrings of the original):
+// the coach panel still shows this via analysis.corrected, so we mirror it here.
+// Standard LCS over whitespace-preserving tokens; deleted/inserted runs coalesce
+// into one change segment, with surrounding whitespace kept in "same" segments so
+// sentence spacing is preserved.
+export function buildWholeSentenceDiff(
+  original: string,
+  corrected: string,
+): DiffSegment[] {
+  const a = original.split(/(\s+)/).filter(Boolean);
+  const b = corrected.split(/(\s+)/).filter(Boolean);
+  const n = a.length;
+  const m = b.length;
+  const lcs: number[][] = Array.from({ length: n + 1 }, () =>
+    new Array<number>(m + 1).fill(0),
+  );
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      lcs[i][j] =
+        a[i] === b[j]
+          ? lcs[i + 1][j + 1] + 1
+          : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
+    }
+  }
+
+  const segments: DiffSegment[] = [];
+  const pushSame = (text: string) => {
+    if (!text) return;
+    const last = segments[segments.length - 1];
+    if (last?.kind === "same") last.text += text;
+    else segments.push({ kind: "same", text });
+  };
+  let del = "";
+  let ins = "";
+  const flush = () => {
+    if (!del && !ins) return;
+    // Lift surrounding whitespace out of the change into "same" segments so the
+    // change holds only the differing words (matches the issue-based convention).
+    const ref = ins || del;
+    pushSame(/^\s*/.exec(ref)![0]);
+    segments.push({
+      kind: "change",
+      original: del.trim(),
+      corrected: ins.trim(),
+    });
+    pushSame(/\s*$/.exec(ref)![0]);
+    del = "";
+    ins = "";
+  };
+
+  let i = 0;
+  let j = 0;
+  while (i < n && j < m) {
+    if (a[i] === b[j]) {
+      flush();
+      pushSame(a[i]);
+      i++;
+      j++;
+    } else if (lcs[i + 1][j] >= lcs[i][j + 1]) {
+      del += a[i++];
+    } else {
+      ins += b[j++];
+    }
+  }
+  while (i < n) del += a[i++];
+  while (j < m) ins += b[j++];
+  flush();
+  return segments;
+}
+
+// Renders diff segments as inline red strikethrough + green correction. del/ins
+// are rendered conditionally so pure insertions/deletions (only in the
+// whole-sentence fallback) don't leave an empty strikethrough or stray space.
+function DiffView({ segments }: { segments: DiffSegment[] }) {
+  return (
+    <span>
+      {segments.map((seg, i) =>
+        seg.kind === "same" ? (
+          <span key={i}>{seg.text}</span>
+        ) : (
+          <span key={i}>
+            {seg.original && (
+              <del className="text-destructive line-through decoration-destructive decoration-[1.5px]">
+                {seg.original}
+              </del>
+            )}
+            {seg.original && seg.corrected ? " " : null}
+            {seg.corrected && (
+              <ins className="font-semibold text-success no-underline">
+                {seg.corrected}
+              </ins>
+            )}
+          </span>
+        ),
+      )}
+    </span>
+  );
+}
+
+// A sentence in the user's bubble: shows an inline diff when there's a correction,
+// otherwise plain text. Prefers the precise issue-span diff; falls back to a
+// whole-sentence diff against analysis.corrected when no spans are locatable, so
+// the main page never silently drops a correction the coach panel does show.
 export function UserSentence({
   text,
   analysis,
@@ -114,31 +217,28 @@ export function UserSentence({
       </span>
     );
   }
-  if (!analysis || analysis.is_correct || analysis.issues.length === 0) {
-    return <>{text}</>;
-  }
-  const segments = buildDiffSegments(text, analysis.issues);
-  const hasDiff = segments.some((s) => s.kind === "change");
-  if (!hasDiff) return <>{text}</>;
+  if (!analysis) return <>{text}</>;
 
-  return (
-    <span>
-      {segments.map((seg, i) =>
-        seg.kind === "same" ? (
-          <span key={i}>{seg.text}</span>
-        ) : (
-          <span key={i}>
-            <del className="text-destructive line-through decoration-destructive decoration-[1.5px]">
-              {seg.original}
-            </del>{" "}
-            <ins className="font-semibold text-success no-underline">
-              {seg.corrected}
-            </ins>
-          </span>
-        ),
-      )}
-    </span>
-  );
+  // Precise issue-span diff takes priority.
+  if (analysis.issues.length > 0) {
+    const segments = buildDiffSegments(text, analysis.issues);
+    if (segments.some((s) => s.kind === "change"))
+      return <DiffView segments={segments} />;
+  }
+
+  // Fallback: the tutor corrected the sentence but the issue spans weren't
+  // locatable. is_correct gates it so ignored capitalization/punctuation (which
+  // flips is_correct to true) stays hidden, matching the old behavior.
+  if (!analysis.is_correct) {
+    const corrected = analysis.corrected?.trim();
+    if (corrected && corrected !== text.trim()) {
+      const segments = buildWholeSentenceDiff(text, corrected);
+      if (segments.some((s) => s.kind === "change"))
+        return <DiffView segments={segments} />;
+    }
+  }
+
+  return <>{text}</>;
 }
 
 export function InlineCorrection({
