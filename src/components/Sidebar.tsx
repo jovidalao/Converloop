@@ -27,7 +27,7 @@ import {
   useState,
 } from "react";
 import { type Locale, staticT, useTranslation } from "@/i18n";
-import { actionShortcutLabel, getAppAction } from "@/lib/app-actions";
+import { actionAriaKeyshortcuts, actionShortcutLabel } from "@/lib/app-actions";
 import type { ConversationMeta } from "../db/conversations";
 import {
   deleteLearningAgent,
@@ -133,8 +133,6 @@ export function Sidebar({
   const derivationActions = getActions("session").filter((a) =>
     isAgentEnabled(a.id),
   );
-  const newChatAction = getAppAction("new-chat");
-
   // Learning lessons (capped at 5) all live in the animated body, so collapsing
   // the section hides every one — nothing peeks while collapsed.
   const visibleLearningAgents = learningAgents.slice(0, 5);
@@ -325,7 +323,7 @@ export function Sidebar({
                 title={t("sidebar.newChatTooltip", {
                   shortcut: actionShortcutLabel("new-chat"),
                 })}
-                aria-keyshortcuts={newChatAction.ariaKeyshortcuts}
+                aria-keyshortcuts={actionAriaKeyshortcuts("new-chat")}
               >
                 <span className="codex-sidebar-leading-icon">
                   <SquarePenIcon className="size-4" />

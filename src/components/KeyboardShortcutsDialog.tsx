@@ -1,7 +1,7 @@
 import { XIcon } from "lucide-react";
 import { useEffect } from "react";
 import { useTranslation } from "@/i18n";
-import { APP_ACTIONS } from "@/lib/app-actions";
+import { APP_ACTIONS, actionKeyCaps, useKeybindings } from "@/lib/app-actions";
 import { Button } from "./ui/button";
 
 function KeyCap({ children }: { children: string }) {
@@ -20,6 +20,8 @@ export function KeyboardShortcutsDialog({
   onClose: () => void;
 }) {
   const { t } = useTranslation();
+  // Reflect custom chords as they change.
+  useKeybindings();
   useEffect(() => {
     if (!open) return;
     function onKeyDown(e: KeyboardEvent) {
@@ -73,7 +75,7 @@ export function KeyboardShortcutsDialog({
                 {t(`actions.${shortcut.id}`)}
               </span>
               <span className="flex shrink-0 items-center gap-1">
-                {shortcut.keys.map((key) => (
+                {actionKeyCaps(shortcut.id).map((key) => (
                   <KeyCap key={key}>{key}</KeyCap>
                 ))}
               </span>

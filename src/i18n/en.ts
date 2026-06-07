@@ -352,6 +352,17 @@ export const en = {
         "Auto-open bilingual reading for AI replies (sentence by sentence)",
       glass: "Enable macOS glass effect",
     },
+    shortcuts: {
+      title: "Keyboard shortcuts",
+      description:
+        "Click Edit, then press a new key combination. A modifier (⌘, ⌃, or ⌥) is required; Esc cancels.",
+      edit: "Edit",
+      recording: "Press keys…",
+      reset: "Reset",
+      resetAll: "Reset all",
+      needModifier: "Add a modifier key (⌘, ⌃, or ⌥).",
+      conflict: "Already used by “{action}”.",
+    },
     themes: { light: "Light", dark: "Dark", system: "System" },
     accents: {
       gray: "Gray",

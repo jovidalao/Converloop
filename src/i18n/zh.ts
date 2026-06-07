@@ -347,6 +347,17 @@ export const zh: Messages = {
       autoBilingual: "AI 回复自动开启双语阅读(逐句对照)",
       glass: "开启 macOS 玻璃效果",
     },
+    shortcuts: {
+      title: "键盘快捷键",
+      description:
+        "点击「修改」后按下新的组合键。需包含修饰键(⌘、⌃ 或 ⌥);按 Esc 取消。",
+      edit: "修改",
+      recording: "请按下按键…",
+      reset: "恢复",
+      resetAll: "全部恢复",
+      needModifier: "请加入修饰键(⌘、⌃ 或 ⌥)。",
+      conflict: "已被「{action}」占用。",
+    },
     themes: { light: "明亮", dark: "暗黑", system: "跟随系统" },
     accents: {
       gray: "灰色",

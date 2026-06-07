@@ -63,7 +63,11 @@ import {
 } from "./db/learning-agents";
 import type { ChatTurn } from "./db/turns";
 import { useTranslation } from "./i18n";
-import { actionShortcutLabel, matchesActionShortcut } from "./lib/app-actions";
+import {
+  actionShortcutLabel,
+  matchesActionShortcut,
+  useKeybindings,
+} from "./lib/app-actions";
 import { withViewTransition } from "./lib/view-transition";
 import { flushMaintainerSoon } from "./profile/maintainer-runner";
 import {
@@ -109,6 +113,8 @@ function isSettingsView(view: MainView): boolean {
 
 function App() {
   const { t } = useTranslation();
+  // Subscribe so topbar/sidebar shortcut labels refresh when a chord is remapped.
+  useKeybindings();
   const [conversations, setConversations] = useState<ConversationMeta[]>([]);
   const [learningAgents, setLearningAgents] = useState<LearningAgentMeta[]>([]);
   const [ready, setReady] = useState(false);

@@ -43,6 +43,7 @@ import {
 import { synthesizeEdge } from "../tts/edge";
 import { synthesizeMimo } from "../tts/mimo";
 import { clearTtsCache, getTtsCacheCount } from "../tts/speak";
+import { ShortcutsEditor } from "./ShortcutsEditor";
 import { type Accent, type Theme, useTheme } from "./theme-provider";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -873,6 +874,8 @@ export function SettingsView({ section }: { section: SettingsSection }) {
             >
               {t("settings.general.autoBilingual")}
             </ToggleField>
+
+            <ShortcutsEditor />
           </section>
         )}
 
