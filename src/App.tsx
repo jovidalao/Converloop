@@ -369,6 +369,15 @@ function App() {
     [activeId, navigateTo],
   );
 
+  // Coach panel's turn index → scroll the chat to that turn. The turn cards are
+  // tagged with data-turn-id; both panels are mounted together when the coach is
+  // visible, so a DOM lookup is enough (no ref plumbing through ChatView).
+  const jumpToTurn = useCallback((turnId: string) => {
+    document
+      .querySelector<HTMLElement>(`[data-turn-id="${turnId}"]`)
+      ?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, []);
+
   // ⌘, settings · ⌘B sidebar · ⌘N new chat · ⌘1/2/3 focus the three panes · ⌘/ shortcuts.
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -955,6 +964,7 @@ function App() {
             turns={coachTurns}
             conversationId={activeId}
             onOpenView={(v) => navigateTo({ view: v, activeId })}
+            onJumpToTurn={jumpToTurn}
           />
         </aside>
       )}

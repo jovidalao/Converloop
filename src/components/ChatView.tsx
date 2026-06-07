@@ -114,7 +114,7 @@ interface ChatViewProps {
   onTurnsChange?: (turns: ChatTurn[]) => void;
   /** Called when a conversation action creates a branch; App switches to the new conversation. */
   onNavigateConversation?: (id: string) => void;
-  /** When the coach panel is visible, the in-chat turn-activity row is hidden — that content lives in the right panel. */
+  /** When the coach panel is visible, the in-chat per-turn "memory" activity row is hidden to avoid duplicating the panel's conversation-level learning-memory view; closing the panel brings the row back, so recorded memory stays visible either way. */
   coachVisible?: boolean;
   /** Small-window mode: strip to bare chat — message bubbles + copy + composer; hide explain/speak/suggestions/corrections/badges/slash menu. */
   compact?: boolean;
@@ -1156,16 +1156,21 @@ function DerivedContextBanner({
 // The activity row consolidates progressive disclosure for the turn: the center stays light,
 // details expand on demand. When the coach panel is open, details go to the right panel; only the conversation is rendered here.
 function TurnCard({
+  turnId,
   live,
   activities,
   children,
 }: {
+  turnId: string;
   live: boolean;
   activities: TurnActivity[];
   children: ReactNode;
 }) {
   return (
-    <div className={`flex flex-col gap-2${live ? " animate-message-in" : ""}`}>
+    <div
+      data-turn-id={turnId}
+      className={`flex flex-col gap-2${live ? " animate-message-in" : ""}`}
+    >
       {children}
       {activities.length > 0 && <TurnActivityRow activities={activities} />}
     </div>
@@ -1903,6 +1908,7 @@ export function ChatView({
         {turns.map((turn) => (
           <TurnCard
             key={turn.id}
+            turnId={turn.id}
             live={liveTurnIdsRef.current.has(turn.id)}
             activities={
               compact || coachVisible

@@ -1,6 +1,6 @@
 import { desc, eq } from "drizzle-orm";
 import { db } from "./client";
-import { type TurnAnnotation, turnAnnotation } from "./schema";
+import { type TurnAnnotation, turn, turnAnnotation } from "./schema";
 
 function payloadJson(payload: unknown): string | null {
   if (payload == null) return null;
@@ -27,12 +27,16 @@ export async function createTurnAnnotation(input: {
   return id;
 }
 
-export async function listTurnAnnotations(
-  turnId: string,
+// Conversation-scoped observations: join turn to gather every annotation across
+// the conversation, for the Coach Panel's whole-conversation review.
+export async function listTurnAnnotationsForConversation(
+  conversationId: string,
 ): Promise<TurnAnnotation[]> {
-  return db
-    .select()
+  const rows = await db
+    .select({ annotation: turnAnnotation })
     .from(turnAnnotation)
-    .where(eq(turnAnnotation.turnId, turnId))
+    .innerJoin(turn, eq(turnAnnotation.turnId, turn.id))
+    .where(eq(turn.conversationId, conversationId))
     .orderBy(desc(turnAnnotation.createdAt));
+  return rows.map((r) => r.annotation);
 }
