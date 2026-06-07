@@ -1,6 +1,8 @@
+import { generateAutoTitle } from "./agents/auto-title";
 import { bilingual } from "./agents/bilingual";
 import { converse } from "./agents/conversation";
 import { explain } from "./agents/explain";
+import { generateInputHints } from "./agents/input-hints";
 import { generateLearningAgentDraft } from "./agents/learning-agent-builder";
 import {
   analyzeLessonWriteback,
@@ -24,11 +26,13 @@ import { applyDataEditInstruction, type DataEditResult } from "./data-edit";
 import { runTrackedAgentJob } from "./db/agent-jobs";
 import {
   completeDerivedConversation,
+  DEFAULT_CONVERSATION_TITLE,
   failDerivedConversation,
   formatModifierInstructions,
   getConversation,
   getSummary,
   parseAgentModifiers,
+  renameConversation,
 } from "./db/conversations";
 import { createLearningAgent, getLearningAgent } from "./db/learning-agents";
 import { createLearningProject } from "./db/learning-projects";
@@ -961,4 +965,52 @@ export async function translateSelection(
       ),
     (text) => ({ chars: text.length }),
   );
+}
+
+// LLM-generated conversation title: called after the first message is persisted.
+// Silently skips when no provider is configured or the title was already changed by the user.
+export async function generateAndSetConversationTitle(
+  conversationId: string,
+  firstUserInput: string,
+): Promise<void> {
+  const provider = await getProvider();
+  if (!provider) return;
+
+  const conv = await getConversation(conversationId);
+  if (!conv || conv.title !== DEFAULT_CONVERSATION_TITLE) return;
+
+  const config = loadConfig();
+  try {
+    const title = await generateAutoTitle(provider, {
+      targetLanguage: config.targetLanguage,
+      firstMessage: firstUserInput,
+    });
+    if (title) await renameConversation(conversationId, title);
+  } catch {
+    // Silently fall back — the existing truncated title remains.
+  }
+}
+
+// Generate 8 short placeholder hints for the next user reply based on recent conversation history.
+// Returns an empty array on any error so callers can silently degrade.
+export async function generateInputHintsForConversation(
+  conversationId: string,
+): Promise<string[]> {
+  const provider = await getProvider();
+  if (!provider) return [];
+
+  const config = loadConfig();
+  try {
+    const turns = await getTurnsAfterId(conversationId, null);
+    const recent = tailTurnsByChars(turns, 4000);
+    const recentHistory = formatTurns(recent);
+    return await generateInputHints(provider, {
+      targetLanguage: config.targetLanguage,
+      nativeLanguage: config.nativeLanguage,
+      level: config.level,
+      recentHistory,
+    });
+  } catch {
+    return [];
+  }
 }

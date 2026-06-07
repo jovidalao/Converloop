@@ -465,7 +465,7 @@ export const zh: Messages = {
     selectModel: "选择模型",
     emptyModelId: "未填写模型 ID",
     inputPlaceholderLesson: "问老师、回答练习，母语/目标语言都可以…",
-    inputPlaceholderPractice: "用目标语言输入一句话…（/ 命令）",
+    inputPlaceholderPractice: "用 {lang} 说点什么…（/ 命令）",
     replySuggestionTruncated:
       "推荐回复因输出长度限制被截断（{provider}:{raw}）。可以重试，反馈问题时请在括号里附上原因。",
     generateReplySuggestion: "生成推荐回复",

@@ -53,7 +53,6 @@ import {
 } from "../config";
 import {
   getConversation,
-  maybeAutoTitle,
   type NewConversationContext,
   parseAgentModifiers,
   touchConversation,
@@ -71,6 +70,8 @@ import { deriveTurnActivities, type TurnActivity } from "../lib/turn-activity";
 import {
   bilingualReply,
   confirmLearningTurnMastery,
+  generateAndSetConversationTitle,
+  generateInputHintsForConversation,
   MissingApiKeyError,
   regenerateReply,
   runTurn,
@@ -1196,6 +1197,8 @@ export function ChatView({
   const [error, setError] = useState<string | null>(null);
   // Retry entry for the last failed operation (send / regenerate / lesson start all share the bottom error bar).
   const [retry, setRetry] = useState<{ run: () => void } | null>(null);
+  const [inputHints, setInputHints] = useState<string[] | null>(null);
+  const [hintIndex, setHintIndex] = useState(0);
   const messagesRef = useRef<HTMLDivElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -1205,8 +1208,9 @@ export function ChatView({
   const kickoffStartedRef = useRef(false);
   const derivationStartedRef = useRef(false);
   const liveTurnIdsRef = useRef<Set<string>>(new Set()); // turns sent in this session; auto-bilingual only applies to these
+  const hintTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const config = useConfig();
-  const { nativeLanguage, autoBilingual } = config;
+  const { nativeLanguage, autoBilingual, targetLanguage } = config;
   const confirm = useConfirm();
   const learningMode = mode === "learning_agent";
 
@@ -1253,6 +1257,18 @@ export function ChatView({
     setSlashSelected((s) => (s < slashCommands.length ? s : 0));
   }, [slashCommands.length]);
 
+  // Cycle placeholder hints every 5 s when available; clean up on unmount or when hints change.
+  useEffect(() => {
+    if (!inputHints || inputHints.length === 0) return;
+    setHintIndex(0);
+    hintTimerRef.current = setInterval(() => {
+      setHintIndex((i) => (i + 1) % inputHints.length);
+    }, 5000);
+    return () => {
+      if (hintTimerRef.current) clearInterval(hintTimerRef.current);
+    };
+  }, [inputHints]);
+
   // Input grows with content up to three lines; after that it scrolls internally.
   // biome-ignore lint/correctness/useExhaustiveDependencies: input is the intentional trigger; the effect reads inputRef after it changes, not input directly
   useEffect(() => {
@@ -1294,6 +1310,8 @@ export function ChatView({
   useEffect(() => {
     let cancelled = false;
     setDerivedBanner(null);
+    setInputHints(null);
+    if (hintTimerRef.current) clearInterval(hintTimerRef.current);
     void loadChatHistory(conversationId).then(async (loaded) => {
       if (cancelled) return;
       setTurns(loaded);
@@ -1527,6 +1545,9 @@ export function ChatView({
     setError(null);
     setRetry(null);
     replyCommittedRef.current = false;
+    // Reset hints for the new turn; hints generation fires after the reply arrives.
+    setInputHints(null);
+    if (hintTimerRef.current) clearInterval(hintTimerRef.current);
     setTurns((prev) => [
       ...(opts?.replacingId
         ? prev.filter((t) => t.id !== opts.replacingId)
@@ -1582,8 +1603,18 @@ export function ChatView({
       // Off-record turns (/btw) don't define the conversation topic and are excluded from auto-naming.
       await touchConversation(conversationId);
       if ((isFirstMessage || draftAtSend) && !learningMode && !offRecord)
-        await maybeAutoTitle(conversationId, text);
-      onActivity?.();
+        void generateAndSetConversationTitle(conversationId, text).then(() =>
+          onActivity?.(),
+        );
+      else onActivity?.();
+      // Fire hint generation in the background after the reply is committed; silently ignore errors.
+      if (!offRecord && !learningMode) {
+        const capturedGen = turnGen;
+        void generateInputHintsForConversation(conversationId).then((hints) => {
+          if (turnGenRef.current === capturedGen && hints.length > 0)
+            setInputHints(hints);
+        });
+      }
     } catch (e) {
       stopSpeech(); // stop any in-progress TTS on error
       speaker?.abort();
@@ -1993,7 +2024,11 @@ export function ChatView({
                 placeholder={
                   learningMode
                     ? t("chat.inputPlaceholderLesson")
-                    : t("chat.inputPlaceholderPractice")
+                    : inputHints && inputHints.length > 0
+                      ? inputHints[hintIndex]
+                      : t("chat.inputPlaceholderPractice", {
+                          lang: targetLanguage || "your target language",
+                        })
                 }
                 disabled={replyBusy}
                 className="max-h-[6.5rem] min-h-14 min-w-0 resize-none border-none bg-transparent px-4 pt-3 pb-2 text-ui-chat outline-none placeholder:text-muted-foreground"
