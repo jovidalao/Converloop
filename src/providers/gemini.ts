@@ -4,6 +4,7 @@ import type {
   FinishReason,
   GenerateOptions,
   ModelProvider,
+  Usage,
 } from "./types";
 
 // Native Gemini adapter (generateContent / streamGenerateContent).
@@ -181,12 +182,14 @@ function extractText(json: unknown): string {
 }
 
 // Parse SSE lines already split by \n, accumulate candidates[].content.parts[].text.
-function consumeSseLines(
+// usageMetadata.promptTokenCount (carried on streamed chunks, final on the last) = the real prompt size.
+export function consumeSseLines(
   lines: string[],
   onDelta: (delta: string) => void,
-): { text: string; finishReason: FinishReason | null } {
+): { text: string; finishReason: FinishReason | null; usage?: Usage } {
   let acc = "";
   let finalReason: FinishReason | null = null;
+  let usage: Usage | undefined;
   for (const line of lines) {
     const t = line.trim();
     if (!t.startsWith("data:")) continue;
@@ -195,6 +198,10 @@ function consumeSseLines(
     try {
       const json = JSON.parse(data) as {
         candidates?: { finishReason?: string; content?: GeminiContent }[];
+        usageMetadata?: {
+          promptTokenCount?: number;
+          candidatesTokenCount?: number;
+        };
       };
       const delta = extractText(json);
       if (delta) {
@@ -203,11 +210,17 @@ function consumeSseLines(
       }
       finalReason =
         finishReason(json.candidates?.[0]?.finishReason) ?? finalReason;
+      if (json.usageMetadata?.promptTokenCount != null) {
+        usage = {
+          inputTokens: json.usageMetadata.promptTokenCount,
+          outputTokens: json.usageMetadata.candidatesTokenCount ?? undefined,
+        };
+      }
     } catch {
       // Partial JSON, wait for subsequent chunks to complete it
     }
   }
-  return { text: acc, finishReason: finalReason };
+  return { text: acc, finishReason: finalReason, usage };
 }
 
 export function createGeminiProvider(cfg: GeminiConfig): ModelProvider {
@@ -225,6 +238,7 @@ export function createGeminiProvider(cfg: GeminiConfig): ModelProvider {
       let full = "";
       let buffer = "";
       let finalReason: FinishReason | null = null;
+      let usage: Usage | undefined;
       const channel = new Channel<string>();
       channel.onmessage = (chunk) => {
         buffer += chunk;
@@ -233,6 +247,7 @@ export function createGeminiProvider(cfg: GeminiConfig): ModelProvider {
         const consumed = consumeSseLines(parts, onDelta);
         full += consumed.text;
         finalReason = consumed.finishReason ?? finalReason;
+        if (consumed.usage) usage = { ...usage, ...consumed.usage };
       };
       await invoke("llm_stream", {
         url: geminiStreamUrl(cfg),
@@ -244,8 +259,10 @@ export function createGeminiProvider(cfg: GeminiConfig): ModelProvider {
         const consumed = consumeSseLines([buffer], onDelta);
         full += consumed.text;
         finalReason = consumed.finishReason ?? finalReason;
+        if (consumed.usage) usage = { ...usage, ...consumed.usage };
       }
       if (finalReason) opts.onFinish?.(finalReason);
+      if (usage) opts.onUsage?.(usage);
       return full;
     },
   };

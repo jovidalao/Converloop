@@ -118,6 +118,10 @@ User message:
 
 > 摘要 system prompt 在 `src/agents/summarize.ts`;改一处记得同步另一处(docs 契约 ↔ 实现)。
 
+## 上下文用量计量(UI 用量条)
+
+聊天框下方的用量条反映**真实发给模型的整段 prompt**(system prompt + 脚手架 + 摘要 + 历史 + 输入),不是可见气泡之和。每轮 `converse()`(及 `runLearningAgent`)组装好 messages 后经回调 `onContext` 上报:先用 `lib/tokens` 字符启发式估算秒显,待 provider 流回真实输入 token 再覆盖为精确值——Anthropic `input_tokens` + cache 读/写桶之和(缓存命中时只算未缓存尾巴会少算)、OpenAI `prompt_tokens`(需 `stream_options.include_usage`)、Gemini `promptTokenCount`、Codex `response.usage.input_tokens`;不报 usage 的端点保留估算。本会话首次发送前(刚打开会话)退回「气泡估算」,会偏低。
+
 ## 对话上下文(摘要段,放在 user 消息里,不进 system,保持可缓存前缀稳定)
 
 ```text

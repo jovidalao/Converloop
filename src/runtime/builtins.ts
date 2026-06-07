@@ -146,6 +146,7 @@ const conversationReply: ReplyProducer = {
           ?.instructions,
       },
       onDelta,
+      ctx.callbacks.onContext,
     );
   },
 };
@@ -183,6 +184,7 @@ const learningReply: ReplyProducer = {
           getBuiltinAgentOverride("builtin:learning")?.instructions,
       },
       onDelta,
+      ctx.callbacks.onContext,
     );
   },
 };

@@ -740,6 +740,7 @@ export async function regenerateReply(
   cb: {
     onReplyDelta: (delta: string) => void;
     onReplyComplete?: (reply: string) => void;
+    onContext?: (promptTokens: number) => void;
   },
 ): Promise<string> {
   const provider = await getProvider();
@@ -807,6 +808,7 @@ export async function regenerateReply(
         ?.instructions,
     },
     cb.onReplyDelta,
+    cb.onContext,
   );
 
   await updateTurnReply(turnId, reply);

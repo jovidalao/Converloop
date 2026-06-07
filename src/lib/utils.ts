@@ -8,7 +8,9 @@ import { extendTailwindMerge } from "tailwind-merge";
 const twMerge = extendTailwindMerge({
   extend: {
     classGroups: {
-      shadow: [{ shadow: ["minimal", "minimal-flat", "modal-small", "tinted"] }],
+      shadow: [
+        { shadow: ["minimal", "minimal-flat", "modal-small", "tinted"] },
+      ],
     },
   },
 });

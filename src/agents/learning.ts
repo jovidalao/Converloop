@@ -1,3 +1,4 @@
+import { estimatePromptTokens } from "../lib/tokens";
 import type { ChatMessage, ModelProvider } from "../providers/types";
 import { appendUserInstructions } from "./custom-instructions";
 import { buildHistoryMessages, type HistoryTurn } from "./history-messages";
@@ -66,14 +67,25 @@ export async function runLearningAgent(
   provider: ModelProvider,
   ctx: LearningAgentContext,
   onDelta: (delta: string) => void,
+  onContext?: (promptTokens: number) => void,
 ): Promise<string> {
   const messages: ChatMessage[] = [
     { role: "system", content: systemPrompt(ctx) },
     ...buildHistoryMessages(ctx.historyTurns),
     { role: "user", content: latestUserMessage(ctx) },
   ];
+  // Report the local estimate immediately for a responsive meter; refine to the provider's real prompt size
+  // (onUsage.inputTokens) when the stream reports it. Endpoints without usage keep the estimate.
+  onContext?.(estimatePromptTokens(messages.map((m) => m.content)));
   return provider.stream(
-    { messages, temperature: 0.5, meta: { label: "learning_agent" } },
+    {
+      messages,
+      temperature: 0.5,
+      meta: { label: "learning_agent" },
+      onUsage: (u) => {
+        if (u.inputTokens != null) onContext?.(u.inputTokens);
+      },
+    },
     onDelta,
   );
 }

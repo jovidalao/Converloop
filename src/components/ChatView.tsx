@@ -1210,6 +1210,10 @@ export function ChatView({
   const [turns, setTurns] = useState<ChatTurn[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState("");
+  // Estimated prompt size (tokens) of the last turn actually sent to the model — the real context the model
+  // received (system prompt + scaffolds + summary + history + input), reported by the reply agent via onContext.
+  // null until the first send this session; the context meter then falls back to a bubble-only estimate.
+  const [lastPromptTokens, setLastPromptTokens] = useState<number | null>(null);
   const [layoutTick, setLayoutTick] = useState(0);
   const [replyBusy, setReplyBusy] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
@@ -1250,7 +1254,10 @@ export function ChatView({
 
   // Status bar below the input: current model + context usage (rough estimate, see lib/tokens).
   const contextLimit = getContextLimit(config);
-  const usedTokens = useMemo(() => {
+  // Prefer the real prompt size reported by the reply agent (system prompt + scaffolds + summary + history + input).
+  // Before the first send in this conversation (e.g. just reopened), fall back to a transcript-only estimate, which
+  // undercounts the fixed prompt overhead but is the only thing available client-side until a turn runs.
+  const fallbackTokens = useMemo(() => {
     const parts: string[] = [];
     for (const turn of turns) {
       if (turn.excludeFromContext) continue; // off-record turns (/btw) are excluded from context and usage count
@@ -1260,6 +1267,7 @@ export function ChatView({
     if (streaming) parts.push(streaming);
     return estimatePromptTokens(parts);
   }, [turns, streaming]);
+  const usedTokens = lastPromptTokens ?? fallbackTokens;
   const usedPercent = Math.min(
     100,
     Math.round((usedTokens / contextLimit) * 100),
@@ -1348,6 +1356,7 @@ export function ChatView({
     let cancelled = false;
     setDerivedBanner(null);
     setInputHints(null);
+    setLastPromptTokens(null); // reset the context meter; repopulated on the next send in this conversation
     if (hintTimerRef.current) clearInterval(hintTimerRef.current);
     void loadChatHistory(conversationId).then(async (loaded) => {
       if (cancelled) return;
@@ -1453,6 +1462,9 @@ export function ChatView({
             replyCommittedRef.current = true;
             commitPartnerReply(turnId, reply);
           },
+          onContext: (tokens) => {
+            if (turnGenRef.current === turnGen) setLastPromptTokens(tokens);
+          },
           onAnalysis: () => {
             patchTurn(turnId, { analysisPending: false });
           },
@@ -1529,6 +1541,9 @@ export function ChatView({
             setDerivationPreparing(false);
             commitPartnerReply(turnId, reply);
             speaker?.finish(reply);
+          },
+          onContext: (tokens) => {
+            if (turnGenRef.current === turnGen) setLastPromptTokens(tokens);
           },
           onAnalysis: () => {
             patchTurn(turnId, { analysisPending: false });
@@ -1648,6 +1663,9 @@ export function ChatView({
             replyCommittedRef.current = true;
             commitPartnerReply(turnId, reply);
             speaker?.finish(reply);
+          },
+          onContext: (tokens) => {
+            if (turnGenRef.current === turnGen) setLastPromptTokens(tokens);
           },
           onAnalysis: (a, opts) => {
             patchTurn(turnId, {
@@ -1775,6 +1793,9 @@ export function ChatView({
         onReplyComplete: (reply) => {
           if (turnGenRef.current !== turnGen) return;
           patchTurn(turnId, { partnerText: reply });
+        },
+        onContext: (tokens) => {
+          if (turnGenRef.current === turnGen) setLastPromptTokens(tokens);
         },
       });
       await touchConversation(conversationId);

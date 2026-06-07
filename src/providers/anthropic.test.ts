@@ -5,6 +5,7 @@ import {
   anthropicMessagesUrl,
   authHeaders,
   buildAnthropicRequestBody,
+  consumeAnthropicSseLines,
   extractAnthropicContent,
   toAnthropicMessages,
 } from "./anthropic";
@@ -196,5 +197,30 @@ describe("anthropic REST alignment", () => {
       false,
     );
     expect(body.temperature).toBeUndefined();
+  });
+});
+
+describe("anthropic stream usage", () => {
+  it("sums input + cache buckets and reads final output tokens", () => {
+    const lines = [
+      'data: {"type":"message_start","message":{"usage":{"input_tokens":50,"cache_read_input_tokens":2000,"cache_creation_input_tokens":100,"output_tokens":1}}}',
+      'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"Hi"}}',
+      'data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":12}}',
+    ];
+    const out: string[] = [];
+    const r = consumeAnthropicSseLines(lines, (d) => out.push(d));
+    expect(out.join("")).toBe("Hi");
+    // 50 (uncached) + 2000 (cache read) + 100 (cache creation) = the real context size, not just the uncached tail.
+    expect(r.usage).toEqual({ inputTokens: 2150, outputTokens: 12 });
+  });
+
+  it("leaves usage undefined when no usage events are present", () => {
+    const r = consumeAnthropicSseLines(
+      [
+        'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"x"}}',
+      ],
+      () => {},
+    );
+    expect(r.usage).toBeUndefined();
   });
 });

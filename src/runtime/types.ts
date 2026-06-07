@@ -76,6 +76,9 @@ export interface ConversationCallbacks {
   onReplyDelta: (delta: string) => void;
   /** Triggered when the conversation stream ends and the user can continue typing; correction is still running in the background. */
   onReplyComplete?: (reply: string) => void;
+  /** Estimated prompt size (tokens) of the messages actually sent to the reply agent this turn — the real context
+   *  the model receives (system prompt + scaffolds + summary + history + input). Drives the UI context-usage meter. */
+  onContext?: (promptTokens: number) => void;
   onAnalysis: (
     analysis: TutorAnalysis | null,
     opts?: { error?: string; proseFeedback?: string },

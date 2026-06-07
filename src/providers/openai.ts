@@ -1,5 +1,10 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
-import type { FinishReason, GenerateOptions, ModelProvider } from "./types";
+import type {
+  FinishReason,
+  GenerateOptions,
+  ModelProvider,
+  Usage,
+} from "./types";
 
 // OpenAI-compatible adapter: covers OpenAI / OpenRouter / LM Studio and similar.
 // HTTP uses Rust's llm_request / llm_stream (bypasses CORS + true streaming).
@@ -17,6 +22,9 @@ function buildBody(
   stream: boolean,
 ): Body {
   const body: Body = { model: cfg.model, messages: opts.messages, stream };
+  // Ask for a final usage chunk on streamed responses (prompt_tokens = real context size). Endpoints that don't
+  // support stream_options ignore it, and we silently fall back to the local estimate.
+  if (stream) body.stream_options = { include_usage: true };
   if (opts.temperature !== undefined) body.temperature = opts.temperature;
   if (opts.maxTokens !== undefined) body.max_tokens = opts.maxTokens;
   if (opts.jsonSchema) {
@@ -93,12 +101,15 @@ function finishReason(raw: string | null | undefined): FinishReason | null {
 }
 
 // Extract delta.content from a batch of SSE lines already split by \n, accumulate and invoke callback.
-function consumeSseLines(
+// The trailing usage chunk (choices: [], usage: {...}, emitted when stream_options.include_usage is set) carries
+// prompt_tokens = the real prompt size.
+export function consumeSseLines(
   lines: string[],
   onDelta: (delta: string) => void,
-): { text: string; finishReason: FinishReason | null } {
+): { text: string; finishReason: FinishReason | null; usage?: Usage } {
   let acc = "";
   let finalReason: FinishReason | null = null;
+  let usage: Usage | undefined;
   for (const line of lines) {
     const t = line.trim();
     if (!t.startsWith("data:")) continue;
@@ -113,11 +124,17 @@ function consumeSseLines(
       }
       finalReason =
         finishReason(json.choices?.[0]?.finish_reason) ?? finalReason;
+      if (json.usage?.prompt_tokens != null) {
+        usage = {
+          inputTokens: json.usage.prompt_tokens,
+          outputTokens: json.usage.completion_tokens ?? undefined,
+        };
+      }
     } catch {
       // Partial JSON or keep-alive, ignore (complete line will be assembled in subsequent chunks)
     }
   }
-  return { text: acc, finishReason: finalReason };
+  return { text: acc, finishReason: finalReason, usage };
 }
 
 export function createOpenAIProvider(cfg: OpenAIConfig): ModelProvider {
@@ -137,6 +154,7 @@ export function createOpenAIProvider(cfg: OpenAIConfig): ModelProvider {
       let full = "";
       let buffer = "";
       let finalReason: FinishReason | null = null;
+      let usage: Usage | undefined;
       const channel = new Channel<string>();
       channel.onmessage = (chunk) => {
         buffer += chunk;
@@ -145,6 +163,7 @@ export function createOpenAIProvider(cfg: OpenAIConfig): ModelProvider {
         const consumed = consumeSseLines(parts, onDelta);
         full += consumed.text;
         finalReason = consumed.finishReason ?? finalReason;
+        if (consumed.usage) usage = { ...usage, ...consumed.usage };
       };
       await invoke("llm_stream", {
         url,
@@ -157,8 +176,10 @@ export function createOpenAIProvider(cfg: OpenAIConfig): ModelProvider {
         const consumed = consumeSseLines([buffer], onDelta);
         full += consumed.text;
         finalReason = consumed.finishReason ?? finalReason;
+        if (consumed.usage) usage = { ...usage, ...consumed.usage };
       }
       if (finalReason) opts.onFinish?.(finalReason);
+      if (usage) opts.onUsage?.(usage);
       return full;
     },
   };

@@ -25,6 +25,13 @@ export interface FinishReason {
   provider: "openai" | "anthropic" | "gemini";
 }
 
+// Token usage reported by the provider for a request. inputTokens is the real prompt size (the full context the
+// model billed, including any cached prefix); it refines the UI context-usage meter over the local estimate.
+export interface Usage {
+  inputTokens?: number;
+  outputTokens?: number;
+}
+
 export interface GenerateOptions {
   messages: ChatMessage[];
   temperature?: number;
@@ -37,6 +44,9 @@ export interface GenerateOptions {
   meta?: { label?: string };
   /** Finish reason returned by the provider; used to detect max_tokens truncation and similar. */
   onFinish?: (reason: FinishReason) => void;
+  /** Token usage reported by the provider when available; inputTokens is the real prompt size for the UI meter.
+   *  Not all endpoints report usage (e.g. some OpenAI-compatible servers) — callers fall back to the estimate. */
+  onUsage?: (usage: Usage) => void;
 }
 
 export interface ModelProvider {

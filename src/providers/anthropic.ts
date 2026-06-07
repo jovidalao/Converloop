@@ -4,6 +4,7 @@ import type {
   FinishReason,
   GenerateOptions,
   ModelProvider,
+  Usage,
 } from "./types";
 
 // Native Anthropic Messages API. Structured output uses tool_use + input_schema.
@@ -195,12 +196,29 @@ export function extractAnthropicContent(json: unknown): string {
   return texts.join("");
 }
 
-function consumeAnthropicSseLines(
+// Sum every input bucket Anthropic reports: on a cache hit, input_tokens covers only the uncached tail and the bulk
+// sits in cache_read/cache_creation. Summing keeps inputTokens the true context size instead of undercounting.
+interface AnthropicUsage {
+  input_tokens?: number;
+  cache_read_input_tokens?: number;
+  cache_creation_input_tokens?: number;
+  output_tokens?: number;
+}
+function totalInputTokens(u: AnthropicUsage): number {
+  return (
+    (u.input_tokens ?? 0) +
+    (u.cache_read_input_tokens ?? 0) +
+    (u.cache_creation_input_tokens ?? 0)
+  );
+}
+
+export function consumeAnthropicSseLines(
   lines: string[],
   onDelta: (delta: string) => void,
-): { text: string; finishReason: FinishReason | null } {
+): { text: string; finishReason: FinishReason | null; usage?: Usage } {
   let acc = "";
   let finalReason: FinishReason | null = null;
+  let usage: Usage | undefined;
   for (const line of lines) {
     const t = line.trim();
     if (!t.startsWith("data:")) continue;
@@ -209,6 +227,8 @@ function consumeAnthropicSseLines(
     try {
       const json = JSON.parse(data) as {
         type?: string;
+        message?: { usage?: AnthropicUsage };
+        usage?: AnthropicUsage;
         delta?: { type?: string; text?: string; stop_reason?: string | null };
       };
       if (
@@ -221,14 +241,20 @@ function consumeAnthropicSseLines(
           onDelta(text);
         }
       }
+      // message_start carries input_tokens (+ cache buckets); message_delta carries the final output_tokens.
+      if (json.type === "message_start" && json.message?.usage) {
+        usage = { ...usage, inputTokens: totalInputTokens(json.message.usage) };
+      }
       if (json.type === "message_delta") {
         finalReason = finishReason(json.delta?.stop_reason) ?? finalReason;
+        if (json.usage?.output_tokens != null)
+          usage = { ...usage, outputTokens: json.usage.output_tokens };
       }
     } catch {
       // Partial JSON, wait for subsequent chunks to complete it
     }
   }
-  return { text: acc, finishReason: finalReason };
+  return { text: acc, finishReason: finalReason, usage };
 }
 
 export function createAnthropicProvider(cfg: AnthropicConfig): ModelProvider {
@@ -247,6 +273,7 @@ export function createAnthropicProvider(cfg: AnthropicConfig): ModelProvider {
       let full = "";
       let buffer = "";
       let finalReason: FinishReason | null = null;
+      let usage: Usage | undefined;
       const channel = new Channel<string>();
       channel.onmessage = (chunk) => {
         buffer += chunk;
@@ -255,6 +282,7 @@ export function createAnthropicProvider(cfg: AnthropicConfig): ModelProvider {
         const consumed = consumeAnthropicSseLines(parts, onDelta);
         full += consumed.text;
         finalReason = consumed.finishReason ?? finalReason;
+        if (consumed.usage) usage = { ...usage, ...consumed.usage };
       };
       await invoke("llm_stream", {
         url,
@@ -266,8 +294,10 @@ export function createAnthropicProvider(cfg: AnthropicConfig): ModelProvider {
         const consumed = consumeAnthropicSseLines([buffer], onDelta);
         full += consumed.text;
         finalReason = consumed.finishReason ?? finalReason;
+        if (consumed.usage) usage = { ...usage, ...consumed.usage };
       }
       if (finalReason) opts.onFinish?.(finalReason);
+      if (usage) opts.onUsage?.(usage);
       return full;
     },
   };

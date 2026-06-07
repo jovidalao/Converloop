@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { tutorJsonSchema } from "../agents/schema";
 import {
   buildGeminiRequestBody,
+  consumeSseLines,
   type GeminiConfig,
   geminiGenerateUrl,
   geminiStreamUrl,
@@ -104,5 +105,25 @@ describe("gemini REST alignment", () => {
     expect(body.generationConfig).toEqual({
       responseMimeType: "application/json",
     });
+  });
+});
+
+describe("gemini stream usage", () => {
+  it("reads promptTokenCount as the input size", () => {
+    const lines = [
+      'data: {"candidates":[{"content":{"parts":[{"text":"Hi"}]}}],"usageMetadata":{"promptTokenCount":1234,"candidatesTokenCount":7}}',
+    ];
+    const out: string[] = [];
+    const r = consumeSseLines(lines, (d) => out.push(d));
+    expect(out.join("")).toBe("Hi");
+    expect(r.usage).toEqual({ inputTokens: 1234, outputTokens: 7 });
+  });
+
+  it("leaves usage undefined when no usageMetadata is present", () => {
+    const r = consumeSseLines(
+      ['data: {"candidates":[{"content":{"parts":[{"text":"x"}]}}]}'],
+      () => {},
+    );
+    expect(r.usage).toBeUndefined();
   });
 });

@@ -4,6 +4,7 @@ import type {
   FinishReason,
   GenerateOptions,
   ModelProvider,
+  Usage,
 } from "./types";
 
 // OpenAI Codex (ChatGPT subscription login) adapter: uses the Responses API, not chat/completions.
@@ -110,10 +111,16 @@ function finishFromType(type: string): FinishReason {
 function consumeResponsesSseLines(
   lines: string[],
   onDelta: (delta: string) => void,
-): { text: string; finishReason: FinishReason | null; error?: string } {
+): {
+  text: string;
+  finishReason: FinishReason | null;
+  error?: string;
+  usage?: Usage;
+} {
   let acc = "";
   let finalReason: FinishReason | null = null;
   let error: string | undefined;
+  let usage: Usage | undefined;
   for (const line of lines) {
     const t = line.trim();
     if (!t.startsWith("data:")) continue;
@@ -124,7 +131,10 @@ function consumeResponsesSseLines(
         type?: string;
         delta?: string;
         message?: string;
-        response?: { error?: { message?: string } };
+        response?: {
+          error?: { message?: string };
+          usage?: { input_tokens?: number; output_tokens?: number };
+        };
       };
       if (ev.type === "response.output_text.delta") {
         const d = ev.delta ?? "";
@@ -138,6 +148,12 @@ function consumeResponsesSseLines(
         ev.type === "response.done"
       ) {
         finalReason = finishFromType(ev.type);
+        // The terminal event carries the final usage on its response object.
+        if (ev.response?.usage?.input_tokens != null)
+          usage = {
+            inputTokens: ev.response.usage.input_tokens,
+            outputTokens: ev.response.usage.output_tokens ?? undefined,
+          };
       } else if (ev.type === "response.failed" || ev.type === "error") {
         error =
           ev.response?.error?.message ?? ev.message ?? "Codex response failed";
@@ -146,7 +162,7 @@ function consumeResponsesSseLines(
       // Partial JSON, wait for subsequent chunks to complete it
     }
   }
-  return { text: acc, finishReason: finalReason, error };
+  return { text: acc, finishReason: finalReason, error, usage };
 }
 
 // Send one streaming request, parse chunk by chunk; shared by generate / stream (generate passes a no-op onDelta).
@@ -155,11 +171,16 @@ async function runStream(
   cfg: OpenAICodexConfig,
   opts: GenerateOptions,
   onDelta: (delta: string) => void,
-): Promise<{ full: string; finishReason: FinishReason | null }> {
+): Promise<{
+  full: string;
+  finishReason: FinishReason | null;
+  usage?: Usage;
+}> {
   let full = "";
   let buffer = "";
   let finalReason: FinishReason | null = null;
   let error: string | undefined;
+  let usage: Usage | undefined;
   const channel = new Channel<string>();
   channel.onmessage = (chunk) => {
     buffer += chunk;
@@ -169,6 +190,7 @@ async function runStream(
     full += c.text;
     finalReason = c.finishReason ?? finalReason;
     error = c.error ?? error;
+    if (c.usage) usage = { ...usage, ...c.usage };
   };
   await invoke("llm_stream", {
     url,
@@ -181,9 +203,10 @@ async function runStream(
     full += c.text;
     finalReason = c.finishReason ?? finalReason;
     error = c.error ?? error;
+    if (c.usage) usage = { ...usage, ...c.usage };
   }
   if (error) throw new Error(error);
-  return { full, finishReason: finalReason };
+  return { full, finishReason: finalReason, usage };
 }
 
 export function createOpenAICodexProvider(
@@ -195,8 +218,14 @@ export function createOpenAICodexProvider(
       return (await runStream(url, cfg, opts, () => {})).full;
     },
     async stream(opts, onDelta) {
-      const { full, finishReason } = await runStream(url, cfg, opts, onDelta);
+      const { full, finishReason, usage } = await runStream(
+        url,
+        cfg,
+        opts,
+        onDelta,
+      );
       if (finishReason) opts.onFinish?.(finishReason);
+      if (usage) opts.onUsage?.(usage);
       return full;
     },
   };
