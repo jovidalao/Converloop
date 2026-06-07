@@ -5,6 +5,7 @@ import openAiLogo from "@lobehub/icons-static-svg/icons/openai.svg?raw";
 import { ChevronDownIcon, SparklesIcon, Volume2Icon } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { type Locale, type MessageKey, useTranslation } from "@/i18n";
+import { isWindows } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import {
   type AppConfig,
@@ -842,9 +843,11 @@ export function SettingsView({ section }: { section: SettingsSection }) {
                 <AccentToggle />
               </Field>
 
-              <div className="md:col-span-2">
-                <GlassToggle />
-              </div>
+              {!isWindows() && (
+                <div className="md:col-span-2">
+                  <GlassToggle />
+                </div>
+              )}
             </div>
 
             <div className="grid gap-4 rounded-xl border border-border/70 bg-card/75 p-5 shadow-minimal-flat sm:grid-cols-3">

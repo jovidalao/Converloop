@@ -7,6 +7,7 @@ import {
   useEffect,
   useState,
 } from "react";
+import { isWindows } from "../lib/platform";
 
 export type Theme = "light" | "dark" | "system";
 export type Accent = "gray" | "blue" | "purple" | "claude";
@@ -96,8 +97,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     document.documentElement.dataset.accent = accent;
   }, [accent]);
 
+  // Glass (native vibrancy) is macOS-only; Windows uses solid chrome by decision,
+  // so force it off there regardless of the stored preference.
   useEffect(() => {
-    document.documentElement.dataset.glass = glassEnabled ? "on" : "off";
+    document.documentElement.dataset.glass =
+      glassEnabled && !isWindows() ? "on" : "off";
   }, [glassEnabled]);
 
   function setTheme(next: Theme) {

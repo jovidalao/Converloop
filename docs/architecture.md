@@ -359,3 +359,4 @@ v1 核心链路已完成并可用:
 - **zod 钉 v3**:`zod-to-json-schema` 为 v3 设计;`tutorJsonSchema()` 去 `$schema`、inline refs(`$refStrategy: "none"`)让 OpenAI 端点能直接吃。
 - **原子写 MD**:Rust 侧写临时文件再 rename(`src-tauri/src/profile.rs`),避免对话 agent 读到半截文件。
 - **日期用 UTC**。
+- **双平台(macOS + Windows)**:新增原生 / chrome 功能遵守 [cross-platform.md](./cross-platform.md) 的三条约定(`cfg` 守卫 / `data-platform` / 薄 port);CI 在 macOS + Windows 都跑 `cargo build`。
