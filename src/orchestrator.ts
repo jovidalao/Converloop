@@ -983,6 +983,7 @@ export async function generateAndSetConversationTitle(
   try {
     const title = await generateAutoTitle(provider, {
       targetLanguage: config.targetLanguage,
+      nativeLanguage: config.nativeLanguage,
       firstMessage: firstUserInput,
     });
     if (title) await renameConversation(conversationId, title);
@@ -1001,7 +1002,10 @@ export async function generateInputHintsForConversation(
 
   const config = loadConfig();
   try {
-    const turns = await getTurnsAfterId(conversationId, null);
+    const [turns, profileMd] = await Promise.all([
+      getTurnsAfterId(conversationId, null),
+      readProfile(config),
+    ]);
     const recent = tailTurnsByChars(turns, 4000);
     const recentHistory = formatTurns(recent);
     return await generateInputHints(provider, {
@@ -1009,6 +1013,7 @@ export async function generateInputHintsForConversation(
       nativeLanguage: config.nativeLanguage,
       level: config.level,
       recentHistory,
+      profileSlice: profileSliceForConversation(profileMd),
     });
   } catch {
     return [];

@@ -2024,7 +2024,7 @@ export function ChatView({
                 placeholder={
                   learningMode
                     ? t("chat.inputPlaceholderLesson")
-                    : inputHints && inputHints.length > 0
+                    : !compact && inputHints && inputHints.length > 0
                       ? inputHints[hintIndex]
                       : t("chat.inputPlaceholderPractice", {
                           lang: targetLanguage || "your target language",

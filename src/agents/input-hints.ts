@@ -6,35 +6,40 @@ export interface InputHintsContext {
   nativeLanguage: string;
   level: string;
   recentHistory: string;
+  profileSlice?: string;
 }
 
 const MAX_OUTPUT_TOKENS = 512;
+// A hint is a short scaffold, never a full reply. Anything much longer than a
+// phrase is almost certainly the model writing the answer — drop it.
+const MAX_HINT_CHARS = 80;
 
 export async function generateInputHints(
   provider: ModelProvider,
   ctx: InputHintsContext,
 ): Promise<string[]> {
+  const profileBlock = ctx.profileSlice?.trim()
+    ? `\nLearner profile (use their interests and what they're working on to make hints relevant):\n${ctx.profileSlice.trim()}\n`
+    : "";
   const messages: ChatMessage[] = [
     {
       role: "user",
-      content: `You help a ${ctx.nativeLanguage} speaker learning ${ctx.targetLanguage} at ${ctx.level} level come up with ideas for their next message.
-
+      content: `You are a ${ctx.targetLanguage} tutor helping a ${ctx.nativeLanguage} speaker at ${ctx.level} level. Based on the conversation so far, give the learner short HINTS that help them write THEIR OWN next reply.
+${profileBlock}
 Recent conversation:
 ${ctx.recentHistory || "(no prior turns yet)"}
 
-Generate exactly 8 short reply hints for the learner's NEXT message. Mix the following types:
-- A sentence starter in ${ctx.targetLanguage} they could use (e.g. "I completely agree, but…" / "Actually, I think…")
-- A vocabulary or expression tip (e.g. "Try using 'nevertheless' here" / "Practice '~にとって'")
-- A conversational direction (e.g. "Ask about their experience with…" / "Share a personal anecdote")
+Produce 6–8 hints. Each hint must:
+- Be written IN ${ctx.targetLanguage} (the language being learned), so reading it is itself practice.
+- Point toward an idea WITHOUT writing the reply for them. Use a varied mix of:
+  • a reusable sentence FRAME with a blank "___" for the learner to complete (a pattern, e.g. the ${ctx.targetLanguage} equivalent of "I'd rather ___ than ___")
+  • a useful WORD or short expression they could weave in — add a brief ${ctx.nativeLanguage} gloss in parentheses ONLY if it is likely above ${ctx.level} level
+  • a DIRECTION: something they could say, ask about, react to, or give an example of next
+- NEVER be a complete, ready-to-send sentence. You give the scaffold; the learner still does the real thinking and composing.
+- Be short — roughly 4–10 words — and specific to THIS conversation and learner, not generic filler.
+- Differ from one another in shape; do not repeat the same structure twice.
 
-Rules:
-- Each hint is 15–60 characters max
-- At least 4 hints should be ${ctx.targetLanguage} sentence starters or phrases
-- Vary types — no two hints have the same shape
-- Be specific to the conversation context, not generic filler
-- Do NOT include numbers, bullets, or labels — just the hint text
-
-Return ONLY a valid JSON array of 8 strings, nothing else.`,
+Return ONLY a valid JSON array of 6–8 strings, nothing else.`,
     },
   ];
 
@@ -45,6 +50,12 @@ Return ONLY a valid JSON array of 8 strings, nothing else.`,
     meta: { label: "input-hints" },
   });
 
+  const clean = (list: string[]) =>
+    list
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0 && s.length <= MAX_HINT_CHARS)
+      .slice(0, 10);
+
   try {
     const parsed = JSON.parse(extractJsonText(raw));
     if (
@@ -52,15 +63,14 @@ Return ONLY a valid JSON array of 8 strings, nothing else.`,
       parsed.length > 0 &&
       parsed.every((s) => typeof s === "string")
     ) {
-      return (parsed as string[]).filter((s) => s.trim().length > 0).slice(0, 10);
+      return clean(parsed as string[]);
     }
   } catch {
-    // Fallback: split plain-text lines if model didn't return JSON
-    const lines = raw
-      .split("\n")
-      .map((l) => l.replace(/^[-•*\d.]+\s*/, "").trim())
-      .filter((l) => l.length > 0);
-    if (lines.length >= 3) return lines.slice(0, 10);
+    // Fallback: split plain-text lines if the model didn't return JSON.
+    const lines = clean(
+      raw.split("\n").map((l) => l.replace(/^[-•*\d.]+\s*/, "")),
+    );
+    if (lines.length >= 3) return lines;
   }
   return [];
 }

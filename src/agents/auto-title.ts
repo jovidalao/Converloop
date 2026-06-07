@@ -2,6 +2,7 @@ import type { ChatMessage, ModelProvider } from "../providers/types";
 
 export interface AutoTitleContext {
   targetLanguage: string;
+  nativeLanguage: string;
   firstMessage: string;
 }
 
@@ -14,14 +15,15 @@ export async function generateAutoTitle(
   const messages: ChatMessage[] = [
     {
       role: "user",
-      content: `Generate a short title (3–6 words) for a ${ctx.targetLanguage} language-learning conversation that started with this message:
+      content: `Generate a very short title for a ${ctx.targetLanguage} practice conversation that started with this message:
 
 "${ctx.firstMessage.slice(0, 300)}"
 
 Rules:
-- 3–6 words, no quotes, no punctuation at the end
+- Write the title in ${ctx.nativeLanguage} so it is easy to scan in a sidebar list
+- Keep it very short — a few words (about 3–6 words, or 4–10 characters for languages like Chinese/Japanese)
 - Capture the topic or situation, not the language itself
-- English is fine regardless of the target language
+- No quotes, no trailing punctuation
 - Return ONLY the title, nothing else`,
     },
   ];
