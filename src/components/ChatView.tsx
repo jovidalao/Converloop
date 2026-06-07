@@ -2058,7 +2058,7 @@ export function ChatView({
                   disabled={replyBusy}
                 >
                   <SelectTrigger
-                    className="h-4 w-auto min-w-[5.5rem] max-w-[min(42vw,12rem)] gap-1.5 rounded-sm border-0 bg-transparent px-1 py-0 font-normal leading-none text-ui-muted shadow-none hover:bg-accent sm:max-w-[14rem] [&>svg]:size-2.5"
+                    className="h-4 w-auto min-w-[5.5rem] max-w-[min(42vw,12rem)] gap-1.5 rounded-sm border-0 bg-transparent px-1 py-0 font-normal leading-none text-ui-muted shadow-none hover:bg-accent focus-visible:ring-0 sm:max-w-[14rem] [&>svg]:size-2.5"
                     aria-label={t("chat.selectModel")}
                     title={currentProviderModelLabel}
                   >
