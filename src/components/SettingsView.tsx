@@ -298,25 +298,32 @@ function ProviderCard({
 function ThemeToggle() {
   const { theme, setTheme } = useTheme();
   const { t } = useTranslation();
+  // Icon-only, no container or background — the active choice is marked by color
+  // alone (foreground vs muted). Labels live in aria-label/title for a11y.
   return (
-    <div className="inline-flex max-w-full flex-wrap rounded-lg border bg-card/70 p-1">
+    <div className="flex items-center gap-0.5">
       {THEMES.map((opt) => {
         const Icon = opt.icon;
+        const active = theme === opt.value;
         return (
-          <button
+          <Button
             key={opt.value}
             type="button"
+            variant="ghost"
+            size="icon"
+            aria-pressed={active}
+            aria-label={t(opt.labelKey)}
+            title={t(opt.labelKey)}
             onClick={() => setTheme(opt.value)}
             className={cn(
-              "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-ui-body transition-colors",
-              theme === opt.value
-                ? "bg-accent text-foreground"
+              "size-8 hover:bg-transparent",
+              active
+                ? "text-foreground"
                 : "text-ui-muted hover:text-foreground",
             )}
           >
-            <Icon className="size-3.5 shrink-0" />
-            {t(opt.labelKey)}
-          </button>
+            <Icon className="size-4 shrink-0" />
+          </Button>
         );
       })}
     </div>
@@ -328,7 +335,7 @@ function AccentSelect() {
   const { t } = useTranslation();
   return (
     <Select value={accent} onValueChange={(v) => setAccent(v as Accent)}>
-      <SelectTrigger className="w-44">
+      <SelectTrigger variant="ghost">
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
@@ -352,7 +359,7 @@ function LanguageSelect() {
   const { locale, setLocale, t } = useTranslation();
   return (
     <Select value={locale} onValueChange={(v) => setLocale(v as Locale)}>
-      <SelectTrigger className="w-44">
+      <SelectTrigger variant="ghost">
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
@@ -893,7 +900,7 @@ export function SettingsView({ section }: { section: SettingsSection }) {
                   value={cfg.nativeLanguage}
                   onValueChange={(v) => update("nativeLanguage", v)}
                 >
-                  <SelectTrigger className="w-44">
+                  <SelectTrigger variant="ghost">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -910,7 +917,7 @@ export function SettingsView({ section }: { section: SettingsSection }) {
                   value={cfg.targetLanguage}
                   onValueChange={(v) => update("targetLanguage", v)}
                 >
-                  <SelectTrigger className="w-44">
+                  <SelectTrigger variant="ghost">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -927,7 +934,7 @@ export function SettingsView({ section }: { section: SettingsSection }) {
                   value={cfg.level}
                   onValueChange={(v) => update("level", v)}
                 >
-                  <SelectTrigger className="w-44">
+                  <SelectTrigger variant="ghost">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>

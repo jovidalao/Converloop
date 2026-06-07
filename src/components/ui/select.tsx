@@ -18,23 +18,36 @@ function SelectValue(
 function SelectTrigger({
   className,
   children,
+  variant = "default",
   ...props
-}: React.ComponentProps<typeof SelectPrimitive.Trigger>) {
+}: React.ComponentProps<typeof SelectPrimitive.Trigger> & {
+  // "ghost": borderless / no background, hugs its content — for inline settings
+  // rows where the trigger reads as plain text + chevron.
+  variant?: "default" | "ghost";
+}) {
   return (
     <SelectPrimitive.Trigger
       data-slot="select-trigger"
       className={cn(
-        "flex h-9 w-full items-center justify-between gap-2 rounded-md border border-input bg-background/70 px-3 py-2 text-ui-body whitespace-nowrap shadow-minimal-flat transition-[color,box-shadow] outline-none",
+        "flex h-9 items-center justify-between gap-2 rounded-md px-3 py-2 text-ui-body whitespace-nowrap transition-[color,box-shadow] outline-none",
         "data-[placeholder]:text-muted-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
-        "focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring",
         "disabled:cursor-not-allowed disabled:opacity-50",
+        variant === "default" &&
+          "w-full border border-input bg-background/70 shadow-minimal-flat focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring",
+        variant === "ghost" &&
+          "w-auto gap-1.5 border border-transparent bg-transparent px-2 font-medium text-foreground shadow-none hover:bg-accent/50 focus-visible:bg-accent/50",
         className,
       )}
       {...props}
     >
       {children}
       <SelectPrimitive.Icon asChild>
-        <ChevronDownIcon className="size-4 opacity-80" />
+        <ChevronDownIcon
+          className={cn(
+            "size-4",
+            variant === "ghost" ? "text-muted-foreground" : "opacity-80",
+          )}
+        />
       </SelectPrimitive.Icon>
     </SelectPrimitive.Trigger>
   );
