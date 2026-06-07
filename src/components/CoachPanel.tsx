@@ -338,7 +338,9 @@ function TurnReviewList({
                 {i + 1}
               </span>
               <span className="min-w-0 flex-1 truncate text-ui-body text-foreground">
-                {turn.userText.trim() || t("coach.emptyTurnText")}
+                {/* Prompt macros: show the verbatim command, not the expanded prompt fed to the agent. */}
+                {(turn.displayText ?? turn.userText).trim() ||
+                  t("coach.emptyTurnText")}
               </span>
               <span
                 className={cn(

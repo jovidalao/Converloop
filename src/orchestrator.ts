@@ -383,10 +383,13 @@ export async function runTurn(
   conversationId: string,
   cb: TurnCallbacks,
   turnId?: string,
-  opts: { offRecord?: boolean } = {},
+  opts: { offRecord?: boolean; displayText?: string } = {},
 ): Promise<TurnResult> {
   // Off-record turn (/btw "by the way"): reads context + streams a reply as normal, but no correction, not counted in future context, no compression.
   const offRecord = opts.offRecord ?? false;
+  // Prompt-macro turn (/topic, /learn, /surprise): userInput is the expanded English prompt — fed to the agent as an
+  // APP INSTRUCTION and kept in context, but not graded. The bubble shows opts.displayText (the verbatim command).
+  const isPromptMacro = opts.displayText !== undefined;
   const conversation = await getConversation(conversationId);
   if (conversation?.kind === "learning_agent") {
     return runLearningTurn(
@@ -396,6 +399,7 @@ export async function runTurn(
       false,
       turnId,
       offRecord,
+      opts.displayText,
     );
   }
 
@@ -472,6 +476,9 @@ export async function runTurn(
     conversationId,
     turnId: id,
     userInput,
+    // Prompt macros steer the reply via the APP INSTRUCTION path (same as derived openings), so the agent treats the
+    // expanded prompt as a directive rather than learner speech; userInput is still persisted for future context.
+    openingInstruction: isPromptMacro ? userInput : undefined,
     langs,
     profileSlice,
     conversationPreferences,
@@ -493,7 +500,8 @@ export async function runTurn(
   // Reply ∥ observer triggered in parallel. Observers are fire-and-forget; they wait for turnPersisted themselves before running accounting.
   // Off-record turns are not corrected: do not dispatch observers; instead tell the UI immediately that this turn has no correction (clears the "analyzing" state).
   const replyPromise = dispatchReply(ctx, cb.onReplyDelta);
-  if (offRecord) cb.onAnalysis(null);
+  // Neither off-record nor prompt-macro turns are graded: the former is a side question, the latter an app directive.
+  if (offRecord || isPromptMacro) cb.onAnalysis(null);
   else dispatchObservers(ctx);
 
   let reply: string;
@@ -506,6 +514,7 @@ export async function runTurn(
 
   await persistTurn(conversationId, userInput, reply, null, id, {
     excludeFromContext: offRecord,
+    displayText: opts.displayText,
   });
   resolvePersisted(id);
   cb.onReplyComplete?.(reply);
@@ -644,6 +653,7 @@ async function runLearningTurn(
   kickoff: boolean,
   turnId?: string,
   offRecord = false,
+  displayText?: string,
 ): Promise<TurnResult> {
   const provider = await getProvider();
   if (!provider) throw new MissingApiKeyError();
@@ -705,6 +715,7 @@ async function runLearningTurn(
 
   await persistTurn(conversationId, userInput, reply, null, id, {
     excludeFromContext: offRecord,
+    displayText,
   });
   resolvePersisted(id);
   cb.onReplyComplete?.(reply);

@@ -13,6 +13,7 @@ function mkTurn(i: number, replyLen = 400): Turn {
     explainCount: 0,
     bilingualCount: 0,
     excludeFromContext: 0,
+    displayText: null,
   };
 }
 

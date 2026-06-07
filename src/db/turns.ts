@@ -11,7 +11,7 @@ export async function persistTurn(
   reply: string,
   analysis: TutorAnalysis | null,
   id: string = crypto.randomUUID(),
-  opts: { excludeFromContext?: boolean } = {},
+  opts: { excludeFromContext?: boolean; displayText?: string } = {},
 ): Promise<string> {
   await db.insert(turn).values({
     id,
@@ -21,6 +21,7 @@ export async function persistTurn(
     analysisJson: analysis ? JSON.stringify(analysis) : null,
     conversationId,
     excludeFromContext: opts.excludeFromContext ? 1 : 0,
+    displayText: opts.displayText ?? null,
   });
   return id;
 }
@@ -57,6 +58,8 @@ export interface ChatTurn {
   analysisError?: string | null;
   /** /btw off-record turn: still shown in history, but excluded from future context and not corrected. */
   excludeFromContext?: boolean;
+  /** Prompt-macro turn (/topic, /learn, /surprise): verbatim command text to render in the bubble instead of userText. */
+  displayText?: string;
 }
 
 export function serializeTurnFeedback(
@@ -126,6 +129,7 @@ export async function loadChatHistory(
       analysisProse: prose,
       analysisError: diagnostic,
       excludeFromContext: t.excludeFromContext === 1,
+      displayText: t.displayText ?? undefined,
     };
   });
 }

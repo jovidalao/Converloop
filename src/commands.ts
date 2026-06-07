@@ -5,17 +5,25 @@
 
 import { isAgentEnabled } from "./runtime/enablement";
 
-export type SlashCommandKind = "message" | "action" | "meta";
+export type SlashCommandKind = "message" | "action" | "meta" | "prompt";
 
 export interface SlashCommand {
   /** Command name without the slash, lowercase, e.g. "btw". */
   name: string;
   description: string;
-  /** Argument hint (only for "message" kind), e.g. "<something to ask the AI>". */
+  /** Argument hint (for "message"/"prompt" kinds), e.g. "<something to ask the AI>". */
   argsHint?: string;
   kind: SlashCommandKind;
   /** For "action" kind: the id of the existing conversation.action Agent to reuse. */
   actionId?: string;
+  /**
+   * For "prompt" kind: build the expanded prompt sent to the conversation agent from the typed args.
+   * Unlike "action" commands (which branch into a new conversation), prompt macros stay in the current
+   * conversation as a turn — the bubble shows the verbatim command, the agent receives this expanded prompt.
+   */
+  buildPrompt?: (rest: string) => string;
+  /** For "prompt" kind: when true, an empty body does not send (e.g. /topic needs pasted material). */
+  requiresArgs?: boolean;
 }
 
 // Command list. message/meta are new behaviors; action kinds are thin entry points into existing conversation actions (builtin:action:*),
@@ -31,6 +39,32 @@ export const SLASH_COMMANDS: SlashCommand[] = [
     name: "help",
     description: "Show all available commands",
     kind: "meta",
+  },
+  {
+    name: "topic",
+    description: "Center the conversation on pasted material",
+    argsHint: "<paste your material>",
+    kind: "prompt",
+    requiresArgs: true,
+    buildPrompt: (rest) =>
+      `The user pasted the material below and wants this conversation to center on it. Read it, then naturally open a conversation about it — lead with your own angle or a question that gets the user talking about it. Don't summarize it back or quiz them mechanically. Material:\n\n${rest}`,
+  },
+  {
+    name: "learn",
+    description: "Learn a topic through conversation",
+    argsHint: "<what to learn>",
+    kind: "prompt",
+    buildPrompt: (rest) => {
+      const subject = rest.trim() ? `"${rest.trim()}"` : "the current topic";
+      return `The user wants to learn about ${subject} through conversation. Act as a tutor-by-dialogue: give a short, level-appropriate way in, then teach interactively — explain a little, show an example, and ask a question that gets the user to use it, one step at a time. Keep it a back-and-forth, not a lecture.`;
+    },
+  },
+  {
+    name: "surprise",
+    description: "Start chatting about a random topic",
+    kind: "prompt",
+    buildPrompt: () =>
+      "Pick an interesting, everyday topic at random and start a fresh, casual conversation about it — open with a hook or a question that gets the user talking. Keep it at the user's level.",
   },
   {
     name: "harder",
@@ -91,10 +125,13 @@ export function slashMenuToken(input: string): string | null {
 export interface SlashMenuContext {
   /** Whether branching is available (practice conversation and not a draft); when false, action-kind commands are hidden. */
   canDerive: boolean;
+  /** Focused-lesson session: prompt macros (/topic, /learn, /surprise) would fight the lesson script, so they are hidden. */
+  isLearning: boolean;
 }
 
 // Filter + sort for the menu: match by command word prefix or substring, startsWith ranked first;
-// action-kind commands are excluded when branching is unavailable or the corresponding agent is disabled.
+// action-kind commands are excluded when branching is unavailable or the corresponding agent is disabled;
+// prompt-kind commands are excluded in focused lessons.
 export function matchSlashCommands(
   token: string,
   ctx: SlashMenuContext,
@@ -105,6 +142,7 @@ export function matchSlashCommands(
       if (!ctx.canDerive) return false;
       if (c.actionId && !isAgentEnabled(c.actionId)) return false;
     }
+    if (c.kind === "prompt" && ctx.isLearning) return false;
     return true;
   });
   if (!q) return available;

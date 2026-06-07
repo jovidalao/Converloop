@@ -979,6 +979,24 @@ function UserTurn({
       </div>
     );
   }
+  // Prompt-macro turn (/topic, /learn, /surprise): show the verbatim command (not the expanded prompt fed to the
+  // agent), with no grading / "more natural" / reply-suggestion / branch actions — it's a directive, not learner output.
+  if (turn.displayText) {
+    return (
+      <div className="flex max-w-[min(88%,520px)] flex-col items-end gap-1.5 self-end">
+        <div
+          className="whitespace-pre-wrap rounded-2xl rounded-br-sm border bg-secondary px-3.5 py-2.5 text-ui-chat text-foreground shadow-sm"
+          data-selectable-context
+        >
+          {turn.displayText}
+        </div>
+        <div className="-mr-1 flex items-center gap-0.5">
+          <CopyButton text={turn.displayText} />
+          <EditFromHereButton onClick={onEditFrom} disabled={editDisabled} />
+        </div>
+      </div>
+    );
+  }
   if (learningMode) {
     return (
       <div className="flex max-w-[min(88%,520px)] flex-col items-end gap-1.5 self-end">
@@ -1218,7 +1236,7 @@ export function ChatView({
   const liveTurnIdsRef = useRef<Set<string>>(new Set()); // turns sent in this session; auto-bilingual only applies to these
   const hintTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const config = useConfig();
-  const { nativeLanguage, autoBilingual, targetLanguage } = config;
+  const { nativeLanguage, autoBilingual } = config;
   const confirm = useConfirm();
   const learningMode = mode === "learning_agent";
   // Coaching hints are rendered as an animated overlay (not the native placeholder, which can't
@@ -1257,9 +1275,12 @@ export function ChatView({
   const slashCommands = useMemo(
     () =>
       slashToken !== null && !slashDismissed
-        ? matchSlashCommands(slashToken, { canDerive })
+        ? matchSlashCommands(slashToken, {
+            canDerive,
+            isLearning: learningMode,
+          })
         : [],
-    [slashToken, slashDismissed, canDerive],
+    [slashToken, slashDismissed, canDerive, learningMode],
   );
   const slashOpen = !compact && slashCommands.length > 0;
 
@@ -1560,15 +1581,22 @@ export function ChatView({
   // opts.text: reuse original text on retry (don't pull from input box);
   // opts.replacingId: replace the failed old turn;
   // opts.offRecord: /btw off-record turn — replied to normally but not graded, not in context (bubble has a marker).
+  // opts.displayText: prompt-macro turn (/topic, /learn, /surprise) — text is the expanded prompt sent to the agent,
+  //   displayText is the verbatim command shown in the bubble; these turns are kept in context but not graded.
+  // opts.titleSeed: text to seed the auto-title from instead of `text` (the expanded prompt is a poor title source).
   async function send(opts?: {
     text?: string;
     replacingId?: string;
     offRecord?: boolean;
+    displayText?: string;
+    titleSeed?: string;
   }) {
     const isRetry = opts?.text !== undefined;
     const text = (opts?.text ?? input).trim();
     if (!text || replyBusy) return;
     const offRecord = opts?.offRecord ?? false;
+    const displayText = opts?.displayText;
+    const isPromptMacro = displayText !== undefined;
     const draftAtSend = isDraft;
     stopSpeech();
     const priorTurns = opts?.replacingId
@@ -1593,8 +1621,9 @@ export function ChatView({
       {
         id: turnId,
         userText: text,
+        displayText,
         analysis: null,
-        analysisPending: !learningMode && !offRecord,
+        analysisPending: !learningMode && !offRecord && !isPromptMacro,
         excludeFromContext: offRecord,
       },
     ]);
@@ -1630,7 +1659,7 @@ export function ChatView({
           },
         },
         turnId,
-        { offRecord },
+        { offRecord, displayText },
       );
       if (turnGenRef.current === turnGen && !replyCommittedRef.current) {
         commitPartnerReply(turnId, result.reply);
@@ -1640,11 +1669,15 @@ export function ChatView({
       // Turn persisted: update conversation sort order, auto-name on first message, then refresh sidebar.
       // Off-record turns (/btw) don't define the conversation topic and are excluded from auto-naming.
       await touchConversation(conversationId);
-      if ((isFirstMessage || draftAtSend) && !learningMode && !offRecord)
-        void generateAndSetConversationTitle(conversationId, text).then(() =>
-          onActivity?.(),
+      if ((isFirstMessage || draftAtSend) && !learningMode && !offRecord) {
+        // Prompt macros: title from the typed args (/topic, /learn) or, when there are none (/surprise), from the reply.
+        const titleSeed = isPromptMacro
+          ? opts?.titleSeed?.trim() || result.reply
+          : text;
+        void generateAndSetConversationTitle(conversationId, titleSeed).then(
+          () => onActivity?.(),
         );
-      else onActivity?.();
+      } else onActivity?.();
       // Fire hint generation in the background after the reply is committed; silently ignore errors.
       if (!offRecord && !learningMode) {
         const capturedGen = turnGen;
@@ -1670,7 +1703,14 @@ export function ChatView({
             : String(e),
       );
       setRetry({
-        run: () => void send({ text, replacingId: turnId, offRecord }),
+        run: () =>
+          void send({
+            text,
+            replacingId: turnId,
+            offRecord,
+            displayText,
+            titleSeed: opts?.titleSeed,
+          }),
       });
     } finally {
       if (turnGenRef.current === turnGen) {
@@ -1706,7 +1746,8 @@ export function ChatView({
     });
     setError(null);
     setRetry(null);
-    setInput(target.userText);
+    // For prompt macros, restore the verbatim command (displayText), not the expanded prompt stored in userText.
+    setInput(target.displayText ?? target.userText);
     inputRef.current?.focus();
     await touchConversation(conversationId);
     onActivity?.();
@@ -1781,7 +1822,22 @@ export function ChatView({
     }
   }
 
+  // Prompt macro (/topic, /learn, /surprise): stays in the conversation as a turn — the bubble shows the verbatim
+  // command, the agent receives the expanded prompt. Requires-args commands with an empty body do nothing.
+  function runPromptMacro(command: SlashCommand, rest: string) {
+    if (!command.buildPrompt) return;
+    if (command.requiresArgs && !rest) return;
+    const displayText = rest ? `/${command.name} ${rest}` : `/${command.name}`;
+    setInput("");
+    void send({
+      text: command.buildPrompt(rest),
+      displayText,
+      titleSeed: rest,
+    });
+  }
+
   // Submit input: check for slash commands first. "message" type (/btw) sends off-record;
+  // "prompt" type (/topic etc.) sends a prompt macro that stays in the conversation;
   // "action" type executes an existing conversation action; "meta" (/help) expands the full list;
   // non-commands send normally. Arrives here via Enter / Send when the menu is already closed.
   function submitInput() {
@@ -1796,6 +1852,10 @@ export function ChatView({
       void send({ text: parsed.rest, offRecord: true });
       return;
     }
+    if (parsed.command.kind === "prompt") {
+      runPromptMacro(parsed.command, parsed.rest);
+      return;
+    }
     if (parsed.command.kind === "meta") {
       setInput("/"); // /help: expand the full command list
       requestAnimationFrame(() => inputRef.current?.focus());
@@ -1807,8 +1867,8 @@ export function ChatView({
     }
   }
 
-  // Select a command in the menu (Enter / click): "message" completes to "/btw " for body input;
-  // "meta" expands all; "action" executes immediately (clears input, menu closes as a result).
+  // Select a command in the menu (Enter / click): "message"/"prompt" with args complete to "/name " for body input;
+  // a no-arg "prompt" (/surprise) runs immediately; "meta" expands all; "action" executes immediately.
   function activateSlashCommand(command: SlashCommand) {
     if (command.kind === "action") {
       if (command.actionId) {
@@ -1817,16 +1877,20 @@ export function ChatView({
       }
       return;
     }
-    // message → "/name " (enter body mode); meta (/help) → "/" (expand full list)
-    setInput(command.kind === "message" ? `/${command.name} ` : "/");
+    if (command.kind === "prompt" && !command.argsHint) {
+      // /surprise (no body): run on the spot. Body-taking macros (/topic, /learn) fall through to body mode below.
+      runPromptMacro(command, "");
+      return;
+    }
+    // body-taking command (/btw, /topic, /learn) → "/name " (enter body mode); meta (/help) → "/" (expand full list)
+    setInput(command.argsHint ? `/${command.name} ` : "/");
     requestAnimationFrame(() => inputRef.current?.focus());
   }
 
-  // Tab-complete the command name: "message" completes to "/btw " (body mode); others to "/btw" (press Enter to run).
+  // Tab-complete the command name: commands that take a body (have an argsHint, e.g. /btw, /topic, /learn) complete
+  // to "/name " (body mode); the rest to "/name" (press Enter to run).
   function completeSlashCommand(command: SlashCommand) {
-    setInput(
-      command.kind === "message" ? `/${command.name} ` : `/${command.name}`,
-    );
+    setInput(command.argsHint ? `/${command.name} ` : `/${command.name}`);
     requestAnimationFrame(() => inputRef.current?.focus());
   }
 
@@ -2067,12 +2131,10 @@ export function ChatView({
                       ? t("chat.inputPlaceholderLesson")
                       : !compact && inputHints && inputHints.length > 0
                         ? "" // hint shown via the animated overlay below
-                        : t("chat.inputPlaceholderPractice", {
-                            lang: targetLanguage || "your target language",
-                          })
+                        : t("chat.inputPlaceholderPractice")
                   }
                   disabled={replyBusy}
-                  className="max-h-[6.5rem] min-h-14 min-w-0 resize-none border-none bg-transparent px-4 pt-3 pb-2 text-ui-chat outline-none placeholder:text-muted-foreground"
+                  className="max-h-[6.5rem] min-h-14 w-full min-w-0 resize-none border-none bg-transparent px-4 pt-3 pb-2 text-ui-chat outline-none placeholder:text-muted-foreground"
                 />
                 {hintsActive && (
                   <div className="pointer-events-none absolute inset-0 overflow-hidden px-4 pt-3 text-ui-chat">

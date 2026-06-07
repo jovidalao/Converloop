@@ -136,6 +136,11 @@ const ADD_LEARNING_AGENT_ENABLED: &str =
 const ADD_LEARNING_AGENT_PACKAGE_META_JSON: &str =
     "ALTER TABLE learning_agent ADD COLUMN package_meta_json TEXT;";
 
+// 提示词宏轮次(/topic、/learn、/surprise):气泡里显示用户原样输入的指令文本,
+// 而 user_input 落库的是展开后的英文提示词(喂给对话 agent、并计入后续上下文)。
+// display_text 仅供 UI 渲染气泡;普通轮次为 NULL(气泡照常显示 user_input)。
+const ADD_TURN_DISPLAY_TEXT: &str = "ALTER TABLE turn ADD COLUMN display_text TEXT;";
+
 const CREATE_AGENT_JOB: &str = "\
 CREATE TABLE IF NOT EXISTS agent_job (
     id          TEXT PRIMARY KEY NOT NULL,
@@ -471,6 +476,12 @@ pub fn run() {
             version: 33,
             description: "add_learning_agent_package_meta_json",
             sql: ADD_LEARNING_AGENT_PACKAGE_META_JSON,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 34,
+            description: "add_turn_display_text",
+            sql: ADD_TURN_DISPLAY_TEXT,
             kind: MigrationKind::Up,
         },
     ];

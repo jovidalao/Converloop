@@ -211,6 +211,9 @@ export const turn = sqliteTable("turn", {
   bilingualCount: integer("bilingual_count").notNull().default(0),
   // Off-record turns (/btw): 1 = still displayed in history, but skipped when building context / feeding the maintainer agent (migration v32).
   excludeFromContext: integer("exclude_from_context").notNull().default(0),
+  // Prompt-macro turns (/topic, /learn, /surprise): the verbatim command text shown in the bubble; user_input holds the
+  // expanded English prompt fed to the agent and kept in context. NULL for normal turns (the bubble shows user_input). Migration v34.
+  displayText: text("display_text"),
 });
 
 export type Turn = typeof turn.$inferSelect;

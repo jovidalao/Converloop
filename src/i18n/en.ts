@@ -459,8 +459,7 @@ export const en = {
     emptyModelId: "Model ID not set",
     inputPlaceholderLesson:
       "Ask the teacher, answer exercises — native or target language…",
-    inputPlaceholderPractice:
-      "Write your reply in {lang} — type / for commands",
+    inputPlaceholderPractice: "Write your reply… type / for commands",
     replySuggestionTruncated:
       "Reply suggestion truncated due to output length limit ({provider}:{raw}). You can retry; include the reason in parentheses when reporting the issue.",
     generateReplySuggestion: "Generate reply suggestion",
