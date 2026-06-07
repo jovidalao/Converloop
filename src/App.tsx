@@ -117,6 +117,7 @@ const SETTINGS_VIEWS: ReadonlySet<MainView> = new Set<MainView>([
   "settings-general",
   "settings-llm",
   "settings-tts",
+  "settings-commands",
   "design",
   "mastery",
   "records",
@@ -607,6 +608,7 @@ function App() {
     "settings-general": t("viewTitles.general"),
     "settings-llm": t("viewTitles.llm"),
     "settings-tts": t("viewTitles.tts"),
+    "settings-commands": t("viewTitles.commands"),
   };
   const topbarTitle =
     view === "chat"
@@ -636,6 +638,8 @@ function App() {
       <SettingsView section="llm" />
     ) : view === "settings-tts" ? (
       <SettingsView section="tts" />
+    ) : view === "settings-commands" ? (
+      <SettingsView section="commands" />
     ) : null;
 
   return (

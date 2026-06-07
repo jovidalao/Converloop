@@ -2,16 +2,26 @@ import anthropicLogo from "@lobehub/icons-static-svg/icons/anthropic.svg?raw";
 import claudeLogo from "@lobehub/icons-static-svg/icons/claude-color.svg?raw";
 import geminiLogo from "@lobehub/icons-static-svg/icons/gemini-color.svg?raw";
 import openAiLogo from "@lobehub/icons-static-svg/icons/openai.svg?raw";
+import type { LucideIcon } from "lucide-react";
 import {
   ChevronDownIcon,
   MonitorIcon,
   MoonIcon,
+  PlusIcon,
+  RotateCcwIcon,
   SparklesIcon,
   SunIcon,
+  Trash2Icon,
   Volume2Icon,
 } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
+import {
+  BUILTIN_PROMPT_MACROS,
+  isValidMacroName,
+  PROMPT_INPUT_TOKEN,
+  type PromptMacroDef,
+  takenMacroNames,
+} from "@/commands";
 import { type Locale, type MessageKey, useTranslation } from "@/i18n";
 import { isWindows } from "@/lib/platform";
 import { cn } from "@/lib/utils";
@@ -40,6 +50,16 @@ import {
   type OAuthTokens,
   setTokens,
 } from "../oauth/store";
+import {
+  type CustomPromptMacro,
+  clearPromptMacroOverride,
+  deleteCustomPromptMacro,
+  getCustomPromptMacros,
+  getPromptMacroOverrides,
+  type PromptMacroOverride,
+  setPromptMacroOverride,
+  upsertCustomPromptMacro,
+} from "../runtime/prompt-macro-store";
 import {
   EDGE_VOICES,
   loadTtsConfig,
@@ -96,7 +116,11 @@ function ToggleField({
   return (
     <div className="flex items-center justify-between gap-4 border-b border-border/70 py-3 last:border-0">
       <span className="text-ui-body">{label}</span>
-      <Switch checked={checked} onCheckedChange={onChange} className="shrink-0" />
+      <Switch
+        checked={checked}
+        onCheckedChange={onChange}
+        className="shrink-0"
+      />
     </div>
   );
 }
@@ -172,7 +196,7 @@ const LEVELS: { value: string; label: BiLabel }[] = [
 ];
 
 const CUSTOM_MODEL_VALUE = "__custom_model__";
-export type SettingsSection = "general" | "llm" | "tts";
+export type SettingsSection = "general" | "llm" | "tts" | "commands";
 
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -382,6 +406,284 @@ function GlassToggle() {
       checked={glassEnabled}
       onChange={setGlassEnabled}
     />
+  );
+}
+
+// One macro's editor card: a /name header with a trailing action (reset / delete) and the fields below.
+function MacroCard({
+  title,
+  trailing,
+  children,
+}: {
+  title: string;
+  trailing?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <div className="space-y-3 rounded-lg border bg-card px-4 py-4">
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-mono text-ui-body font-semibold text-foreground">
+          {title}
+        </span>
+        {trailing}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+type BuiltinForm = { description: string; argsHint: string; template: string };
+
+function effectiveBuiltinForm(
+  def: PromptMacroDef,
+  ov: PromptMacroOverride | undefined,
+): BuiltinForm {
+  return {
+    description: ov?.description ?? def.description,
+    argsHint: ov?.argsHint ?? def.argsHint ?? "",
+    template: ov?.template ?? def.template,
+  };
+}
+
+// Store only the fields that differ from the default, so an untouched (or restored) built-in keeps no
+// override and "Reset" disappears — and future default changes still flow through.
+function diffFromDefault(
+  def: PromptMacroDef,
+  f: BuiltinForm,
+): PromptMacroOverride {
+  const p: PromptMacroOverride = {};
+  if (f.description.trim() && f.description.trim() !== def.description)
+    p.description = f.description;
+  if (f.argsHint.trim() && f.argsHint.trim() !== (def.argsHint ?? ""))
+    p.argsHint = f.argsHint;
+  if (f.template.trim() && f.template !== def.template) p.template = f.template;
+  return p;
+}
+
+// Editor for the customizable "/" prompt macros: edit the built-ins (reset to default) and add/remove
+// custom ones. Persists to the prompt-macro store on every change (frontend localStorage); the chat menu
+// recomputes from the store, so changes take effect without a reload.
+function CommandsSettings() {
+  const { t } = useTranslation();
+  const [overrides, setOverrides] = useState(() => getPromptMacroOverrides());
+  const [builtinForm, setBuiltinForm] = useState<Record<string, BuiltinForm>>(
+    () => {
+      const ov = getPromptMacroOverrides();
+      const m: Record<string, BuiltinForm> = {};
+      for (const def of BUILTIN_PROMPT_MACROS)
+        m[def.name] = effectiveBuiltinForm(def, ov[def.name]);
+      return m;
+    },
+  );
+  const [custom, setCustom] = useState<CustomPromptMacro[]>(() =>
+    getCustomPromptMacros().map((c) => ({ ...c })),
+  );
+
+  function editBuiltin(def: PromptMacroDef, patch: Partial<BuiltinForm>) {
+    const next = { ...builtinForm[def.name], ...patch };
+    setBuiltinForm((prev) => ({ ...prev, [def.name]: next }));
+    setPromptMacroOverride(def.name, diffFromDefault(def, next));
+    setOverrides(getPromptMacroOverrides());
+  }
+
+  function resetBuiltin(def: PromptMacroDef) {
+    clearPromptMacroOverride(def.name);
+    setOverrides(getPromptMacroOverrides());
+    setBuiltinForm((prev) => ({
+      ...prev,
+      [def.name]: effectiveBuiltinForm(def, undefined),
+    }));
+  }
+
+  function editCustom(id: string, patch: Partial<CustomPromptMacro>) {
+    const next = custom.map((c) => (c.id === id ? { ...c, ...patch } : c));
+    setCustom(next);
+    const item = next.find((c) => c.id === id);
+    if (item) upsertCustomPromptMacro(item);
+  }
+
+  function addCustom() {
+    const taken = takenMacroNames(custom);
+    let i = 1;
+    while (taken.has(`custom${i}`)) i++;
+    const macro: CustomPromptMacro = {
+      id: crypto.randomUUID(),
+      name: `custom${i}`,
+      description: "",
+      argsHint: "",
+      template: "",
+    };
+    setCustom((prev) => [...prev, macro]);
+    upsertCustomPromptMacro(macro);
+  }
+
+  function removeCustom(id: string) {
+    deleteCustomPromptMacro(id);
+    setCustom((prev) => prev.filter((c) => c.id !== id));
+  }
+
+  return (
+    <section className="space-y-7">
+      <div className="space-y-2 border-b border-border/70 pb-5">
+        <h2 className="mt-0 text-ui-title font-semibold tracking-tight">
+          {t("settings.commands.title")}
+        </h2>
+        <p className="max-w-2xl text-ui-body leading-relaxed text-ui-muted">
+          {t("settings.commands.description")}
+        </p>
+      </div>
+
+      <div className="rounded-lg border bg-muted/30 px-4 py-3 text-ui-body text-ui-muted">
+        {t("settings.commands.inputTokenHint")}
+      </div>
+
+      <div className="space-y-4">
+        <h3 className="text-ui-meta font-semibold uppercase tracking-wide text-ui-muted">
+          {t("settings.commands.builtinHeading")}
+        </h3>
+        {BUILTIN_PROMPT_MACROS.map((def) => {
+          const f = builtinForm[def.name];
+          const takesBody = f.template.includes(PROMPT_INPUT_TOKEN);
+          return (
+            <MacroCard
+              key={def.name}
+              title={`/${def.name}`}
+              trailing={
+                overrides[def.name] ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="gap-1.5"
+                    onClick={() => resetBuiltin(def)}
+                  >
+                    <RotateCcwIcon className="size-3.5" />
+                    {t("settings.commands.reset")}
+                  </Button>
+                ) : null
+              }
+            >
+              <Field label={t("settings.commands.descriptionLabel")}>
+                <Input
+                  value={f.description}
+                  onChange={(e) =>
+                    editBuiltin(def, { description: e.target.value })
+                  }
+                />
+              </Field>
+              <Field label={t("settings.commands.promptLabel")}>
+                <Textarea
+                  className="min-h-24 resize-y font-mono leading-snug"
+                  value={f.template}
+                  onChange={(e) =>
+                    editBuiltin(def, { template: e.target.value })
+                  }
+                />
+              </Field>
+              {takesBody && (
+                <Field label={t("settings.commands.argsHintLabel")}>
+                  <Input
+                    value={f.argsHint}
+                    onChange={(e) =>
+                      editBuiltin(def, { argsHint: e.target.value })
+                    }
+                  />
+                </Field>
+              )}
+            </MacroCard>
+          );
+        })}
+      </div>
+
+      <div className="space-y-4">
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="text-ui-meta font-semibold uppercase tracking-wide text-ui-muted">
+            {t("settings.commands.customHeading")}
+          </h3>
+          <Button
+            variant="secondary"
+            size="sm"
+            className="gap-1.5"
+            onClick={addCustom}
+          >
+            <PlusIcon className="size-4" />
+            {t("settings.commands.add")}
+          </Button>
+        </div>
+        {custom.length === 0 && (
+          <p className="text-ui-body text-ui-muted">
+            {t("settings.commands.customEmpty")}
+          </p>
+        )}
+        {custom.map((c) => {
+          const takesBody = c.template.includes(PROMPT_INPUT_TOKEN);
+          const nameNorm = c.name.trim().toLowerCase();
+          const nameError = !isValidMacroName(c.name)
+            ? t("settings.commands.nameInvalid")
+            : takenMacroNames(custom, c.id).has(nameNorm)
+              ? t("settings.commands.nameTaken")
+              : null;
+          return (
+            <MacroCard
+              key={c.id}
+              title={`/${c.name.trim() || "…"}`}
+              trailing={
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="gap-1.5 text-destructive hover:text-destructive"
+                  onClick={() => removeCustom(c.id)}
+                >
+                  <Trash2Icon className="size-3.5" />
+                  {t("settings.commands.delete")}
+                </Button>
+              }
+            >
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label={t("settings.commands.nameLabel")}>
+                  <Input
+                    value={c.name}
+                    onChange={(e) => editCustom(c.id, { name: e.target.value })}
+                  />
+                  {nameError && (
+                    <span className="text-ui-caption text-destructive">
+                      {nameError}
+                    </span>
+                  )}
+                </Field>
+                <Field label={t("settings.commands.descriptionLabel")}>
+                  <Input
+                    value={c.description ?? ""}
+                    onChange={(e) =>
+                      editCustom(c.id, { description: e.target.value })
+                    }
+                  />
+                </Field>
+              </div>
+              <Field label={t("settings.commands.promptLabel")}>
+                <Textarea
+                  className="min-h-24 resize-y font-mono leading-snug"
+                  value={c.template}
+                  onChange={(e) =>
+                    editCustom(c.id, { template: e.target.value })
+                  }
+                  placeholder={t("settings.commands.promptPlaceholder")}
+                />
+              </Field>
+              {takesBody && (
+                <Field label={t("settings.commands.argsHintLabel")}>
+                  <Input
+                    value={c.argsHint ?? ""}
+                    onChange={(e) =>
+                      editCustom(c.id, { argsHint: e.target.value })
+                    }
+                  />
+                </Field>
+              )}
+            </MacroCard>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
@@ -1194,6 +1496,8 @@ export function SettingsView({ section }: { section: SettingsSection }) {
             </div>
           </section>
         )}
+
+        {section === "commands" && <CommandsSettings />}
       </div>
     </div>
   );

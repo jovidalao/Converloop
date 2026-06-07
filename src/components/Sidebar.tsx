@@ -13,6 +13,7 @@ import {
   SlidersHorizontalIcon,
   SparklesIcon,
   SquarePenIcon,
+  SquareSlashIcon,
   Trash2Icon,
   TrophyIcon,
   UserRoundIcon,
@@ -51,7 +52,8 @@ export type MainView =
   | "settings-logs"
   | "settings-general"
   | "settings-llm"
-  | "settings-tts";
+  | "settings-tts"
+  | "settings-commands";
 
 // Relative time: "just now" within the first minute, then stepping up through
 // minutes → hours → days → weeks → months → years. Number/unit wording is
@@ -477,6 +479,11 @@ export function Sidebar({
                 "settings-tts",
                 <Volume2Icon className="size-4" />,
                 t("sidebar.ttsProviders"),
+              )}
+              {renderSettingsItem(
+                "settings-commands",
+                <SquareSlashIcon className="size-4" />,
+                t("sidebar.slashCommands"),
               )}
 
               <div className="codex-section-label">

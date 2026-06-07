@@ -1,9 +1,16 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import {
   matchSlashCommands,
   parseSlashInput,
+  resolvePromptMacros,
   slashMenuToken,
 } from "./commands";
+import {
+  clearPromptMacroOverride,
+  deleteCustomPromptMacro,
+  setPromptMacroOverride,
+  upsertCustomPromptMacro,
+} from "./runtime/prompt-macro-store";
 
 describe("parseSlashInput", () => {
   it("parses a message command and extracts arguments", () => {
@@ -31,11 +38,13 @@ describe("parseSlashInput", () => {
     expect(p?.command.buildPrompt?.(p.rest)).toContain("the CAP theorem");
   });
 
-  it("/learn with no args falls back to the current topic", () => {
-    const p = parseSlashInput("/learn");
+  it("/learn takes a subject and substitutes it into the prompt", () => {
+    const p = parseSlashInput("/learn the past tense");
     expect(p?.command.kind).toBe("prompt");
-    expect(p?.command.requiresArgs).toBeUndefined();
-    expect(p?.command.buildPrompt?.("")).toContain("the current topic");
+    expect(p?.command.requiresArgs).toBe(true);
+    expect(p?.command.buildPrompt?.("the past tense")).toContain(
+      "the past tense",
+    );
   });
 
   it("/surprise is a no-arg prompt command", () => {
@@ -137,5 +146,41 @@ describe("matchSlashCommands", () => {
     // "e" appears in "easier" (prefix match) and "harder"/"help"/"next-day" (substring match).
     const r = matchSlashCommands("e", { canDerive: true, isLearning: false });
     expect(r[0]?.name).toBe("easier");
+  });
+});
+
+describe("prompt macro customization", () => {
+  afterEach(() => {
+    clearPromptMacroOverride("surprise");
+    deleteCustomPromptMacro("test-1");
+  });
+
+  it("applies a built-in template override to the resolved prompt", () => {
+    setPromptMacroOverride("surprise", { template: "Custom surprise prompt" });
+    const cmd = resolvePromptMacros().find((c) => c.name === "surprise");
+    expect(cmd?.buildPrompt?.("")).toBe("Custom surprise prompt");
+  });
+
+  it("includes a valid custom macro and substitutes {input}", () => {
+    upsertCustomPromptMacro({
+      id: "test-1",
+      name: "debate",
+      description: "Debate a topic",
+      template: "Let's debate {input}.",
+    });
+    const cmd = resolvePromptMacros().find((c) => c.name === "debate");
+    expect(cmd?.requiresArgs).toBe(true);
+    expect(cmd?.buildPrompt?.("AI ethics")).toBe("Let's debate AI ethics.");
+  });
+
+  it("skips a custom macro whose name collides with a built-in", () => {
+    upsertCustomPromptMacro({
+      id: "test-1",
+      name: "topic",
+      template: "should be ignored {input}",
+    });
+    const matches = resolvePromptMacros().filter((c) => c.name === "topic");
+    expect(matches).toHaveLength(1);
+    expect(matches[0]?.buildPrompt?.("x")).not.toContain("should be ignored");
   });
 });

@@ -208,6 +208,7 @@ export const zh: Messages = {
     general: "通用设置",
     llmProviders: "LLM 提供商",
     ttsProviders: "TTS 提供商",
+    slashCommands: "斜杠命令",
     designNotes: "设计说明",
     data: "数据",
     achievements: "学习成就",
@@ -273,6 +274,7 @@ export const zh: Messages = {
     general: "通用设置",
     llm: "LLM 提供商",
     tts: "TTS 提供商",
+    commands: "斜杠命令",
   },
   records: {
     title: "你的学习成就",
@@ -440,6 +442,27 @@ export const zh: Messages = {
       noMimoKey: "还没有 MiMo TTS API key。",
       cacheCleared: "✓ 已清空朗读缓存({n} 条)",
       cacheClearFailed: "✗ 清空缓存失败:{error}",
+    },
+    commands: {
+      title: "斜杠命令",
+      description:
+        "自定义聊天中使用的 / 命令。每个命令在发送给 AI 前会替换成下面的提示词;气泡里仍然显示你输入的原文。",
+      // {input} 是字面占位符(对应 commands.ts 的 PROMPT_INPUT_TOKEN),不传插值参数。
+      inputTokenHint:
+        "在提示词中用 {input} 标记命令后面输入的文字会插入的位置。不含 {input} 的命令(如 /surprise)直接运行。",
+      builtinHeading: "内置命令",
+      customHeading: "你的命令",
+      add: "添加命令",
+      reset: "重置",
+      delete: "删除",
+      customEmpty: "还没有自定义命令。添加一个来创建你自己的 / 快捷指令。",
+      nameLabel: "命令名(不能有空格)",
+      descriptionLabel: "菜单描述",
+      promptLabel: "发送给 AI 的提示词",
+      argsHintLabel: "输入提示(显示在菜单里)",
+      promptPlaceholder: "写下提示词。用 {input} 标记你输入的文字插入的位置。",
+      nameInvalid: "只能用字母、数字、- 或 _,且必须以字母开头。",
+      nameTaken: "这个名字已被其他命令占用。",
     },
   },
   chat: {

@@ -212,6 +212,7 @@ export const en = {
     general: "General",
     llmProviders: "LLM providers",
     ttsProviders: "TTS providers",
+    slashCommands: "Slash commands",
     designNotes: "Design notes",
     data: "Data",
     achievements: "Achievements",
@@ -277,6 +278,7 @@ export const en = {
     general: "General settings",
     llm: "LLM providers",
     tts: "TTS providers",
+    commands: "Slash commands",
   },
   records: {
     title: "Your progress",
@@ -450,6 +452,29 @@ export const en = {
       noMimoKey: "No MiMo TTS API key yet.",
       cacheCleared: "✓ Cleared reading cache ({n} item(s))",
       cacheClearFailed: "✗ Failed to clear cache: {error}",
+    },
+    commands: {
+      title: "Slash commands",
+      description:
+        "Customize the / prompt commands used in chat. Each command turns into the prompt below before it's sent to the AI; the bubble still shows what you typed.",
+      // {input} is the literal placeholder token (commands.ts PROMPT_INPUT_TOKEN); no interpolation param is passed.
+      inputTokenHint:
+        "Use {input} in a prompt to mark where the text you type after the command goes. A command without {input} (like /surprise) runs on its own.",
+      builtinHeading: "Built-in commands",
+      customHeading: "Your commands",
+      add: "Add command",
+      reset: "Reset",
+      delete: "Delete",
+      customEmpty:
+        "No custom commands yet. Add one to create your own / shortcut.",
+      nameLabel: "Command (no spaces)",
+      descriptionLabel: "Menu description",
+      promptLabel: "Prompt sent to the AI",
+      argsHintLabel: "Input hint (shown in the menu)",
+      promptPlaceholder:
+        "Write the prompt. Use {input} where your typed text should go.",
+      nameInvalid: "Use letters, digits, - or _; must start with a letter.",
+      nameTaken: "This name is already used by another command.",
     },
   },
   chat: {
