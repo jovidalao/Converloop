@@ -26,6 +26,7 @@ import { CoachPanel } from "./components/CoachPanel";
 import { CommandPalette } from "./components/CommandPalette";
 import { KeyboardShortcutsDialog } from "./components/KeyboardShortcutsDialog";
 import { LearningAgentsView } from "./components/LearningAgentsView";
+import { LearningRecordsView } from "./components/LearningRecordsView";
 import { LogsView } from "./components/LogsView";
 import { MasteryView } from "./components/MasteryView";
 import { ProfileView } from "./components/ProfileView";
@@ -96,6 +97,7 @@ const SETTINGS_VIEWS: ReadonlySet<MainView> = new Set<MainView>([
   "settings-tts",
   "design",
   "mastery",
+  "records",
   "agents",
   "settings-logs",
   "profile",
@@ -499,6 +501,7 @@ function App() {
   const TOPBAR_TITLES: Partial<Record<MainView, string>> = {
     profile: t("viewTitles.profile"),
     mastery: t("viewTitles.mastery"),
+    records: t("viewTitles.records"),
     learning: t("viewTitles.learning"),
     design: t("viewTitles.design"),
     agents: t("viewTitles.agents"),
@@ -519,6 +522,8 @@ function App() {
       <ProfileView />
     ) : view === "mastery" ? (
       <MasteryView />
+    ) : view === "records" ? (
+      <LearningRecordsView />
     ) : view === "learning" ? (
       <LearningAgentsView onRefresh={refreshLearningAgents} />
     ) : view === "design" ? (

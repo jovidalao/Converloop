@@ -14,6 +14,7 @@ import {
   SparklesIcon,
   SquarePenIcon,
   Trash2Icon,
+  TrophyIcon,
   UserRoundIcon,
   Volume2Icon,
 } from "lucide-react";
@@ -43,6 +44,7 @@ export type MainView =
   | "chat"
   | "profile"
   | "mastery"
+  | "records"
   | "learning"
   | "design"
   | "agents"
@@ -482,6 +484,11 @@ export function Sidebar({
               <div className="codex-section-label">
                 {t("sidebar.sectionProfileDatabase")}
               </div>
+              {renderSettingsItem(
+                "records",
+                <TrophyIcon className="size-4" />,
+                t("sidebar.achievements"),
+              )}
               {renderSettingsItem(
                 "design",
                 <PencilRulerIcon className="size-4" />,
