@@ -2,7 +2,15 @@ import anthropicLogo from "@lobehub/icons-static-svg/icons/anthropic.svg?raw";
 import claudeLogo from "@lobehub/icons-static-svg/icons/claude-color.svg?raw";
 import geminiLogo from "@lobehub/icons-static-svg/icons/gemini-color.svg?raw";
 import openAiLogo from "@lobehub/icons-static-svg/icons/openai.svg?raw";
-import { ChevronDownIcon, SparklesIcon, Volume2Icon } from "lucide-react";
+import {
+  ChevronDownIcon,
+  MonitorIcon,
+  MoonIcon,
+  SparklesIcon,
+  SunIcon,
+  Volume2Icon,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { type Locale, type MessageKey, useTranslation } from "@/i18n";
 import { isWindows } from "@/lib/platform";
@@ -79,24 +87,39 @@ function Field({
 function ToggleField({
   checked,
   onChange,
-  children,
+  label,
 }: {
   checked: boolean;
   onChange: (v: boolean) => void;
-  children: ReactNode;
+  label: string;
 }) {
   return (
-    <label className="flex min-h-11 items-center gap-3 rounded-lg border border-border/70 bg-card/70 px-3.5 py-2.5 text-ui-body">
-      <Switch checked={checked} onCheckedChange={onChange} />
-      <span>{children}</span>
-    </label>
+    <div className="flex items-center justify-between gap-4 border-b border-border/70 py-3 last:border-0">
+      <span className="text-ui-body">{label}</span>
+      <Switch checked={checked} onCheckedChange={onChange} className="shrink-0" />
+    </div>
   );
 }
 
-const THEMES: { value: Theme; labelKey: MessageKey }[] = [
-  { value: "light", labelKey: "settings.themes.light" },
-  { value: "dark", labelKey: "settings.themes.dark" },
-  { value: "system", labelKey: "settings.themes.system" },
+function SettingRow({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4 border-b border-border/70 py-3 last:border-0">
+      <span className="shrink-0 text-ui-body">{label}</span>
+      <div className="min-w-0">{children}</div>
+    </div>
+  );
+}
+
+const THEMES: { value: Theme; labelKey: MessageKey; icon: LucideIcon }[] = [
+  { value: "light", labelKey: "settings.themes.light", icon: SunIcon },
+  { value: "dark", labelKey: "settings.themes.dark", icon: MoonIcon },
+  { value: "system", labelKey: "settings.themes.system", icon: MonitorIcon },
 ];
 // Accent swatches use the light-mode --brand value, purely as a selection marker.
 const ACCENTS: { value: Accent; labelKey: MessageKey; swatch: string }[] = [
@@ -125,6 +148,29 @@ const LOCALES: { value: Locale; labelKey: MessageKey }[] = [
   { value: "en", labelKey: "settings.languages.en" },
   { value: "zh", labelKey: "settings.languages.zh" },
 ];
+
+type BiLabel = { en: string; zh: string };
+const STUDY_LANGUAGES: { value: string; label: BiLabel }[] = [
+  { value: "Chinese", label: { en: "Chinese", zh: "中文" } },
+  { value: "English", label: { en: "English", zh: "英语" } },
+  { value: "Japanese", label: { en: "Japanese", zh: "日语" } },
+  { value: "Korean", label: { en: "Korean", zh: "韩语" } },
+  { value: "Spanish", label: { en: "Spanish", zh: "西班牙语" } },
+  { value: "French", label: { en: "French", zh: "法语" } },
+  { value: "German", label: { en: "German", zh: "德语" } },
+  { value: "Portuguese", label: { en: "Portuguese", zh: "葡萄牙语" } },
+  { value: "Russian", label: { en: "Russian", zh: "俄语" } },
+  { value: "Italian", label: { en: "Italian", zh: "意大利语" } },
+];
+const LEVELS: { value: string; label: BiLabel }[] = [
+  { value: "A1", label: { en: "A1 · Beginner", zh: "A1 · 入门" } },
+  { value: "A2", label: { en: "A2 · Elementary", zh: "A2 · 初级" } },
+  { value: "B1", label: { en: "B1 · Intermediate", zh: "B1 · 中级" } },
+  { value: "B2", label: { en: "B2 · Upper-Intermediate", zh: "B2 · 中高级" } },
+  { value: "C1", label: { en: "C1 · Advanced", zh: "C1 · 高级" } },
+  { value: "C2", label: { en: "C2 · Mastery", zh: "C2 · 精通" } },
+];
+
 const CUSTOM_MODEL_VALUE = "__custom_model__";
 export type SettingsSection = "general" | "llm" | "tts";
 
@@ -254,73 +300,69 @@ function ThemeToggle() {
   const { t } = useTranslation();
   return (
     <div className="inline-flex max-w-full flex-wrap rounded-lg border bg-card/70 p-1">
-      {THEMES.map((opt) => (
-        <button
-          key={opt.value}
-          type="button"
-          onClick={() => setTheme(opt.value)}
-          className={cn(
-            "rounded-md px-3 py-1.5 text-ui-body transition-colors",
-            theme === opt.value
-              ? "bg-accent text-foreground"
-              : "text-ui-muted hover:text-foreground",
-          )}
-        >
-          {t(opt.labelKey)}
-        </button>
-      ))}
+      {THEMES.map((opt) => {
+        const Icon = opt.icon;
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            onClick={() => setTheme(opt.value)}
+            className={cn(
+              "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-ui-body transition-colors",
+              theme === opt.value
+                ? "bg-accent text-foreground"
+                : "text-ui-muted hover:text-foreground",
+            )}
+          >
+            <Icon className="size-3.5 shrink-0" />
+            {t(opt.labelKey)}
+          </button>
+        );
+      })}
     </div>
   );
 }
 
-function AccentToggle() {
+function AccentSelect() {
   const { accent, setAccent } = useTheme();
   const { t } = useTranslation();
   return (
-    <div className="inline-flex max-w-full flex-wrap rounded-lg border bg-card/70 p-1">
-      {ACCENTS.map((a) => (
-        <button
-          key={a.value}
-          type="button"
-          onClick={() => setAccent(a.value)}
-          className={cn(
-            "flex items-center gap-2 rounded-md px-3 py-1.5 text-ui-body transition-colors",
-            accent === a.value
-              ? "bg-accent text-foreground"
-              : "text-ui-muted hover:text-foreground",
-          )}
-        >
-          <span
-            className="size-3 rounded-full"
-            style={{ background: a.swatch }}
-          />
-          {t(a.labelKey)}
-        </button>
-      ))}
-    </div>
+    <Select value={accent} onValueChange={(v) => setAccent(v as Accent)}>
+      <SelectTrigger className="w-44">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {ACCENTS.map((a) => (
+          <SelectItem key={a.value} value={a.value}>
+            <span className="flex items-center gap-2">
+              <span
+                className="size-3 shrink-0 rounded-full"
+                style={{ background: a.swatch }}
+              />
+              {t(a.labelKey)}
+            </span>
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }
 
-function LanguageToggle() {
+function LanguageSelect() {
   const { locale, setLocale, t } = useTranslation();
   return (
-    <div className="inline-flex max-w-full flex-wrap rounded-lg border bg-card/70 p-1">
-      {LOCALES.map((opt) => (
-        <button
-          key={opt.value}
-          type="button"
-          onClick={() => setLocale(opt.value)}
-          className={cn(
-            "rounded-md px-3 py-1.5 text-ui-body transition-colors",
-            locale === opt.value
-              ? "bg-accent text-foreground"
-              : "text-ui-muted hover:text-foreground",
-          )}
-        >
-          {t(opt.labelKey)}
-        </button>
-      ))}
-    </div>
+    <Select value={locale} onValueChange={(v) => setLocale(v as Locale)}>
+      <SelectTrigger className="w-44">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {LOCALES.map((opt) => (
+          <SelectItem key={opt.value} value={opt.value}>
+            {t(opt.labelKey)}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }
 
@@ -328,14 +370,16 @@ function GlassToggle() {
   const { glassEnabled, setGlassEnabled } = useTheme();
   const { t } = useTranslation();
   return (
-    <ToggleField checked={glassEnabled} onChange={setGlassEnabled}>
-      {t("settings.general.glass")}
-    </ToggleField>
+    <ToggleField
+      label={t("settings.general.glass")}
+      checked={glassEnabled}
+      onChange={setGlassEnabled}
+    />
   );
 }
 
 export function SettingsView({ section }: { section: SettingsSection }) {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const [cfg, setCfg] = useState<AppConfig>(loadConfig);
   const [ttsCfg, setTtsCfg] = useState<TtsConfig>(loadTtsConfig());
 
@@ -830,53 +874,77 @@ export function SettingsView({ section }: { section: SettingsSection }) {
               </p>
             </div>
 
-            <div className="grid gap-5 rounded-xl border border-border/70 bg-card/75 p-5 shadow-minimal-flat md:grid-cols-2">
-              <Field label={t("settings.general.interfaceLanguage")}>
-                <LanguageToggle />
-              </Field>
-
-              <Field label={t("settings.general.theme")}>
+            <div>
+              <SettingRow label={t("settings.general.interfaceLanguage")}>
+                <LanguageSelect />
+              </SettingRow>
+              <SettingRow label={t("settings.general.theme")}>
                 <ThemeToggle />
-              </Field>
-
-              <Field label={t("settings.general.accent")}>
-                <AccentToggle />
-              </Field>
-
-              {!isWindows() && (
-                <div className="md:col-span-2">
-                  <GlassToggle />
-                </div>
-              )}
+              </SettingRow>
+              <SettingRow label={t("settings.general.accent")}>
+                <AccentSelect />
+              </SettingRow>
+              {!isWindows() && <GlassToggle />}
             </div>
 
-            <div className="grid gap-4 rounded-xl border border-border/70 bg-card/75 p-5 shadow-minimal-flat sm:grid-cols-3">
-              <Field label={t("settings.general.nativeLanguage")}>
-                <Input
+            <div>
+              <SettingRow label={t("settings.general.nativeLanguage")}>
+                <Select
                   value={cfg.nativeLanguage}
-                  onChange={(e) => update("nativeLanguage", e.target.value)}
-                />
-              </Field>
-              <Field label={t("settings.general.targetLanguage")}>
-                <Input
+                  onValueChange={(v) => update("nativeLanguage", v)}
+                >
+                  <SelectTrigger className="w-44">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {STUDY_LANGUAGES.map((l) => (
+                      <SelectItem key={l.value} value={l.value}>
+                        {l.label[locale]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </SettingRow>
+              <SettingRow label={t("settings.general.targetLanguage")}>
+                <Select
                   value={cfg.targetLanguage}
-                  onChange={(e) => update("targetLanguage", e.target.value)}
-                />
-              </Field>
-              <Field label={t("settings.general.level")}>
-                <Input
+                  onValueChange={(v) => update("targetLanguage", v)}
+                >
+                  <SelectTrigger className="w-44">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {STUDY_LANGUAGES.map((l) => (
+                      <SelectItem key={l.value} value={l.value}>
+                        {l.label[locale]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </SettingRow>
+              <SettingRow label={t("settings.general.level")}>
+                <Select
                   value={cfg.level}
-                  onChange={(e) => update("level", e.target.value)}
-                />
-              </Field>
+                  onValueChange={(v) => update("level", v)}
+                >
+                  <SelectTrigger className="w-44">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {LEVELS.map((l) => (
+                      <SelectItem key={l.value} value={l.value}>
+                        {l.label[locale]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </SettingRow>
+              <ToggleField
+                label={t("settings.general.autoBilingual")}
+                checked={cfg.autoBilingual}
+                onChange={(v) => update("autoBilingual", v)}
+              />
             </div>
-
-            <ToggleField
-              checked={cfg.autoBilingual}
-              onChange={(v) => update("autoBilingual", v)}
-            >
-              {t("settings.general.autoBilingual")}
-            </ToggleField>
 
             <ShortcutsEditor />
           </section>
@@ -913,11 +981,10 @@ export function SettingsView({ section }: { section: SettingsSection }) {
             </div>
 
             <ToggleField
+              label={t("settings.tts.autoSpeak")}
               checked={ttsCfg.autoSpeak}
               onChange={(v) => updateTts("autoSpeak", v)}
-            >
-              {t("settings.tts.autoSpeak")}
-            </ToggleField>
+            />
 
             <div className="flex flex-col gap-4">
               <ProviderCard
