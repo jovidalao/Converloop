@@ -28,6 +28,9 @@ dist-ssr
 *.sln
 *.sw?
 
+# Claude Code: machine-local settings (launch.json is shared)
+.claude/settings.local.json
+
 # Vendored reference checkout, not part of this project
 cherry-studio-main/
 craft-agents-oss-main/
