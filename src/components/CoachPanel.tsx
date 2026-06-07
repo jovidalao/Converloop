@@ -163,11 +163,14 @@ function CoachOverview({
   );
 }
 
+// Only shown while at least one activity is still pending — avoids duplicating
+// information already visible in the CoachOverview tiles once grading is done.
 function ActivitySummary({ activities }: { activities: TurnActivity[] }) {
-  if (activities.length === 0) return null;
+  const pending = activities.filter((a) => a.status === "pending");
+  if (pending.length === 0) return null;
   return (
     <div className="flex flex-col gap-1.5">
-      {activities.map((activity, index) => (
+      {pending.map((activity, index) => (
         <div
           key={`${activity.kind}:${index}`}
           className="flex min-w-0 items-start gap-2 rounded-md bg-foreground-3 px-2.5 py-2"
@@ -189,9 +192,7 @@ function ActivitySummary({ activities }: { activities: TurnActivity[] }) {
               </span>
             )}
           </span>
-          {activity.status === "pending" && (
-            <Spinner className="mt-0.5 size-3.5 shrink-0" />
-          )}
+          <Spinner className="mt-0.5 size-3.5 shrink-0" />
         </div>
       ))}
     </div>
@@ -249,6 +250,15 @@ function TurnFeedback({
         <p className="m-0 text-ui-muted">{gap.original}</p>
         <FieldLabel>{t("corrections.naturalExpression")}</FieldLabel>
         <SpeakableText text={gap.target_expression} />
+        {gap.template?.trim() &&
+          gap.template.trim() !== gap.target_expression.trim() && (
+            <>
+              <FieldLabel>{t("corrections.expressionTemplate")}</FieldLabel>
+              <p className="m-0 font-mono text-ui-body text-foreground">
+                {gap.template.trim()}
+              </p>
+            </>
+          )}
         <FieldLabel>{t("corrections.explanationHeader")}</FieldLabel>
         <p className="m-0 leading-relaxed text-foreground">{gap.explanation}</p>
         {gap.key_items.length > 0 && (
@@ -520,9 +530,10 @@ function MemoryProposals({
             <ul className="my-2 flex list-none flex-col gap-1 p-0 text-ui-caption text-ui-muted">
               {ops.map((op, i) => (
                 <li key={`${op.action}:${op.key}:${i}`}>
-                  {op.action} · {op.key}
-                  {op.target_key ? ` → ${op.target_key}` : ""}
-                  {op.label ? ` · ${op.label}` : ""}
+                  {t(`coach.proposal.${op.action}`, {
+                    label: op.label ?? op.key,
+                    target: op.target_key ?? "",
+                  })}
                 </li>
               ))}
             </ul>

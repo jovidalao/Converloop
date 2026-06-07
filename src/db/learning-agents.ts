@@ -140,7 +140,30 @@ const BUILT_INS: BuiltInAgent[] = [
       "due_review",
       "proficiency",
     ],
-    prompt: `On the FIRST message of the session, open with a detailed review report of what the learner practiced today. Use the data tagged as today; if there is none, fall back to the recent session history. Write it as clear Markdown the learner can scan:
+    prompt: `On the FIRST message of the session, open with a structured review of what the learner practiced today. Use the data tagged as today; if there is none, fall back to the recent session history. Write it as clear Markdown in the learner's native language:
+
+1. **Practice overview** — how many exchanges, the main topics/situations covered.
+2. **What went well** — 1-3 concrete strengths, each with a short target-language example pulled from today.
+3. **Points to watch** — group today's corrections and weak items: for each, show the pattern name, what the learner wrote vs. the natural form, and a one-line rule explanation.
+4. **Top 3 to review now** — pick the 3 highest-value items, each with a brief reason why.
+
+Keep the report accurate to the data shown; do not invent practice that is not there. If there is no practice today, say so plainly and instead summarize the most relevant due-for-review and weak items.
+
+After the report, ask the learner if they want to start with the first item or pick a different one. Then begin the drill: give 1-2 target-language examples and ask for one short sentence. From then on keep it focused and conversational — give feedback directly in the chat.`,
+    supersedes: [
+      {
+        name: "Daily review",
+        description:
+          "Opens with a today's practice report, then guides you through the top points to revisit.",
+        dataScopes: [
+          "profile",
+          "comfortable",
+          "today_turns",
+          "weak_all",
+          "due_review",
+          "proficiency",
+        ],
+        prompt: `On the FIRST message of the session, open with a detailed review report of what the learner practiced today. Use the data tagged as today; if there is none, fall back to the recent session history. Write it as clear Markdown the learner can scan:
 
 1. **今日概览** — how many exchanges, the main topics/situations practiced. Summarize in the learner's native language.
 2. **做得好的地方** — 1-3 concrete strengths, each with a short target-language example pulled from today.
@@ -150,7 +173,7 @@ const BUILT_INS: BuiltInAgent[] = [
 Keep the report accurate to the data shown; do not invent practice that is not there. If there is no practice today, say so plainly and instead report on the most relevant due-for-review and weak items.
 
 AFTER the report, transition into practice: take the first of the Top 3 points, give 1-2 target-language examples, and ask the learner to produce one short sentence. From then on keep it focused and conversational — give feedback directly in the chat.`,
-    supersedes: [
+      },
       {
         name: "Daily review",
         description:
@@ -186,7 +209,26 @@ Keep the lesson focused. Do not turn this into a long report; make it actionable
       "due_review",
       "proficiency",
     ],
-    prompt: `On the FIRST message of the session, walk through the learner's RECENT grammar mistakes and recurring error patterns. Focus on what they got wrong most recently — the data is ordered newest-first — not old history. Cover EVERY recent grammar issue shown; only merge mistakes that are genuinely the same pattern. Write it as clear Markdown the learner can scan:
+    prompt: `On the FIRST message of the session, open with a focused grammar diagnosis in the learner's native language. Look at the most recent grammar mistakes — prioritize what happened recently, not old history. Group mistakes that are the same underlying pattern. Write it as clear Markdown:
+
+**Recent grammar issues** — for each pattern: name it, show how the learner wrote it (wrong) vs. the natural form, and give a one-line explanation of the rule.
+
+Keep the list short: 2-4 patterns maximum. Do not invent mistakes. If there is little grammar data, explain what exists and choose one useful pattern matched to the learner's level.
+
+After the diagnosis, drill the most important issue first: give 1-2 target-language examples, then ask for 2-3 short sentences that force the learner to use the pattern. Once that pattern is solid, move to the next. Give feedback directly in the chat.`,
+    supersedes: [
+      {
+        name: "Grammar drill",
+        description:
+          "Explains each recent grammar mistake one by one, then drills them until they stick.",
+        dataScopes: [
+          "profile",
+          "comfortable",
+          "weak_grammar",
+          "due_review",
+          "proficiency",
+        ],
+        prompt: `On the FIRST message of the session, walk through the learner's RECENT grammar mistakes and recurring error patterns. Focus on what they got wrong most recently — the data is ordered newest-first — not old history. Cover EVERY recent grammar issue shown; only merge mistakes that are genuinely the same pattern. Write it as clear Markdown the learner can scan:
 
 1. **最近的语法问题** — a numbered list, one entry per recent grammar issue. For each: name the pattern, show how the learner wrote it (wrong) vs. the natural form, and a one-line explanation of the underlying rule in the learner's native language.
 2. **逐个击破的顺序** — list the order you will drill these in this session (most foundational first), so the learner knows the plan.
@@ -194,7 +236,7 @@ Keep the lesson focused. Do not turn this into a long report; make it actionable
 Keep the report grounded in the data shown; do not invent mistakes. If there is little grammar data, explain what little exists and pick one useful pattern matched to the learner's level/profile.
 
 AFTER the report, drill the issues ONE AT A TIME (逐个击破): start with the first, give 1-2 target-language examples, then ask for 2-3 short sentences that force the learner to use it. Only move on to the next issue once the current one is solid, and tell the learner when you do (e.g. "✅ 第 1 个搞定,下一个"). Give feedback directly in the chat rather than using the normal correction panel.`,
-    supersedes: [
+      },
       {
         name: "Grammar drill",
         description:
@@ -246,11 +288,38 @@ After the explanation, run a small drill: ask for 2-3 short target-language sent
       "due_review",
       "proficiency",
     ],
-    prompt: `Focus on expression gaps: things the learner wanted to say but fell back to their native language or mixed language.
+    prompt: `Focus on expression gaps: situations the learner wanted to express but fell back to their native language or mixed speech.
+
+On the FIRST message, open with a short overview in the learner's native language:
+
+**Expression gaps to work on** — list 1-2 high-value situations from the data. For each:
+- The original intent (what the learner was trying to say)
+- The natural target-language sentence they could use
+- A reusable pattern with blank slots (e.g. "I'd rather ___ than ___") to help them generalize it
+- A one-line explanation of when to use this pattern
+
+If there are no expression gaps yet, teach one practical pattern tied to the learner's interests or current profile, and present it in the same format.
+
+After the overview, focus on one gap at a time. Ask the learner to produce a new sentence using the pattern from their own life — not just repeat the example. Give feedback directly in the chat.`,
+    supersedes: [
+      {
+        name: "Expression gap training",
+        description:
+          "Turns native-language or mixed-language fallback moments into reusable target-language patterns.",
+        dataScopes: [
+          "profile",
+          "comfortable",
+          "expression_gaps",
+          "due_review",
+          "proficiency",
+        ],
+        prompt: `Focus on expression gaps: things the learner wanted to say but fell back to their native language or mixed language.
 
 Pick one or two high-value situations. For each, teach the reusable target-language pattern, explain when to use it in the learner's native language, then ask the learner to produce a similar sentence.
 
 Prioritize practical phrasing over abstract grammar terms. If there are no expression gaps yet, teach one useful pattern related to their profile/interests and ask them to try it.`,
+      },
+    ],
   },
 ];
 

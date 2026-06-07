@@ -69,6 +69,7 @@ export const en = {
     unavailable: "Correction unavailable",
     explain: "Explain",
     naturalExpression: "Natural expression",
+    expressionTemplate: "Reusable pattern",
     grammarDetails: "Grammar details",
     explanationHeader: "Explanation",
     keyItems: "Key words / patterns",
@@ -126,6 +127,12 @@ export const en = {
     noProposalsHint: "No write suggestions to confirm.",
     confirmWrite: "Confirm write",
     dismiss: "Dismiss",
+    proposal: {
+      create: "Add to learning data: {label}",
+      update: "Update: {label}",
+      delete: "Remove: {label}",
+      merge: "Merge {label} → {target}",
+    },
     badge: {
       grading: "Grading",
       graded: "Graded",
@@ -633,6 +640,12 @@ export const en = {
     editSectionLabel: "Edit {name}",
     userSectionPlaceholder:
       "Write something you want AI to remember: reminders, long-term preferences, facts about you… (AI will never edit this)",
+    aboutMePlaceholder:
+      "Tell the AI who you are so conversations feel personal — e.g. your job and field, what you're studying, where you live, hobbies, and why you're learning this language. One fact per line.",
+    aboutMeCalloutTitle: "Introduce yourself",
+    aboutMeCalloutDesc:
+      "Your conversation partner replies more personally when it knows a bit about you — your work, studies, interests, and why you're learning. Takes a minute and you only do it once.",
+    aboutMeCalloutCta: "Fill in About me",
     perLineHint: "One item per line",
     clickToAdd: "Click to add…",
     emptySection: "Empty",

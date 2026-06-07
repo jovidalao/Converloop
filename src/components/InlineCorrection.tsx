@@ -265,6 +265,17 @@ export function InlineCorrection({
             </span>
             <SpeakableText text={gap.target_expression} />
           </div>
+          {gap.template?.trim() &&
+            gap.template.trim() !== gap.target_expression.trim() && (
+              <div className="flex flex-col gap-1">
+                <span className="text-ui-caption font-semibold uppercase tracking-wide text-ui-muted">
+                  {t("corrections.expressionTemplate")}
+                </span>
+                <p className="m-0 font-mono text-ui-body text-foreground">
+                  {gap.template.trim()}
+                </p>
+              </div>
+            )}
           <div className="flex flex-col gap-1">
             <span className="text-ui-caption font-semibold uppercase tracking-wide text-ui-muted">
               {t("corrections.explanationHeader")}

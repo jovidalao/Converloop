@@ -70,6 +70,7 @@ export const zh: Messages = {
     unavailable: "未生成纠错",
     explain: "讲解",
     naturalExpression: "地道表达",
+    expressionTemplate: "可复用句型",
     grammarDetails: "语法详解",
     explanationHeader: "讲解",
     keyItems: "关键词 / 句式",
@@ -125,6 +126,12 @@ export const zh: Messages = {
     noProposalsHint: "没有待确认的写入建议。",
     confirmWrite: "确认写入",
     dismiss: "忽略",
+    proposal: {
+      create: "加入学习数据：{label}",
+      update: "更新：{label}",
+      delete: "删除：{label}",
+      merge: "合并 {label} → {target}",
+    },
     badge: {
       grading: "批改中",
       graded: "已批改",
@@ -618,6 +625,12 @@ export const zh: Messages = {
     editSectionLabel: "编辑{name}",
     userSectionPlaceholder:
       "写下你希望 AI 记住的内容：提醒、长期偏好、关于你的事实…（AI 永远不会编辑这里）",
+    aboutMePlaceholder:
+      "告诉 AI 你是谁，让对话更贴合你——比如你的职业和领域、正在学什么、住在哪、兴趣爱好，以及为什么学这门语言。每行一条。",
+    aboutMeCalloutTitle: "介绍一下你自己",
+    aboutMeCalloutDesc:
+      "对话搭档了解你之后，回复会更贴合你——你的工作、学习、兴趣，以及学这门语言的原因。花一分钟，只需填一次。",
+    aboutMeCalloutCta: "填写「关于我」",
     perLineHint: "每行一条",
     clickToAdd: "点击添加…",
     emptySection: "空",

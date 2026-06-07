@@ -5,6 +5,7 @@ import {
   RotateCcwIcon,
   SaveIcon,
   SparklesIcon,
+  UserRoundIcon,
   XIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -77,6 +78,12 @@ function isEditable(title: string): boolean {
 function displayBody(s: ProfileSection): string {
   if (s.title !== "My notes") return s.body;
   return s.body.replace(/<!--[\s\S]*?-->/g, "").trim();
+}
+
+// A section body that is only the template placeholder (a lone "-" / bullets /
+// whitespace) counts as empty, so cold-start hints don't think it's filled.
+function isEffectivelyEmpty(body: string): boolean {
+  return body.replace(/[-*\s]/g, "").length === 0;
 }
 
 function normalizeProfileMd(md: string): string {
@@ -173,6 +180,32 @@ function PreferencesPanel({
         </div>
       </details>
     </section>
+  );
+}
+
+// Cold-start nudge: shown only while "About me" is still empty. The maintainer
+// rarely fills this on its own (durable personal facts seldom surface verbatim
+// in chat), so a personal conversation partner benefits from the user seeding it.
+function AboutMeCallout({ onFill }: { onFill: () => void }) {
+  const { t } = useTranslation();
+  return (
+    <div className="mb-4 flex flex-col gap-2 rounded-md border border-primary/30 bg-primary/5 p-4">
+      <div className="flex items-center gap-2">
+        <UserRoundIcon size={16} className="shrink-0 text-primary" />
+        <h3 className="m-0 text-ui-body font-semibold text-foreground">
+          {t("profile.aboutMeCalloutTitle")}
+        </h3>
+      </div>
+      <p className="m-0 text-ui-body leading-snug text-ui-muted">
+        {t("profile.aboutMeCalloutDesc")}
+      </p>
+      <div>
+        <Button type="button" size="sm" onClick={onFill}>
+          <SparklesIcon size={14} />
+          {t("profile.aboutMeCalloutCta")}
+        </Button>
+      </div>
+    </div>
   );
 }
 
@@ -296,9 +329,20 @@ function EditOverlay({
   onCancel: () => void;
 }) {
   const { t } = useTranslation();
-  const [draft, setDraft] = useState(displayBody(section));
+  // Start blank when the body is just the template placeholder, so the guiding
+  // placeholder shows instead of a stray "-".
+  const [draft, setDraft] = useState(() => {
+    const body = displayBody(section);
+    return isEffectivelyEmpty(body) ? "" : body;
+  });
   const owner = ownerOf(section.title);
   const label = sectionLabel(section.title, t);
+  const placeholder =
+    section.title === "About me"
+      ? t("profile.aboutMePlaceholder")
+      : owner === "user"
+        ? t("profile.userSectionPlaceholder")
+        : t("profile.perLineHint");
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -339,11 +383,7 @@ function EditOverlay({
           className="min-h-48 flex-1 resize-none font-mono text-ui-body leading-normal"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          placeholder={
-            owner === "user"
-              ? t("profile.userSectionPlaceholder")
-              : t("profile.perLineHint")
-          }
+          placeholder={placeholder}
           spellCheck={false}
         />
         <div className="mt-3 flex justify-end gap-2">
@@ -694,6 +734,10 @@ export function ProfileView() {
     (section) => !isPreferenceSection(section),
   );
   const columns = distribute(displaySections, colCount);
+  const aboutMeEmpty = useMemo(() => {
+    const s = sections.find((x) => x.title === "About me");
+    return !!s && isEffectivelyEmpty(s.body);
+  }, [sections]);
 
   return (
     <div className="h-full overflow-y-auto px-6 py-8">
@@ -744,6 +788,9 @@ export function ProfileView() {
         ) : (
           <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
             <main className="min-w-0">
+              {aboutMeEmpty && (
+                <AboutMeCallout onFill={() => setEditingTitle("About me")} />
+              )}
               <div className="mb-3 flex items-center justify-between gap-3">
                 <h3 className="m-0 text-ui-body font-semibold">
                   {t("profile.sections")}

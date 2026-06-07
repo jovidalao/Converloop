@@ -1,6 +1,7 @@
 import {
   getCurrentWindow,
   LogicalSize,
+  PhysicalPosition,
   type PhysicalSize,
 } from "@tauri-apps/api/window";
 import {
@@ -189,14 +190,37 @@ function App() {
         if (!prevWindowSizeRef.current) {
           prevWindowSizeRef.current = await win.innerSize();
         }
+        const pos = await win.outerPosition();
+        const size = await win.outerSize();
+        const cx = pos.x + size.width / 2;
+        const cy = pos.y + size.height / 2;
         await win.setMinSize(new LogicalSize(COMPACT_MIN_W, COMPACT_MIN_H));
-        if (!cancelled)
+        if (!cancelled) {
           await win.setSize(new LogicalSize(COMPACT_W, COMPACT_H));
+          const newSize = await win.outerSize();
+          await win.setPosition(
+            new PhysicalPosition(
+              Math.round(cx - newSize.width / 2),
+              Math.round(cy - newSize.height / 2),
+            ),
+          );
+        }
       } else {
         const prev = prevWindowSizeRef.current;
         if (prev) {
+          const pos = await win.outerPosition();
+          const size = await win.outerSize();
+          const cx = pos.x + size.width / 2;
+          const cy = pos.y + size.height / 2;
           await win.setSize(prev);
           prevWindowSizeRef.current = null;
+          const newSize = await win.outerSize();
+          await win.setPosition(
+            new PhysicalPosition(
+              Math.round(cx - newSize.width / 2),
+              Math.round(cy - newSize.height / 2),
+            ),
+          );
         }
         await win.setMinSize(new LogicalSize(FULL_MIN_W, FULL_MIN_H));
       }

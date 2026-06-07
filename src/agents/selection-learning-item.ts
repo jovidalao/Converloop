@@ -57,10 +57,20 @@ export function fallbackSelectionLearningItem(
   };
 }
 
+function formatExistingKeys(keys: string[]): string {
+  if (keys.length === 0) return "(none)";
+  return keys.map((k) => `- ${k}`).join("\n");
+}
+
 function systemPrompt(ctx: {
   nativeLanguage: string;
   targetLanguage: string;
+  existingKeys?: string[];
 }): string {
+  const dedupeBlock =
+    ctx.existingKeys && ctx.existingKeys.length > 0
+      ? `\n\nEXISTING KEYS IN THE LEARNER'S DATA (check before inventing a new key):\n${formatExistingKeys(ctx.existingKeys)}\nIf the selection is the same concept as one of these, reuse that exact key instead of creating a new one.`
+      : "";
   return `You create one learning-data item from highlighted text in a language-learning chat.
 
 The learner is a ${ctx.nativeLanguage} speaker learning ${ctx.targetLanguage}.
@@ -75,8 +85,8 @@ Rules:
 - key must be stable lowercase snake_case with a type prefix, e.g.
   vocab:deadline, collocation:push_back_a_deadline, grammar:would_rather_not_but.
 - label should be human-readable.
-- notes should briefly explain meaning/usage in ${ctx.nativeLanguage}, not a long dictionary entry.
-- Do not create expression_gap from highlighted target-language text.`;
+- notes should briefly explain meaning/usage in ${ctx.nativeLanguage} in 1–2 sentences; not a dictionary entry.
+- Do not create expression_gap from highlighted target-language text.${dedupeBlock}`;
 }
 
 export async function generateSelectionLearningItem(
@@ -86,6 +96,7 @@ export async function generateSelectionLearningItem(
     targetLanguage: string;
     selection: string;
     context: string;
+    existingKeys?: string[];
   },
 ): Promise<SelectionLearningItemDraft> {
   const messages: ChatMessage[] = [

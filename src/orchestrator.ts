@@ -368,6 +368,7 @@ export async function addSelectionToLearningData(
         targetLanguage: config.targetLanguage,
         selection,
         context,
+        existingKeys: (await getMasteryKeyHints(60)).map((h) => h.key),
       })
     : fallbackSelectionLearningItem(selection, context);
   await createManualMasteryItem(draft);
