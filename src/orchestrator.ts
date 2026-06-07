@@ -24,6 +24,7 @@ import { translate } from "./agents/translate";
 import { type AppConfig, getProvider, loadConfig } from "./config";
 import { applyDataEditInstruction, type DataEditResult } from "./data-edit";
 import { runTrackedAgentJob } from "./db/agent-jobs";
+import { getAppState, setAppState } from "./db/app-state";
 import {
   completeDerivedConversation,
   DEFAULT_CONVERSATION_TITLE,
@@ -993,7 +994,37 @@ export async function generateAndSetConversationTitle(
   }
 }
 
-// Generate 8 short placeholder hints for the next user reply based on recent conversation history.
+// Cache of generated input hints, keyed per conversation. Stored in app_state (SQLite) so
+// hints survive switching away and reopening the conversation, and app restarts.
+// throughTurnId is the last on-record turn at generation time (the watermark): hints reflect
+// the conversation state after that turn, so a different last turn means the cache is stale.
+const INPUT_HINTS_CACHE_PREFIX = "inputHints:";
+
+interface CachedInputHints {
+  throughTurnId: string | null;
+  hints: string[];
+}
+
+// Load cached hints for a conversation, but only if they were generated for the current
+// last-turn watermark. Returns [] on miss/stale/corrupt so callers can regenerate.
+export async function loadCachedInputHints(
+  conversationId: string,
+  throughTurnId: string | null,
+): Promise<string[]> {
+  const raw = await getAppState(INPUT_HINTS_CACHE_PREFIX + conversationId);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as CachedInputHints;
+    if (parsed.throughTurnId === throughTurnId && Array.isArray(parsed.hints))
+      return parsed.hints;
+  } catch {
+    // Corrupt cache entry — treat as a miss.
+  }
+  return [];
+}
+
+// Generate short coaching hints for the next user reply based on recent conversation history,
+// and cache them keyed by the conversation's last-turn watermark.
 // Returns an empty array on any error so callers can silently degrade.
 export async function generateInputHintsForConversation(
   conversationId: string,
@@ -1009,13 +1040,21 @@ export async function generateInputHintsForConversation(
     ]);
     const recent = tailTurnsByChars(turns, 4000);
     const recentHistory = formatTurns(recent);
-    return await generateInputHints(provider, {
+    const hints = await generateInputHints(provider, {
       targetLanguage: config.targetLanguage,
       nativeLanguage: config.nativeLanguage,
       level: config.level,
       recentHistory,
       profileSlice: profileSliceForConversation(profileMd),
     });
+    if (hints.length > 0) {
+      const throughTurnId = turns[turns.length - 1]?.id ?? null;
+      await setAppState(
+        INPUT_HINTS_CACHE_PREFIX + conversationId,
+        JSON.stringify({ throughTurnId, hints } satisfies CachedInputHints),
+      );
+    }
+    return hints;
   } catch {
     return [];
   }

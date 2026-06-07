@@ -10,9 +10,10 @@ export interface InputHintsContext {
 }
 
 const MAX_OUTPUT_TOKENS = 512;
-// A hint is a short scaffold, never a full reply. Anything much longer than a
-// phrase is almost certainly the model writing the answer — drop it.
-const MAX_HINT_CHARS = 80;
+// A hint is a short coaching cue + a phrase to try, never a full reply. The native
+// cue makes it a little longer than a bare scaffold, but anything past this is
+// almost certainly the model writing the answer — drop it.
+const MAX_HINT_CHARS = 110;
 
 export async function generateInputHints(
   provider: ModelProvider,
@@ -24,20 +25,25 @@ export async function generateInputHints(
   const messages: ChatMessage[] = [
     {
       role: "user",
-      content: `You are a ${ctx.targetLanguage} tutor helping a ${ctx.nativeLanguage} speaker at ${ctx.level} level. Based on the conversation so far, give the learner short HINTS that help them write THEIR OWN next reply.
+      content: `You are a ${ctx.targetLanguage} tutor coaching a ${ctx.nativeLanguage} speaker at ${ctx.level} level. Based on the conversation so far, give short COACHING HINTS that nudge the learner on HOW to phrase their own next reply — the way a mentor leans in and says "here's a way you could put it."
 ${profileBlock}
 Recent conversation:
 ${ctx.recentHistory || "(no prior turns yet)"}
 
-Produce 6–8 hints. Each hint must:
-- Be written IN ${ctx.targetLanguage} (the language being learned), so reading it is itself practice.
-- Point toward an idea WITHOUT writing the reply for them. Use a varied mix of:
-  • a reusable sentence FRAME with a blank "___" for the learner to complete (a pattern, e.g. the ${ctx.targetLanguage} equivalent of "I'd rather ___ than ___")
-  • a useful WORD or short expression they could weave in — add a brief ${ctx.nativeLanguage} gloss in parentheses ONLY if it is likely above ${ctx.level} level
-  • a DIRECTION: something they could say, ask about, react to, or give an example of next
-- NEVER be a complete, ready-to-send sentence. You give the scaffold; the learner still does the real thinking and composing.
-- Be short — roughly 4–10 words — and specific to THIS conversation and learner, not generic filler.
-- Differ from one another in shape; do not repeat the same structure twice.
+Produce 6–8 hints. Each hint has TWO parts joined by " → ":
+1. A short cue IN ${ctx.nativeLanguage} naming the communicative intent or situation — this is the mentor's coaching voice, e.g. the ${ctx.nativeLanguage} for "to disagree politely" or "to give a concrete example".
+2. A ${ctx.targetLanguage} expression to TRY for that intent — an opener or sentence frame the learner can borrow and finish themselves. Use "___" for the part they must complete when it helps.
+
+Example shape (cue shown in Chinese here only to illustrate the format — write yours in ${ctx.nativeLanguage}, and never reuse this content):
+  想委婉反驳 → "I see your point, but ___"
+  让观点更有力 → "I'd argue that ___"
+
+Rules:
+- The cue is ALWAYS in ${ctx.nativeLanguage}; the expression is ALWAYS in ${ctx.targetLanguage}. Never translate the expression into ${ctx.nativeLanguage}.
+- The expression is a STARTER, not a complete ready-to-send reply. The learner still does the real composing.
+- Be specific to THIS conversation and learner, not generic filler.
+- Vary the intents across the list (agreeing, pushing back, asking, giving an example, hedging, clarifying, …); do not repeat an intent.
+- Keep each hint short enough to read at a glance.
 
 Return ONLY a valid JSON array of 6–8 strings, nothing else.`,
     },

@@ -1192,10 +1192,22 @@
   animation: message-in 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+/* 输入框提示轮换:新提示从下方上移淡入(配合 key 重挂载,每次切换重放)。 */
+@keyframes hint-in {
+  from {
+    transform: translateY(0.6em);
+    opacity: 0;
+  }
+}
+.animate-hint-in {
+  animation: hint-in 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
 /* 聊天路由仍直切;设置/档案二级页只做轻微入场,配合侧栏 drill-down。 */
 
 @media (prefers-reduced-motion: reduce) {
   .animate-message-in,
+  .animate-hint-in,
   .codex-secondary-view {
     animation: none;
   }

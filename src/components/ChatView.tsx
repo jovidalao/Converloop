@@ -72,6 +72,7 @@ import {
   confirmLearningTurnMastery,
   generateAndSetConversationTitle,
   generateInputHintsForConversation,
+  loadCachedInputHints,
   MissingApiKeyError,
   regenerateReply,
   runTurn,
@@ -1215,6 +1216,14 @@ export function ChatView({
   const { nativeLanguage, autoBilingual, targetLanguage } = config;
   const confirm = useConfirm();
   const learningMode = mode === "learning_agent";
+  // Coaching hints are rendered as an animated overlay (not the native placeholder, which can't
+  // transition between hints). Active only in practice mode, when hints exist and the input is empty.
+  const hintsActive =
+    !compact &&
+    !learningMode &&
+    !!inputHints &&
+    inputHints.length > 0 &&
+    input.length === 0;
 
   // Status bar below the input: current model + context usage (rough estimate, see lib/tokens).
   const contextLimit = getContextLimit(config);
@@ -1336,6 +1345,28 @@ export function ChatView({
           mods.derivation?.status === "pending"
         )
           void startDerived();
+        // Restore input hints for the reopened conversation. The watermark is the last
+        // on-record turn (off-record /btw turns are excluded from hint generation).
+        const lastTurnId =
+          [...loaded].reverse().find((tn) => !tn.excludeFromContext)?.id ??
+          null;
+        if (lastTurnId) {
+          const capturedGen = turnGenRef.current;
+          const cached = await loadCachedInputHints(conversationId, lastTurnId);
+          if (cancelled || turnGenRef.current !== capturedGen) return;
+          if (cached.length > 0) setInputHints(cached);
+          else
+            void generateInputHintsForConversation(conversationId).then(
+              (hints) => {
+                if (
+                  !cancelled &&
+                  turnGenRef.current === capturedGen &&
+                  hints.length > 0
+                )
+                  setInputHints(hints);
+              },
+            );
+        }
       }
     });
     return () => {
@@ -1974,67 +2005,80 @@ export function ChatView({
                 submitInput();
               }}
             >
-              <textarea
-                ref={inputRef}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  // Intercept navigation keys when the menu is open (not during IME composition); don't let them bubble to send.
-                  if (slashOpen && !e.nativeEvent.isComposing) {
-                    if (e.key === "ArrowDown") {
-                      e.preventDefault();
-                      setSlashSelected((s) => (s + 1) % slashCommands.length);
-                      return;
+              <div className="relative">
+                <textarea
+                  ref={inputRef}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    // Intercept navigation keys when the menu is open (not during IME composition); don't let them bubble to send.
+                    if (slashOpen && !e.nativeEvent.isComposing) {
+                      if (e.key === "ArrowDown") {
+                        e.preventDefault();
+                        setSlashSelected((s) => (s + 1) % slashCommands.length);
+                        return;
+                      }
+                      if (e.key === "ArrowUp") {
+                        e.preventDefault();
+                        setSlashSelected(
+                          (s) =>
+                            (s - 1 + slashCommands.length) %
+                            slashCommands.length,
+                        );
+                        return;
+                      }
+                      if (e.key === "Tab") {
+                        e.preventDefault();
+                        const c = slashCommands[slashSelected];
+                        if (c) completeSlashCommand(c);
+                        return;
+                      }
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        const c = slashCommands[slashSelected];
+                        if (c) activateSlashCommand(c);
+                        return;
+                      }
+                      if (e.key === "Escape") {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setSlashDismissed(true);
+                        return;
+                      }
                     }
-                    if (e.key === "ArrowUp") {
+                    if (
+                      e.key === "Enter" &&
+                      !e.shiftKey &&
+                      !e.nativeEvent.isComposing
+                    ) {
                       e.preventDefault();
-                      setSlashSelected(
-                        (s) =>
-                          (s - 1 + slashCommands.length) % slashCommands.length,
-                      );
-                      return;
+                      submitInput();
                     }
-                    if (e.key === "Tab") {
-                      e.preventDefault();
-                      const c = slashCommands[slashSelected];
-                      if (c) completeSlashCommand(c);
-                      return;
-                    }
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      const c = slashCommands[slashSelected];
-                      if (c) activateSlashCommand(c);
-                      return;
-                    }
-                    if (e.key === "Escape") {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setSlashDismissed(true);
-                      return;
-                    }
+                  }}
+                  rows={1}
+                  placeholder={
+                    learningMode
+                      ? t("chat.inputPlaceholderLesson")
+                      : !compact && inputHints && inputHints.length > 0
+                        ? "" // hint shown via the animated overlay below
+                        : t("chat.inputPlaceholderPractice", {
+                            lang: targetLanguage || "your target language",
+                          })
                   }
-                  if (
-                    e.key === "Enter" &&
-                    !e.shiftKey &&
-                    !e.nativeEvent.isComposing
-                  ) {
-                    e.preventDefault();
-                    submitInput();
-                  }
-                }}
-                rows={1}
-                placeholder={
-                  learningMode
-                    ? t("chat.inputPlaceholderLesson")
-                    : !compact && inputHints && inputHints.length > 0
-                      ? inputHints[hintIndex]
-                      : t("chat.inputPlaceholderPractice", {
-                          lang: targetLanguage || "your target language",
-                        })
-                }
-                disabled={replyBusy}
-                className="max-h-[6.5rem] min-h-14 min-w-0 resize-none border-none bg-transparent px-4 pt-3 pb-2 text-ui-chat outline-none placeholder:text-muted-foreground"
-              />
+                  disabled={replyBusy}
+                  className="max-h-[6.5rem] min-h-14 min-w-0 resize-none border-none bg-transparent px-4 pt-3 pb-2 text-ui-chat outline-none placeholder:text-muted-foreground"
+                />
+                {hintsActive && (
+                  <div className="pointer-events-none absolute inset-0 overflow-hidden px-4 pt-3 text-ui-chat">
+                    <span
+                      key={hintIndex}
+                      className="animate-hint-in block truncate text-muted-foreground"
+                    >
+                      {inputHints?.[hintIndex]}
+                    </span>
+                  </div>
+                )}
+              </div>
               <div className="flex min-h-11 items-end gap-2 px-2 pt-1 pb-2">
                 <div
                   className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5"
