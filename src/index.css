@@ -944,7 +944,9 @@
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 0 4px 10px;
+  padding: 0 4px 48px;
+  mask-image: linear-gradient(to bottom, black calc(100% - 52px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, black calc(100% - 52px), transparent 100%);
 }
 .codex-sidebar-learning {
   flex: 0 0 auto;
@@ -1069,8 +1071,7 @@
 }
 .codex-sidebar-footer {
   flex: 0 0 auto;
-  border-top: 1px solid var(--codex-sidebar-footer-border);
-  padding: 8px 4px 0;
+  padding: 0 4px;
 }
 .codex-sidebar-resizer {
   position: absolute;
