@@ -135,6 +135,8 @@ export const zh: Messages = {
     hints: {
       title: "接下来可以怎么说",
       empty: "对方回复后,这里会给你几种可以直接借用、把对话接下去的说法。",
+      regenerate: "重新生成",
+      regenerating: "正在重新生成…",
     },
   },
   logs: {

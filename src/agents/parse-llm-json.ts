@@ -23,6 +23,75 @@ export function extractJsonText(raw: string): string {
   return body.slice(0, closing).trim();
 }
 
+/**
+ * Extract string elements from a JSON array of strings, tolerating a leading
+ * ```json fence even when the closing fence is missing, and a truncated array
+ * (e.g. the model hit its token limit mid-element). Returns every COMPLETE
+ * string element and drops a trailing unterminated one.
+ *
+ * This exists because a truncated `["a", "b`-style response can't be repaired by
+ * JSON.parse; the previous line-splitting fallback would surface the raw ```json,
+ * [, and partial element as bogus "items".
+ */
+export function parseStringArrayLoose(raw: string): string[] {
+  let text = raw.trim();
+
+  // Strip a leading code fence even when truncation dropped the closing one.
+  if (text.startsWith("```")) {
+    const nl = text.indexOf("\n");
+    if (nl >= 0) text = text.slice(nl + 1);
+    const close = text.lastIndexOf("```");
+    if (close >= 0) text = text.slice(0, close);
+    text = text.trim();
+  }
+
+  // Fast path: a well-formed array.
+  try {
+    const parsed = JSON.parse(text);
+    if (Array.isArray(parsed))
+      return parsed.filter((s): s is string => typeof s === "string");
+  } catch {
+    // Fall through to salvage complete elements from a truncated array.
+  }
+
+  const start = text.indexOf("[");
+  if (start < 0) return [];
+  const out: string[] = [];
+  let i = start + 1;
+  const n = text.length;
+  while (i < n) {
+    // Skip whitespace/commas to the next element; stop at the array close.
+    while (i < n && text[i] !== '"') {
+      if (text[i] === "]") return out;
+      i++;
+    }
+    if (i >= n) break;
+    // Find the matching closing quote, honoring escape sequences.
+    let j = i + 1;
+    let closed = false;
+    while (j < n) {
+      if (text[j] === "\\") {
+        j += 2;
+        continue;
+      }
+      if (text[j] === '"') {
+        closed = true;
+        break;
+      }
+      j++;
+    }
+    if (!closed) break; // truncated final element
+    try {
+      const s = JSON.parse(text.slice(i, j + 1)); // let JSON decode escapes
+      if (typeof s === "string") out.push(s);
+    } catch {
+      // Skip a malformed span and keep scanning.
+    }
+    i = j + 1;
+  }
+  return out;
+}
+
 function stripTrailingJsonCommas(text: string): string {
   let out = "";
   let inString = false;

@@ -1,5 +1,5 @@
 import type { ChatMessage, ModelProvider } from "../providers/types";
-import { extractJsonText } from "./parse-llm-json";
+import { parseStringArrayLoose } from "./parse-llm-json";
 
 export interface InputHintsContext {
   targetLanguage: string;
@@ -9,7 +9,10 @@ export interface InputHintsContext {
   profileSlice?: string;
 }
 
-const MAX_OUTPUT_TOKENS = 640;
+// Roomy enough that a full set of hints rarely truncates mid-array. Truncation is
+// still handled gracefully (parseStringArrayLoose salvages complete elements), but
+// a larger budget means we lose fewer hints to the cut-off.
+const MAX_OUTPUT_TOKENS = 1024;
 // A hint is a short native cue + a near-ready opener the learner can borrow. We
 // now want openers that flow from what was just said (not bare stems), so this is
 // roomy enough for one natural sentence; well past it is the model writing a whole
@@ -65,27 +68,11 @@ Return ONLY a valid JSON array of strings, nothing else.`,
     meta: { label: "input-hints" },
   });
 
-  const clean = (list: string[]) =>
-    list
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0 && s.length <= MAX_HINT_CHARS)
-      .slice(0, MAX_HINTS);
-
-  try {
-    const parsed = JSON.parse(extractJsonText(raw));
-    if (
-      Array.isArray(parsed) &&
-      parsed.length > 0 &&
-      parsed.every((s) => typeof s === "string")
-    ) {
-      return clean(parsed as string[]);
-    }
-  } catch {
-    // Fallback: split plain-text lines if the model didn't return JSON.
-    const lines = clean(
-      raw.split("\n").map((l) => l.replace(/^[-•*\d.]+\s*/, "")),
-    );
-    if (lines.length >= 3) return lines;
-  }
-  return [];
+  // parseStringArrayLoose tolerates a missing closing ```fence and a truncated
+  // array, salvaging every complete element — so a cut-off response degrades to
+  // fewer hints instead of dumping raw JSON syntax into the UI.
+  return parseStringArrayLoose(raw)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0 && s.length <= MAX_HINT_CHARS)
+    .slice(0, MAX_HINTS);
 }

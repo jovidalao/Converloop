@@ -3,6 +3,7 @@ import {
   extractJsonText,
   normalizeTutorPayload,
   parseLLMJson,
+  parseStringArrayLoose,
 } from "./parse-llm-json";
 import { TutorAnalysis } from "./schema";
 
@@ -15,6 +16,46 @@ describe("extractJsonText", () => {
     expect(extractJsonText('Here:\n{"a":1}\nDone')).toBe(
       'Here:\n{"a":1}\nDone',
     );
+  });
+});
+
+describe("parseStringArrayLoose", () => {
+  it("parses a well-formed array", () => {
+    expect(parseStringArrayLoose('["a", "b"]')).toEqual(["a", "b"]);
+  });
+
+  it("strips a complete ```json fence", () => {
+    expect(parseStringArrayLoose('```json\n["a", "b"]\n```')).toEqual([
+      "a",
+      "b",
+    ]);
+  });
+
+  it("salvages elements when the closing fence is missing", () => {
+    expect(parseStringArrayLoose('```json\n["a", "b"]')).toEqual(["a", "b"]);
+  });
+
+  it("salvages complete elements and drops a truncated trailing one", () => {
+    expect(
+      parseStringArrayLoose('["done one", "done two", "cut off here'),
+    ).toEqual(["done one", "done two"]);
+  });
+
+  it("decodes escapes via JSON, including escaped quotes", () => {
+    expect(parseStringArrayLoose('["cue → \\"quoted opener\\""]')).toEqual([
+      'cue → "quoted opener"',
+    ]);
+  });
+
+  it("returns nothing for the truncated-fence case from the bug report", () => {
+    // The model emitted a fenced array cut off mid-element (no element ever closed).
+    const raw =
+      '```json\n[\n"回答偏好慢歌并解释原因 → \\"I definitely prefer slower, relaxing music';
+    expect(parseStringArrayLoose(raw)).toEqual([]);
+  });
+
+  it("returns [] when there is no array at all", () => {
+    expect(parseStringArrayLoose("Sorry, I can't help with that.")).toEqual([]);
   });
 });
 

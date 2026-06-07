@@ -137,6 +137,8 @@ export const en = {
       title: "Ways to keep going",
       empty:
         "Once a reply comes in, this shows a few ready-to-borrow ways to keep the conversation going.",
+      regenerate: "Regenerate",
+      regenerating: "Regenerating…",
     },
   },
   logs: {

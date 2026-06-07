@@ -1,5 +1,5 @@
-import { ArrowRightIcon, GraduationCapIcon } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { ArrowRightIcon, GraduationCapIcon, RefreshCwIcon } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type TFunction, useTranslation } from "@/i18n";
 import { cn } from "@/lib/utils";
 import {
@@ -16,7 +16,10 @@ import {
 import type { MemoryProposal, TurnAnnotation } from "../db/schema";
 import { listTurnAnnotationsForConversation } from "../db/turn-annotations";
 import type { ChatTurn } from "../db/turns";
-import { loadCachedInputHints } from "../orchestrator";
+import {
+  generateInputHintsForConversation,
+  loadCachedInputHints,
+} from "../orchestrator";
 import { Markdown } from "./Markdown";
 import type { MainView } from "./Sidebar";
 import { Button } from "./ui/button";
@@ -37,16 +40,21 @@ const SIGNAL_TONE: Record<SignalKind, string> = {
 
 function Section({
   title,
+  action,
   children,
 }: {
   title: string;
+  action?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <section className="flex flex-col gap-2.5">
-      <h3 className="m-0 text-ui-body font-semibold text-foreground">
-        {title}
-      </h3>
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="m-0 text-ui-body font-semibold text-foreground">
+          {title}
+        </h3>
+        {action}
+      </div>
       {children}
     </section>
   );
@@ -380,11 +388,19 @@ function MasteryLink({
 // reply, shown as a block. Same content the chat input cycles through one at a
 // time — the panel just lays them all out. Display only. Each hint is a native
 // cue + a target-language opener joined by an arrow.
-function ConversationHints({ hints }: { hints: string[] }) {
+function ConversationHints({
+  hints,
+  regenerating,
+}: {
+  hints: string[];
+  regenerating: boolean;
+}) {
   const { t } = useTranslation();
   if (hints.length === 0) {
     return (
-      <p className="m-0 text-ui-body text-ui-muted">{t("coach.hints.empty")}</p>
+      <p className="m-0 text-ui-body text-ui-muted">
+        {regenerating ? t("coach.hints.regenerating") : t("coach.hints.empty")}
+      </p>
     );
   }
   return (
@@ -512,6 +528,23 @@ export function CoachPanel({
     [turns],
   );
   const [hints, setHints] = useState<string[]>([]);
+  const [regenerating, setRegenerating] = useState(false);
+  const regeneratingRef = useRef(false);
+
+  // Manual refresh: re-run hint generation for the current turn and re-cache it.
+  // Used when the model returned nothing useful (e.g. a truncated response) and
+  // the learner wants another set.
+  const regenerateHints = useCallback(() => {
+    if (!conversationId || regeneratingRef.current) return;
+    regeneratingRef.current = true;
+    setRegenerating(true);
+    void generateInputHintsForConversation(conversationId)
+      .then((h) => setHints(h))
+      .finally(() => {
+        regeneratingRef.current = false;
+        setRegenerating(false);
+      });
+  }, [conversationId]);
 
   // Hints are written asynchronously after a reply arrives; reuse the same
   // short-lived polling window so they surface shortly after the turn.
@@ -521,9 +554,10 @@ export function CoachPanel({
       return;
     }
     let cancelled = false;
+    // Don't let a stale cache read overwrite a regeneration that's in flight.
     const load = () =>
       void loadCachedInputHints(conversationId, hintWatermark).then((h) => {
-        if (!cancelled) setHints(h);
+        if (!cancelled && !regeneratingRef.current) setHints(h);
       });
     load();
     let ticks = 0;
@@ -566,8 +600,25 @@ export function CoachPanel({
         ) : (
           <>
             <ConversationStats stats={stats} />
-            <Section title={t("coach.hints.title")}>
-              <ConversationHints hints={hints} />
+            <Section
+              title={t("coach.hints.title")}
+              action={
+                <button
+                  type="button"
+                  onClick={regenerateHints}
+                  disabled={regenerating}
+                  title={t("coach.hints.regenerate")}
+                  aria-label={t("coach.hints.regenerate")}
+                  className="shrink-0 rounded p-1 text-ui-muted transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
+                >
+                  <RefreshCwIcon
+                    size={13}
+                    className={regenerating ? "animate-spin" : undefined}
+                  />
+                </button>
+              }
+            >
+              <ConversationHints hints={hints} regenerating={regenerating} />
             </Section>
             <Section title={t("coach.reviewTitle")}>
               <TurnReviewList turns={turns} onJumpToTurn={onJumpToTurn} />
