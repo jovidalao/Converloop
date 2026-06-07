@@ -37,20 +37,31 @@ const observers: Observer[] = [];
 const actions: ActionAgent[] = [];
 const transformers: TransformerInfo[] = [];
 
+// Idempotent registration: re-registering an id replaces the existing entry instead of appending.
+// builtins.ts registers via module-level side effects; under Vite/React-Fast-Refresh that module
+// re-executes on hot reload while these arrays (in this separate module) persist, so without dedup
+// the built-ins accumulate duplicates — visible as repeated "Branch from here" buttons on every user
+// message, and as observers firing multiple times per turn.
+function upsertById<T extends { id: string }>(list: T[], item: T): void {
+  const i = list.findIndex((entry) => entry.id === item.id);
+  if (i >= 0) list[i] = item;
+  else list.push(item);
+}
+
 export function registerReplyProducer(producer: ReplyProducer): void {
   replyProducers.set(producer.conversationKind, producer);
 }
 
 export function registerObserver(observer: Observer): void {
-  observers.push(observer);
+  upsertById(observers, observer);
 }
 
 export function registerAction(action: ActionAgent): void {
-  actions.push(action);
+  upsertById(actions, action);
 }
 
 export function registerTransformer(transformer: TransformerInfo): void {
-  transformers.push(transformer);
+  upsertById(transformers, transformer);
 }
 
 // Merge user overrides (name/description) for built-in agents into their display card, so the action bar and agent library stay consistent.

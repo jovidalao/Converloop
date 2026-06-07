@@ -100,6 +100,23 @@ describe("agent runtime registry", () => {
     expect(result.navigateTo).toBe("new-conv-id");
   });
 
+  it("re-registering the same action id replaces instead of appending (HMR-safe: no duplicate branch buttons)", () => {
+    const make = (label: string): ActionAgent => ({
+      id: "test:idempotent-action",
+      kind: "action",
+      scope: "turn",
+      label,
+      run: async () => ({}),
+    });
+    registerAction(make("first"));
+    registerAction(make("second"));
+    const matches = getActions("turn").filter(
+      (a) => a.id === "test:idempotent-action",
+    );
+    expect(matches).toHaveLength(1);
+    expect(matches[0].label).toBe("second");
+  });
+
   it("hidden action is filtered out from getActions and the capability list (delete = permanent hide)", () => {
     const action: ActionAgent = {
       id: "test:hidden-action",
