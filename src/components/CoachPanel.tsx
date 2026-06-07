@@ -484,6 +484,14 @@ export function CoachPanel({
     return { graded, accurate, issues, memory: conversationSignals.length };
   }, [turns, conversationSignals]);
 
+  // Turns the learner actually produced. A derived conversation opens with a
+  // partner-only turn (empty user input) so the partner can speak first; that's
+  // not a learner turn and must not show as a phantom "(空)" row in the review.
+  const learnerTurns = useMemo(
+    () => turns.filter((t) => (t.displayText ?? t.userText).trim().length > 0),
+    [turns],
+  );
+
   const refreshExtras = useCallback(() => {
     void Promise.all([
       conversationId
@@ -573,9 +581,9 @@ export function CoachPanel({
   }, [conversationId, hintWatermark]);
 
   const subtitle =
-    turns.length === 0
+    learnerTurns.length === 0
       ? t("coach.waitingInput")
-      : t("coach.wholeConversationSub", { n: turns.length });
+      : t("coach.wholeConversationSub", { n: learnerTurns.length });
 
   return (
     <div className="codex-coach-content group flex h-full min-h-0 flex-col">
@@ -620,9 +628,14 @@ export function CoachPanel({
             >
               <ConversationHints hints={hints} regenerating={regenerating} />
             </Section>
-            <Section title={t("coach.reviewTitle")}>
-              <TurnReviewList turns={turns} onJumpToTurn={onJumpToTurn} />
-            </Section>
+            {learnerTurns.length > 0 && (
+              <Section title={t("coach.reviewTitle")}>
+                <TurnReviewList
+                  turns={learnerTurns}
+                  onJumpToTurn={onJumpToTurn}
+                />
+              </Section>
+            )}
             <Section title={t("coach.conversationMemoryTitle")}>
               {conversationSignals.length > 0 ? (
                 <SignalList signals={conversationSignals} />
