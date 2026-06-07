@@ -944,6 +944,11 @@ export function SettingsView({ section }: { section: SettingsSection }) {
                 checked={cfg.autoBilingual}
                 onChange={(v) => update("autoBilingual", v)}
               />
+              <ToggleField
+                label={t("settings.general.actionLabels")}
+                checked={cfg.actionLabels}
+                onChange={(v) => update("actionLabels", v)}
+              />
             </div>
 
             <ShortcutsEditor />

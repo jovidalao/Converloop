@@ -447,6 +447,7 @@ function ReplySuggestionButton({
   suggestion: ReplySuggestionControl;
 }) {
   const { t } = useTranslation();
+  const { actionLabels } = useConfig();
   return (
     <Button
       type="button"
@@ -461,7 +462,7 @@ function ReplySuggestionButton({
       <span className="inline-flex size-4 shrink-0 items-center justify-center">
         <MessageSquareReplyIcon className="size-4" />
       </span>
-      <span>{t("chat.replySuggestion")}</span>
+      {actionLabels && <span>{t("chat.replySuggestion")}</span>}
     </Button>
   );
 }
@@ -666,6 +667,7 @@ function PartnerReply({
   regenerating?: boolean;
 }) {
   const { t } = useTranslation();
+  const { actionLabels } = useConfig();
   const [open, setOpen] = useState(false); // whether bilingual view is currently shown
   const [loading, setLoading] = useState(false);
   const [view, setView] = useState<string | null>(null); // bilingual Markdown
@@ -858,7 +860,7 @@ function PartnerReply({
                   <LanguagesIcon className="size-4" />
                 )}
               </span>
-              <span>{t("chat.bilingualReading")}</span>
+              {actionLabels && <span>{t("chat.bilingualReading")}</span>}
             </Button>
           )
         }

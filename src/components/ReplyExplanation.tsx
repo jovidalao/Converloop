@@ -1,6 +1,7 @@
 import { BookOpenIcon, RefreshCwIcon } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useTranslation } from "@/i18n";
+import { useConfig } from "../config";
 import { explainReply, MissingApiKeyError } from "../orchestrator";
 import { isAgentHidden } from "../runtime";
 import { Markdown } from "./Markdown";
@@ -32,6 +33,7 @@ export function ReplyExplanation({
   onLayoutChange?: () => void;
 }) {
   const { t } = useTranslation();
+  const { actionLabels } = useConfig();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [explanation, setExplanation] = useState("");
@@ -113,7 +115,7 @@ export function ReplyExplanation({
                 <BookOpenIcon className="size-4" />
               )}
             </span>
-            <span>{t("replyExplanation.explain")}</span>
+            {actionLabels && <span>{t("replyExplanation.explain")}</span>}
           </Button>
         )}
         {trailingActions}

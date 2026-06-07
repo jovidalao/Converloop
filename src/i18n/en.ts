@@ -359,6 +359,7 @@ export const en = {
       level: "Level",
       autoBilingual:
         "Auto-open bilingual reading for AI replies (sentence by sentence)",
+      actionLabels: "Show text labels on chat action buttons",
       glass: "Enable macOS glass effect",
     },
     shortcuts: {

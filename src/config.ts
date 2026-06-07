@@ -47,6 +47,8 @@ const AppConfigSchema = z.object({
   level: z.string(),
   /** Automatically expand bilingual reading for new AI replies. */
   autoBilingual: z.boolean(),
+  /** Show text labels next to chat action buttons (reply suggestion / bilingual). Off = icon only. */
+  actionLabels: z.boolean(),
 });
 
 export type AppConfig = z.infer<typeof AppConfigSchema>;
@@ -248,6 +250,7 @@ const DEFAULT_CONFIG: AppConfig = {
   targetLanguage: "English",
   level: "B1",
   autoBilingual: false,
+  actionLabels: false,
 };
 
 function freshDefault(): AppConfig {

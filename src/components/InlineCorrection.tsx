@@ -9,6 +9,7 @@ import { type ReactNode, useState } from "react";
 import { useTranslation } from "@/i18n";
 import { cn } from "@/lib/utils";
 import type { Issue, TutorAnalysis } from "../agents/schema";
+import { useConfig } from "../config";
 import { SpeakableText } from "./SpeakButton";
 import { Button } from "./ui/button";
 import { Spinner } from "./ui/spinner";
@@ -160,6 +161,7 @@ export function InlineCorrection({
   natural?: { open: boolean; onToggle: () => void };
 }) {
   const { t } = useTranslation();
+  const { actionLabels } = useConfig();
   // Explanation expanded by default, grammar details collapsed by default; each
   // icon toggles its own.
   const [gapOpen, setGapOpen] = useState(true);
@@ -221,7 +223,7 @@ export function InlineCorrection({
             onClick={() => setGapOpen((v) => !v)}
           >
             <LanguagesIcon />
-            <span>{t("corrections.explain")}</span>
+            {actionLabels && <span>{t("corrections.explain")}</span>}
           </Button>
         )}
         {natural && (
@@ -235,7 +237,7 @@ export function InlineCorrection({
             onClick={natural.onToggle}
           >
             <SparklesIcon />
-            <span>{t("corrections.naturalExpression")}</span>
+            {actionLabels && <span>{t("corrections.naturalExpression")}</span>}
           </Button>
         )}
         {hasIssues && (
@@ -249,7 +251,7 @@ export function InlineCorrection({
             onClick={() => setGrammarOpen((v) => !v)}
           >
             <BookOpenIcon />
-            <span>{t("corrections.grammarDetails")}</span>
+            {actionLabels && <span>{t("corrections.grammarDetails")}</span>}
             <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-background px-1 text-ui-caption font-bold text-ui-muted">
               {analysis?.issues.length ?? 0}
             </span>
