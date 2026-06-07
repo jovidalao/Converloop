@@ -4,7 +4,7 @@ AI 语言学习 agent 的**开源桌面端**(v1)。
 
 ## 如果你是新会话,先读这里
 
-**当前状态:v1 核心链路已完成并可用。** scaffold、SQLite、三个 provider、导师 + 对话 + 编排、MD 档案 + 维护 agent、多会话、按需讲解、朗读(TTS)、母语/混说表达缺口都已落地。剩下的「下一步」(每日复习页、维护 agent 的会话结束触发、Anthropic 缓存断点)见 [architecture.md#状态--路线图](docs/architecture.md#状态--路线图)。
+**当前状态:v1 核心链路已完成并可用。** scaffold、SQLite、三个 provider、导师 + 对话 + 编排、MD 档案 + 维护 agent(含会话结束/空闲触发)、多会话、按需讲解、朗读(TTS)、母语/混说表达缺口、专项课/学习项目、能力库/自定义 Agent、分享包都已落地。完整状态见 [architecture.md#状态--路线图](docs/architecture.md#状态--路线图);界面持续打磨见 [ui-guide.md](docs/ui-guide.md)。
 
 **动手前必读(15 分钟):**
 1. [docs/README.md](docs/README.md) — 设计总览与索引

@@ -1,6 +1,6 @@
 # Architecture (v1)
 
-AI 语言学习 agent —— 第一版范围、数据流、存储与现状。Agent 的逐字契约见各自文档:[conversation](./conversation-agent.md) · [tutor](./tutor-agent.md) · [profile-maintainer](./profile-maintainer-agent.md) · [task-agent](./task-agent.md) · [reply-suggestion](./reply-suggestion-agent.md);母语/混说链路见 [expression-gap](./expression-gap.md)。
+AI 语言学习 agent —— 第一版范围、数据流、存储与现状。Agent 的逐字契约见各自文档:[conversation](./conversation-agent.md) · [tutor](./tutor-agent.md) · [profile-maintainer](./profile-maintainer-agent.md) · [lessons](./lessons.md)(学习项目 + 专项课)· [reply-suggestion](./reply-suggestion-agent.md);母语/混说链路见 [expression-gap](./expression-gap.md)。
 
 ## v1 范围(刻意收窄)
 
@@ -23,8 +23,8 @@ AI 语言学习 agent —— 第一版范围、数据流、存储与现状。Age
 | **Conversation** | 每轮(热) | MD 叙述档案 + 对话 | 纯文本,流式 | [conversation-agent](./conversation-agent.md) |
 | **Tutor** | 每轮(热,与对话并行) | SQLite 薄弱表 + 输入 | 结构化 `TutorAnalysis` | [tutor-agent](./tutor-agent.md) |
 | **Profile Maintainer** | 偶尔(后台) | 现有 MD + SQLite 聚合 + 近期对话 | 更新后的 MD | [profile-maintainer-agent](./profile-maintainer-agent.md) |
-| **Task / 学习项目** | 用户从定制化学习入口触发 | 用户目标 + 语言配置 | `learning_project` + 专项课草案 | [task-agent](./task-agent.md) |
-| **Learning / 专项课** | 用户从定制化学习入口开启 | 代码拼好的学习数据 scope + 专项 prompt | 老师型课程回复,流式 | [learning-agent](./learning-agent.md) |
+| **Task / 学习项目** | 用户从定制化学习入口触发 | 用户目标 + 语言配置 | `learning_project` + 专项课草案 | [lessons](./lessons.md) |
+| **Learning / 专项课** | 用户从定制化学习入口开启 | 代码拼好的学习数据 scope + 专项 prompt | 老师型课程回复,流式 | [lessons](./lessons.md) |
 | **Explain**(按需) | 用户点「讲解」时 | 对话回复 + MD 档案切片 | 母语讲解,流式 | 见下方[按需讲解](#按需讲解-explain-agent) |
 | **Reply Suggestion**(按需) | 用户点「推荐回复」时 | 被点击消息 + 会话上下文 + MD 档案切片 | 推荐用户可发送的目标语回复 | [reply-suggestion-agent](./reply-suggestion-agent.md) |
 
@@ -185,7 +185,7 @@ migration 定义在 **Rust 侧**(`src-tauri/src/lib.rs`,`tauri_plugin_sql::Build
 }
 ```
 
-`kind="lesson"` 是专项课:不跑普通 Tutor Agent,因此不会把用户在课堂里的母语问题误记成表达缺口;老师直接在聊天中解释和反馈。`kind="observer" | "action"` 是自定义 Runtime Agent:启动 / 刷新时由 `reloadCustomRuntimeAgents()` 从 DB 加载进内存注册表。observer 输出只写 `turn_annotation`;若 `writeback_policy="propose_review_signals"`,只能创建 `memory_proposal`,等待用户确认后由代码执行有限数据操作。详见 [learning-agent.md](./learning-agent.md)。
+`kind="lesson"` 是专项课:不跑普通 Tutor Agent,因此不会把用户在课堂里的母语问题误记成表达缺口;老师直接在聊天中解释和反馈。`kind="observer" | "action"` 是自定义 Runtime Agent:启动 / 刷新时由 `reloadCustomRuntimeAgents()` 从 DB 加载进内存注册表。observer 输出只写 `turn_annotation`;若 `writeback_policy="propose_review_signals"`,只能创建 `memory_proposal`,等待用户确认后由代码执行有限数据操作。详见 [lessons.md](./lessons.md)。
 
 ### `turn_annotation` / `memory_proposal`(自定义 Agent 可见产物)
 
@@ -245,7 +245,7 @@ migration 定义在 **Rust 侧**(`src-tauri/src/lib.rs`,`tauri_plugin_sql::Build
 }
 ```
 
-Task Agent 只产出项目计划和专项课草案;落库与创建课程包由代码执行,且不写 mastery。详见 [task-agent.md](./task-agent.md)。
+Task Agent 只产出项目计划和专项课草案;落库与创建课程包由代码执行,且不写 mastery。详见 [lessons.md](./lessons.md)。
 
 ### 选 top-N 喂回 prompt
 
@@ -319,7 +319,7 @@ provider 解析全在 TS;**LLM HTTP 走 Rust**(`src-tauri/src/llm.rs` 的 `llm_r
 
 - 把稳定的 system 段放最前打缓存断点(Anthropic `cache_control` / OpenAI 自动前缀缓存);profile/weak-list 每轮变,放断点之后。两个热 agent 共享前缀 → 命中。
 - ⚠️ 缓存只省**输入** token,且有最小长度门槛。多 agent **不比单调用便宜**(略贵 10–15%)。真正收益是**延迟**(并行 + 对话流式秒回)和**关注点分离**,不是省钱。
-- OpenAI 自动前缀缓存即生效;Anthropic 的显式 `cache_control` 留到需要时再加。
+- OpenAI 自动前缀缓存即生效,无需显式标记;Anthropic 的显式 `cache_control` 已加(`providers/anthropic.ts`:稳定 system 段打缓存断点)。
 
 ## 复习去哪了
 
@@ -345,7 +345,7 @@ v1 核心链路已完成并可用:
 - ✅ Task Agent / 学习项目:把开放式学习需求规划成 `learning_project`,并生成有界专项课草案;`agent_job` 记录作业状态
 - ✅ 学习数据页自然语言修改:LLM 只生成有限操作,代码执行 create/update/delete/merge/状态修改,不让 LLM 直接碰计数
 - ✅ 最小 UI:聊天 / 批改面板 / 档案查看编辑(含 AI 自定义偏好) / 学习数据管理 / 设置(provider + key + TTS)
-- ✅ 教练面板:右栏常驻 Coach Panel,展示本轮反馈 + 本轮「系统记下了什么」(`deriveSignals` 同源);三栏工作台布局(侧栏 / 对话 / 教练),窄屏降级为抽屉。后续界面打磨见 [craft-ui-plan.md](./craft-ui-plan.md)
+- ✅ 教练面板:右栏常驻 Coach Panel,展示本轮反馈 + 本轮「系统记下了什么」(`deriveSignals` 同源);三栏工作台布局(侧栏 / 对话 / 教练),窄屏降级为抽屉。后续界面打磨见 [ui-guide.md](./ui-guide.md)
 - ✅ 会话动作 + 分支:`conversation.action` action Agent(从此处分支 / 重新开始 / 升降难度 / 调换角色 / 第二天继续)非破坏式派生分支(`conversation` 加 parent/branch_kind/agent_modifiers 列,migration v23–v26),修饰符经 `SESSION ADJUSTMENTS` 注入对话回复;动作条与按钮由注册表驱动。
 - ✅ Agent 能力库:能力库页(侧栏 → 能力库)按 kind 展示注册表里的内置 Agent(做什么/时机/读写)、启用/禁用(`runtime/enablement.ts`,localStorage)、运行日志(`agent_job`)。按需讲解 / 双语阅读 / 划词解析也作为不可关闭的 `transformer` 能力展示并记录运行日志。能力库真相源是内存注册表,未把代码 Agent 同步进 DB。
 - ✅ 自定义 Agent(Agent-first Phase 5):能力库提供 6 问式 prompt Agent 创建(observer/action)。observer 每轮产出 `turn_annotation` 并可提出 `memory_proposal`;Coach Panel 展示自定义观察和待确认记忆,确认后由代码执行有限数据操作。action 通过 LLM 生成分支指令并创建非破坏式分支;内置「变成专项课」动作可从当前会话生成专项课并跳转。

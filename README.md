@@ -36,7 +36,7 @@ pnpm tauri build    # 打包
 - [docs/README.md](docs/README.md) — 设计总览与索引(先读这个)
 - [docs/architecture.md](docs/architecture.md) — 范围、数据流、存储、schema、状态/路线图
 - 三个核心 agent 契约:[conversation](docs/conversation-agent.md) · [tutor](docs/tutor-agent.md) · [profile-maintainer](docs/profile-maintainer-agent.md)
-- [docs/expression-gap.md](docs/expression-gap.md) — 母语/混说 → 表达缺口(已实现 + 复习页路线图)
+- [docs/expression-gap.md](docs/expression-gap.md) — 母语/混说 → 表达缺口
 
 ## v1 范围(刻意收窄)
 
