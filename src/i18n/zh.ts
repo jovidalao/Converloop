@@ -132,6 +132,10 @@ export const zh: Messages = {
     observationsTitle: "自定义观察",
     emptyTurnText: "(空)",
     viewAllData: "查看全部学习数据",
+    hints: {
+      title: "接下来可以怎么说",
+      empty: "对方回复后,这里会给你几种可以直接借用、把对话接下去的说法。",
+    },
   },
   logs: {
     title: "日志",

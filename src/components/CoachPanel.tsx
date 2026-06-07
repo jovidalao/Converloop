@@ -16,6 +16,7 @@ import {
 import type { MemoryProposal, TurnAnnotation } from "../db/schema";
 import { listTurnAnnotationsForConversation } from "../db/turn-annotations";
 import type { ChatTurn } from "../db/turns";
+import { loadCachedInputHints } from "../orchestrator";
 import { Markdown } from "./Markdown";
 import type { MainView } from "./Sidebar";
 import { Button } from "./ui/button";
@@ -373,6 +374,43 @@ function MasteryLink({
   );
 }
 
+// "Ways to keep going": the whole set of coaching hints generated for the next
+// reply, shown as a block. Same content the chat input cycles through one at a
+// time — the panel just lays them all out. Display only. Each hint is a native
+// cue + a target-language opener joined by an arrow.
+function ConversationHints({ hints }: { hints: string[] }) {
+  const { t } = useTranslation();
+  if (hints.length === 0) {
+    return (
+      <p className="m-0 text-ui-body text-ui-muted">{t("coach.hints.empty")}</p>
+    );
+  }
+  return (
+    <ul className="m-0 flex list-none flex-col gap-2 p-0">
+      {hints.map((hint, i) => {
+        const parts = hint.split("→");
+        const cue = parts.length >= 2 ? parts[0].trim() : null;
+        const opener = (
+          parts.length >= 2 ? parts.slice(1).join("→") : hint
+        ).trim();
+        return (
+          <li
+            key={`${i}:${hint}`}
+            className="flex flex-col gap-1 rounded-lg border bg-card px-3 py-2.5 text-ui-body"
+          >
+            {cue && (
+              <span className="text-ui-caption font-medium text-ui-muted">
+                {cue}
+              </span>
+            )}
+            <span className="leading-relaxed text-foreground">{opener}</span>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 export function CoachPanel({
   turns,
   conversationId,
@@ -463,6 +501,41 @@ export function CoachPanel({
     refreshExtras,
   ]);
 
+  // The chat input generates coaching hints for the next reply and caches them
+  // keyed by the last on-record turn. The panel mirrors that same cached set as a
+  // block — it does not generate its own. Watermark = last turn counting toward
+  // context (off-record /btw turns are excluded), matching ChatView.
+  const hintWatermark = useMemo(
+    () => [...turns].reverse().find((tn) => !tn.excludeFromContext)?.id ?? null,
+    [turns],
+  );
+  const [hints, setHints] = useState<string[]>([]);
+
+  // Hints are written asynchronously after a reply arrives; reuse the same
+  // short-lived polling window so they surface shortly after the turn.
+  useEffect(() => {
+    if (!conversationId || !hintWatermark) {
+      setHints([]);
+      return;
+    }
+    let cancelled = false;
+    const load = () =>
+      void loadCachedInputHints(conversationId, hintWatermark).then((h) => {
+        if (!cancelled) setHints(h);
+      });
+    load();
+    let ticks = 0;
+    const timer = window.setInterval(() => {
+      load();
+      ticks += 1;
+      if (ticks >= 8) window.clearInterval(timer);
+    }, 1500);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [conversationId, hintWatermark]);
+
   const subtitle =
     turns.length === 0
       ? t("coach.waitingInput")
@@ -491,6 +564,9 @@ export function CoachPanel({
         ) : (
           <>
             <ConversationStats stats={stats} />
+            <Section title={t("coach.hints.title")}>
+              <ConversationHints hints={hints} />
+            </Section>
             <Section title={t("coach.reviewTitle")}>
               <TurnReviewList turns={turns} onJumpToTurn={onJumpToTurn} />
             </Section>

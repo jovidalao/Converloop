@@ -133,6 +133,11 @@ export const en = {
     observationsTitle: "Custom observations",
     emptyTurnText: "(empty)",
     viewAllData: "View all learning data",
+    hints: {
+      title: "Ways to keep going",
+      empty:
+        "Once a reply comes in, this shows a few ready-to-borrow ways to keep the conversation going.",
+    },
   },
   logs: {
     title: "Logs",
