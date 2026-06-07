@@ -217,10 +217,11 @@ export function InlineCorrection({
             size="action"
             data-active={gapOpen}
             aria-expanded={gapOpen}
+            title={t("corrections.explain")}
             onClick={() => setGapOpen((v) => !v)}
           >
-            <LanguagesIcon size={15} />
-            {t("corrections.explain")}
+            <LanguagesIcon />
+            <span>{t("corrections.explain")}</span>
           </Button>
         )}
         {natural && (
@@ -230,10 +231,11 @@ export function InlineCorrection({
             size="action"
             data-active={natural.open}
             aria-expanded={natural.open}
+            title={t("corrections.naturalExpression")}
             onClick={natural.onToggle}
           >
-            <SparklesIcon size={15} />
-            {t("corrections.naturalExpression")}
+            <SparklesIcon />
+            <span>{t("corrections.naturalExpression")}</span>
           </Button>
         )}
         {hasIssues && (
@@ -243,10 +245,11 @@ export function InlineCorrection({
             size="action"
             data-active={grammarOpen}
             aria-expanded={grammarOpen}
+            title={t("corrections.grammarDetails")}
             onClick={() => setGrammarOpen((v) => !v)}
           >
-            <BookOpenIcon size={15} />
-            {t("corrections.grammarDetails")}
+            <BookOpenIcon />
+            <span>{t("corrections.grammarDetails")}</span>
             <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-background px-1 text-ui-caption font-bold text-ui-muted">
               {analysis?.issues.length ?? 0}
             </span>

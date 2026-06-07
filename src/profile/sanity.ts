@@ -96,16 +96,25 @@ export function sanityCheck(oldMd: string, newMd: string): SanityResult {
     oldPreferences &&
     extractSectionBlock(newMd, "AI preferences") !== oldPreferences
   ) {
-    return { ok: false, reason: "## AI preferences was modified (must be preserved verbatim)" };
+    return {
+      ok: false,
+      reason: "## AI preferences was modified (must be preserved verbatim)",
+    };
   }
   if (
     extractMyNotes(oldMd) &&
     extractMyNotes(newMd) !== extractMyNotes(oldMd)
   ) {
-    return { ok: false, reason: "## My notes was modified (must be preserved verbatim)" };
+    return {
+      ok: false,
+      reason: "## My notes was modified (must be preserved verbatim)",
+    };
   }
   if (oldMd.length > 0 && newMd.length < oldMd.length * 0.3) {
-    return { ok: false, reason: "Abnormal length collapse (content may have been lost)" };
+    return {
+      ok: false,
+      reason: "Abnormal length collapse (content may have been lost)",
+    };
   }
   if (newMd.length > MAX_PROFILE_CHARS) {
     return {

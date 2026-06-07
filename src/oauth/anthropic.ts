@@ -61,7 +61,9 @@ export async function loginAnthropic(): Promise<OAuthTokens> {
   const result = await callback;
 
   if (result.state !== state) {
-    throw new Error("OAuth state mismatch; possible security risk — please log in again.");
+    throw new Error(
+      "OAuth state mismatch; possible security risk — please log in again.",
+    );
   }
   return postToken({
     grant_type: "authorization_code",

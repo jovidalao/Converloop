@@ -565,7 +565,10 @@ function turnStatusBadge(
   t: TFunction,
 ): { label: string; tone: string } {
   if (turn.analysisPending) {
-    return { label: t("coach.badge.grading"), tone: "bg-foreground-5 text-ui-muted" };
+    return {
+      label: t("coach.badge.grading"),
+      tone: "bg-foreground-5 text-ui-muted",
+    };
   }
   const a = turn.analysis;
   if (!a) {
@@ -581,7 +584,10 @@ function turnStatusBadge(
         tone: "bg-destructive/10 text-destructive",
       };
     }
-    return { label: t("coach.badge.notGraded"), tone: "bg-foreground-5 text-ui-muted" };
+    return {
+      label: t("coach.badge.notGraded"),
+      tone: "bg-foreground-5 text-ui-muted",
+    };
   }
   if (a.expression_gap) {
     return { label: t("coach.badge.gap"), tone: "bg-accent text-primary" };
@@ -592,7 +598,10 @@ function turnStatusBadge(
       tone: "bg-info/10 text-info-text",
     };
   }
-  return { label: t("coach.badge.accurate"), tone: "bg-success/10 text-success" };
+  return {
+    label: t("coach.badge.accurate"),
+    tone: "bg-success/10 text-success",
+  };
 }
 
 function ScopeSwitch({
@@ -922,7 +931,10 @@ export function CoachPanel({
       : scope === "conversation"
         ? t("coach.wholeConversationSub", { n: turns.length })
         : activeIndex >= 0
-          ? t("coach.turnCounter", { index: activeIndex + 1, total: turns.length })
+          ? t("coach.turnCounter", {
+              index: activeIndex + 1,
+              total: turns.length,
+            })
           : t("coach.currentTurn");
 
   return (

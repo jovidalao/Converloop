@@ -71,7 +71,8 @@ async function runJob(): Promise<MaintainerResult> {
 
 // Manual trigger (profile page "Refresh profile"). Single-flight.
 export async function runMaintainerNow(): Promise<MaintainerResult> {
-  if (running) return { written: false, reason: "Maintenance job already running" };
+  if (running)
+    return { written: false, reason: "Maintenance job already running" };
   running = true;
   const startedDirtyVersion = dirtyVersion;
   try {

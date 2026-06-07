@@ -48,13 +48,17 @@ async function deriveConversationContext(
   },
 ): Promise<NewConversationContext> {
   const provider = await getProvider();
-  if (!provider) throw new Error("No API key configured, please fill it in on the settings page");
+  if (!provider)
+    throw new Error(
+      "No API key configured, please fill it in on the settings page",
+    );
   const config = loadConfig();
   const [sourceConversation, turns] = await Promise.all([
     getConversation(ctx.sourceConversationId),
     getTurnsAfterId(ctx.sourceConversationId, null),
   ]);
-  const sourceTitle = sourceConversation?.title?.trim() || "current conversation";
+  const sourceTitle =
+    sourceConversation?.title?.trim() || "current conversation";
   const selectedTurn = ctx.sourceTurnId
     ? turns.find((t) => t.id === ctx.sourceTurnId)
     : null;
@@ -113,10 +117,12 @@ const conversationReply: ReplyProducer = {
   conversationKind: "practice",
   card: {
     title: "Conversation Partner",
-    description: "Replies naturally in the target language, continuing the conversation — correction is the tutor's job.",
+    description:
+      "Replies naturally in the target language, continuing the conversation — correction is the tutor's job.",
     entry: "auto_turn",
     timing: "Every turn · hot path · streaming",
-    reads: "MD profile slice · mastered scaffolds · review candidates · difficulty calibration · session adjustments",
+    reads:
+      "MD profile slice · mastered scaffolds · review candidates · difficulty calibration · session adjustments",
     writes: "None (reply text only)",
     canDisable: false,
   },
@@ -151,7 +157,8 @@ const learningReply: ReplyProducer = {
   conversationKind: "learning_agent",
   card: {
     title: "Focused Lesson Teacher",
-    description: "Runs a teacher-style focused lesson using the course prompt and bounded learning data.",
+    description:
+      "Runs a teacher-style focused lesson using the course prompt and bounded learning data.",
     entry: "lesson",
     timing: "Every focused-lesson turn · streaming",
     reads: "Authorized learning data scope · course prompt",
@@ -187,11 +194,13 @@ const tutorObserver: Observer = {
   kind: "observer",
   card: {
     title: "Correction Tutor",
-    description: "Corrects in parallel per sentence — errors, natural alternatives, expression gaps — signals fed to code bookkeeping.",
+    description:
+      "Corrects in parallel per sentence — errors, natural alternatives, expression gaps — signals fed to code bookkeeping.",
     entry: "auto_turn",
     timing: "Every turn · hot path · parallel with reply",
     reads: "SQLite weakness table · current input",
-    writes: "error/correct/introduced/gap signals → code bookkeeping (LLM does not touch counts)",
+    writes:
+      "error/correct/introduced/gap signals → code bookkeeping (LLM does not touch counts)",
     canDisable: true,
   },
   run: async (ctx: PracticeContext) => {
@@ -257,7 +266,8 @@ const transformers: TransformerInfo[] = [
     id: "builtin:transformer:explain",
     card: {
       title: "Reply Explanation",
-      description: "Explains on demand in native language the structures, idioms, and usage that might trip up the learner.",
+      description:
+        "Explains on demand in native language the structures, idioms, and usage that might trip up the learner.",
       entry: "reply_action",
       timing: "User clicks Explain",
       reads: "Current reply · MD profile slice · reading preferences",
@@ -269,7 +279,8 @@ const transformers: TransformerInfo[] = [
     id: "builtin:transformer:bilingual",
     card: {
       title: "Bilingual Reading",
-      description: "Rearranges a reply into interleaved target-language / native-language sentences for easier reading.",
+      description:
+        "Rearranges a reply into interleaved target-language / native-language sentences for easier reading.",
       entry: "reply_action",
       timing: "User clicks Bilingual",
       reads: "Current reply · reading preferences",
@@ -293,10 +304,12 @@ const transformers: TransformerInfo[] = [
     id: "builtin:transformer:reply_suggestion",
     card: {
       title: "Reply Suggestion",
-      description: "Generates on-demand native-sounding replies the learner can send, based on a message and context.",
+      description:
+        "Generates on-demand native-sounding replies the learner can send, based on a message and context.",
       entry: "reply_action",
       timing: "User clicks Suggest Reply",
-      reads: "Current message · conversation context · MD profile slice · expression preferences",
+      reads:
+        "Current message · conversation context · MD profile slice · expression preferences",
       writes: "None (suggestion text only)",
       canDisable: false,
     },
@@ -331,8 +344,12 @@ function makeDerivationAction(spec: DerivationSpec): ActionAgent {
       description: spec.description,
       entry: "derive",
       timing: "User clicks",
-      reads: spec.scope === "turn" ? "Current conversation + selected turn" : "Current conversation",
-      writes: "Derives a new conversation context and opens a new session (does not change counts / keys / settings)",
+      reads:
+        spec.scope === "turn"
+          ? "Current conversation + selected turn"
+          : "Current conversation",
+      writes:
+        "Derives a new conversation context and opens a new session (does not change counts / keys / settings)",
       canDisable: true,
     },
     // Name override + append supplementary instructions after the official objective (does not replace the base prompt); read at click time.
@@ -351,7 +368,8 @@ const derivationSpecs: DerivationSpec[] = [
     id: "builtin:action:branch_from",
     scope: "turn",
     label: "Branch from here",
-    description: "Open a new conversation continuing from the context before this turn.",
+    description:
+      "Open a new conversation continuing from the context before this turn.",
     kind: "branch_from",
     objective:
       "Create a fresh continuation based on the selected source turn. Preserve the useful setup before that point, but start the new conversation cleanly without copying visible history.",
@@ -360,7 +378,8 @@ const derivationSpecs: DerivationSpec[] = [
     id: "builtin:action:restart",
     scope: "session",
     label: "Restart",
-    description: "Keep the core setup; open a blank new conversation for re-practice.",
+    description:
+      "Keep the core setup; open a blank new conversation for re-practice.",
     kind: "restart",
     objective:
       "Restart the same useful scenario/persona from a clean beginning. Keep the learning purpose, but do not continue as if previous turns already happened.",
@@ -419,7 +438,8 @@ const derivationSpecs: DerivationSpec[] = [
 const LESSON_FROM_CONVERSATION_ID = "builtin:action:lesson_from_conversation";
 const LESSON_FROM_CONVERSATION_DEFAULTS = {
   label: "Turn into focused lesson",
-  description: "Extract the issues and goals from this chat into a reusable focused lesson.",
+  description:
+    "Extract the issues and goals from this chat into a reusable focused lesson.",
   objective:
     "Create a focused lesson agent from this conversation. Identify the most useful practice theme, recurring mistakes, and next drill. Keep it practical and interactive.",
 };
@@ -429,7 +449,8 @@ const lessonFromConversation: ActionAgent = {
   kind: "action",
   scope: "session",
   label: LESSON_FROM_CONVERSATION_DEFAULTS.label,
-  description: "Generate a focused lesson from this conversation and open a new lesson session.",
+  description:
+    "Generate a focused lesson from this conversation and open a new lesson session.",
   card: {
     title: LESSON_FROM_CONVERSATION_DEFAULTS.label,
     description: LESSON_FROM_CONVERSATION_DEFAULTS.description,
@@ -441,7 +462,10 @@ const lessonFromConversation: ActionAgent = {
   },
   run: async (ctx) => {
     const provider = await getProvider();
-    if (!provider) throw new Error("No API key configured, please fill it in on the settings page");
+    if (!provider)
+      throw new Error(
+        "No API key configured, please fill it in on the settings page",
+      );
     const config = loadConfig();
     const turns = await getTurnsAfterId(ctx.conversationId, null);
     const history = formatTurns(turns);

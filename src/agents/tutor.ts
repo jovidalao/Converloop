@@ -319,9 +319,14 @@ async function requestStructuredTutorRaw(
   try {
     const raw = await provider.generate({ ...base, jsonSchema: schema });
     if (raw.trim()) return raw;
-    console.warn("json_schema mode returned empty content, trying json_object fallback");
+    console.warn(
+      "json_schema mode returned empty content, trying json_object fallback",
+    );
   } catch (e) {
-    console.warn("json_schema mode request failed, trying json_object fallback:", e);
+    console.warn(
+      "json_schema mode request failed, trying json_object fallback:",
+      e,
+    );
   }
 
   return provider.generate({
@@ -420,7 +425,10 @@ function rawPreview(raw: string, max = 1200): string {
 function formatTutorDiagnostic(
   attempts: { label: string; failure: string; raw?: string }[],
 ): string {
-  const lines = ["Structured correction degraded to plain text; mastery not written this turn.", "Development diagnostics:"];
+  const lines = [
+    "Structured correction degraded to plain text; mastery not written this turn.",
+    "Development diagnostics:",
+  ];
   for (const [i, attempt] of attempts.entries()) {
     lines.push(`${i + 1}. ${attempt.label}: ${attempt.failure}`);
     if (attempt.raw !== undefined) {
@@ -493,7 +501,10 @@ export async function analyze(
         label: "repair json_schema",
         failure: `request_failed: ${e instanceof Error ? e.message : String(e)}`,
       });
-      console.warn("Tutor JSON repair request failed, enabling plain-text fallback:", e);
+      console.warn(
+        "Tutor JSON repair request failed, enabling plain-text fallback:",
+        e,
+      );
     }
 
     const proseRaw = await requestProseFeedback(provider, ctx);

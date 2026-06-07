@@ -34,7 +34,8 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   },
   {
     name: "harder",
-    description: "Increase difficulty: branch into a harder version of the current conversation",
+    description:
+      "Increase difficulty: branch into a harder version of the current conversation",
     kind: "action",
     actionId: "builtin:action:harder",
   },
@@ -58,7 +59,8 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   },
   {
     name: "next-day",
-    description: "Continue next day: branch into a new-day continuation of the current story",
+    description:
+      "Continue next day: branch into a new-day continuation of the current story",
     kind: "action",
     actionId: "builtin:action:next_day",
   },

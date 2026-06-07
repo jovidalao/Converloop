@@ -38,7 +38,8 @@ const validAnalysis = JSON.stringify({
       category: "grammar",
       span_original: "go",
       span_corrected: "went",
-      explanation: "'yesterday' implies past tense; use the past form of the verb.",
+      explanation:
+        "'yesterday' implies past tense; use the past form of the verb.",
       severity: "moderate",
       mastery_key: "grammar:past_tense",
       mastery_label: "Simple past tense",

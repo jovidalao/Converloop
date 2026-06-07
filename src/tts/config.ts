@@ -30,10 +30,22 @@ export const EDGE_TTS_DEFAULTS = {
 };
 
 export const EDGE_VOICES: { id: string; label: string }[] = [
-  { id: "en-US-EmmaMultilingualNeural", label: "Emma (English · Multilingual Female)" },
-  { id: "en-US-AvaMultilingualNeural", label: "Ava (English · Multilingual Female)" },
-  { id: "en-US-AndrewMultilingualNeural", label: "Andrew (English · Multilingual Male)" },
-  { id: "en-US-BrianMultilingualNeural", label: "Brian (English · Multilingual Male)" },
+  {
+    id: "en-US-EmmaMultilingualNeural",
+    label: "Emma (English · Multilingual Female)",
+  },
+  {
+    id: "en-US-AvaMultilingualNeural",
+    label: "Ava (English · Multilingual Female)",
+  },
+  {
+    id: "en-US-AndrewMultilingualNeural",
+    label: "Andrew (English · Multilingual Male)",
+  },
+  {
+    id: "en-US-BrianMultilingualNeural",
+    label: "Brian (English · Multilingual Male)",
+  },
   { id: "en-US-AriaNeural", label: "Aria (English · US Female)" },
   { id: "en-US-GuyNeural", label: "Guy (English · US Male)" },
   { id: "en-GB-SoniaNeural", label: "Sonia (English · UK Female)" },
@@ -103,7 +115,9 @@ export async function getMimoTtsApiKey(): Promise<string | null> {
 
 export class MissingTtsApiKeyError extends Error {
   constructor() {
-    super("Please configure the MiMo API key in Settings → Text-to-Speech first.");
+    super(
+      "Please configure the MiMo API key in Settings → Text-to-Speech first.",
+    );
     this.name = "MissingTtsApiKeyError";
   }
 }

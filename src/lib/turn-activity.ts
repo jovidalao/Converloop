@@ -56,7 +56,11 @@ function tutorActivity(turn: ChatTurn): TurnActivity | null {
   const showCorrected = !!corrected && corrected !== turn.userText.trim();
   const showNatural = !!natural && natural !== corrected;
   if (issues === 0 && !showCorrected && !showNatural) {
-    return { kind: "tutor", status: "ok", label: "Accurate, no changes needed" };
+    return {
+      kind: "tutor",
+      status: "ok",
+      label: "Accurate, no changes needed",
+    };
   }
   if (issues > 0) {
     return {

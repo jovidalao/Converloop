@@ -139,7 +139,8 @@ function consumeResponsesSseLines(
       ) {
         finalReason = finishFromType(ev.type);
       } else if (ev.type === "response.failed" || ev.type === "error") {
-        error = ev.response?.error?.message ?? ev.message ?? "Codex response failed";
+        error =
+          ev.response?.error?.message ?? ev.message ?? "Codex response failed";
       }
     } catch {
       // Partial JSON, wait for subsequent chunks to complete it

@@ -260,6 +260,8 @@ export const zh: Messages = {
     hideCoach: "隐藏教练面板",
     deriveFailed: "对话衍生失败：{error}",
     customLearningFallback: "定制化学习",
+    smallWindow: "小窗模式",
+    exitSmallWindow: "退出小窗",
   },
   actions: {
     "new-chat": "新对话",
@@ -601,8 +603,7 @@ export const zh: Messages = {
       "只影响普通对话，例如多问开放性问题；回复保持简洁",
     prefTutorPlaceholder:
       "只影响批改，例如我经常口述，纯大小写和标点问题不用管",
-    prefLearningPlaceholder:
-      "只影响课程，例如先诊断再练习；每次只练一个知识点",
+    prefLearningPlaceholder: "只影响课程，例如先诊断再练习；每次只练一个知识点",
     prefReadingPlaceholder:
       "只影响阅读辅助，例如翻译更口语化；解释习语时多给背景",
     maintenanceTitle: "维护",
@@ -679,11 +680,9 @@ export const zh: Messages = {
     customCreated: "自定义 Agent 已创建并启用。",
     exportedTo: '已导出到下方"高级"的包文本框中。',
     deleteCustomTitle: '删除自定义 Agent"{name}"？',
-    deleteCustomDesc:
-      "从数据库永久删除，无法恢复。已有对话不受影响。",
+    deleteCustomDesc: "从数据库永久删除，无法恢复。已有对话不受影响。",
     deleteBuiltinTitle: '删除能力"{name}"？',
-    deleteBuiltinDesc:
-      "永久隐藏这个内置能力，无法恢复——清除 App 数据可还原。",
+    deleteBuiltinDesc: "永久隐藏这个内置能力，无法恢复——清除 App 数据可还原。",
     deleted: '已删除"{name}"。',
     agentNotFound: "找不到该自定义 Agent。",
     advanced: "高级 · 分享包导入/导出",

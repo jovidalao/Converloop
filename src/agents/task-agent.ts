@@ -98,7 +98,9 @@ export async function planLearningProject(
   if (!parsed.ok) throw new Error(parsed.error);
   const validated = GeneratedLearningProject.safeParse(parsed.value);
   if (!validated.success) {
-    throw new Error(`Learning project plan validation failed: ${formatZodError(validated.error)}`);
+    throw new Error(
+      `Learning project plan validation failed: ${formatZodError(validated.error)}`,
+    );
   }
 
   return {

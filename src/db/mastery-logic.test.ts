@@ -241,7 +241,8 @@ describe("deriveSignals", () => {
         original: "I want to decline this request politely",
         target_expression:
           "I'd rather not take this on right now, but I could help later.",
-        explanation: "Use 'I'd rather not ___, but ___' to soften the refusal and offer an alternative.",
+        explanation:
+          "Use 'I'd rather not ___, but ___' to soften the refusal and offer an alternative.",
         key_items: [
           {
             text: "I'd rather not",

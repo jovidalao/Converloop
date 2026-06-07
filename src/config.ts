@@ -196,7 +196,9 @@ export function findProviderModelOption(
 export function providerModelLabel(type: ProviderType, model: string): string {
   const preset = PROVIDER_PRESETS[type];
   const modelLabel =
-    findProviderModelOption(type, model)?.label || model.trim() || "Custom Model";
+    findProviderModelOption(type, model)?.label ||
+    model.trim() ||
+    "Custom Model";
   return `${preset.shortLabel} · ${modelLabel}`;
 }
 

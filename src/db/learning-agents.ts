@@ -79,14 +79,21 @@ export interface LearningAgentMeta extends LearningAgent {
 }
 
 export const DATA_SCOPE_LABELS: Record<LearningDataScope, string> = {
-  profile: "Learner profile: interests, preferences, what they are currently practising",
-  comfortable: "Mastered scaffolding: expressions, grammar, collocations safe to reuse and transfer",
-  weak_all: "Weak points: vocabulary, grammar, collocations, and error patterns not yet mastered",
-  weak_grammar: "Grammar / error patterns: recently missed or still-weak grammar points",
-  expression_gaps: "Expression gaps: things wanted to say but fell back to native language or mixed speech",
-  today_turns: "Today's conversations: practice content and corrections from the last 24 hours",
+  profile:
+    "Learner profile: interests, preferences, what they are currently practising",
+  comfortable:
+    "Mastered scaffolding: expressions, grammar, collocations safe to reuse and transfer",
+  weak_all:
+    "Weak points: vocabulary, grammar, collocations, and error patterns not yet mastered",
+  weak_grammar:
+    "Grammar / error patterns: recently missed or still-weak grammar points",
+  expression_gaps:
+    "Expression gaps: things wanted to say but fell back to native language or mixed speech",
+  today_turns:
+    "Today's conversations: practice content and corrections from the last 24 hours",
   due_review: "Due for review: learning items not revisited for a long time",
-  proficiency: "Difficulty reading: difficulty calibration inferred from recent performance",
+  proficiency:
+    "Difficulty reading: difficulty calibration inferred from recent performance",
 };
 
 export const LEARNING_DATA_SCOPES = [...LEARNING_DATA_SCOPE_VALUES];
@@ -123,7 +130,8 @@ const BUILT_INS: BuiltInAgent[] = [
   {
     id: "builtin:daily_review",
     name: "Daily review",
-    description: "Opens with a today's practice report, then guides you through the top points to revisit.",
+    description:
+      "Opens with a today's practice report, then guides you through the top points to revisit.",
     dataScopes: [
       "profile",
       "comfortable",
@@ -145,7 +153,8 @@ AFTER the report, transition into practice: take the first of the Top 3 points, 
     supersedes: [
       {
         name: "Daily review",
-        description: "Summarizes what you practised today and picks the 3 points most worth reviewing right now.",
+        description:
+          "Summarizes what you practised today and picks the 3 points most worth reviewing right now.",
         dataScopes: [
           "profile",
           "comfortable",
@@ -168,7 +177,8 @@ Keep the lesson focused. Do not turn this into a long report; make it actionable
   {
     id: "builtin:grammar_review",
     name: "Grammar drill",
-    description: "Explains each recent grammar mistake one by one, then drills them until they stick.",
+    description:
+      "Explains each recent grammar mistake one by one, then drills them until they stick.",
     dataScopes: [
       "profile",
       "comfortable",
@@ -187,7 +197,8 @@ AFTER the report, drill the issues ONE AT A TIME (逐个击破): start with the 
     supersedes: [
       {
         name: "Grammar drill",
-        description: "Opens with a grammar diagnostic report, then runs a focused drill on the highest-priority point.",
+        description:
+          "Opens with a grammar diagnostic report, then runs a focused drill on the highest-priority point.",
         dataScopes: [
           "profile",
           "comfortable",
@@ -206,7 +217,8 @@ AFTER the report, run a small drill on the top-priority pattern: ask for 2-3 sho
       },
       {
         name: "Grammar drill",
-        description: "Groups recent grammar mistakes by error pattern, with explanations, examples, and immediate practice.",
+        description:
+          "Groups recent grammar mistakes by error pattern, with explanations, examples, and immediate practice.",
         dataScopes: [
           "profile",
           "comfortable",
@@ -225,7 +237,8 @@ After the explanation, run a small drill: ask for 2-3 short target-language sent
   {
     id: "builtin:expression_gap_review",
     name: "Expression gap training",
-    description: "Turns native-language or mixed-language fallback moments into reusable target-language patterns.",
+    description:
+      "Turns native-language or mixed-language fallback moments into reusable target-language patterns.",
     dataScopes: [
       "profile",
       "comfortable",

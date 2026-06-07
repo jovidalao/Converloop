@@ -133,7 +133,9 @@ ${input.partnerReply || "(none yet)"}`,
   if (!parsed.ok) throw new Error(parsed.error);
   const validated = LessonWritebackResult.safeParse(parsed.value);
   if (!validated.success) {
-    throw new Error(`Lesson writeback validation failed: ${formatZodError(validated.error)}`);
+    throw new Error(
+      `Lesson writeback validation failed: ${formatZodError(validated.error)}`,
+    );
   }
   return validated.data;
 }

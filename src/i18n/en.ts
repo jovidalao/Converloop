@@ -263,6 +263,8 @@ export const en = {
     hideCoach: "Hide coach panel",
     deriveFailed: "Failed to derive conversation: {error}",
     customLearningFallback: "Custom learning",
+    smallWindow: "Small window",
+    exitSmallWindow: "Exit small window",
   },
   actions: {
     "new-chat": "New chat",
@@ -536,7 +538,7 @@ export const en = {
     },
     expression_gaps: {
       name: "Expression gaps",
-      desc: "\"want to say but can't\" exposed by native/mixed input",
+      desc: '"want to say but can\'t" exposed by native/mixed input',
     },
     today_turns: {
       name: "Today's conversation",
@@ -552,7 +554,7 @@ export const en = {
     },
   },
   mastery: {
-    deleteTitle: "Delete \"{label}\"?",
+    deleteTitle: 'Delete "{label}"?',
     deleteDesc: "The event log will be preserved.",
     errorRatio: "Errors/outputs {ratio}",
     lastSeen: "Last seen {date}",
@@ -570,7 +572,7 @@ export const en = {
     empty: "No matching items",
     naturalEditTitle: "Edit data with natural language",
     naturalEditPlaceholder:
-      "e.g. Mark grammar:article_usage as mastered; delete the duplicate make/do collocation; add an expression gap \"politely decline a request\".",
+      'e.g. Mark grammar:article_usage as mastered; delete the duplicate make/do collocation; add an expression gap "politely decline a request".',
     naturalEditNote:
       "The system converts the request to a limited set of data operations before code executes it; it does not directly modify counts.",
     processing: "Processing…",
@@ -699,20 +701,21 @@ export const en = {
     customUpdated: "Custom agent updated.",
     customCreated: "Custom agent created and enabled.",
     exportedTo: 'Exported to the package text box under "Advanced" below.',
-    deleteCustomTitle: "Delete custom agent \"{name}\"?",
+    deleteCustomTitle: 'Delete custom agent "{name}"?',
     deleteCustomDesc:
       "Permanently deleted from the database, cannot be recovered. Existing conversations are unaffected.",
-    deleteBuiltinTitle: "Delete capability \"{name}\"?",
+    deleteBuiltinTitle: 'Delete capability "{name}"?',
     deleteBuiltinDesc:
       "Permanently hides this built-in capability, cannot be recovered — clear app data to restore it.",
-    deleted: "Deleted \"{name}\".",
+    deleted: 'Deleted "{name}".',
     agentNotFound: "This custom agent was not found.",
     advanced: "Advanced · Share package import/export",
     packagePlaceholder:
       "Paste lang-agent.package JSON; old lang-agent.agent-package is also compatible. Exported packages appear here.",
     importPackage: "Import package",
-    importedPackage: "Package imported: {skills} skill(s), {lessons} lesson(s).",
-    logsLink: "Run logs have moved to \"Settings → Logs\"",
+    importedPackage:
+      "Package imported: {skills} skill(s), {lessons} lesson(s).",
+    logsLink: 'Run logs have moved to "Settings → Logs"',
     outputPreviewObserver:
       "Output → a note in the coach panel (memory_proposals require your confirmation before writing)",
     outputPreviewAction:
@@ -743,8 +746,7 @@ export const en = {
       },
     },
     entryIo: {
-      auto_turn:
-        "Your sentence → corrections / notes in the coach panel",
+      auto_turn: "Your sentence → corrections / notes in the coach panel",
       selection: "Selected text + context → native-language analysis",
       reply_action:
         "Current reply → explanation / bilingual / suggested reply text",
@@ -829,7 +831,7 @@ export const en = {
     },
     dataScopesTitle: "Readable data scopes",
     dataScopesIntro:
-      "The \"readable data\" selected when creating a custom agent determines which learning context it can see. Narrower scopes are more stable; broader scopes suit comprehensive summaries.",
+      'The "readable data" selected when creating a custom agent determines which learning context it can see. Narrower scopes are more stable; broader scopes suit comprehensive summaries.',
     dataScopesNote:
       "In addition, custom agents always see the current input and necessary recent context; these scopes are additional learning data injected.",
     scopeSource: "Source",
@@ -837,15 +839,13 @@ export const en = {
     scopeCaution: "Note",
     scopeDetail: {
       profile: {
-        source:
-          "The learner's MD profile written by the maintainer agent.",
+        source: "The learner's MD profile written by the maintainer agent.",
         use: "Best for letting capabilities know your interests, preferences, long-term goals, and recent practice direction.",
         caution:
           "It's the narrative layer — not suitable for accurate counts or sorting.",
       },
       comfortable: {
-        source:
-          "Stable scaffold selected by code from SQLite mastered items.",
+        source: "Stable scaffold selected by code from SQLite mastered items.",
         use: "Best for letting a teacher reuse expressions you already know, connecting new content to existing capability.",
         caution:
           "Don't treat this as all learned content — only a small number of high-value candidates are included.",
@@ -866,7 +866,7 @@ export const en = {
       },
       expression_gaps: {
         source:
-          "\"Want to say but can't\" identified by the Tutor from native/mixed input.",
+          '"Want to say but can\'t" identified by the Tutor from native/mixed input.',
         use: "Best for scenario expression training, reusable sentence pattern lessons, and real-intent rewriting.",
         caution:
           "This is intent-layer data — don't treat every gap as an expression the user has already learned.",
@@ -875,8 +875,7 @@ export const en = {
         source:
           "Conversation, replies, and correction summaries from the last 24 hours or today.",
         use: "Best for end-of-day review, post-lesson summaries, and generating questions from just-practiced content.",
-        caution:
-          "Skews recent — doesn't represent long-term weak rankings.",
+        caution: "Skews recent — doesn't represent long-term weak rankings.",
       },
       due_review: {
         source:

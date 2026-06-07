@@ -65,6 +65,7 @@ import {
   incrementExplainCount,
   loadChatHistory,
 } from "../db/turns";
+import { staticT, useTranslation } from "../i18n";
 import { estimatePromptTokens } from "../lib/tokens";
 import { deriveTurnActivities, type TurnActivity } from "../lib/turn-activity";
 import {
@@ -86,7 +87,6 @@ import {
 import { loadTtsConfig } from "../tts/config";
 import { stopSpeech } from "../tts/playback";
 import { createReplySpeaker } from "../tts/stream";
-import { useTranslation, staticT } from "../i18n";
 import { AnnotationIsland } from "./AnnotationIsland";
 import { useConfirm } from "./confirm";
 import { InlineCorrection, UserSentence } from "./InlineCorrection";
@@ -114,6 +114,8 @@ interface ChatViewProps {
   onNavigateConversation?: (id: string) => void;
   /** When the coach panel is visible, the in-chat turn-activity row is hidden — that content lives in the right panel. */
   coachVisible?: boolean;
+  /** Small-window mode: strip to bare chat — message bubbles + copy + composer; hide explain/speak/suggestions/corrections/badges/slash menu. */
+  compact?: boolean;
 }
 
 const MODEL_PROVIDERS = Object.keys(PROVIDER_PRESETS) as ProviderType[];
@@ -551,9 +553,7 @@ function EditFromHereButton({
       type="button"
       variant="action"
       size="action"
-      title={
-        disabled ? t("chat.editFromHereGrading") : t("chat.editFromHere")
-      }
+      title={disabled ? t("chat.editFromHereGrading") : t("chat.editFromHere")}
       disabled={disabled}
       onClick={onClick}
     >
@@ -1128,7 +1128,8 @@ function DerivedContextBanner({
           <SparklesIcon size={14} />
         </span>
         <span className="min-w-0 flex-1 truncate">
-          {label ? `${label} · ` : ""}{t("chat.derivedContextLabel")}
+          {label ? `${label} · ` : ""}
+          {t("chat.derivedContextLabel")}
         </span>
       </button>
       {open && (
@@ -1176,6 +1177,7 @@ export function ChatView({
   onTurnsChange,
   onNavigateConversation,
   coachVisible = false,
+  compact = false,
 }: ChatViewProps) {
   const { t } = useTranslation();
   const [turns, setTurns] = useState<ChatTurn[]>([]);
@@ -1239,7 +1241,7 @@ export function ChatView({
         : [],
     [slashToken, slashDismissed, canDerive],
   );
-  const slashOpen = slashCommands.length > 0;
+  const slashOpen = !compact && slashCommands.length > 0;
 
   // When leaving the command context (no token), clear the "Esc-closed" flag so the next / re-opens the menu.
   useEffect(() => {
@@ -1587,7 +1589,9 @@ export function ChatView({
       speaker?.abort();
       patchTurn(turnId, {
         analysisPending: false,
-        analysisError: learningMode ? t("chat.sendFailed") : t("chat.sendFailedNoGrading"),
+        analysisError: learningMode
+          ? t("chat.sendFailed")
+          : t("chat.sendFailedNoGrading"),
       });
       setError(
         e instanceof MissingApiKeyError
@@ -1771,10 +1775,16 @@ export function ChatView({
       : { label: t("chat.practiceBadge"), tone: "muted" },
   ];
   if (derivedBanner) {
-    optionBadges.push({ label: derivedBanner.label ?? t("chat.derivedBadge"), tone: "info" });
+    optionBadges.push({
+      label: derivedBanner.label ?? t("chat.derivedBadge"),
+      tone: "info",
+    });
     const diff = derivedBanner.context.difficulty?.trim();
     if (diff && diff.length <= 16)
-      optionBadges.push({ label: t("chat.difficultyBadge", { diff }), tone: "muted" });
+      optionBadges.push({
+        label: t("chat.difficultyBadge", { diff }),
+        tone: "muted",
+      });
   }
   const active = activeProvider(config);
   const currentPreset = PROVIDER_PRESETS[config.providerType];
@@ -1812,7 +1822,7 @@ export function ChatView({
         ref={messagesRef}
         onScroll={syncStickToBottom}
       >
-        {derivedBanner && (
+        {!compact && derivedBanner && (
           <DerivedContextBanner
             conversationId={conversationId}
             context={derivedBanner.context}
@@ -1831,7 +1841,7 @@ export function ChatView({
             key={turn.id}
             live={liveTurnIdsRef.current.has(turn.id)}
             activities={
-              coachVisible
+              compact || coachVisible
                 ? []
                 : deriveTurnActivities(turn).filter((a) => a.kind === "memory")
             }
@@ -1991,20 +2001,21 @@ export function ChatView({
               <div className="flex min-h-11 items-end gap-2 px-2 pt-1 pb-2">
                 <div
                   className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5"
-                  title={contextTitle}
+                  title={compact ? undefined : contextTitle}
                 >
-                  {optionBadges.map((b) => (
-                    <span
-                      key={b.label}
-                      className={`inline-flex max-w-32 items-center truncate rounded-md px-1.5 py-0.5 text-ui-caption font-medium ${
-                        b.tone === "info"
-                          ? "bg-primary/10 text-primary"
-                          : "bg-muted text-ui-muted"
-                      }`}
-                    >
-                      {b.label}
-                    </span>
-                  ))}
+                  {!compact &&
+                    optionBadges.map((b) => (
+                      <span
+                        key={b.label}
+                        className={`inline-flex max-w-32 items-center truncate rounded-md px-1.5 py-0.5 text-ui-caption font-medium ${
+                          b.tone === "info"
+                            ? "bg-primary/10 text-primary"
+                            : "bg-muted text-ui-muted"
+                        }`}
+                      >
+                        {b.label}
+                      </span>
+                    ))}
                 </div>
                 <Select
                   value={selectedModelValue}

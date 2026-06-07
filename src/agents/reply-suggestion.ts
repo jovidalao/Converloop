@@ -96,6 +96,7 @@ export async function suggestReplyText(
     onDelta,
   );
   const text = reply.trim();
-  if (!text) throw new Error("Reply suggestion generation failed, please retry");
+  if (!text)
+    throw new Error("Reply suggestion generation failed, please retry");
   return { text, finishReason: finish };
 }

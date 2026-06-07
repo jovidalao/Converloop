@@ -140,7 +140,10 @@ async function runCustomAction(
   ctx: DerivationContext,
 ): Promise<NewConversationContext> {
   const provider = await getProvider();
-  if (!provider) throw new Error("No API key configured, please fill it in on the settings page");
+  if (!provider)
+    throw new Error(
+      "No API key configured, please fill it in on the settings page",
+    );
 
   const config = loadConfig();
   const [conversation, turns, dataContext] = await Promise.all([
@@ -227,7 +230,8 @@ function actionFromAgent(agent: LearningAgentMeta): ActionAgent {
       entry: "derive",
       timing: "User clicks",
       reads: "Current conversation · authorized learning data",
-      writes: "Derives a new conversation context and opens a new session (does not change counts / keys / settings)",
+      writes:
+        "Derives a new conversation context and opens a new session (does not change counts / keys / settings)",
       canDisable: true,
     },
     deriveContext: (ctx) => runCustomAction(agent, ctx),

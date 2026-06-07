@@ -189,7 +189,9 @@ async function runLogged<T>(
       error: e instanceof Error ? e.message : String(e),
       startedAt,
       finishedAt: Date.now(),
-    }).catch((err) => logError("agent-run", "Failed to write agent run log", err));
+    }).catch((err) =>
+      logError("agent-run", "Failed to write agent run log", err),
+    );
     throw e;
   }
 }
@@ -239,9 +241,11 @@ export async function runAction(
   ctx: ActionContext,
 ): Promise<ActionResult> {
   const action = actions.find((a) => a.id === actionId);
-  if (!action) throw new Error(`No action agent registered with id=${actionId}`);
+  if (!action)
+    throw new Error(`No action agent registered with id=${actionId}`);
   const run = action.run;
-  if (!run) throw new Error(`Action ${actionId} is not a directly executable action`);
+  if (!run)
+    throw new Error(`Action ${actionId} is not a directly executable action`);
   return runLogged(
     {
       agentId: action.id,
@@ -286,14 +290,18 @@ export async function derivePendingAction(
   );
   const derivation = modifiers.derivation;
   if (!conversation || !derivation) {
-    throw new Error("This conversation has no pending derivation context to generate");
+    throw new Error(
+      "This conversation has no pending derivation context to generate",
+    );
   }
   if (!conversation.parentConversationId) {
     throw new Error("Derived conversation is missing a source conversation");
   }
   const action = actions.find((a) => a.id === derivation.actionId);
   if (!action?.deriveContext) {
-    throw new Error(`Action ${derivation.actionId} cannot generate a derived conversation context`);
+    throw new Error(
+      `Action ${derivation.actionId} cannot generate a derived conversation context`,
+    );
   }
   const ctx: DerivationContext = {
     newConversationId,

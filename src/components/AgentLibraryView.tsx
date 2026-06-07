@@ -8,8 +8,8 @@ import {
   UploadIcon,
 } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
-import { useTranslation } from "@/i18n";
 import type { TFunction } from "@/i18n";
+import { useTranslation } from "@/i18n";
 import { cn } from "@/lib/utils";
 import {
   defaultAgentOutputSchema,
@@ -290,7 +290,11 @@ function AgentRow({
             <Switch
               checked={entry.enabled}
               onCheckedChange={(v) => onToggle(entry.id, v)}
-              aria-label={entry.enabled ? t("agentLibrary.disabled") : t("agentLibrary.alwaysOn")}
+              aria-label={
+                entry.enabled
+                  ? t("agentLibrary.disabled")
+                  : t("agentLibrary.alwaysOn")
+              }
               className="ml-1"
             />
           )}
@@ -330,7 +334,7 @@ function OutputPreview({ kind }: { kind: LearningAgentKind }) {
     kind === "observer"
       ? `{
   "title": "Interview expression observation",
-  "body_md": "You said \"负责\" but a more natural phrasing is ...",
+  "body_md": "You said "负责" but a more natural phrasing is ...",
   "memory_proposals": [ /* written only after your confirmation */ ]
 }`
       : `{
@@ -583,19 +587,18 @@ export function AgentLibraryView({
     items: catalog.filter((e) => entryOf(e) === entry),
   })).filter((g) => g.items.length > 0);
 
-  const typeOptions: { v: LearningAgentKind; title: string; desc: string }[] =
-    [
-      {
-        v: "observer",
-        title: t("agentLibrary.observerTitle"),
-        desc: t("agentLibrary.observerDesc"),
-      },
-      {
-        v: "action",
-        title: t("agentLibrary.actionTitle"),
-        desc: t("agentLibrary.actionDesc"),
-      },
-    ];
+  const typeOptions: { v: LearningAgentKind; title: string; desc: string }[] = [
+    {
+      v: "observer",
+      title: t("agentLibrary.observerTitle"),
+      desc: t("agentLibrary.observerDesc"),
+    },
+    {
+      v: "action",
+      title: t("agentLibrary.actionTitle"),
+      desc: t("agentLibrary.actionDesc"),
+    },
+  ];
 
   return (
     <div className="flex h-full max-w-5xl flex-col overflow-y-auto px-6 pt-14 pb-6">
@@ -608,7 +611,9 @@ export function AgentLibraryView({
 
       <section ref={formRef} className="mb-6 rounded-lg border bg-card p-4">
         <h3 className="m-0 mb-3 text-ui-body font-semibold">
-          {editingId ? t("agentLibrary.editCustom") : t("agentLibrary.createCustom")}
+          {editingId
+            ? t("agentLibrary.editCustom")
+            : t("agentLibrary.createCustom")}
         </h3>
         <div className="flex flex-col gap-4">
           <FormSection title={t("agentLibrary.basicInfo")}>
@@ -689,7 +694,9 @@ export function AgentLibraryView({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">{t("agentLibrary.writebackNone")}</SelectItem>
+                  <SelectItem value="none">
+                    {t("agentLibrary.writebackNone")}
+                  </SelectItem>
                   <SelectItem value="propose_review_signals">
                     {t("agentLibrary.writebackPropose")}
                   </SelectItem>
@@ -720,7 +727,9 @@ export function AgentLibraryView({
               disabled={busy || !name.trim() || !prompt.trim()}
             >
               {editingId ? <PencilIcon size={14} /> : <PlusIcon size={14} />}
-              {editingId ? t("agentLibrary.saveChanges") : t("agentLibrary.createAndEnable")}
+              {editingId
+                ? t("agentLibrary.saveChanges")
+                : t("agentLibrary.createAndEnable")}
             </Button>
             {editingId && (
               <Button
@@ -742,10 +751,14 @@ export function AgentLibraryView({
           <section key={group.entry} className="flex flex-col gap-2">
             <div>
               <h3 className="m-0 text-ui-caption font-semibold uppercase tracking-wide text-ui-muted">
-                {t(`agentLibrary.entryMeta.${group.entry}.label` as Parameters<TFunction>[0])}
+                {t(
+                  `agentLibrary.entryMeta.${group.entry}.label` as Parameters<TFunction>[0],
+                )}
               </h3>
               <p className="mt-0.5 mb-0 text-ui-caption text-ui-muted">
-                {t(`agentLibrary.entryMeta.${group.entry}.intro` as Parameters<TFunction>[0])}
+                {t(
+                  `agentLibrary.entryMeta.${group.entry}.intro` as Parameters<TFunction>[0],
+                )}
               </p>
             </div>
             {group.items.map((entry) => (
@@ -794,8 +807,9 @@ export function AgentLibraryView({
               <div className="mt-2 rounded-md bg-muted px-2.5 py-2 text-ui-caption leading-relaxed">
                 <div className="font-medium">{packageReview.name}</div>
                 <div className="text-ui-muted">
-                  {packageReview.itemSummary} · {t("agentLibrary.reads")}: {packageReview.reads} ·
-                  {t("agentLibrary.writes")}: {packageReview.writes}
+                  {packageReview.itemSummary} · {t("agentLibrary.reads")}:{" "}
+                  {packageReview.reads} ·{t("agentLibrary.writes")}:{" "}
+                  {packageReview.writes}
                 </div>
               </div>
             )}

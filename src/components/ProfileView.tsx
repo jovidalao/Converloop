@@ -8,8 +8,8 @@ import {
   XIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useTranslation } from "@/i18n";
 import type { TFunction } from "@/i18n";
+import { useTranslation } from "@/i18n";
 import { loadConfig } from "../config";
 import { applyProfilePreferenceInstruction } from "../orchestrator";
 import { runMaintainerNow } from "../profile/maintainer-runner";
@@ -113,7 +113,9 @@ function PreferencesPanel({
     <section className="rounded-md border border-border/70 bg-card/80 p-4 shadow-minimal-flat">
       <div className="mb-4 flex flex-col gap-2">
         <div>
-          <h3 className="m-0 text-ui-body font-semibold">{t("profile.aiCustomTitle")}</h3>
+          <h3 className="m-0 text-ui-body font-semibold">
+            {t("profile.aiCustomTitle")}
+          </h3>
           <p className="m-0 mt-1 text-ui-body leading-snug text-ui-muted">
             {t("profile.aiCustomDesc")}
           </p>
@@ -139,7 +141,9 @@ function PreferencesPanel({
             className="w-full"
           >
             <SparklesIcon size={15} />
-            {smartBusy ? t("profile.aiClassifying") : t("profile.aiClassifySave")}
+            {smartBusy
+              ? t("profile.aiClassifying")
+              : t("profile.aiClassifySave")}
           </Button>
         </div>
       </div>
@@ -205,7 +209,9 @@ function SectionCard({
           />
         )}
       </span>
-      <span className={`shrink-0 rounded px-1.5 py-0.5 text-ui-caption ${badgeCls}`}>
+      <span
+        className={`shrink-0 rounded px-1.5 py-0.5 text-ui-caption ${badgeCls}`}
+      >
         {badgeText}
       </span>
     </div>
@@ -378,7 +384,9 @@ function ProfileActions({
   return (
     <section className="rounded-md border border-border/70 bg-card/80 p-4 shadow-minimal-flat">
       <div className="mb-3">
-        <h3 className="m-0 text-ui-body font-semibold">{t("profile.maintenanceTitle")}</h3>
+        <h3 className="m-0 text-ui-body font-semibold">
+          {t("profile.maintenanceTitle")}
+        </h3>
         <p className="m-0 mt-1 text-ui-body leading-snug text-ui-muted">
           {t("profile.maintenanceDesc")}
         </p>
@@ -602,7 +610,11 @@ export function ProfileView() {
       setSmartDraft("");
       setStatus(t("profile.classifiedStatus"));
     } catch (e) {
-      setStatus(t("profile.classifyFailed", { error: e instanceof Error ? e.message : String(e) }));
+      setStatus(
+        t("profile.classifyFailed", {
+          error: e instanceof Error ? e.message : String(e),
+        }),
+      );
     } finally {
       setSmartBusy(false);
     }
@@ -648,7 +660,11 @@ export function ProfileView() {
         setStatus(t("profile.refreshNotUpdated", { reason: r.reason ?? "" }));
       }
     } catch (e) {
-      setStatus(t("profile.refreshFailed", { error: e instanceof Error ? e.message : String(e) }));
+      setStatus(
+        t("profile.refreshFailed", {
+          error: e instanceof Error ? e.message : String(e),
+        }),
+      );
     } finally {
       setBusy(false);
     }
@@ -699,7 +715,9 @@ export function ProfileView() {
         </header>
 
         {!loaded ? (
-          <p className="m-0 text-ui-body text-ui-muted">{t("profile.loading")}</p>
+          <p className="m-0 text-ui-body text-ui-muted">
+            {t("profile.loading")}
+          </p>
         ) : raw ? (
           <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
             <Textarea
@@ -727,9 +745,13 @@ export function ProfileView() {
           <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
             <main className="min-w-0">
               <div className="mb-3 flex items-center justify-between gap-3">
-                <h3 className="m-0 text-ui-body font-semibold">{t("profile.sections")}</h3>
+                <h3 className="m-0 text-ui-body font-semibold">
+                  {t("profile.sections")}
+                </h3>
                 <span className="text-ui-caption text-ui-muted">
-                  {t("profile.modulesCount", { n: String(displaySections.length) })}
+                  {t("profile.modulesCount", {
+                    n: String(displaySections.length),
+                  })}
                 </span>
               </div>
               {/* Waterfall layout: JS distributes cards into equal-width flex columns, top-aligned. */}

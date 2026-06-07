@@ -46,7 +46,8 @@ describe("Task Agent", () => {
       return JSON.stringify({
         title: "English interview prep",
         goal: "Prepare a self-introduction and project walkthrough for a frontend engineering interview.",
-        plan_markdown: "## Week 1\nPractise self-introduction and project description.",
+        plan_markdown:
+          "## Week 1\nPractise self-introduction and project description.",
         notes_markdown: "Start with the most common interview questions.",
         suggested_lessons: [
           {
@@ -61,11 +62,15 @@ describe("Task Agent", () => {
       });
     });
 
-    const plan = await planLearningProject(provider, "Prepare for an English frontend engineering interview", {
-      nativeLanguage: "Chinese",
-      targetLanguage: "English",
-      level: "B1",
-    });
+    const plan = await planLearningProject(
+      provider,
+      "Prepare for an English frontend engineering interview",
+      {
+        nativeLanguage: "Chinese",
+        targetLanguage: "English",
+        level: "B1",
+      },
+    );
 
     expect(calls[0].jsonSchema?.name).toBe("GeneratedLearningProject");
     expect(calls[0].meta?.label).toBe("task_agent");

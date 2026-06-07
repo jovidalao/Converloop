@@ -88,7 +88,8 @@ export async function applyMemoryProposal(id: string): Promise<{
     .where(eq(memoryProposal.id, id))
     .limit(1);
   if (!row) throw new Error("Memory proposal not found");
-  if (row.status !== "pending") throw new Error("This memory proposal has already been processed");
+  if (row.status !== "pending")
+    throw new Error("This memory proposal has already been processed");
 
   const operations = parseOperations(row.operationsJson);
   const result = await applyDataEditOperations(operations, row.summary);

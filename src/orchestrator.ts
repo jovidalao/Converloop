@@ -258,10 +258,13 @@ export async function confirmLearningTurnMastery(
 
   const conversation = await getConversation(conversationId);
   if (conversation?.kind !== "learning_agent") {
-    throw new Error("Only focused-lesson sessions can confirm lesson mastery signals");
+    throw new Error(
+      "Only focused-lesson sessions can confirm lesson mastery signals",
+    );
   }
   const agentId = conversation.learningAgentId;
-  if (!agentId) throw new Error("This focused lesson has no learning agent linked");
+  if (!agentId)
+    throw new Error("This focused lesson has no learning agent linked");
   const agent = await getLearningAgent(agentId);
   if (!agent) throw new Error("Learning agent not found");
   const turn = await getTurn(turnId);
@@ -269,7 +272,10 @@ export async function confirmLearningTurnMastery(
     throw new Error("Focused-lesson turn not found");
   }
   if (!turn.userInput.trim()) {
-    return { summary: "This turn is not learner output; nothing was written.", applied: 0 };
+    return {
+      summary: "This turn is not learner output; nothing was written.",
+      applied: 0,
+    };
   }
 
   const config = loadConfig();
@@ -638,7 +644,8 @@ async function runLearningTurn(
 
   const conversation = await getConversation(conversationId);
   const agentId = conversation?.learningAgentId;
-  if (!agentId) throw new Error("This focused lesson has no learning agent linked");
+  if (!agentId)
+    throw new Error("This focused lesson has no learning agent linked");
 
   const agent = await getLearningAgent(agentId);
   if (!agent) throw new Error("Learning agent not found");

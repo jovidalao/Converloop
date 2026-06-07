@@ -45,7 +45,9 @@ describe("appendNoteToMd", () => {
   it("existing content → new bullet appended at end", () => {
     const once = appendNoteToMd(base, "Interview next Monday");
     const twice = appendNoteToMd(once, "Prefer engineering examples");
-    expect(myNotesBody(twice)).toBe("- Interview next Monday\n- Prefer engineering examples");
+    expect(myNotesBody(twice)).toBe(
+      "- Interview next Monday\n- Prefer engineering examples",
+    );
   });
 
   it("blank input → returned unchanged", () => {

@@ -96,7 +96,9 @@ ${instruction}`,
   if (!parsed.ok) throw new Error(parsed.error);
   const validated = DataEditPlan.safeParse(parsed.value);
   if (!validated.success) {
-    throw new Error(`Data edit plan validation failed: ${formatZodError(validated.error)}`);
+    throw new Error(
+      `Data edit plan validation failed: ${formatZodError(validated.error)}`,
+    );
   }
   return validated.data;
 }

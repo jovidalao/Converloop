@@ -99,7 +99,10 @@ export async function classifyProfilePreferenceInstruction(
       }),
     );
   } catch (e) {
-    console.warn("Preference classification json_schema failed, retrying with json_object:", e);
+    console.warn(
+      "Preference classification json_schema failed, retrying with json_object:",
+      e,
+    );
   }
 
   return parseClassification(

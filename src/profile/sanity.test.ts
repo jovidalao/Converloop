@@ -50,9 +50,13 @@ const oldMd = `# Learner Profile · Chinese → English · B1 · updated 2026-05
 My own notes: practise tenses more, review preposition collocations on weekends.
 `;
 
-const MY_NOTES = "My own notes: practise tenses more, review preposition collocations on weekends.\n";
+const MY_NOTES =
+  "My own notes: practise tenses more, review preposition collocations on weekends.\n";
 
-function withSections(myNotes: string, working = "- Articles a/an/the"): string {
+function withSections(
+  myNotes: string,
+  working = "- Articles a/an/the",
+): string {
   return `# Learner Profile · Chinese → English · B1 · updated 2026-05-30
 
 ## About me
@@ -125,7 +129,10 @@ describe("sanityCheck", () => {
   });
 
   it("profile too long → rejected (agent did not control bullet count)", () => {
-    const bloated = withSections(MY_NOTES, `${"- A weak point\n".repeat(1500)}`);
+    const bloated = withSections(
+      MY_NOTES,
+      `${"- A weak point\n".repeat(1500)}`,
+    );
     const r = sanityCheck(oldMd, bloated);
     expect(r.ok).toBe(false);
     expect(r.reason).toContain("too long");

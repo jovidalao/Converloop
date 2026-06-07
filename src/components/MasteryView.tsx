@@ -133,14 +133,18 @@ function MasteryRow({
             {TYPE_LABEL[item.type] ?? item.type}
           </Badge>
           <Badge className={STATUS_CLASS[item.status] ?? "bg-muted"}>
-            {t(`mastery.status.${item.status as "struggling" | "learning" | "known"}`)}
+            {t(
+              `mastery.status.${item.status as "struggling" | "learning" | "known"}`,
+            )}
           </Badge>
         </div>
       </div>
 
       <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-ui-caption text-ui-muted">
         <span>{t("mastery.errorRatio", { ratio: ratio(item) })}</span>
-        <span>{t("mastery.lastSeen", { date: dateLabel(item.lastSeenAt) })}</span>
+        <span>
+          {t("mastery.lastSeen", { date: dateLabel(item.lastSeenAt) })}
+        </span>
       </div>
 
       {editing ? (

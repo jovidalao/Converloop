@@ -265,9 +265,13 @@ export function AppDesignView() {
           {LEARNING_DATA_SCOPES.map((scope) => {
             const name = t(`scopeLabel.${scope}.name` as MessageKey);
             const desc = t(`scopeLabel.${scope}.desc` as MessageKey);
-            const source = t(`design.scopeDetail.${scope}.source` as MessageKey);
+            const source = t(
+              `design.scopeDetail.${scope}.source` as MessageKey,
+            );
             const use = t(`design.scopeDetail.${scope}.use` as MessageKey);
-            const caution = t(`design.scopeDetail.${scope}.caution` as MessageKey);
+            const caution = t(
+              `design.scopeDetail.${scope}.caution` as MessageKey,
+            );
             return (
               <div key={scope} className="rounded-lg border bg-card p-3">
                 <div className="flex flex-wrap items-center gap-2">
@@ -281,15 +285,21 @@ export function AppDesignView() {
                 </p>
                 <dl className="m-0 grid gap-1 text-ui-caption leading-relaxed">
                   <div>
-                    <dt className="inline text-ui-muted">{t("design.scopeSource")}: </dt>
+                    <dt className="inline text-ui-muted">
+                      {t("design.scopeSource")}:{" "}
+                    </dt>
                     <dd className="inline text-foreground">{source}</dd>
                   </div>
                   <div>
-                    <dt className="inline text-ui-muted">{t("design.scopeUse")}: </dt>
+                    <dt className="inline text-ui-muted">
+                      {t("design.scopeUse")}:{" "}
+                    </dt>
                     <dd className="inline text-foreground">{use}</dd>
                   </div>
                   <div>
-                    <dt className="inline text-ui-muted">{t("design.scopeCaution")}: </dt>
+                    <dt className="inline text-ui-muted">
+                      {t("design.scopeCaution")}:{" "}
+                    </dt>
                     <dd className="inline text-foreground">{caution}</dd>
                   </div>
                 </dl>

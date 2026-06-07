@@ -7,7 +7,8 @@ const DB_VERSION = 1;
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onerror = () => reject(req.error ?? new Error("Failed to open TTS cache"));
+    req.onerror = () =>
+      reject(req.error ?? new Error("Failed to open TTS cache"));
     req.onupgradeneeded = () => {
       const db = req.result;
       if (!db.objectStoreNames.contains(STORE_NAME)) {
@@ -21,7 +22,8 @@ function openDb(): Promise<IDBDatabase> {
 function idbRequest<T>(req: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
     req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error ?? new Error("IndexedDB operation failed"));
+    req.onerror = () =>
+      reject(req.error ?? new Error("IndexedDB operation failed"));
   });
 }
 
@@ -78,7 +80,8 @@ export async function setCachedSpeech(
     tx.objectStore(STORE_NAME).put({ key, audio, createdAt: Date.now() });
     await new Promise<void>((resolve, reject) => {
       tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error ?? new Error("Failed to write TTS cache"));
+      tx.onerror = () =>
+        reject(tx.error ?? new Error("Failed to write TTS cache"));
     });
     db.close();
   } catch (e) {
@@ -105,7 +108,8 @@ export async function clearTtsCache(): Promise<number> {
   await idbRequest(tx.objectStore(STORE_NAME).clear());
   await new Promise<void>((resolve, reject) => {
     tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error ?? new Error("Failed to clear TTS cache"));
+    tx.onerror = () =>
+      reject(tx.error ?? new Error("Failed to clear TTS cache"));
   });
   db.close();
   return count;

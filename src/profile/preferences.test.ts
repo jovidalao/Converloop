@@ -65,7 +65,11 @@ describe("profile preferences", () => {
   });
 
   it("updating a module writes back to the profile section", () => {
-    const next = updateProfilePreference(md, "reading", "- Explain idioms in context more.");
+    const next = updateProfilePreference(
+      md,
+      "reading",
+      "- Explain idioms in context more.",
+    );
 
     expect(next).toContain("## AI preferences");
     expect(next).toContain("### Reading help");

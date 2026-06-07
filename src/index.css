@@ -698,6 +698,26 @@
 .codex-shell[data-coach-open="true"] {
   --codex-coach-width-current: var(--codex-coach-width);
 }
+/* Small-window mode: a compact, chat-only panel (Gemini-style). The OS window
+   is shrunk in App.tsx; here the chrome collapses to just the topbar + a
+   full-bleed chat column. */
+.codex-shell[data-compact="true"] {
+  --codex-sidebar-width-current: 0px;
+  --codex-coach-width-current: 0px;
+}
+.codex-shell[data-compact="true"] .codex-sidebar,
+.codex-shell[data-compact="true"] .codex-coach {
+  display: none;
+}
+.codex-shell[data-compact="true"] .codex-main {
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+.codex-shell[data-compact="true"] [data-slot="button"] > span:not([class]) {
+  display: none;
+}
 .codex-shell[data-sidebar-resizing="true"],
 .codex-shell[data-coach-resizing="true"] {
   transition: none;
@@ -731,6 +751,13 @@
   top: 8px;
   right: 12px;
   z-index: 1;
+}
+/* Windows uses the native OS title bar (window controls live top-right, and
+   there are no macOS traffic lights top-left), so reclaim the left gap the
+   topbar reserved for them. Glass is also force-disabled on Windows
+   (see theme-provider) per the no-vibrancy decision. */
+:root[data-platform="windows"] .codex-topbar-left {
+  left: 12px;
 }
 .codex-titlebar {
   grid-column: 1 / -1;

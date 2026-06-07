@@ -1,9 +1,15 @@
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import {
+  getCurrentWindow,
+  LogicalSize,
+  type PhysicalSize,
+} from "@tauri-apps/api/window";
 import {
   ChevronDownIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   GraduationCapIcon,
+  Maximize2Icon,
+  Minimize2Icon,
   PanelLeftIcon,
   PanelRightIcon,
   SearchIcon,
@@ -17,6 +23,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   useCallback,
   useEffect,
+  useRef,
   useState,
 } from "react";
 import { AgentLibraryView } from "./components/AgentLibraryView";
@@ -82,6 +89,16 @@ const SIDEBAR_MAX = 420;
 const COACH_MIN = 300;
 const COACH_MAX = 560;
 
+// Small-window mode: the compact OS window size, plus the relaxed min size it
+// needs (the configured 720×520 min would otherwise clamp the shrink). Restored
+// to FULL_MIN_* on exit.
+const COMPACT_W = 420;
+const COMPACT_H = 600;
+const COMPACT_MIN_W = 360;
+const COMPACT_MIN_H = 480;
+const FULL_MIN_W = 720;
+const FULL_MIN_H = 520;
+
 type AppLocation = {
   view: MainView;
   activeId: string;
@@ -125,6 +142,10 @@ function App() {
   const [coachOpen, setCoachOpen] = useState(
     () => localStorage.getItem("coachOpen") !== "false",
   );
+  const [smallWindow, setSmallWindow] = useState(
+    () => localStorage.getItem("smallWindow") === "true",
+  );
+  const prevWindowSizeRef = useRef<PhysicalSize | null>(null);
   const [coachTurns, setCoachTurns] = useState<ChatTurn[]>([]);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
@@ -154,6 +175,36 @@ function App() {
   useEffect(() => {
     localStorage.setItem("coachOpen", String(coachOpen));
   }, [coachOpen]);
+
+  // Small-window mode shrinks the real OS window to a compact chat panel and
+  // restores the previous size on exit. The configured min size (720×520) must
+  // be relaxed before the shrink, or setSize would be clamped to it.
+  useEffect(() => {
+    localStorage.setItem("smallWindow", String(smallWindow));
+    if (!("__TAURI_INTERNALS__" in window)) return;
+    const win = getCurrentWindow();
+    let cancelled = false;
+    void (async () => {
+      if (smallWindow) {
+        if (!prevWindowSizeRef.current) {
+          prevWindowSizeRef.current = await win.innerSize();
+        }
+        await win.setMinSize(new LogicalSize(COMPACT_MIN_W, COMPACT_MIN_H));
+        if (!cancelled)
+          await win.setSize(new LogicalSize(COMPACT_W, COMPACT_H));
+      } else {
+        const prev = prevWindowSizeRef.current;
+        if (prev) {
+          await win.setSize(prev);
+          prevWindowSizeRef.current = null;
+        }
+        await win.setMinSize(new LogicalSize(FULL_MIN_W, FULL_MIN_H));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [smallWindow]);
 
   // Top-level lightweight toast (e.g. a derivation failure): auto-dismisses
   // after a few seconds, and can also be closed manually.
@@ -196,6 +247,10 @@ function App() {
 
   const toggleCoach = useCallback(() => {
     setCoachOpen((c) => !c);
+  }, []);
+
+  const toggleSmallWindow = useCallback(() => {
+    setSmallWindow((c) => !c);
   }, []);
 
   const applyLocation = useCallback(
@@ -489,11 +544,15 @@ function App() {
 
   const activeConversation = conversations.find((c) => c.id === activeId);
   const draftActive = view === "chat" && activeId === draftId;
+  // Small-window mode always shows the chat, regardless of the underlying view,
+  // so the draft check can't rely on view === "chat".
+  const chatIsDraft = smallWindow ? activeId === draftId : draftActive;
   // The coach panel only appears in regular practice conversations (lessons
-  // give feedback inline, without structured correction).
+  // give feedback inline, without structured correction). It's hidden entirely
+  // in small-window mode.
   const coachEligible =
     view === "chat" && (activeConversation?.kind ?? "practice") === "practice";
-  const coachVisible = coachEligible && coachOpen;
+  const coachVisible = coachEligible && coachOpen && !smallWindow;
   const derivationActions = getActions("session").filter((a) =>
     isAgentEnabled(a.id),
   );
@@ -551,6 +610,7 @@ function App() {
       className="codex-shell"
       data-sidebar-collapsed={collapsed}
       data-coach-open={coachVisible}
+      data-compact={smallWindow}
       data-sidebar-resizing={resizingSidebar}
       data-coach-resizing={resizingCoach}
       style={
@@ -566,84 +626,9 @@ function App() {
         data-tauri-drag-region
         onMouseDown={startTopbarDrag}
       >
-        <div className="codex-topbar-left">
-          <TooltipProvider delayDuration={300}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="codex-chrome-button"
-                  onClick={toggleSidebar}
-                  aria-label={
-                    collapsed
-                      ? t("app.expandSidebar")
-                      : t("app.collapseSidebar")
-                  }
-                >
-                  {collapsed ? <PanelRightIcon /> : <PanelLeftIcon />}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent
-                side="bottom"
-                align="start"
-                className="flex items-center gap-2"
-              >
-                <span>
-                  {collapsed
-                    ? t("app.expandSidebar")
-                    : t("app.collapseSidebar")}
-                </span>
-                <kbd className="rounded border border-border/60 bg-muted px-1.5 py-0.5 font-sans text-ui-caption text-ui-muted">
-                  {actionShortcutLabel("toggle-sidebar")}
-                </kbd>
-              </TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="codex-chrome-button"
-                  onClick={goBack}
-                  disabled={backStack.length === 0}
-                  aria-label={t("app.back")}
-                >
-                  <ChevronLeftIcon />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" align="start">
-                <span>{t("app.back")}</span>
-              </TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="codex-chrome-button"
-                  onClick={goForward}
-                  disabled={forwardStack.length === 0}
-                  aria-label={t("app.forward")}
-                >
-                  <ChevronRightIcon />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" align="start">
-                <span>{t("app.forward")}</span>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        </div>
-        <div className="codex-titlebar">
-          <span className="truncate">{topbarTitle}</span>
-        </div>
-        <div className="codex-topbar-right">
-          <TooltipProvider delayDuration={300}>
-            {collapsed && (
+        {!smallWindow && (
+          <div className="codex-topbar-left">
+            <TooltipProvider delayDuration={300}>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -651,23 +636,205 @@ function App() {
                     variant="ghost"
                     size="icon"
                     className="codex-chrome-button"
-                    onClick={openDraftConversation}
-                    aria-label={t("app.newChat")}
+                    onClick={toggleSidebar}
+                    aria-label={
+                      collapsed
+                        ? t("app.expandSidebar")
+                        : t("app.collapseSidebar")
+                    }
                   >
-                    <SquarePenIcon />
+                    {collapsed ? <PanelRightIcon /> : <PanelLeftIcon />}
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent
                   side="bottom"
-                  align="end"
+                  align="start"
                   className="flex items-center gap-2"
                 >
-                  <span>{t("app.newChat")}</span>
+                  <span>
+                    {collapsed
+                      ? t("app.expandSidebar")
+                      : t("app.collapseSidebar")}
+                  </span>
                   <kbd className="rounded border border-border/60 bg-muted px-1.5 py-0.5 font-sans text-ui-caption text-ui-muted">
-                    {actionShortcutLabel("new-chat")}
+                    {actionShortcutLabel("toggle-sidebar")}
                   </kbd>
                 </TooltipContent>
               </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="codex-chrome-button"
+                    onClick={goBack}
+                    disabled={backStack.length === 0}
+                    aria-label={t("app.back")}
+                  >
+                    <ChevronLeftIcon />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" align="start">
+                  <span>{t("app.back")}</span>
+                </TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="codex-chrome-button"
+                    onClick={goForward}
+                    disabled={forwardStack.length === 0}
+                    aria-label={t("app.forward")}
+                  >
+                    <ChevronRightIcon />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" align="start">
+                  <span>{t("app.forward")}</span>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+        )}
+        {!smallWindow && (
+          <div className="codex-titlebar">
+            <span className="truncate">{topbarTitle}</span>
+          </div>
+        )}
+        <div className="codex-topbar-right">
+          <TooltipProvider delayDuration={300}>
+            {!smallWindow && (
+              <>
+                {collapsed && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="codex-chrome-button"
+                        onClick={openDraftConversation}
+                        aria-label={t("app.newChat")}
+                      >
+                        <SquarePenIcon />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent
+                      side="bottom"
+                      align="end"
+                      className="flex items-center gap-2"
+                    >
+                      <span>{t("app.newChat")}</span>
+                      <kbd className="rounded border border-border/60 bg-muted px-1.5 py-0.5 font-sans text-ui-caption text-ui-muted">
+                        {actionShortcutLabel("new-chat")}
+                      </kbd>
+                    </TooltipContent>
+                  </Tooltip>
+                )}
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="codex-chrome-button"
+                      onClick={() => setPaletteOpen(true)}
+                      aria-label={t("app.search")}
+                    >
+                      <SearchIcon />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent
+                    side="bottom"
+                    align="end"
+                    className="flex items-center gap-2"
+                  >
+                    <span>{t("app.search")}</span>
+                    <kbd className="rounded border border-border/60 bg-muted px-1.5 py-0.5 font-sans text-ui-caption text-ui-muted">
+                      {actionShortcutLabel("command-palette")}
+                    </kbd>
+                  </TooltipContent>
+                </Tooltip>
+                {canDerive && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 gap-1.5 px-2.5 text-ui-caption"
+                        disabled={derivationBusy}
+                        title={t("app.deriveTooltip")}
+                        data-no-window-drag
+                      >
+                        {derivationBusy ? (
+                          <Spinner className="size-3.5" />
+                        ) : (
+                          <SparklesIcon size={15} />
+                        )}
+                        {derivationBusy
+                          ? t("app.deriving")
+                          : t("app.deriveNewConversation")}
+                        <ChevronDownIcon size={13} />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent
+                      align="end"
+                      className="max-h-[min(420px,var(--radix-dropdown-menu-content-available-height))] min-w-60 overflow-y-auto"
+                    >
+                      {derivationActions.map((action) => (
+                        <DropdownMenuItem
+                          key={action.id}
+                          onSelect={() =>
+                            void deriveConversation(activeId, action.id)
+                          }
+                        >
+                          <SparklesIcon size={14} />
+                          <span className="flex min-w-0 flex-col">
+                            <span className="truncate font-medium">
+                              {action.label}
+                            </span>
+                            {action.description && (
+                              <span className="max-w-64 truncate text-ui-caption text-ui-muted">
+                                {action.description}
+                              </span>
+                            )}
+                          </span>
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+                {coachEligible && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="codex-chrome-button"
+                        onClick={toggleCoach}
+                        data-active={coachVisible}
+                        aria-pressed={coachVisible}
+                        aria-label={
+                          coachVisible ? t("app.hideCoach") : t("app.showCoach")
+                        }
+                      >
+                        <GraduationCapIcon />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" align="end">
+                      <span>
+                        {coachVisible ? t("app.hideCoach") : t("app.showCoach")}
+                      </span>
+                    </TooltipContent>
+                  </Tooltip>
+                )}
+              </>
             )}
             <Tooltip>
               <TooltipTrigger asChild>
@@ -676,98 +843,26 @@ function App() {
                   variant="ghost"
                   size="icon"
                   className="codex-chrome-button"
-                  onClick={() => setPaletteOpen(true)}
-                  aria-label={t("app.search")}
+                  onClick={toggleSmallWindow}
+                  data-active={smallWindow}
+                  aria-pressed={smallWindow}
+                  aria-label={
+                    smallWindow
+                      ? t("app.exitSmallWindow")
+                      : t("app.smallWindow")
+                  }
                 >
-                  <SearchIcon />
+                  {smallWindow ? <Maximize2Icon /> : <Minimize2Icon />}
                 </Button>
               </TooltipTrigger>
-              <TooltipContent
-                side="bottom"
-                align="end"
-                className="flex items-center gap-2"
-              >
-                <span>{t("app.search")}</span>
-                <kbd className="rounded border border-border/60 bg-muted px-1.5 py-0.5 font-sans text-ui-caption text-ui-muted">
-                  {actionShortcutLabel("command-palette")}
-                </kbd>
+              <TooltipContent side="bottom" align="end">
+                <span>
+                  {smallWindow
+                    ? t("app.exitSmallWindow")
+                    : t("app.smallWindow")}
+                </span>
               </TooltipContent>
             </Tooltip>
-            {canDerive && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 gap-1.5 px-2.5 text-ui-caption"
-                    disabled={derivationBusy}
-                    title={t("app.deriveTooltip")}
-                    data-no-window-drag
-                  >
-                    {derivationBusy ? (
-                      <Spinner className="size-3.5" />
-                    ) : (
-                      <SparklesIcon size={15} />
-                    )}
-                    {derivationBusy
-                      ? t("app.deriving")
-                      : t("app.deriveNewConversation")}
-                    <ChevronDownIcon size={13} />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  align="end"
-                  className="max-h-[min(420px,var(--radix-dropdown-menu-content-available-height))] min-w-60 overflow-y-auto"
-                >
-                  {derivationActions.map((action) => (
-                    <DropdownMenuItem
-                      key={action.id}
-                      onSelect={() =>
-                        void deriveConversation(activeId, action.id)
-                      }
-                    >
-                      <SparklesIcon size={14} />
-                      <span className="flex min-w-0 flex-col">
-                        <span className="truncate font-medium">
-                          {action.label}
-                        </span>
-                        {action.description && (
-                          <span className="max-w-64 truncate text-ui-caption text-ui-muted">
-                            {action.description}
-                          </span>
-                        )}
-                      </span>
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-            {coachEligible && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="codex-chrome-button"
-                    onClick={toggleCoach}
-                    data-active={coachVisible}
-                    aria-pressed={coachVisible}
-                    aria-label={
-                      coachVisible ? t("app.hideCoach") : t("app.showCoach")
-                    }
-                  >
-                    <GraduationCapIcon />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" align="end">
-                  <span>
-                    {coachVisible ? t("app.hideCoach") : t("app.showCoach")}
-                  </span>
-                </TooltipContent>
-              </Tooltip>
-            )}
           </TooltipProvider>
         </div>
       </header>
@@ -803,21 +898,22 @@ function App() {
       <main className="codex-main relative flex min-h-0 flex-col overflow-hidden">
         <div
           className="flex min-h-0 flex-1 flex-col data-[hidden=true]:hidden"
-          data-hidden={view !== "chat"}
+          data-hidden={!smallWindow && view !== "chat"}
         >
           <ChatView
             key={activeId}
             conversationId={activeId}
-            isDraft={draftActive}
+            isDraft={chatIsDraft}
             mode={activeConversation?.kind ?? "practice"}
             onCreateDraftConversation={materializeDraftConversation}
             onActivity={() => void refresh()}
             onTurnsChange={setCoachTurns}
             onNavigateConversation={selectConversation}
             coachVisible={coachVisible}
+            compact={smallWindow}
           />
         </div>
-        {secondaryView && (
+        {!smallWindow && secondaryView && (
           <div key={view} className="codex-secondary-view">
             {secondaryView}
           </div>

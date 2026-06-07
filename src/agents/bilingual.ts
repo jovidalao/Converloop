@@ -72,6 +72,7 @@ export async function bilingual(
   });
 
   const md = stripFences(raw);
-  if (!md.trim()) throw new Error("Bilingual layout generation failed, please retry");
+  if (!md.trim())
+    throw new Error("Bilingual layout generation failed, please retry");
   return md;
 }
