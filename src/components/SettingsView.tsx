@@ -1,7 +1,15 @@
 import anthropicLogo from "@lobehub/icons-static-svg/icons/anthropic.svg?raw";
+import chatglmLogo from "@lobehub/icons-static-svg/icons/chatglm-color.svg?raw";
 import claudeLogo from "@lobehub/icons-static-svg/icons/claude-color.svg?raw";
+import deepSeekLogo from "@lobehub/icons-static-svg/icons/deepseek-color.svg?raw";
 import geminiLogo from "@lobehub/icons-static-svg/icons/gemini-color.svg?raw";
+import grokLogo from "@lobehub/icons-static-svg/icons/grok.svg?raw";
+import kimiLogo from "@lobehub/icons-static-svg/icons/kimi-color.svg?raw";
+import minimaxLogo from "@lobehub/icons-static-svg/icons/minimax-color.svg?raw";
+import mistralLogo from "@lobehub/icons-static-svg/icons/mistral-color.svg?raw";
 import openAiLogo from "@lobehub/icons-static-svg/icons/openai.svg?raw";
+import openRouterLogo from "@lobehub/icons-static-svg/icons/openrouter.svg?raw";
+import qwenLogo from "@lobehub/icons-static-svg/icons/qwen-color.svg?raw";
 import type { LucideIcon } from "lucide-react";
 import {
   ChevronDownIcon,
@@ -206,6 +214,14 @@ const PROVIDER_BRAND: Record<ProviderType, { svg: string; className: string }> =
     openai: { svg: openAiLogo, className: "text-foreground" },
     gemini: { svg: geminiLogo, className: "text-brand" },
     anthropic: { svg: anthropicLogo, className: "text-info" },
+    deepseek: { svg: deepSeekLogo, className: "text-brand" },
+    openrouter: { svg: openRouterLogo, className: "text-foreground" },
+    xai: { svg: grokLogo, className: "text-foreground" },
+    mistral: { svg: mistralLogo, className: "text-info" },
+    qwen: { svg: qwenLogo, className: "text-brand" },
+    moonshot: { svg: kimiLogo, className: "text-foreground" },
+    glm: { svg: chatglmLogo, className: "text-info" },
+    minimax: { svg: minimaxLogo, className: "text-destructive" },
     "claude-oauth": { svg: claudeLogo, className: "text-info" },
     "codex-oauth": { svg: openAiLogo, className: "text-foreground" },
   };
@@ -740,6 +756,14 @@ export function SettingsView({ section }: { section: SettingsSection }) {
     openai: "sk-…",
     gemini: "AIza…",
     anthropic: "sk-ant-…",
+    deepseek: "sk-…",
+    openrouter: "sk-or-…",
+    xai: "xai-…",
+    mistral: "…",
+    qwen: "sk-…",
+    moonshot: "sk-…",
+    glm: "…",
+    minimax: "eyJ…",
     "claude-oauth": "",
     "codex-oauth": "",
   };

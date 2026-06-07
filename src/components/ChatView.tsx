@@ -1,11 +1,14 @@
 import anthropicLogo from "@lobehub/icons-static-svg/icons/anthropic.svg?raw";
+import chatglmLogo from "@lobehub/icons-static-svg/icons/chatglm-color.svg?raw";
 import claudeLogo from "@lobehub/icons-static-svg/icons/claude-color.svg?raw";
 import cohereLogo from "@lobehub/icons-static-svg/icons/cohere-color.svg?raw";
 import deepSeekLogo from "@lobehub/icons-static-svg/icons/deepseek-color.svg?raw";
 import geminiLogo from "@lobehub/icons-static-svg/icons/gemini-color.svg?raw";
 import grokLogo from "@lobehub/icons-static-svg/icons/grok.svg?raw";
 import groqLogo from "@lobehub/icons-static-svg/icons/groq.svg?raw";
+import kimiLogo from "@lobehub/icons-static-svg/icons/kimi-color.svg?raw";
 import metaLogo from "@lobehub/icons-static-svg/icons/meta-color.svg?raw";
+import minimaxLogo from "@lobehub/icons-static-svg/icons/minimax-color.svg?raw";
 import mistralLogo from "@lobehub/icons-static-svg/icons/mistral-color.svg?raw";
 import openAiLogo from "@lobehub/icons-static-svg/icons/openai.svg?raw";
 import perplexityLogo from "@lobehub/icons-static-svg/icons/perplexity-color.svg?raw";
@@ -223,6 +226,31 @@ function modelBrand(model: string): ModelBrand {
       name: "Cohere",
       svg: cohereLogo,
       className: "text-success",
+    };
+  }
+  if (lower.includes("kimi") || lower.includes("moonshot")) {
+    return {
+      name: "Kimi",
+      svg: kimiLogo,
+      className: "text-foreground",
+    };
+  }
+  if (
+    lower.includes("glm") ||
+    lower.includes("zhipu") ||
+    lower.includes("chatglm")
+  ) {
+    return {
+      name: "Zhipu GLM",
+      svg: chatglmLogo,
+      className: "text-info",
+    };
+  }
+  if (lower.includes("minimax") || lower.includes("abab")) {
+    return {
+      name: "MiniMax",
+      svg: minimaxLogo,
+      className: "text-destructive",
     };
   }
   return {

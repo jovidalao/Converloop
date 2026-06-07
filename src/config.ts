@@ -11,11 +11,20 @@ import { createOpenAICodexProvider } from "./providers/openai-responses";
 import { defaultPlugins, withPlugins } from "./providers/plugins";
 import type { ModelProvider } from "./providers/types";
 
+// deepseek…minimax: extra OpenAI-compatible API-key providers (reuse the OpenAI adapter, only the baseUrl/model differ).
 // claude-oauth / codex-oauth: sign in via subscription (Claude Pro/Max, ChatGPT) browser login instead of an API key.
 export const PROVIDER_TYPES = [
   "openai",
   "gemini",
   "anthropic",
+  "deepseek",
+  "openrouter",
+  "xai",
+  "mistral",
+  "qwen",
+  "moonshot",
+  "glm",
+  "minimax",
   "claude-oauth",
   "codex-oauth",
 ] as const;
@@ -39,6 +48,14 @@ const AppConfigSchema = z.object({
     openai: ProviderSettingsSchema,
     gemini: ProviderSettingsSchema,
     anthropic: ProviderSettingsSchema,
+    deepseek: ProviderSettingsSchema,
+    openrouter: ProviderSettingsSchema,
+    xai: ProviderSettingsSchema,
+    mistral: ProviderSettingsSchema,
+    qwen: ProviderSettingsSchema,
+    moonshot: ProviderSettingsSchema,
+    glm: ProviderSettingsSchema,
+    minimax: ProviderSettingsSchema,
     "claude-oauth": ProviderSettingsSchema,
     "codex-oauth": ProviderSettingsSchema,
   }),
@@ -77,6 +94,23 @@ const CONTEXT_WINDOW_TABLE: { prefix: string; tokens: number }[] = [
   { prefix: "gpt-3.5", tokens: 16_385 },
   { prefix: "o1", tokens: 200_000 },
   { prefix: "o3", tokens: 200_000 },
+  // Extra OpenAI-compatible providers (windows per models.dev, 2026-06). OpenRouter keeps its vendor/ prefix and falls through to the default.
+  { prefix: "deepseek", tokens: 1_000_000 },
+  { prefix: "grok-build", tokens: 256_000 },
+  { prefix: "grok-4.3", tokens: 1_000_000 },
+  { prefix: "grok-4.20", tokens: 2_000_000 },
+  { prefix: "grok-4-fast", tokens: 2_000_000 },
+  { prefix: "grok", tokens: 256_000 },
+  { prefix: "codestral", tokens: 256_000 },
+  { prefix: "mistral", tokens: 262_144 },
+  { prefix: "devstral", tokens: 262_144 },
+  { prefix: "qwen", tokens: 1_000_000 },
+  { prefix: "kimi", tokens: 262_144 },
+  { prefix: "moonshot", tokens: 131_072 },
+  { prefix: "glm-4.6", tokens: 200_000 },
+  { prefix: "glm", tokens: 204_800 },
+  { prefix: "minimax-m3", tokens: 512_000 },
+  { prefix: "minimax", tokens: 204_800 },
 ];
 
 // Infer the context limit (tokens) from the model name; falls back to the default if no prefix matches.
@@ -160,6 +194,109 @@ export const PROVIDER_PRESETS: Record<ProviderType, ProviderPreset> = {
       { label: "Claude Haiku 3.5", model: "claude-3-5-haiku-20241022" },
     ],
   },
+  // The following all speak the OpenAI chat/completions wire format, so buildProviderFor routes them through createOpenAIProvider; only baseUrl + model differ.
+  // Model lists track models.dev (2026-06); -latest/stable aliases preferred so they auto-upgrade. Any id can be overridden in settings.
+  deepseek: {
+    label: "DeepSeek",
+    shortLabel: "DeepSeek",
+    baseUrl: "https://api.deepseek.com/v1",
+    model: "deepseek-chat",
+    models: [
+      { label: "DeepSeek V3.2 (chat)", model: "deepseek-chat" },
+      { label: "DeepSeek V3.2 (reasoner)", model: "deepseek-reasoner" },
+      { label: "DeepSeek V4 Flash", model: "deepseek-v4-flash" },
+      { label: "DeepSeek V4 Pro", model: "deepseek-v4-pro" },
+    ],
+  },
+  openrouter: {
+    label: "OpenRouter (200+ models)",
+    shortLabel: "OpenRouter",
+    baseUrl: "https://openrouter.ai/api/v1",
+    model: "anthropic/claude-sonnet-4.6",
+    // OpenRouter model ids are vendor/model; type any slug from openrouter.ai/models.
+    models: [
+      { label: "Claude Sonnet 4.6", model: "anthropic/claude-sonnet-4.6" },
+      { label: "Claude Opus 4.8", model: "anthropic/claude-opus-4.8" },
+      { label: "GPT-5.5", model: "openai/gpt-5.5" },
+      { label: "Gemini 3.5 Flash", model: "google/gemini-3.5-flash" },
+      { label: "DeepSeek V3.2", model: "deepseek/deepseek-v3.2" },
+    ],
+  },
+  xai: {
+    label: "xAI (Grok)",
+    shortLabel: "xAI Grok",
+    baseUrl: "https://api.x.ai/v1",
+    model: "grok-4.3",
+    models: [
+      { label: "Grok 4.3", model: "grok-4.3" },
+      { label: "Grok Build 0.1 (coding)", model: "grok-build-0.1" },
+      { label: "Grok 4 Fast", model: "grok-4-fast" },
+    ],
+  },
+  mistral: {
+    label: "Mistral AI",
+    shortLabel: "Mistral",
+    baseUrl: "https://api.mistral.ai/v1",
+    model: "mistral-medium-latest",
+    models: [
+      { label: "Mistral Medium", model: "mistral-medium-latest" },
+      { label: "Mistral Large", model: "mistral-large-latest" },
+      { label: "Mistral Small", model: "mistral-small-latest" },
+      { label: "Codestral", model: "codestral-latest" },
+      { label: "Devstral Medium", model: "devstral-medium-latest" },
+    ],
+  },
+  qwen: {
+    label: "Qwen (Alibaba DashScope)",
+    shortLabel: "Qwen",
+    // DashScope OpenAI-compatible mode; switch to dashscope-intl.aliyuncs.com for the international account.
+    baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    model: "qwen-plus",
+    models: [
+      { label: "Qwen Plus", model: "qwen-plus" },
+      { label: "Qwen Max", model: "qwen-max" },
+      { label: "Qwen Turbo", model: "qwen-turbo" },
+      { label: "Qwen3 Coder Plus", model: "qwen3-coder-plus" },
+    ],
+  },
+  moonshot: {
+    label: "Moonshot (Kimi)",
+    shortLabel: "Kimi",
+    // China endpoint; switch to api.moonshot.ai/v1 for the international account.
+    baseUrl: "https://api.moonshot.cn/v1",
+    model: "kimi-latest",
+    models: [
+      { label: "Kimi (latest)", model: "kimi-latest" },
+      { label: "Kimi K2.5", model: "kimi-k2.5" },
+      { label: "Kimi K2 Turbo", model: "kimi-k2-turbo-preview" },
+      { label: "Moonshot v1 128K", model: "moonshot-v1-128k" },
+    ],
+  },
+  glm: {
+    label: "Zhipu GLM",
+    shortLabel: "GLM",
+    // bigmodel.cn endpoint; switch to api.z.ai/api/paas/v4 for the international (z.ai) account.
+    baseUrl: "https://open.bigmodel.cn/api/paas/v4",
+    model: "glm-5.1",
+    models: [
+      { label: "GLM-5.1", model: "glm-5.1" },
+      { label: "GLM-5", model: "glm-5" },
+      { label: "GLM-4.7", model: "glm-4.7" },
+      { label: "GLM-4.6", model: "glm-4.6" },
+    ],
+  },
+  minimax: {
+    label: "MiniMax",
+    shortLabel: "MiniMax",
+    // International OpenAI-compatible endpoint; switch to api.minimaxi.com/v1 for the China account.
+    baseUrl: "https://api.minimax.io/v1",
+    model: "MiniMax-M3",
+    models: [
+      { label: "MiniMax-M3", model: "MiniMax-M3" },
+      { label: "MiniMax-M2.7", model: "MiniMax-M2.7" },
+      { label: "MiniMax-M2", model: "MiniMax-M2" },
+    ],
+  },
   // Subscription login: token connects directly to the official Anthropic API (no proxy); model can be changed in settings to any model available under the subscription.
   "claude-oauth": {
     label: "Claude (Pro/Max Login)",
@@ -217,6 +354,14 @@ function defaultProviders(): Record<ProviderType, ProviderSettings> {
     openai: presetSettings("openai"),
     gemini: presetSettings("gemini"),
     anthropic: presetSettings("anthropic"),
+    deepseek: presetSettings("deepseek"),
+    openrouter: presetSettings("openrouter"),
+    xai: presetSettings("xai"),
+    mistral: presetSettings("mistral"),
+    qwen: presetSettings("qwen"),
+    moonshot: presetSettings("moonshot"),
+    glm: presetSettings("glm"),
+    minimax: presetSettings("minimax"),
     "claude-oauth": presetSettings("claude-oauth"),
     "codex-oauth": presetSettings("codex-oauth"),
   };
