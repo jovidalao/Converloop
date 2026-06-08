@@ -75,7 +75,10 @@ import {
   generateAndSetConversationTitle,
   generateInputHintsForConversation,
   loadCachedInputHints,
+  loadCachedQuickfireTopics,
   MissingApiKeyError,
+  type QuickfireTopicsDebug,
+  recommendQuickfireTopics,
   regenerateReply,
   runTurn,
   startDerivedConversation,
@@ -96,6 +99,7 @@ import { AnnotationIsland } from "./AnnotationIsland";
 import { useConfirm } from "./confirm";
 import { InlineCorrection, UserSentence } from "./InlineCorrection";
 import { Markdown } from "./Markdown";
+import { QuickfireStartScreen } from "./QuickfireStartScreen";
 import { ReplyExplanation } from "./ReplyExplanation";
 import { remarkBilingual } from "./remark-bilingual";
 import { SlashMenu } from "./SlashMenu";
@@ -108,11 +112,15 @@ import { Spinner } from "./ui/spinner";
 interface ChatViewProps {
   conversationId: string;
   isDraft?: boolean;
+  /** This draft is a Rapid Q&A start page (only meaningful when isDraft): show the start screen and treat the first commit as the umbrella scenario. */
+  isQuickfireDraft?: boolean;
   mode?: "practice" | "learning_agent";
   /** Fires after a new turn is persisted (title may have changed, sidebar needs refresh). */
   onActivity?: () => void;
   /** Called after the first turn of a draft conversation is persisted; creates the real conversation row. */
   onCreateDraftConversation?: (id: string) => Promise<void>;
+  /** Materialize a Rapid Q&A draft into a real conversation with the chosen umbrella scenario (called before the AI kickoff). */
+  onCreateQuickfireDraft?: (id: string, scenario: string) => Promise<void>;
   /** Reports all turns to the coach panel; re-reported when analysis arrives (read-only, doesn't affect this component's logic). */
   onTurnsChange?: (turns: ChatTurn[]) => void;
   /** Called when a conversation action creates a branch; App switches to the new conversation. */
@@ -1221,9 +1229,11 @@ function TurnCard({
 export function ChatView({
   conversationId,
   isDraft = false,
+  isQuickfireDraft = false,
   mode = "practice",
   onActivity,
   onCreateDraftConversation,
+  onCreateQuickfireDraft,
   onTurnsChange,
   onNavigateConversation,
   compact = false,
@@ -1249,6 +1259,16 @@ export function ChatView({
   const [quickfireScenario, setQuickfireScenario] = useState<string | null>(
     null,
   );
+  // Rapid Q&A start page: recommended umbrella scenarios (null = still loading, [] = none → type-your-own).
+  const [quickfireTopics, setQuickfireTopics] = useState<string[] | null>(null);
+  // True while a fresh recommendation fetch is in flight — drives the trailing loading box even when cached chips show.
+  const [quickfireTopicsRefreshing, setQuickfireTopicsRefreshing] =
+    useState(false);
+  // Diagnostics from the last recommendation fetch (raw response / error / counts) for the start-page debug panel.
+  const [quickfireDebug, setQuickfireDebug] =
+    useState<QuickfireTopicsDebug | null>(null);
+  // Bumped by the debug panel's "regenerate" button to re-run the recommendation fetch.
+  const [quickfireReloadTick, setQuickfireReloadTick] = useState(0);
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Retry entry for the last failed operation (send / regenerate / lesson start all share the bottom error bar).
@@ -1270,6 +1290,9 @@ export function ChatView({
   const { nativeLanguage, autoBilingual } = config;
   const confirm = useConfirm();
   const learningMode = mode === "learning_agent";
+  // Rapid Q&A start page: an uncommitted quickfire draft (no conversation row yet). Drives the start screen,
+  // the scenario-input composer, and routing the first send through startQuickfireDraft instead of a graded turn.
+  const quickfireDraftActive = isDraft && isQuickfireDraft;
   // Coaching hints are rendered as an animated overlay (not the native placeholder, which can't
   // transition between hints). Active only in practice mode, when hints exist and the input is empty.
   const hintsActive =
@@ -1317,7 +1340,8 @@ export function ChatView({
         : [],
     [slashToken, slashDismissed, canDerive, learningMode],
   );
-  const slashOpen = !compact && slashCommands.length > 0;
+  const slashOpen =
+    !compact && !quickfireDraftActive && slashCommands.length > 0;
 
   // When leaving the command context (no token), clear the "Esc-closed" flag so the next / re-opens the menu.
   useEffect(() => {
@@ -1448,6 +1472,37 @@ export function ChatView({
       cancelled = true;
     };
   }, [conversationId, learningMode]);
+
+  // Rapid Q&A start page: when the draft opens, show the last cached recommendations immediately (no empty flash),
+  // then refresh them from the learner's records in the background. Clears when committed (quickfireDraftActive flips
+  // false). A different draft has a new id, so ChatView remounts (key={activeId}) and this re-runs fresh — no need to
+  // depend on conversationId. quickfireReloadTick is a re-run trigger (its value is unused in the body).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: quickfireReloadTick is an intentional re-run trigger
+  useEffect(() => {
+    if (!quickfireDraftActive) {
+      setQuickfireTopics(null);
+      setQuickfireTopicsRefreshing(false);
+      return;
+    }
+    let cancelled = false;
+    setQuickfireTopicsRefreshing(true);
+    void (async () => {
+      // Keep whatever is already shown (cached, or a previous set on manual refresh) until fresh ones arrive.
+      const cached = await loadCachedQuickfireTopics();
+      if (cancelled) return;
+      if (cached.length > 0) setQuickfireTopics((cur) => cur ?? cached);
+      const result = await recommendQuickfireTopics();
+      if (cancelled) return;
+      setQuickfireDebug(result.debug);
+      if (result.topics.length > 0) setQuickfireTopics(result.topics);
+      // Nothing available (no provider / error and no cache): stop the loading box.
+      else setQuickfireTopics((cur) => cur ?? []);
+      setQuickfireTopicsRefreshing(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [quickfireDraftActive, quickfireReloadTick]);
 
   // All turns are reported to the coach panel. Turns are patched (new object) when analysis arrives, so re-reporting is automatic.
   useEffect(() => {
@@ -1715,6 +1770,24 @@ export function ChatView({
         speaker?.abort();
       }
     }
+  }
+
+  // Commit an umbrella scenario from the Rapid Q&A start page (chip / Random / typed-send): first materialize the real
+  // quickfire conversation so the AI kickoff can read the scenario from its modifiers, then fire the first situation.
+  async function startQuickfireDraft(scenario: string) {
+    const s = scenario.trim();
+    if (!s || replyBusy || quickfireStartedRef.current) return;
+    setInput("");
+    await onCreateQuickfireDraft?.(conversationId, s);
+    setQuickfireScenario(s); // drive the mode badge immediately
+    await startQuickfire();
+  }
+
+  // "Random" button: start one of the recommended topics at random. No-op until recommendations have loaded.
+  function pickRandomQuickfireTopic() {
+    const topics = quickfireTopics;
+    if (!topics || topics.length === 0) return;
+    void startQuickfireDraft(topics[Math.floor(Math.random() * topics.length)]);
   }
 
   // opts.text: reuse original text on retry (don't pull from input box);
@@ -1986,6 +2059,11 @@ export function ChatView({
   // "action" type executes an existing conversation action; "meta" (/help) expands the full list;
   // non-commands send normally. Arrives here via Enter / Send when the menu is already closed.
   function submitInput() {
+    // Rapid Q&A start page: the composer takes a custom umbrella scenario, not a graded turn or a slash command.
+    if (quickfireDraftActive) {
+      void startQuickfireDraft(input);
+      return;
+    }
     const parsed = parseSlashInput(input);
     if (!parsed) {
       void send();
@@ -2050,7 +2128,7 @@ export function ChatView({
   const optionBadges: { label: string; tone: "info" | "muted" }[] = [
     learningMode
       ? { label: t("chat.lessonBadge"), tone: "info" }
-      : quickfireScenario
+      : quickfireScenario || quickfireDraftActive
         ? { label: t("chat.quickfireBadge"), tone: "info" }
         : { label: t("chat.practiceBadge"), tone: "muted" },
   ];
@@ -2109,13 +2187,25 @@ export function ChatView({
             label={derivedBanner.label}
           />
         )}
-        {turns.length === 0 && !streaming && (
-          <div className="m-auto text-center text-ui-body leading-relaxed text-ui-muted">
-            {learningMode
-              ? t("chat.preparingLesson")
-              : t("chat.startConversation")}
-          </div>
-        )}
+        {turns.length === 0 &&
+          !streaming &&
+          (quickfireDraftActive ? (
+            <QuickfireStartScreen
+              topics={quickfireTopics}
+              refreshing={quickfireTopicsRefreshing}
+              debug={quickfireDebug}
+              busy={replyBusy}
+              onPick={(s) => void startQuickfireDraft(s)}
+              onRandom={pickRandomQuickfireTopic}
+              onRefresh={() => setQuickfireReloadTick((n) => n + 1)}
+            />
+          ) : (
+            <div className="m-auto text-center text-ui-body leading-relaxed text-ui-muted">
+              {learningMode
+                ? t("chat.preparingLesson")
+                : t("chat.startConversation")}
+            </div>
+          ))}
         {turns.map((turn) => (
           <TurnCard
             key={turn.id}
@@ -2271,9 +2361,11 @@ export function ChatView({
                   placeholder={
                     learningMode
                       ? t("chat.inputPlaceholderLesson")
-                      : !compact && inputHints && inputHints.length > 0
-                        ? "" // hint shown via the animated overlay below
-                        : t("chat.inputPlaceholderPractice")
+                      : quickfireDraftActive
+                        ? t("quickfire.scenarioPlaceholder")
+                        : !compact && inputHints && inputHints.length > 0
+                          ? "" // hint shown via the animated overlay below
+                          : t("chat.inputPlaceholderPractice")
                   }
                   disabled={replyBusy}
                   className="max-h-[6.5rem] min-h-14 w-full min-w-0 resize-none border-none bg-transparent px-4 pt-3 pb-2 text-ui-chat outline-none placeholder:text-muted-foreground"

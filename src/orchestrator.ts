@@ -9,6 +9,7 @@ import {
   toLessonWritebackCandidate,
 } from "./agents/lesson-writeback";
 import { classifyProfilePreferenceInstruction } from "./agents/profile-preferences";
+import { generateQuickfireTopics } from "./agents/quickfire-topics";
 import {
   type ReplySuggestionResult,
   type ReplySuggestionSource,
@@ -21,7 +22,12 @@ import {
 } from "./agents/selection-learning-item";
 import { planLearningProject } from "./agents/task-agent";
 import { translate } from "./agents/translate";
-import { type AppConfig, getProvider, loadConfig } from "./config";
+import {
+  type AppConfig,
+  activeProvider,
+  getProvider,
+  loadConfig,
+} from "./config";
 import { applyDataEditInstruction, type DataEditResult } from "./data-edit";
 import { runTrackedAgentJob } from "./db/agent-jobs";
 import { getAppState, setAppState } from "./db/app-state";
@@ -32,6 +38,7 @@ import {
   formatModifierInstructions,
   getConversation,
   getSummary,
+  listConversations,
   parseAgentModifiers,
   QUICKFIRE_OPENING_INSTRUCTION,
   renameConversation,
@@ -1108,5 +1115,138 @@ export async function generateInputHintsForConversation(
     return hints;
   } catch {
     return [];
+  }
+}
+
+// Cache of the most recent quickfire topic recommendations (a single global list, since they're derived from the
+// learner's records rather than any one conversation). Shown immediately on the next start page while fresh ones
+// regenerate in the background, so the chips don't flash empty.
+const QUICKFIRE_TOPICS_CACHE_KEY = "quickfireTopics";
+
+export async function loadCachedQuickfireTopics(): Promise<string[]> {
+  const raw = await getAppState(QUICKFIRE_TOPICS_CACHE_KEY);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed)
+      ? parsed.filter((s): s is string => typeof s === "string")
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+// Diagnostics surfaced on the start-page debug panel so a silently-empty result can be inspected.
+export interface QuickfireTopicsDebug {
+  at: number;
+  providerConfigured: boolean;
+  model: string;
+  weakCount: number;
+  recentCount: number;
+  profileChars: number;
+  parsedCount: number;
+  rawResponse?: string;
+  error?: string;
+  elapsedMs: number;
+}
+
+export interface QuickfireTopicsResult {
+  topics: string[];
+  debug: QuickfireTopicsDebug;
+}
+
+// Recommend umbrella scenarios for the rapid-fire Q&A start page, drawn from the learner's records: weak mastery
+// items, profile, and recent conversation topics (with everyday corner cases when records are thin). Caches the
+// result for instant reuse next time. Never throws — returns an empty list plus a debug payload (raw response /
+// error / counts) so the start page can degrade to the cached set (or type-your-own) and still be inspectable.
+export async function recommendQuickfireTopics(): Promise<QuickfireTopicsResult> {
+  const started = Date.now();
+  const config = loadConfig();
+  const model = activeProvider(config).model;
+  const provider = await getProvider();
+  if (!provider) {
+    return {
+      topics: [],
+      debug: {
+        at: started,
+        providerConfigured: false,
+        model,
+        weakCount: 0,
+        recentCount: 0,
+        profileChars: 0,
+        parsedCount: 0,
+        elapsedMs: Date.now() - started,
+      },
+    };
+  }
+
+  let rawResponse: string | undefined;
+  let weakCount = 0;
+  let recentCount = 0;
+  let profileChars = 0;
+  try {
+    const [weakList, profileMd, convs] = await Promise.all([
+      getWeakList(),
+      readProfile(config),
+      listConversations(),
+    ]);
+    const recentTopics = convs
+      .filter(
+        (c) => c.kind === "practice" && c.title !== DEFAULT_CONVERSATION_TITLE,
+      )
+      .slice(0, 8)
+      .map((c) => c.title);
+    const profileSlice = profileSliceForConversation(profileMd);
+    weakCount = weakList.length;
+    recentCount = recentTopics.length;
+    profileChars = profileSlice.length;
+
+    const topics = await generateQuickfireTopics(
+      provider,
+      {
+        targetLanguage: config.targetLanguage,
+        nativeLanguage: config.nativeLanguage,
+        level: config.level,
+        profileSlice,
+        weakItems: weakList.map((w) => w.label),
+        recentTopics,
+      },
+      (raw) => {
+        rawResponse = raw;
+      },
+    );
+    if (topics.length > 0) {
+      await setAppState(QUICKFIRE_TOPICS_CACHE_KEY, JSON.stringify(topics));
+    }
+    return {
+      topics,
+      debug: {
+        at: started,
+        providerConfigured: true,
+        model,
+        weakCount,
+        recentCount,
+        profileChars,
+        parsedCount: topics.length,
+        rawResponse: rawResponse?.slice(0, 4000),
+        elapsedMs: Date.now() - started,
+      },
+    };
+  } catch (e) {
+    return {
+      topics: [],
+      debug: {
+        at: started,
+        providerConfigured: true,
+        model,
+        weakCount,
+        recentCount,
+        profileChars,
+        parsedCount: 0,
+        rawResponse: rawResponse?.slice(0, 4000),
+        error: e instanceof Error ? `${e.name}: ${e.message}` : String(e),
+        elapsedMs: Date.now() - started,
+      },
+    };
   }
 }

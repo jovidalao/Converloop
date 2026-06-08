@@ -82,6 +82,8 @@ interface SidebarProps {
   learningAgents: LearningAgentMeta[];
   activeId: string;
   newChatActive: boolean;
+  /** The current draft is a Rapid Q&A start page (highlights the quickfire entry). */
+  quickfireActive: boolean;
   view: MainView;
   onSelect: (id: string) => void;
   onNewChat: () => void;
@@ -107,6 +109,7 @@ export function Sidebar({
   learningAgents,
   activeId,
   newChatActive,
+  quickfireActive,
   view,
   onSelect,
   onNewChat,
@@ -342,6 +345,7 @@ export function Sidebar({
               <button
                 type="button"
                 className="codex-sidebar-action"
+                data-active={quickfireActive}
                 onClick={onStartQuickfire}
                 title={t("sidebar.quickfireTooltip")}
               >

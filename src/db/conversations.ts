@@ -182,8 +182,8 @@ export async function createConversation(
 // startQuickfireSession), so the title is seeded from the umbrella scenario rather than a first user message.
 export async function createQuickfireConversation(
   scenario: string,
+  id: string = crypto.randomUUID(),
 ): Promise<string> {
-  const id = crypto.randomUUID();
   const now = Date.now();
   const modifiers: AgentModifiers = {
     quickfire: { scenario: scenario.trim() },

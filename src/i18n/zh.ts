@@ -226,11 +226,14 @@ export const zh: Messages = {
     deleteConversationDescription: "此操作不可撤销。",
   },
   quickfire: {
-    title: "快问快答",
-    description:
-      "设定一个大场景。AI 每轮自行给出一个具体情况让你即兴应对,下一题之前会先给一句示范说法。",
-    placeholder: "例如:工作面试 · 餐厅点餐 · 客服电话",
-    start: "开始",
+    startTitle: "快问快答",
+    startDescription:
+      "给我一个场景,我会连续抛出具体情境让你即兴应答,下一题之前会先给一句示范说法。",
+    recommendedTopics: "推荐话题",
+    random: "随机",
+    scenarioPlaceholder: "描述一个场景…… 或从上方选一个",
+    debugTitle: "调试信息",
+    refresh: "重新生成",
   },
   commandPalette: {
     ariaLabel: "快速跳转",

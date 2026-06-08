@@ -231,12 +231,14 @@ export const en = {
     deleteConversationDescription: "This action cannot be undone.",
   },
   quickfire: {
-    title: "Rapid Q&A",
-    description:
-      "Set one big scenario. The AI invents a specific situation each round and you respond on the spot — a quick model answer comes before the next one.",
-    placeholder:
-      "e.g. A job interview · Ordering at a restaurant · A customer support call",
-    start: "Start",
+    startTitle: "Rapid Q&A",
+    startDescription:
+      "Give me a scenario and I'll fire concrete situations at you to respond to on the spot — a quick model answer comes before the next one.",
+    recommendedTopics: "Recommended topics",
+    random: "Random",
+    scenarioPlaceholder: "Describe a scenario… or pick one above",
+    debugTitle: "Debug info",
+    refresh: "Regenerate",
   },
   commandPalette: {
     ariaLabel: "Quick jump",

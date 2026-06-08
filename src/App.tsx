@@ -38,7 +38,6 @@ import { LearningRecordsView } from "./components/LearningRecordsView";
 import { LogsView } from "./components/LogsView";
 import { MasteryView } from "./components/MasteryView";
 import { ProfileView } from "./components/ProfileView";
-import { QuickfireSetupDialog } from "./components/QuickfireSetupDialog";
 import { SettingsView } from "./components/SettingsView";
 import { type MainView, Sidebar } from "./components/Sidebar";
 import { Button } from "./components/ui/button";
@@ -141,6 +140,8 @@ function App() {
   const [learningAgents, setLearningAgents] = useState<LearningAgentMeta[]>([]);
   const [ready, setReady] = useState(false);
   const [draftId, setDraftId] = useState(() => crypto.randomUUID());
+  // Which kind of draft the current draftId is: a blank chat, or a Rapid Q&A start page.
+  const [draftKind, setDraftKind] = useState<"chat" | "quickfire">("chat");
   const [activeId, setActiveId] = useState<string | null>(null);
   const [view, setView] = useState<MainView>("chat");
   const [collapsed, setCollapsed] = useState(false);
@@ -154,7 +155,6 @@ function App() {
   const [coachTurns, setCoachTurns] = useState<ChatTurn[]>([]);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
-  const [quickfireOpen, setQuickfireOpen] = useState(false);
   const [derivationBusy, setDerivationBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [resizingSidebar, setResizingSidebar] = useState(false);
@@ -344,6 +344,16 @@ function App() {
   const openDraftConversation = useCallback(() => {
     const id = crypto.randomUUID();
     setDraftId(id);
+    setDraftKind("chat");
+    navigateTo({ view: "chat", activeId: id });
+  }, [navigateTo]);
+
+  // Rapid Q&A: enter a fresh start page like a new chat — no conversation row is created until the learner commits a
+  // scenario (chip / Random / typed-send), which materializes it via materializeQuickfireDraft.
+  const openQuickfireDraft = useCallback(() => {
+    const id = crypto.randomUUID();
+    setDraftId(id);
+    setDraftKind("quickfire");
     navigateTo({ view: "chat", activeId: id });
   }, [navigateTo]);
 
@@ -466,11 +476,14 @@ function App() {
     setDraftId((current) => (current === id ? crypto.randomUUID() : current));
   }
 
-  async function startQuickfire(scenario: string) {
-    setQuickfireOpen(false);
-    const id = await createQuickfireConversation(scenario);
+  // Materialize a Rapid Q&A draft into a real conversation seeded with the chosen umbrella scenario. Called by
+  // ChatView before the AI kickoff, so the conversation row (with the quickfire modifier) exists when the drill opens.
+  async function materializeQuickfireDraft(id: string, scenario: string) {
+    await createQuickfireConversation(scenario, id);
+    setActiveConversationId(id);
+    setDraftId((current) => (current === id ? crypto.randomUUID() : current));
+    setDraftKind("chat");
     await refresh();
-    selectConversation(id);
   }
 
   async function startLearningAgent(agentId: string) {
@@ -923,11 +936,12 @@ function App() {
           conversations={conversations}
           learningAgents={learningAgents}
           activeId={activeId}
-          newChatActive={draftActive}
+          newChatActive={draftActive && draftKind === "chat"}
+          quickfireActive={draftActive && draftKind === "quickfire"}
           view={view}
           onSelect={selectConversation}
           onNewChat={openDraftConversation}
-          onStartQuickfire={() => setQuickfireOpen(true)}
+          onStartQuickfire={openQuickfireDraft}
           onStartLearningAgent={(id) => void startLearningAgent(id)}
           onRefreshLearningAgents={refreshLearningAgents}
           onDeriveConversation={(id, actionId) =>
@@ -956,8 +970,10 @@ function App() {
             key={activeId}
             conversationId={activeId}
             isDraft={chatIsDraft}
+            isQuickfireDraft={chatIsDraft && draftKind === "quickfire"}
             mode={activeConversation?.kind ?? "practice"}
             onCreateDraftConversation={materializeDraftConversation}
+            onCreateQuickfireDraft={materializeQuickfireDraft}
             onActivity={() => void refresh()}
             onTurnsChange={setCoachTurns}
             onNavigateConversation={selectConversation}
@@ -1000,12 +1016,6 @@ function App() {
       <KeyboardShortcutsDialog
         open={shortcutsOpen}
         onClose={() => setShortcutsOpen(false)}
-      />
-
-      <QuickfireSetupDialog
-        open={quickfireOpen}
-        onSubmit={(scenario) => void startQuickfire(scenario)}
-        onCancel={() => setQuickfireOpen(false)}
       />
 
       {toast && (
