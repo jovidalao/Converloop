@@ -51,6 +51,16 @@ describe("generateQuickfireTopics", () => {
     ]);
   });
 
+  it("salvages a malformed markdown-ish one-line topic", async () => {
+    const provider = stubProvider(
+      () =>
+        "Awkward corner case):* Disputing an incorrect charge on a utility”",
+    );
+    expect(await generateQuickfireTopics(provider, ctx)).toEqual([
+      "Disputing an incorrect charge on a utility",
+    ]);
+  });
+
   it("drops overly long labels and caps the count", async () => {
     const longLabel = "x".repeat(60);
     const many = Array.from({ length: 14 }, (_, i) => `场景${i}`);
@@ -63,8 +73,17 @@ describe("generateQuickfireTopics", () => {
     expect(topics[0]).toBe("场景0");
   });
 
-  it("returns an empty list when nothing parseable comes back", async () => {
+  it("falls back to default topics when nothing parseable comes back", async () => {
     const provider = stubProvider(() => "Sorry, I cannot help with that.");
-    expect(await generateQuickfireTopics(provider, ctx)).toEqual([]);
+    expect(await generateQuickfireTopics(provider, ctx)).toEqual([
+      "处理快递送错地址",
+      "向店员反馈多收费问题",
+      "预约看医生",
+      "和同事委婉改时间",
+      "机场值机遇到问题",
+      "退换有瑕疵商品",
+      "房东拖延维修",
+      "第一次见面闲聊",
+    ]);
   });
 });

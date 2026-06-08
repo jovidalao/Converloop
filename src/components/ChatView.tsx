@@ -77,7 +77,6 @@ import {
   loadCachedInputHints,
   loadCachedQuickfireTopics,
   MissingApiKeyError,
-  type QuickfireTopicsDebug,
   recommendQuickfireTopics,
   regenerateReply,
   runTurn,
@@ -1264,10 +1263,7 @@ export function ChatView({
   // True while a fresh recommendation fetch is in flight — drives the trailing loading box even when cached chips show.
   const [quickfireTopicsRefreshing, setQuickfireTopicsRefreshing] =
     useState(false);
-  // Diagnostics from the last recommendation fetch (raw response / error / counts) for the start-page debug panel.
-  const [quickfireDebug, setQuickfireDebug] =
-    useState<QuickfireTopicsDebug | null>(null);
-  // Bumped by the debug panel's "regenerate" button to re-run the recommendation fetch.
+  // Bumped by the regenerate button to re-run the recommendation fetch.
   const [quickfireReloadTick, setQuickfireReloadTick] = useState(0);
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -1493,7 +1489,6 @@ export function ChatView({
       if (cached.length > 0) setQuickfireTopics((cur) => cur ?? cached);
       const result = await recommendQuickfireTopics();
       if (cancelled) return;
-      setQuickfireDebug(result.debug);
       if (result.topics.length > 0) setQuickfireTopics(result.topics);
       // Nothing available (no provider / error and no cache): stop the loading box.
       else setQuickfireTopics((cur) => cur ?? []);
@@ -2193,7 +2188,6 @@ export function ChatView({
             <QuickfireStartScreen
               topics={quickfireTopics}
               refreshing={quickfireTopicsRefreshing}
-              debug={quickfireDebug}
               busy={replyBusy}
               onPick={(s) => void startQuickfireDraft(s)}
               onRandom={pickRandomQuickfireTopic}

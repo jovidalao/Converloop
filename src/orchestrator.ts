@@ -22,12 +22,7 @@ import {
 } from "./agents/selection-learning-item";
 import { planLearningProject } from "./agents/task-agent";
 import { translate } from "./agents/translate";
-import {
-  type AppConfig,
-  activeProvider,
-  getProvider,
-  loadConfig,
-} from "./config";
+import { type AppConfig, getProvider, loadConfig } from "./config";
 import { applyDataEditInstruction, type DataEditResult } from "./data-edit";
 import { runTrackedAgentJob } from "./db/agent-jobs";
 import { getAppState, setAppState } from "./db/app-state";
@@ -1136,54 +1131,20 @@ export async function loadCachedQuickfireTopics(): Promise<string[]> {
   }
 }
 
-// Diagnostics surfaced on the start-page debug panel so a silently-empty result can be inspected.
-export interface QuickfireTopicsDebug {
-  at: number;
-  providerConfigured: boolean;
-  model: string;
-  weakCount: number;
-  recentCount: number;
-  profileChars: number;
-  parsedCount: number;
-  rawResponse?: string;
-  error?: string;
-  elapsedMs: number;
-}
-
 export interface QuickfireTopicsResult {
   topics: string[];
-  debug: QuickfireTopicsDebug;
 }
 
 // Recommend umbrella scenarios for the rapid-fire Q&A start page, drawn from the learner's records: weak mastery
 // items, profile, and recent conversation topics (with everyday corner cases when records are thin). Caches the
-// result for instant reuse next time. Never throws — returns an empty list plus a debug payload (raw response /
-// error / counts) so the start page can degrade to the cached set (or type-your-own) and still be inspectable.
+// result for instant reuse next time. Never throws, so the start page can degrade to the cached set (or type-your-own).
 export async function recommendQuickfireTopics(): Promise<QuickfireTopicsResult> {
-  const started = Date.now();
   const config = loadConfig();
-  const model = activeProvider(config).model;
   const provider = await getProvider();
   if (!provider) {
-    return {
-      topics: [],
-      debug: {
-        at: started,
-        providerConfigured: false,
-        model,
-        weakCount: 0,
-        recentCount: 0,
-        profileChars: 0,
-        parsedCount: 0,
-        elapsedMs: Date.now() - started,
-      },
-    };
+    return { topics: [] };
   }
 
-  let rawResponse: string | undefined;
-  let weakCount = 0;
-  let recentCount = 0;
-  let profileChars = 0;
   try {
     const [weakList, profileMd, convs] = await Promise.all([
       getWeakList(),
@@ -1197,56 +1158,20 @@ export async function recommendQuickfireTopics(): Promise<QuickfireTopicsResult>
       .slice(0, 8)
       .map((c) => c.title);
     const profileSlice = profileSliceForConversation(profileMd);
-    weakCount = weakList.length;
-    recentCount = recentTopics.length;
-    profileChars = profileSlice.length;
 
-    const topics = await generateQuickfireTopics(
-      provider,
-      {
-        targetLanguage: config.targetLanguage,
-        nativeLanguage: config.nativeLanguage,
-        level: config.level,
-        profileSlice,
-        weakItems: weakList.map((w) => w.label),
-        recentTopics,
-      },
-      (raw) => {
-        rawResponse = raw;
-      },
-    );
+    const topics = await generateQuickfireTopics(provider, {
+      targetLanguage: config.targetLanguage,
+      nativeLanguage: config.nativeLanguage,
+      level: config.level,
+      profileSlice,
+      weakItems: weakList.map((w) => w.label),
+      recentTopics,
+    });
     if (topics.length > 0) {
       await setAppState(QUICKFIRE_TOPICS_CACHE_KEY, JSON.stringify(topics));
     }
-    return {
-      topics,
-      debug: {
-        at: started,
-        providerConfigured: true,
-        model,
-        weakCount,
-        recentCount,
-        profileChars,
-        parsedCount: topics.length,
-        rawResponse: rawResponse?.slice(0, 4000),
-        elapsedMs: Date.now() - started,
-      },
-    };
-  } catch (e) {
-    return {
-      topics: [],
-      debug: {
-        at: started,
-        providerConfigured: true,
-        model,
-        weakCount,
-        recentCount,
-        profileChars,
-        parsedCount: 0,
-        rawResponse: rawResponse?.slice(0, 4000),
-        error: e instanceof Error ? `${e.name}: ${e.message}` : String(e),
-        elapsedMs: Date.now() - started,
-      },
-    };
+    return { topics };
+  } catch {
+    return { topics: [] };
   }
 }

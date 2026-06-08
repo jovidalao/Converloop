@@ -3,7 +3,6 @@ import { RefreshCwIcon, ShuffleIcon, ZapIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { useTranslation } from "@/i18n";
-import type { QuickfireTopicsDebug } from "../orchestrator";
 
 // Rapid-fire Q&A start page (shown on an empty quickfire draft): a default prompt up top, a set of recommended
 // umbrella-scenario chips generated in the background from the learner's records, and a "Random" button. Picking a
@@ -11,7 +10,6 @@ import type { QuickfireTopicsDebug } from "../orchestrator";
 export function QuickfireStartScreen({
   topics,
   refreshing,
-  debug,
   busy,
   onPick,
   onRandom,
@@ -21,8 +19,6 @@ export function QuickfireStartScreen({
   topics: string[] | null;
   /** A fresh recommendation fetch is in flight — show the trailing loading box. */
   refreshing: boolean;
-  /** Diagnostics from the last fetch (raw response / error / counts), shown in a collapsible debug panel. */
-  debug: QuickfireTopicsDebug | null;
   busy: boolean;
   onPick: (scenario: string) => void;
   onRandom: () => void;
@@ -48,18 +44,35 @@ export function QuickfireStartScreen({
           <span className="text-ui-caption font-medium text-ui-muted">
             {t("quickfire.recommendedTopics")}
           </span>
-          {/* Always present so it doesn't pop in after loading; enabled once recommendations are available. */}
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-7 gap-1.5 px-2 text-ui-caption"
-            disabled={busy || !hasTopics}
-            onClick={onRandom}
-          >
-            <ShuffleIcon className="size-3.5" />
-            {t("quickfire.random")}
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1.5 px-2 text-ui-caption"
+              disabled={busy || refreshing}
+              onClick={onRefresh}
+            >
+              {refreshing ? (
+                <Spinner className="size-3.5" />
+              ) : (
+                <RefreshCwIcon className="size-3.5" />
+              )}
+              {t("quickfire.refresh")}
+            </Button>
+            {/* Always present so it doesn't pop in after loading; enabled once recommendations are available. */}
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1.5 px-2 text-ui-caption"
+              disabled={busy || !hasTopics}
+              onClick={onRandom}
+            >
+              <ShuffleIcon className="size-3.5" />
+              {t("quickfire.random")}
+            </Button>
+          </div>
         </div>
         {/* Re-keyed by content so swapping cached → fresh remounts and plays the fade-in transition. */}
         <div
@@ -85,56 +98,6 @@ export function QuickfireStartScreen({
           )}
         </div>
       </div>
-
-      {debug && (
-        <details
-          className="rounded-lg border bg-muted/30 text-ui-caption"
-          open={!!debug.error || debug.parsedCount === 0}
-        >
-          <summary className="cursor-pointer select-none px-3 py-2 text-ui-muted">
-            {t("quickfire.debugTitle")} · parsed={debug.parsedCount} ·{" "}
-            {debug.elapsedMs}ms
-          </summary>
-          <div className="space-y-1.5 border-t px-3 py-2 font-mono text-ui-muted">
-            <div>
-              provider={debug.providerConfigured ? "yes" : "no"} · model=
-              {debug.model || "(none)"}
-            </div>
-            <div>
-              records: weak={debug.weakCount} recent={debug.recentCount}{" "}
-              profile=
-              {debug.profileChars}c
-            </div>
-            {debug.error && (
-              <div className="whitespace-pre-wrap text-destructive">
-                error: {debug.error}
-              </div>
-            )}
-            <div>
-              raw response:
-              <pre className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap rounded bg-background p-2 text-foreground">
-                {debug.rawResponse ??
-                  "(none — request not sent or threw before responding)"}
-              </pre>
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-7 gap-1.5"
-              disabled={refreshing}
-              onClick={onRefresh}
-            >
-              {refreshing ? (
-                <Spinner className="size-3.5" />
-              ) : (
-                <RefreshCwIcon className="size-3.5" />
-              )}
-              {t("quickfire.refresh")}
-            </Button>
-          </div>
-        </details>
-      )}
     </div>
   );
 }

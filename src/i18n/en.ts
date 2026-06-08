@@ -237,7 +237,6 @@ export const en = {
     recommendedTopics: "Recommended topics",
     random: "Random",
     scenarioPlaceholder: "Describe a scenario… or pick one above",
-    debugTitle: "Debug info",
     refresh: "Regenerate",
   },
   commandPalette: {

@@ -232,7 +232,6 @@ export const zh: Messages = {
     recommendedTopics: "推荐话题",
     random: "随机",
     scenarioPlaceholder: "描述一个场景…… 或从上方选一个",
-    debugTitle: "调试信息",
     refresh: "重新生成",
   },
   commandPalette: {
