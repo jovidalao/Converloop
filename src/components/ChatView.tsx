@@ -69,7 +69,6 @@ import {
 } from "../db/turns";
 import { staticT, useTranslation } from "../i18n";
 import { estimatePromptTokens } from "../lib/tokens";
-import { deriveTurnActivities, type TurnActivity } from "../lib/turn-activity";
 import {
   bilingualReply,
   confirmLearningTurnMastery,
@@ -100,7 +99,7 @@ import { ReplyExplanation } from "./ReplyExplanation";
 import { remarkBilingual } from "./remark-bilingual";
 import { SlashMenu } from "./SlashMenu";
 import { SpeakButton } from "./SpeakButton";
-import { ThinkingIndicator, TurnActivityRow } from "./TurnActivity";
+import { ThinkingIndicator } from "./TurnActivity";
 import { Button } from "./ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "./ui/select";
 import { Spinner } from "./ui/spinner";
@@ -117,8 +116,6 @@ interface ChatViewProps {
   onTurnsChange?: (turns: ChatTurn[]) => void;
   /** Called when a conversation action creates a branch; App switches to the new conversation. */
   onNavigateConversation?: (id: string) => void;
-  /** When the coach panel is visible, the in-chat per-turn "memory" activity row is hidden to avoid duplicating the panel's conversation-level learning-memory view; closing the panel brings the row back, so recorded memory stays visible either way. */
-  coachVisible?: boolean;
   /** Small-window mode: strip to bare chat — message bubbles + copy + composer; hide explain/speak/suggestions/corrections/badges/slash menu. */
   compact?: boolean;
 }
@@ -1204,12 +1201,10 @@ function DerivedContextBanner({
 function TurnCard({
   turnId,
   live,
-  activities,
   children,
 }: {
   turnId: string;
   live: boolean;
-  activities: TurnActivity[];
   children: ReactNode;
 }) {
   return (
@@ -1218,7 +1213,6 @@ function TurnCard({
       className={`flex flex-col gap-2${live ? " animate-message-in" : ""}`}
     >
       {children}
-      {activities.length > 0 && <TurnActivityRow activities={activities} />}
     </div>
   );
 }
@@ -1231,7 +1225,6 @@ export function ChatView({
   onCreateDraftConversation,
   onTurnsChange,
   onNavigateConversation,
-  coachVisible = false,
   compact = false,
 }: ChatViewProps) {
   const { t } = useTranslation();
@@ -2023,11 +2016,6 @@ export function ChatView({
             key={turn.id}
             turnId={turn.id}
             live={liveTurnIdsRef.current.has(turn.id)}
-            activities={
-              compact || coachVisible
-                ? []
-                : deriveTurnActivities(turn).filter((a) => a.kind === "memory")
-            }
           >
             {turn.userText.trim() && (
               <UserTurn

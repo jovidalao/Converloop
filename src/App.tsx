@@ -946,7 +946,6 @@ function App() {
             onActivity={() => void refresh()}
             onTurnsChange={setCoachTurns}
             onNavigateConversation={selectConversation}
-            coachVisible={coachVisible}
             compact={smallWindow}
           />
         </div>
