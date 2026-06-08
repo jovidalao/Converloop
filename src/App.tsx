@@ -38,6 +38,7 @@ import { LearningRecordsView } from "./components/LearningRecordsView";
 import { LogsView } from "./components/LogsView";
 import { MasteryView } from "./components/MasteryView";
 import { ProfileView } from "./components/ProfileView";
+import { QuickfireSetupDialog } from "./components/QuickfireSetupDialog";
 import { SettingsView } from "./components/SettingsView";
 import { type MainView, Sidebar } from "./components/Sidebar";
 import { Button } from "./components/ui/button";
@@ -58,6 +59,7 @@ import {
   type ConversationMeta,
   clearActiveConversationId,
   createConversation,
+  createQuickfireConversation,
   deleteConversation,
   ensureActiveConversation,
   listConversations,
@@ -115,6 +117,7 @@ function sameLocation(a: AppLocation, b: AppLocation): boolean {
 // not treated as a settings view.
 const SETTINGS_VIEWS: ReadonlySet<MainView> = new Set<MainView>([
   "settings-general",
+  "settings-customize",
   "settings-llm",
   "settings-tts",
   "settings-commands",
@@ -151,6 +154,7 @@ function App() {
   const [coachTurns, setCoachTurns] = useState<ChatTurn[]>([]);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [quickfireOpen, setQuickfireOpen] = useState(false);
   const [derivationBusy, setDerivationBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [resizingSidebar, setResizingSidebar] = useState(false);
@@ -462,6 +466,13 @@ function App() {
     setDraftId((current) => (current === id ? crypto.randomUUID() : current));
   }
 
+  async function startQuickfire(scenario: string) {
+    setQuickfireOpen(false);
+    const id = await createQuickfireConversation(scenario);
+    await refresh();
+    selectConversation(id);
+  }
+
   async function startLearningAgent(agentId: string) {
     const agent = learningAgents.find((a) => a.id === agentId);
     const title = agent?.name ?? t("app.customLearningFallback");
@@ -606,6 +617,7 @@ function App() {
     agents: t("viewTitles.agents"),
     "settings-logs": t("viewTitles.logs"),
     "settings-general": t("viewTitles.general"),
+    "settings-customize": t("viewTitles.customize"),
     "settings-llm": t("viewTitles.llm"),
     "settings-tts": t("viewTitles.tts"),
     "settings-commands": t("viewTitles.commands"),
@@ -634,6 +646,8 @@ function App() {
       <LogsView />
     ) : view === "settings-general" ? (
       <SettingsView section="general" />
+    ) : view === "settings-customize" ? (
+      <SettingsView section="customize" />
     ) : view === "settings-llm" ? (
       <SettingsView section="llm" />
     ) : view === "settings-tts" ? (
@@ -913,6 +927,7 @@ function App() {
           view={view}
           onSelect={selectConversation}
           onNewChat={openDraftConversation}
+          onStartQuickfire={() => setQuickfireOpen(true)}
           onStartLearningAgent={(id) => void startLearningAgent(id)}
           onRefreshLearningAgents={refreshLearningAgents}
           onDeriveConversation={(id, actionId) =>
@@ -985,6 +1000,12 @@ function App() {
       <KeyboardShortcutsDialog
         open={shortcutsOpen}
         onClose={() => setShortcutsOpen(false)}
+      />
+
+      <QuickfireSetupDialog
+        open={quickfireOpen}
+        onSubmit={(scenario) => void startQuickfire(scenario)}
+        onCancel={() => setQuickfireOpen(false)}
       />
 
       {toast && (

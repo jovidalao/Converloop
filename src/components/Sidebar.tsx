@@ -18,6 +18,7 @@ import {
   TrophyIcon,
   UserRoundIcon,
   Volume2Icon,
+  ZapIcon,
 } from "lucide-react";
 import {
   type MouseEvent as ReactMouseEvent,
@@ -53,7 +54,8 @@ export type MainView =
   | "settings-general"
   | "settings-llm"
   | "settings-tts"
-  | "settings-commands";
+  | "settings-commands"
+  | "settings-customize";
 
 // Relative time: "just now" within the first minute, then stepping up through
 // minutes → hours → days → weeks → months → years. Number/unit wording is
@@ -83,6 +85,7 @@ interface SidebarProps {
   view: MainView;
   onSelect: (id: string) => void;
   onNewChat: () => void;
+  onStartQuickfire: () => void;
   onStartLearningAgent: (agentId: string) => void;
   onRefreshLearningAgents: () => Promise<void>;
   onDeriveConversation: (conversationId: string, actionId: string) => void;
@@ -107,6 +110,7 @@ export function Sidebar({
   view,
   onSelect,
   onNewChat,
+  onStartQuickfire,
   onStartLearningAgent,
   onRefreshLearningAgents,
   onDeriveConversation,
@@ -335,6 +339,17 @@ export function Sidebar({
                   {actionShortcutLabel("new-chat")}
                 </kbd>
               </button>
+              <button
+                type="button"
+                className="codex-sidebar-action"
+                onClick={onStartQuickfire}
+                title={t("sidebar.quickfireTooltip")}
+              >
+                <span className="codex-sidebar-leading-icon">
+                  <ZapIcon className="size-4" />
+                </span>
+                <span>{t("sidebar.quickfire")}</span>
+              </button>
             </div>
 
             <nav className="codex-sidebar-scroll">
@@ -469,6 +484,11 @@ export function Sidebar({
                 "settings-general",
                 <SlidersHorizontalIcon className="size-4" />,
                 t("sidebar.general"),
+              )}
+              {renderSettingsItem(
+                "settings-customize",
+                <SparklesIcon className="size-4" />,
+                t("sidebar.customization"),
               )}
               {renderSettingsItem(
                 "settings-llm",

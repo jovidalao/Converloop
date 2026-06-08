@@ -200,6 +200,9 @@ export const en = {
     justNow: "just now",
     newChat: "New chat",
     newChatTooltip: "New chat {shortcut}",
+    quickfire: "Rapid Q&A",
+    quickfireTooltip:
+      "Rapid-fire Q&A drill: set one scenario, answer situations on the spot",
     customLearning: "Custom learning",
     createLesson: "Create lesson",
     recent: "Recent",
@@ -212,6 +215,7 @@ export const en = {
     sectionSettings: "Settings",
     sectionProfileDatabase: "Profile database",
     general: "General",
+    customization: "Customization",
     llmProviders: "LLM providers",
     ttsProviders: "TTS providers",
     slashCommands: "Slash commands",
@@ -225,6 +229,14 @@ export const en = {
     deleteLessonDescription: "Existing conversations won't be deleted.",
     deleteConversationTitle: 'Delete conversation "{title}"?',
     deleteConversationDescription: "This action cannot be undone.",
+  },
+  quickfire: {
+    title: "Rapid Q&A",
+    description:
+      "Set one big scenario. The AI invents a specific situation each round and you respond on the spot — a quick model answer comes before the next one.",
+    placeholder:
+      "e.g. A job interview · Ordering at a restaurant · A customer support call",
+    start: "Start",
   },
   commandPalette: {
     ariaLabel: "Quick jump",
@@ -278,6 +290,7 @@ export const en = {
     agents: "Capabilities",
     logs: "Logs",
     general: "General settings",
+    customize: "Customization",
     llm: "LLM providers",
     tts: "TTS providers",
     commands: "Slash commands",
@@ -531,6 +544,8 @@ export const en = {
     editFromHereConfirm: "Discard and edit",
     lessonBadge: "Lesson",
     practiceBadge: "Practice",
+    quickfireBadge: "Rapid Q&A",
+    quickfireStartFailed: "Failed to start rapid-fire Q&A",
     derivedBadge: "Derived",
     difficultyBadge: "Difficulty·{diff}",
     contextUsage: "~{used} / {limit} tokens · Context {pct}%",

@@ -80,6 +80,7 @@ import {
   runTurn,
   startDerivedConversation,
   startLearningSession,
+  startQuickfireSession,
   suggestReply,
 } from "../orchestrator";
 import {
@@ -1244,6 +1245,10 @@ export function ChatView({
     context: NewConversationContext;
     label?: string;
   } | null>(null);
+  // Umbrella scenario of a rapid-fire Q&A conversation (null for normal practice); drives the mode badge.
+  const [quickfireScenario, setQuickfireScenario] = useState<string | null>(
+    null,
+  );
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Retry entry for the last failed operation (send / regenerate / lesson start all share the bottom error bar).
@@ -1258,6 +1263,7 @@ export function ChatView({
   const replyCommittedRef = useRef(false);
   const kickoffStartedRef = useRef(false);
   const derivationStartedRef = useRef(false);
+  const quickfireStartedRef = useRef(false);
   const liveTurnIdsRef = useRef<Set<string>>(new Set()); // turns sent in this session; auto-bilingual only applies to these
   const hintTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const config = useConfig();
@@ -1376,6 +1382,7 @@ export function ChatView({
   useEffect(() => {
     let cancelled = false;
     setDerivedBanner(null);
+    setQuickfireScenario(null);
     setInputHints(null);
     setLastPromptTokens(null); // reset the context meter; repopulated on the next send in this conversation
     if (hintTimerRef.current) clearInterval(hintTimerRef.current);
@@ -1395,12 +1402,24 @@ export function ChatView({
             context: mods.derivedContext,
             label: mods.derivation?.actionLabel,
           });
+        if (mods.quickfire) setQuickfireScenario(mods.quickfire.scenario);
         if (
           loaded.length === 0 &&
           !derivationStartedRef.current &&
           mods.derivation?.status === "pending"
-        )
+        ) {
           void startDerived();
+          return;
+        }
+        // Rapid-fire Q&A: the AI opens by firing the first situation (no pending derivation involved).
+        if (
+          loaded.length === 0 &&
+          !quickfireStartedRef.current &&
+          mods.quickfire
+        ) {
+          void startQuickfire();
+          return;
+        }
         // Restore input hints for the reopened conversation. The watermark is the last
         // on-record turn (off-record /btw turns are excluded from hint generation).
         const lastTurnId =
@@ -1610,6 +1629,90 @@ export function ChatView({
         setReplyBusy(false);
       } else {
         speaker?.abort(); // this turn was superseded by a new action; stop synthesis
+      }
+    }
+  }
+
+  // Rapid-fire Q&A kickoff: the AI fires the first situation into an empty quickfire conversation. Like a derived
+  // opening (AI speaks first, no grading), but the scenario already lives in the conversation's modifiers, so there
+  // is no context-generation step. Subsequent learner answers go through the normal graded send().
+  async function startQuickfire(replacingId?: string) {
+    if (learningMode || replyBusy || quickfireStartedRef.current) return;
+    stopSpeech();
+    quickfireStartedRef.current = true;
+    const turnGen = ++turnGenRef.current;
+    const turnId = crypto.randomUUID();
+    liveTurnIdsRef.current.add(turnId);
+    stickToBottomRef.current = true;
+    setError(null);
+    setRetry(null);
+    replyCommittedRef.current = false;
+    setTurns((prev) => [
+      ...(replacingId ? prev.filter((t) => t.id !== replacingId) : prev),
+      {
+        id: turnId,
+        userText: "",
+        analysis: null,
+        analysisPending: false,
+      },
+    ]);
+    setReplyBusy(true);
+    setStreaming("");
+    let acc = "";
+    const speaker = loadTtsConfig().autoSpeak ? createReplySpeaker() : null;
+    try {
+      const result = await startQuickfireSession(
+        conversationId,
+        {
+          onReplyDelta: (d) => {
+            if (turnGenRef.current !== turnGen) return;
+            acc += d;
+            setStreaming(acc);
+          },
+          onReplyComplete: (reply) => {
+            if (turnGenRef.current !== turnGen) return;
+            replyCommittedRef.current = true;
+            commitPartnerReply(turnId, reply);
+            speaker?.finish(reply);
+          },
+          onContext: (tokens) => {
+            if (turnGenRef.current === turnGen) setLastPromptTokens(tokens);
+          },
+          onAnalysis: () => {
+            patchTurn(turnId, { analysisPending: false });
+          },
+        },
+        turnId,
+      );
+      if (turnGenRef.current === turnGen && !replyCommittedRef.current) {
+        commitPartnerReply(turnId, result.reply);
+        speaker?.finish(result.reply);
+      }
+      await touchConversation(conversationId);
+      onActivity?.();
+    } catch (e) {
+      stopSpeech();
+      speaker?.abort();
+      patchTurn(turnId, {
+        analysisPending: false,
+        analysisError: t("chat.quickfireStartFailed"),
+      });
+      setError(
+        e instanceof MissingApiKeyError
+          ? e.message
+          : e instanceof Error
+            ? e.message
+            : String(e),
+      );
+      // Release the kickoff guard so retry can restart; the failed turn is replaced on retry.
+      quickfireStartedRef.current = false;
+      setRetry({ run: () => void startQuickfire(turnId) });
+    } finally {
+      if (turnGenRef.current === turnGen) {
+        setStreaming("");
+        setReplyBusy(false);
+      } else {
+        speaker?.abort();
       }
     }
   }
@@ -1947,7 +2050,9 @@ export function ChatView({
   const optionBadges: { label: string; tone: "info" | "muted" }[] = [
     learningMode
       ? { label: t("chat.lessonBadge"), tone: "info" }
-      : { label: t("chat.practiceBadge"), tone: "muted" },
+      : quickfireScenario
+        ? { label: t("chat.quickfireBadge"), tone: "info" }
+        : { label: t("chat.practiceBadge"), tone: "muted" },
   ];
   if (derivedBanner) {
     optionBadges.push({

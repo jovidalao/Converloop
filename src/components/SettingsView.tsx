@@ -22,7 +22,7 @@ import {
   Trash2Icon,
   Volume2Icon,
 } from "lucide-react";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import {
   BUILTIN_PROMPT_MACROS,
   isValidMacroName,
@@ -58,6 +58,13 @@ import {
   type OAuthTokens,
   setTokens,
 } from "../oauth/store";
+import { applyProfilePreferenceInstruction } from "../orchestrator";
+import {
+  type PreferenceScope,
+  preferencesFromProfile,
+  updateProfilePreference,
+} from "../profile/preferences";
+import { readProfile, writeProfile } from "../profile/profile";
 import {
   type CustomPromptMacro,
   clearPromptMacroOverride,
@@ -80,6 +87,7 @@ import {
 import { synthesizeEdge } from "../tts/edge";
 import { synthesizeMimo } from "../tts/mimo";
 import { clearTtsCache, getTtsCacheCount } from "../tts/speak";
+import { PreferencesPanel } from "./PreferencesPanel";
 import { ShortcutsEditor } from "./ShortcutsEditor";
 import { type Accent, type Theme, useTheme } from "./theme-provider";
 import { Button } from "./ui/button";
@@ -204,7 +212,12 @@ const LEVELS: { value: string; label: BiLabel }[] = [
 ];
 
 const CUSTOM_MODEL_VALUE = "__custom_model__";
-export type SettingsSection = "general" | "llm" | "tts" | "commands";
+export type SettingsSection =
+  | "general"
+  | "llm"
+  | "tts"
+  | "commands"
+  | "customize";
 
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -699,6 +712,110 @@ function CommandsSettings() {
           );
         })}
       </div>
+    </section>
+  );
+}
+
+// Self-contained host for the free-form AI-customization panel, surfaced in
+// Settings (the same panel also lives in the Profile page). Loads the profile
+// MD, edits only its "AI preferences" section, and persists on blur / smart-apply.
+function AiCustomizeSettings() {
+  const { t } = useTranslation();
+  const [md, setMd] = useState("");
+  const [savedMd, setSavedMd] = useState("");
+  const [loaded, setLoaded] = useState(false);
+  const [smartDraft, setSmartDraft] = useState("");
+  const [smartBusy, setSmartBusy] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    readProfile(loadConfig()).then((m) => {
+      if (!alive) return;
+      setMd(m);
+      setSavedMd(m);
+      setLoaded(true);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const preferences = useMemo(() => preferencesFromProfile(md || ""), [md]);
+
+  // Refs so the unmount flush always sees the latest unsaved edits.
+  const mdRef = useRef("");
+  mdRef.current = md;
+  const savedMdRef = useRef("");
+  savedMdRef.current = savedMd;
+  const loadedRef = useRef(false);
+  loadedRef.current = loaded;
+
+  // Flush unsaved per-scope edits when navigating away from Settings.
+  useEffect(
+    () => () => {
+      if (loadedRef.current && mdRef.current !== savedMdRef.current) {
+        void writeProfile(mdRef.current);
+      }
+    },
+    [],
+  );
+
+  function updatePreference(scope: PreferenceScope, body: string) {
+    if (!loaded) return;
+    setMd((cur) => updateProfilePreference(cur, scope, body));
+  }
+
+  async function saveIfDirty() {
+    if (!loaded || mdRef.current === savedMdRef.current) return;
+    const next = mdRef.current;
+    await writeProfile(next);
+    setSavedMd(next);
+  }
+
+  async function applySmart() {
+    const instruction = smartDraft.trim();
+    if (!loaded || !instruction) return;
+    setSmartBusy(true);
+    setStatus(t("profile.aiClassifyingStatus"));
+    try {
+      await writeProfile(mdRef.current);
+      const next = await applyProfilePreferenceInstruction(
+        instruction,
+        mdRef.current,
+      );
+      await writeProfile(next);
+      setMd(next);
+      setSavedMd(next);
+      setSmartDraft("");
+      setStatus(t("profile.classifiedStatus"));
+    } catch (e) {
+      setStatus(
+        t("profile.classifyFailed", {
+          error: e instanceof Error ? e.message : String(e),
+        }),
+      );
+    } finally {
+      setSmartBusy(false);
+    }
+  }
+
+  return (
+    <section className="space-y-4">
+      <PreferencesPanel
+        preferences={preferences}
+        smartDraft={smartDraft}
+        smartBusy={smartBusy}
+        onSmartDraftChange={setSmartDraft}
+        onSmartApply={() => void applySmart()}
+        onScopeChange={updatePreference}
+        onScopeBlur={() => void saveIfDirty()}
+      />
+      {status && (
+        <p className="m-0 text-ui-body text-ui-muted" role="status">
+          {status}
+        </p>
+      )}
     </section>
   );
 }
@@ -1522,6 +1639,8 @@ export function SettingsView({ section }: { section: SettingsSection }) {
         )}
 
         {section === "commands" && <CommandsSettings />}
+
+        {section === "customize" && <AiCustomizeSettings />}
       </div>
     </div>
   );

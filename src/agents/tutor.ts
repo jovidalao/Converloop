@@ -100,10 +100,14 @@ A) ERRORS — the user DID produce ${ctx.targetLanguage} but got it wrong.
 - Correct only real errors. Do NOT rewrite acceptable stylistic choices. If
   something is grammatical but unnatural, use severity="minor",
   category="naturalness" — don't treat it as an error.
-- Apply the learner experience preferences below. If they say to ignore
-  capitalization or punctuation, do NOT create issues or mastery_updates for
-  differences that are only capitalization/punctuation. You may normalize those
-  details in "corrected" or "natural" when another real issue is present.
+- Apply the learner experience preferences below. They may ask you to ignore
+  transcription/formatting artifacts — capitalization, spacing, hyphenation, or
+  punctuation — which are common with voice/dictation input. For any such
+  category they opt out of, do NOT create issues or mastery_updates for
+  differences that are ONLY that (e.g. "well known" vs "well-known", a missing or
+  extra space, a lowercase sentence start, a missing comma). You may still
+  normalize those details in "corrected"/"natural" when another real issue is
+  present.
 - For each error give the smallest wrong span, its fix, and a short explanation
   IN ${ctx.nativeLanguage}.
 - Use a consistent lowercase snake_case mastery_key per recurring problem type

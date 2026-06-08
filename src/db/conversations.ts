@@ -48,6 +48,13 @@ export interface ConversationDerivationState {
   error?: string | null;
 }
 
+// Rapid-fire Q&A drill: the learner sets one umbrella scenario, the reply agent invents a fresh concrete
+// situation each turn for them to respond to (see formatModifierInstructions). Still a practice-kind
+// conversation, so tutor correction / mastery / coach panel all run as usual.
+export interface QuickfireModifiers {
+  scenario: string;
+}
+
 // Session-level adjustments: behavior changes the reply agent should follow. LLM observes; behavior is injected by code (formatted as instructions).
 export interface AgentModifiers {
   difficultyDelta?: number; // +1 harder / -1 easier
@@ -56,6 +63,7 @@ export interface AgentModifiers {
   note?: string; // free-form supplementary instruction
   derivation?: ConversationDerivationState;
   derivedContext?: NewConversationContext;
+  quickfire?: QuickfireModifiers;
 }
 
 export function parseAgentModifiers(json: string | null): AgentModifiers {
@@ -104,9 +112,20 @@ export function formatModifierInstructions(mods: AgentModifiers): string {
     ctx.constraints.length > 0 ? ctx.constraints.join(" / ") : "(none)"
   }`);
   }
+  if (mods.quickfire?.scenario.trim()) {
+    lines.push(`- RAPID-FIRE Q&A DRILL — this overrides the default "keep a flowing conversation" behavior.
+  Umbrella scenario the learner chose: "${mods.quickfire.scenario.trim()}".
+  Run a fast drill. Every turn, invent ONE fresh, specific, concrete micro-situation that fits this umbrella scenario, and prompt the learner to respond to it in the target language. Make each situation a vivid one-liner (who says/does what, where) and clearly different from the previous ones — do NOT build a continuous storyline.
+  After the learner answers a situation, your next message has TWO short parts: FIRST a brief model answer in the target language showing one natural way to handle the situation they just responded to (one or two sentences, introduced with a short lead-in); THEN immediately present the NEXT situation. Keep the whole turn short and energetic.
+  Do NOT correct or critique the learner's answer — another agent handles that. Do NOT chit-chat or ask how they are doing; just model, then next situation.`);
+  }
   if (mods.note?.trim()) lines.push(`- ${mods.note.trim()}`);
   return lines.join("\n");
 }
+
+// Opening instruction for the AI's first turn of a rapid-fire drill: present the first situation only, no model answer yet.
+export const QUICKFIRE_OPENING_INSTRUCTION =
+  "Start the rapid-fire Q&A drill now. Present the FIRST specific situation within the umbrella scenario for the learner to respond to. Do not give a model answer yet — there is nothing to model on the first turn.";
 
 // Placeholder title for new conversations; ChatView changes it to truncated input content after the first message is sent (ChatGPT style).
 export const DEFAULT_CONVERSATION_TITLE = "New conversation";
@@ -154,6 +173,29 @@ export async function createConversation(
     updatedAt: now,
     kind: opts.kind ?? "practice",
     learningAgentId: opts.learningAgentId ?? null,
+  });
+  return id;
+}
+
+// Create a rapid-fire Q&A conversation: a normal practice conversation (tutor / mastery / coach all apply) whose
+// reply agent is reshaped into a drill via the quickfire modifier. The AI opens with the first situation (see
+// startQuickfireSession), so the title is seeded from the umbrella scenario rather than a first user message.
+export async function createQuickfireConversation(
+  scenario: string,
+): Promise<string> {
+  const id = crypto.randomUUID();
+  const now = Date.now();
+  const modifiers: AgentModifiers = {
+    quickfire: { scenario: scenario.trim() },
+  };
+  await db.insert(conversation).values({
+    id,
+    title: titleFromInput(scenario),
+    createdAt: now,
+    updatedAt: now,
+    kind: "practice",
+    learningAgentId: null,
+    agentModifiersJson: JSON.stringify(modifiers),
   });
   return id;
 }

@@ -33,6 +33,7 @@ import {
   getConversation,
   getSummary,
   parseAgentModifiers,
+  QUICKFIRE_OPENING_INSTRUCTION,
   renameConversation,
 } from "./db/conversations";
 import { createLearningAgent, getLearningAgent } from "./db/learning-agents";
@@ -540,24 +541,18 @@ export async function startLearningSession(
   return runLearningTurn("", conversationId, cb, true, turnId);
 }
 
-export async function startDerivedConversation(
+// Open a conversation with a hidden app kickoff (the AI speaks first): loads the same per-turn context as a normal
+// practice turn, runs the reply agent with the given opening instruction, persists the empty-user opening turn, and
+// reports no correction. Shared by derived conversations and rapid-fire drills — the per-conversation behavior
+// (derived context / quickfire scenario) is already in agent_modifiers_json and injected via SESSION ADJUSTMENTS.
+async function openConversationWithInstruction(
   conversationId: string,
+  openingInstruction: string,
   cb: TurnCallbacks,
   turnId?: string,
 ): Promise<TurnResult> {
   const provider = await getProvider();
   if (!provider) throw new MissingApiKeyError();
-
-  let openingInstruction = "";
-  try {
-    const derivedContext = await derivePendingAction(conversationId);
-    await completeDerivedConversation(conversationId, derivedContext);
-    openingInstruction = `Start this newly derived conversation now. Follow the derived conversation context exactly, especially this opening instruction: ${derivedContext.openingInstruction}`;
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    await failDerivedConversation(conversationId, msg);
-    throw e;
-  }
 
   const config = loadConfig();
   const langs = {
@@ -644,6 +639,49 @@ export async function startDerivedConversation(
     estimateNonHistoryTokens(profileSlice, comfortableItems, reviewItems),
   );
   return { reply, analysis: null };
+}
+
+export async function startDerivedConversation(
+  conversationId: string,
+  cb: TurnCallbacks,
+  turnId?: string,
+): Promise<TurnResult> {
+  const provider = await getProvider();
+  if (!provider) throw new MissingApiKeyError();
+
+  let openingInstruction = "";
+  try {
+    const derivedContext = await derivePendingAction(conversationId);
+    await completeDerivedConversation(conversationId, derivedContext);
+    openingInstruction = `Start this newly derived conversation now. Follow the derived conversation context exactly, especially this opening instruction: ${derivedContext.openingInstruction}`;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    await failDerivedConversation(conversationId, msg);
+    throw e;
+  }
+
+  return openConversationWithInstruction(
+    conversationId,
+    openingInstruction,
+    cb,
+    turnId,
+  );
+}
+
+// Kick off a rapid-fire Q&A drill: the AI presents the first situation. The quickfire scenario/rules live in the
+// conversation's agent_modifiers_json and reach the reply agent through SESSION ADJUSTMENTS, so only the opening
+// instruction is needed here. Subsequent learner answers go through the normal practice runTurn (graded as usual).
+export async function startQuickfireSession(
+  conversationId: string,
+  cb: TurnCallbacks,
+  turnId?: string,
+): Promise<TurnResult> {
+  return openConversationWithInstruction(
+    conversationId,
+    QUICKFIRE_OPENING_INSTRUCTION,
+    cb,
+    turnId,
+  );
 }
 
 async function runLearningTurn(
