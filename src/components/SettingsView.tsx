@@ -36,10 +36,12 @@ import { cn } from "@/lib/utils";
 import {
   type AppConfig,
   apiKeyAccount,
+  effectiveJsonObjectFallback,
   findProviderModelOption,
   getProviderFor,
   inferContextLimit,
   isOAuthProvider,
+  isOpenAIWireProvider,
   loadConfig,
   oauthAccount,
   PROVIDER_PRESETS,
@@ -950,6 +952,7 @@ export function SettingsView({ section }: { section: SettingsSection }) {
       baseUrl: p.baseUrl,
       model: p.model,
       contextTokens: undefined,
+      jsonObjectFallback: undefined,
     });
   }
 
@@ -1212,6 +1215,19 @@ export function SettingsView({ section }: { section: SettingsSection }) {
             })}
           />
         </Field>
+
+        {isOpenAIWireProvider(type) && (
+          <div className="space-y-1.5">
+            <ToggleField
+              label={t("settings.llm.jsonObjectFallback")}
+              checked={effectiveJsonObjectFallback(type, entry)}
+              onChange={(v) => updateProvider(type, { jsonObjectFallback: v })}
+            />
+            <p className="text-ui-caption text-ui-muted">
+              {t("settings.llm.jsonObjectFallbackHint")}
+            </p>
+          </div>
+        )}
 
         {oauth ? (
           <div className="flex flex-col gap-2.5">

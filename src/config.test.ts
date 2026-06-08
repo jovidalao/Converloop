@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  effectiveJsonObjectFallback,
   findProviderModelOption,
   inferContextLimit,
   isOAuthProvider,
+  isOpenAIWireProvider,
   PROVIDER_PRESETS,
   PROVIDER_TYPES,
+  type ProviderSettings,
   type ProviderType,
   providerModelLabel,
 } from "./config";
@@ -100,5 +103,53 @@ describe("provider registration completeness", () => {
   it("flags exactly the subscription-login providers as OAuth", () => {
     const oauth = PROVIDER_TYPES.filter(isOAuthProvider);
     expect(oauth.sort()).toEqual(["claude-oauth", "codex-oauth"]);
+  });
+
+  it("isOpenAIWireProvider matches the OpenAI-wire set", () => {
+    expect(PROVIDER_TYPES.filter(isOpenAIWireProvider).sort()).toEqual(
+      [...OPENAI_WIRE].sort(),
+    );
+  });
+});
+
+describe("json_object fallback switch", () => {
+  // A provider settings object with no explicit override, so the preset default decides.
+  const noOverride = (type: ProviderType): ProviderSettings => ({
+    baseUrl: PROVIDER_PRESETS[type].baseUrl,
+    model: PROVIDER_PRESETS[type].model,
+  });
+
+  it("defaults on for vendors without json_schema, off for the rest", () => {
+    for (const type of [
+      "deepseek",
+      "qwen",
+      "moonshot",
+      "glm",
+      "minimax",
+    ] as const) {
+      expect(effectiveJsonObjectFallback(type, noOverride(type)), type).toBe(
+        true,
+      );
+    }
+    for (const type of ["openai", "openrouter", "xai", "mistral"] as const) {
+      expect(effectiveJsonObjectFallback(type, noOverride(type)), type).toBe(
+        false,
+      );
+    }
+  });
+
+  it("an explicit per-provider override wins over the preset default", () => {
+    expect(
+      effectiveJsonObjectFallback("deepseek", {
+        ...noOverride("deepseek"),
+        jsonObjectFallback: false,
+      }),
+    ).toBe(false);
+    expect(
+      effectiveJsonObjectFallback("openai", {
+        ...noOverride("openai"),
+        jsonObjectFallback: true,
+      }),
+    ).toBe(true);
   });
 });

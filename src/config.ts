@@ -36,6 +36,9 @@ const ProviderSettingsSchema = z.object({
   model: z.string(),
   /** Manual override for the model context window (tokens). Leave unset to infer from the model name (see inferContextLimit). */
   contextTokens: z.number().int().positive().optional(),
+  /** Override the endpoint's json-schema capability: true forces the json_object fallback, false forces json_schema,
+   *  unset = the provider preset's default (see effectiveJsonObjectFallback). Only used by OpenAI-wire providers. */
+  jsonObjectFallback: z.boolean().optional(),
 });
 
 export type ProviderSettings = z.infer<typeof ProviderSettingsSchema>;
@@ -143,6 +146,37 @@ export function isOAuthProvider(type: ProviderType): boolean {
   return OAUTH_PROVIDERS.has(type);
 }
 
+// Providers that speak the OpenAI chat/completions wire format (routed through createOpenAIProvider). Excludes the
+// native adapters (gemini/anthropic) and the OAuth providers; gates the json_object-fallback switch in settings.
+const OPENAI_WIRE_PROVIDERS = new Set<ProviderType>([
+  "openai",
+  "deepseek",
+  "openrouter",
+  "xai",
+  "mistral",
+  "qwen",
+  "moonshot",
+  "glm",
+  "minimax",
+]);
+
+export function isOpenAIWireProvider(type: ProviderType): boolean {
+  return OPENAI_WIRE_PROVIDERS.has(type);
+}
+
+// Effective "downgrade json_schema → json_object" setting: an explicit per-provider override wins, otherwise the
+// provider preset's default (true for vendors known to lack json_schema support), otherwise off.
+export function effectiveJsonObjectFallback(
+  type: ProviderType,
+  settings: ProviderSettings,
+): boolean {
+  return (
+    settings.jsonObjectFallback ??
+    PROVIDER_PRESETS[type].jsonObjectFallback ??
+    false
+  );
+}
+
 export interface ProviderModelOption {
   label: string;
   model: string;
@@ -155,6 +189,8 @@ interface ProviderPreset {
   /** Default model: used when switching to this provider and also the first item in the model list. */
   model: string;
   models: ProviderModelOption[];
+  /** Default for OpenAI-wire providers whose endpoint can't honor response_format:json_schema (overridable per provider). */
+  jsonObjectFallback?: boolean;
 }
 
 // Presets shared between the settings page and chat input when switching providers (baseUrl + optional model list).
@@ -201,6 +237,7 @@ export const PROVIDER_PRESETS: Record<ProviderType, ProviderPreset> = {
     shortLabel: "DeepSeek",
     baseUrl: "https://api.deepseek.com/v1",
     model: "deepseek-chat",
+    jsonObjectFallback: true,
     models: [
       { label: "DeepSeek V3.2 (chat)", model: "deepseek-chat" },
       { label: "DeepSeek V3.2 (reasoner)", model: "deepseek-reasoner" },
@@ -252,6 +289,7 @@ export const PROVIDER_PRESETS: Record<ProviderType, ProviderPreset> = {
     // DashScope OpenAI-compatible mode; switch to dashscope-intl.aliyuncs.com for the international account.
     baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
     model: "qwen-plus",
+    jsonObjectFallback: true,
     models: [
       { label: "Qwen Plus", model: "qwen-plus" },
       { label: "Qwen Max", model: "qwen-max" },
@@ -265,6 +303,7 @@ export const PROVIDER_PRESETS: Record<ProviderType, ProviderPreset> = {
     // China endpoint; switch to api.moonshot.ai/v1 for the international account.
     baseUrl: "https://api.moonshot.cn/v1",
     model: "kimi-latest",
+    jsonObjectFallback: true,
     models: [
       { label: "Kimi (latest)", model: "kimi-latest" },
       { label: "Kimi K2.5", model: "kimi-k2.5" },
@@ -278,6 +317,7 @@ export const PROVIDER_PRESETS: Record<ProviderType, ProviderPreset> = {
     // bigmodel.cn endpoint; switch to api.z.ai/api/paas/v4 for the international (z.ai) account.
     baseUrl: "https://open.bigmodel.cn/api/paas/v4",
     model: "glm-5.1",
+    jsonObjectFallback: true,
     models: [
       { label: "GLM-5.1", model: "glm-5.1" },
       { label: "GLM-5", model: "glm-5" },
@@ -291,6 +331,7 @@ export const PROVIDER_PRESETS: Record<ProviderType, ProviderPreset> = {
     // International OpenAI-compatible endpoint; switch to api.minimaxi.com/v1 for the China account.
     baseUrl: "https://api.minimax.io/v1",
     model: "MiniMax-M3",
+    jsonObjectFallback: true,
     models: [
       { label: "MiniMax-M3", model: "MiniMax-M3" },
       { label: "MiniMax-M2.7", model: "MiniMax-M2.7" },
@@ -546,7 +587,10 @@ async function buildProviderFor(
   } else if (type === "anthropic") {
     provider = createAnthropicProvider(base);
   } else {
-    provider = createOpenAIProvider(base);
+    provider = createOpenAIProvider({
+      ...base,
+      jsonObjectFallback: effectiveJsonObjectFallback(type, entry),
+    });
   }
   return withPlugins(provider, defaultPlugins());
 }

@@ -392,6 +392,9 @@ export const en = {
       contextWindow:
         "Context window (tokens · leave blank to infer from the model)",
       contextAuto: "Auto: {n}",
+      jsonObjectFallback: "Degrade to JSON object mode",
+      jsonObjectFallbackHint:
+        "For endpoints that don't support response_format json_schema (DeepSeek / Qwen / Kimi / GLM / MiniMax and similar): the schema is added to the prompt and the reply is parsed leniently. On by default for providers known to lack it.",
       apiKeyLabel: "API key {state}",
       apiKeyStateSaved: "(saved · leave blank to keep)",
       apiKeyStateUnset: "(not set)",

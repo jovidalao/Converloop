@@ -383,6 +383,9 @@ export const zh: Messages = {
       modelId: "模型 ID: {id}",
       contextWindow: "上下文窗口 (token · 留空自动按模型推断)",
       contextAuto: "自动:{n}",
+      jsonObjectFallback: "降级为 JSON object 模式",
+      jsonObjectFallbackHint:
+        "用于不支持 response_format json_schema 的端点(DeepSeek / Qwen / Kimi / GLM / MiniMax 等):schema 会写进 prompt,回复按宽松方式解析。已知不支持的 provider 默认开启。",
       apiKeyLabel: "API key {state}",
       apiKeyStateSaved: "(已保存 · 留空不改)",
       apiKeyStateUnset: "(未设置)",

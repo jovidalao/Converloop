@@ -1,7 +1,9 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import type {
+  ChatMessage,
   FinishReason,
   GenerateOptions,
+  JsonSchemaSpec,
   ModelProvider,
   Usage,
 } from "./types";
@@ -12,11 +14,31 @@ export interface OpenAIConfig {
   baseUrl: string; // e.g. https://api.openai.com/v1
   apiKey: string;
   model: string;
+  /** When the endpoint can't honor response_format:json_schema (many non-OpenAI vendors: DeepSeek/Qwen/Kimi/GLM/MiniMax),
+   *  downgrade json_schema requests to json_object up front and put the schema in the prompt instead. */
+  jsonObjectFallback?: boolean;
 }
 
 type Body = Record<string, unknown>;
 
-function buildBody(
+// Inline the JSON schema into the prompt as a reminder so a model answering in plain json_object mode still knows the
+// exact shape. Appends to the first system message (or prepends one). Mirrors the tutor's manual fallback, applied
+// centrally so every agent — not just the tutor — degrades cleanly on endpoints without json_schema support.
+export function withSchemaReminder(
+  messages: ChatMessage[],
+  schema: JsonSchemaSpec,
+): ChatMessage[] {
+  const reminder = `Respond with ONE JSON object only (no markdown, no commentary). It MUST match this JSON schema:\n${JSON.stringify(schema.schema)}`;
+  const firstSystem = messages.findIndex((m) => m.role === "system");
+  if (firstSystem === -1)
+    return [{ role: "system", content: reminder }, ...messages];
+  return messages.map((m, i) =>
+    i === firstSystem ? { ...m, content: `${m.content}\n\n${reminder}` } : m,
+  );
+}
+
+/** Matches the official chat/completions request body; exported for unit tests. */
+export function buildBody(
   cfg: OpenAIConfig,
   opts: GenerateOptions,
   stream: boolean,
@@ -27,7 +49,11 @@ function buildBody(
   if (stream) body.stream_options = { include_usage: true };
   if (opts.temperature !== undefined) body.temperature = opts.temperature;
   if (opts.maxTokens !== undefined) body.max_tokens = opts.maxTokens;
-  if (opts.jsonSchema) {
+  if (opts.jsonSchema && cfg.jsonObjectFallback) {
+    // Provider can't enforce json_schema → ask for a plain JSON object and carry the schema in the prompt.
+    body.response_format = { type: "json_object" };
+    body.messages = withSchemaReminder(opts.messages, opts.jsonSchema);
+  } else if (opts.jsonSchema) {
     body.response_format = {
       type: "json_schema",
       json_schema: {
