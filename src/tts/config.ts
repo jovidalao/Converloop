@@ -3,7 +3,9 @@ import { getSecret } from "../keychain";
 export const MIMO_TTS_KEY_ACCOUNT = "mimo_tts_api_key";
 
 export const MIMO_TTS_DEFAULTS = {
-  baseUrl: "http://192.168.31.154:8045/v1",
+  // MiMo TTS has no canonical public endpoint; the user supplies their own
+  // OpenAI-compatible gateway in Settings → Text-to-Speech.
+  baseUrl: "",
   model: "mimo-v2.5-tts",
   voice: "Chloe",
   stylePrompt:
@@ -80,8 +82,10 @@ export interface TtsConfig {
 
 const STORAGE_KEY = "lang-agent.tts";
 
+// Edge is the out-of-the-box default: free and keyless, so autoSpeak works on a
+// fresh install. MiMo needs a key plus a user-supplied gateway URL.
 const DEFAULT_TTS_CONFIG: TtsConfig = {
-  ttsProvider: "mimo",
+  ttsProvider: "edge",
   baseUrl: MIMO_TTS_DEFAULTS.baseUrl,
   model: MIMO_TTS_DEFAULTS.model,
   voice: MIMO_TTS_DEFAULTS.voice,

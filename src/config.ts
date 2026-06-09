@@ -200,7 +200,7 @@ export const PROVIDER_PRESETS: Record<ProviderType, ProviderPreset> = {
   openai: {
     label: "OpenAI Compatible (OpenAI / OpenRouter / LM Studio)",
     shortLabel: "OpenAI Compatible",
-    baseUrl: "http://192.168.31.154:8045/v1",
+    baseUrl: "https://api.openai.com/v1",
     model: "gpt-4o-mini",
     models: [
       { label: "GPT-4o mini", model: "gpt-4o-mini" },
@@ -213,7 +213,7 @@ export const PROVIDER_PRESETS: Record<ProviderType, ProviderPreset> = {
   gemini: {
     label: "Gemini (Native API)",
     shortLabel: "Gemini",
-    baseUrl: "http://192.168.31.154:8045/v1beta",
+    baseUrl: "https://generativelanguage.googleapis.com/v1beta",
     model: "gemini-2.0-flash",
     models: [
       { label: "Gemini 2.0 Flash", model: "gemini-2.0-flash" },
@@ -224,7 +224,7 @@ export const PROVIDER_PRESETS: Record<ProviderType, ProviderPreset> = {
   anthropic: {
     label: "Anthropic (Claude)",
     shortLabel: "Anthropic Claude",
-    baseUrl: "http://192.168.31.154:8045/v1",
+    baseUrl: "https://api.anthropic.com/v1",
     model: "claude-sonnet-4-20250514",
     models: [
       { label: "Claude Sonnet 4", model: "claude-sonnet-4-20250514" },
