@@ -187,9 +187,14 @@ async function runStandaloneSideQuestion(
     throw e;
   }
 
-  await persistTurn(conversationId, userInput, reply, null, id, {
-    excludeFromContext: true,
-  });
+  try {
+    await persistTurn(conversationId, userInput, reply, null, id, {
+      excludeFromContext: true,
+    });
+  } catch (e) {
+    rejectPersisted(e); // persistence failed → observers abandon bookkeeping instead of awaiting forever
+    throw e;
+  }
   resolvePersisted(id);
   cb.onReplyComplete?.(reply);
   return { reply, analysis: null };
@@ -722,10 +727,15 @@ export async function runTurn(
     throw e;
   }
 
-  await persistTurn(conversationId, userInput, reply, null, id, {
-    excludeFromContext: offRecord,
-    displayText: opts.displayText,
-  });
+  try {
+    await persistTurn(conversationId, userInput, reply, null, id, {
+      excludeFromContext: offRecord,
+      displayText: opts.displayText,
+    });
+  } catch (e) {
+    rejectPersisted(e); // persistence failed → observers abandon bookkeeping instead of awaiting forever
+    throw e;
+  }
   resolvePersisted(id);
   cb.onReplyComplete?.(reply);
 
