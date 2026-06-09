@@ -1277,6 +1277,7 @@ export function ChatView({
   const messagesRef = useRef<HTMLDivElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const hintOverlayRef = useRef<HTMLDivElement>(null);
   const stickToBottomRef = useRef(true);
   const turnGenRef = useRef(0);
   const replyCommittedRef = useRef(false);
@@ -1365,19 +1366,25 @@ export function ChatView({
   }, [inputHints]);
 
   // Input grows with content up to three lines; after that it scrolls internally.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: input is the intentional trigger; the effect reads inputRef after it changes, not input directly
+  // When the input is empty, an animated coaching hint is overlaid on top — let it wrap to
+  // multiple lines too, growing the box to fit the (clipped at three lines) hint so it isn't
+  // cut off to a single line. The overlay has no bottom padding, so add the textarea's pb-2 (8px).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: input/hint changes are the intentional triggers; the effect measures inputRef/hintOverlayRef after they change, not the values directly
   useEffect(() => {
     const el = inputRef.current;
     if (!el) return;
     el.style.height = "auto";
+    let contentHeight = el.scrollHeight;
+    const overlay = hintOverlayRef.current;
+    if (overlay) contentHeight = Math.max(contentHeight, overlay.scrollHeight + 8);
     const nextHeight = Math.min(
-      Math.max(el.scrollHeight, INPUT_TEXTAREA_MIN_HEIGHT),
+      Math.max(contentHeight, INPUT_TEXTAREA_MIN_HEIGHT),
       INPUT_TEXTAREA_MAX_HEIGHT,
     );
     el.style.height = `${nextHeight}px`;
     el.style.overflowY =
-      el.scrollHeight > INPUT_TEXTAREA_MAX_HEIGHT ? "auto" : "hidden";
-  }, [input]);
+      contentHeight > INPUT_TEXTAREA_MAX_HEIGHT ? "auto" : "hidden";
+  }, [input, hintsActive, hintIndex, inputHints]);
 
   function syncStickToBottom() {
     const el = messagesRef.current;
@@ -2368,10 +2375,13 @@ export function ChatView({
                   className="max-h-[6.5rem] min-h-14 w-full min-w-0 resize-none border-none bg-transparent px-4 pt-3 pb-2 text-ui-chat outline-none placeholder:text-muted-foreground"
                 />
                 {hintsActive && (
-                  <div className="pointer-events-none absolute inset-0 overflow-hidden px-4 pt-3 text-ui-chat">
+                  <div
+                    ref={hintOverlayRef}
+                    className="pointer-events-none absolute inset-0 overflow-hidden px-4 pt-3 text-ui-chat"
+                  >
                     <span
                       key={hintIndex}
-                      className="animate-hint-in block truncate text-muted-foreground"
+                      className="animate-hint-in line-clamp-3 text-muted-foreground"
                     >
                       {inputHints?.[hintIndex]}
                     </span>
