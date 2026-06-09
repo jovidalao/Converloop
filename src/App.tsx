@@ -5,7 +5,6 @@ import {
   type PhysicalSize,
 } from "@tauri-apps/api/window";
 import {
-  ChevronDownIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   GraduationCapIcon,
@@ -14,7 +13,6 @@ import {
   PanelLeftIcon,
   PanelRightIcon,
   SearchIcon,
-  SparklesIcon,
   SquarePenIcon,
   XIcon,
 } from "lucide-react";
@@ -42,13 +40,6 @@ import { SettingsView } from "./components/SettingsView";
 import { type MainView, Sidebar } from "./components/Sidebar";
 import { Button } from "./components/ui/button";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "./components/ui/dropdown-menu";
-import { Spinner } from "./components/ui/spinner";
-import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -64,6 +55,7 @@ import {
   listConversations,
   renameConversation,
   setActiveConversationId,
+  titleFromInput,
 } from "./db/conversations";
 import {
   ensureBuiltInLearningAgents,
@@ -79,12 +71,7 @@ import {
 } from "./lib/app-actions";
 import { withViewTransition } from "./lib/view-transition";
 import { flushMaintainerSoon } from "./profile/maintainer-runner";
-import {
-  beginAction,
-  getActions,
-  isAgentEnabled,
-  reloadCustomRuntimeAgents,
-} from "./runtime";
+import { beginAction, reloadCustomRuntimeAgents } from "./runtime";
 
 const SIDEBAR_MIN = 200;
 const SIDEBAR_MAX = 420;
@@ -105,6 +92,8 @@ type AppLocation = {
   view: MainView;
   activeId: string;
 };
+
+type DraftKind = "chat" | "quickfire" | "learning_agent";
 
 function sameLocation(a: AppLocation, b: AppLocation): boolean {
   return a.view === b.view && a.activeId === b.activeId;
@@ -140,8 +129,11 @@ function App() {
   const [learningAgents, setLearningAgents] = useState<LearningAgentMeta[]>([]);
   const [ready, setReady] = useState(false);
   const [draftId, setDraftId] = useState(() => crypto.randomUUID());
-  // Which kind of draft the current draftId is: a blank chat, or a Rapid Q&A start page.
-  const [draftKind, setDraftKind] = useState<"chat" | "quickfire">("chat");
+  // Which kind of draft the current draftId is: a blank chat, Rapid Q&A, or a lesson start page.
+  const [draftKind, setDraftKind] = useState<DraftKind>("chat");
+  const [draftLearningAgentId, setDraftLearningAgentId] = useState<
+    string | null
+  >(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [view, setView] = useState<MainView>("chat");
   const [collapsed, setCollapsed] = useState(false);
@@ -345,6 +337,7 @@ function App() {
     const id = crypto.randomUUID();
     setDraftId(id);
     setDraftKind("chat");
+    setDraftLearningAgentId(null);
     navigateTo({ view: "chat", activeId: id });
   }, [navigateTo]);
 
@@ -354,8 +347,22 @@ function App() {
     const id = crypto.randomUUID();
     setDraftId(id);
     setDraftKind("quickfire");
+    setDraftLearningAgentId(null);
     navigateTo({ view: "chat", activeId: id });
   }, [navigateTo]);
+
+  // Lesson drafts mirror Rapid Q&A: selecting a lesson opens a frontend-only start page. The conversation row is
+  // created only after the learner presses Start.
+  const openLearningAgentDraft = useCallback(
+    (agentId: string) => {
+      const id = crypto.randomUUID();
+      setDraftId(id);
+      setDraftKind("learning_agent");
+      setDraftLearningAgentId(agentId);
+      navigateTo({ view: "chat", activeId: id });
+    },
+    [navigateTo],
+  );
 
   const focusPanel = useCallback(
     (panel: "sidebar" | "chat" | "coach") => {
@@ -486,15 +493,28 @@ function App() {
     await refresh();
   }
 
-  async function startLearningAgent(agentId: string) {
+  // Materialize a new-chat draft seeded with a chosen topic into a real practice conversation (titled from the topic).
+  // Called by ChatView before the AI kickoff, so the conversation row exists when the AI opens the chat on that topic.
+  async function materializeTopicDraft(id: string, topic: string) {
+    await createConversation(titleFromInput(topic), id);
+    setActiveConversationId(id);
+    setDraftId((current) => (current === id ? crypto.randomUUID() : current));
+    setDraftKind("chat");
+    await refresh();
+  }
+
+  async function materializeLearningAgentDraft(id: string, agentId: string) {
     const agent = learningAgents.find((a) => a.id === agentId);
     const title = agent?.name ?? t("app.customLearningFallback");
-    const id = await createConversation(title, crypto.randomUUID(), {
+    await createConversation(title, id, {
       kind: "learning_agent",
       learningAgentId: agentId,
     });
+    setActiveConversationId(id);
+    setDraftId((current) => (current === id ? crypto.randomUUID() : current));
+    setDraftKind("chat");
+    setDraftLearningAgentId(null);
     await refresh();
-    selectConversation(id);
   }
 
   async function deriveConversation(
@@ -605,21 +625,20 @@ function App() {
   // Small-window mode always shows the chat, regardless of the underlying view,
   // so the draft check can't rely on view === "chat".
   const chatIsDraft = smallWindow ? activeId === draftId : draftActive;
+  const activeDraftLearningAgent =
+    chatIsDraft && draftKind === "learning_agent" && draftLearningAgentId
+      ? (learningAgents.find((a) => a.id === draftLearningAgentId) ?? null)
+      : null;
+  const currentChatKind =
+    activeConversation?.kind ??
+    (chatIsDraft && draftKind === "learning_agent"
+      ? "learning_agent"
+      : "practice");
   // The coach panel only appears in regular practice conversations (lessons
   // give feedback inline, without structured correction). It's hidden entirely
   // in small-window mode.
-  const coachEligible =
-    view === "chat" && (activeConversation?.kind ?? "practice") === "practice";
+  const coachEligible = view === "chat" && currentChatKind === "practice";
   const coachVisible = coachEligible && coachOpen && !smallWindow;
-  const derivationActions = getActions("session").filter((a) =>
-    isAgentEnabled(a.id),
-  );
-  const canDerive =
-    view === "chat" &&
-    !!activeConversation &&
-    !draftActive &&
-    activeConversation.kind === "practice" &&
-    derivationActions.length > 0;
   const settingsMode = isSettingsView(view);
   const TOPBAR_TITLES: Partial<Record<MainView, string>> = {
     profile: t("viewTitles.profile"),
@@ -638,7 +657,9 @@ function App() {
   const topbarTitle =
     view === "chat"
       ? draftActive
-        ? t("app.newChat")
+        ? draftKind === "learning_agent"
+          ? (activeDraftLearningAgent?.name ?? t("app.customLearningFallback"))
+          : t("app.newChat")
         : (activeConversation?.title ?? "")
       : (TOPBAR_TITLES[view] ?? "");
 
@@ -823,110 +844,66 @@ function App() {
                     </kbd>
                   </TooltipContent>
                 </Tooltip>
-                {canDerive && (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 gap-1.5 px-2.5 text-ui-caption"
-                        disabled={derivationBusy}
-                        title={t("app.deriveTooltip")}
-                        data-no-window-drag
-                      >
-                        {derivationBusy ? (
-                          <Spinner className="size-3.5" />
-                        ) : (
-                          <SparklesIcon size={15} />
-                        )}
-                        {derivationBusy
-                          ? t("app.deriving")
-                          : t("app.deriveNewConversation")}
-                        <ChevronDownIcon size={13} />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent
-                      align="end"
-                      className="max-h-[min(420px,var(--radix-dropdown-menu-content-available-height))] min-w-60 overflow-y-auto"
-                    >
-                      {derivationActions.map((action) => (
-                        <DropdownMenuItem
-                          key={action.id}
-                          onSelect={() =>
-                            void deriveConversation(activeId, action.id)
-                          }
-                        >
-                          <SparklesIcon size={14} />
-                          <span className="flex min-w-0 flex-col">
-                            <span className="truncate font-medium">
-                              {action.label}
-                            </span>
-                            {action.description && (
-                              <span className="max-w-64 truncate text-ui-caption text-ui-muted">
-                                {action.description}
-                              </span>
-                            )}
-                          </span>
-                        </DropdownMenuItem>
-                      ))}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                )}
-                {coachEligible && (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="codex-chrome-button"
-                        onClick={toggleCoach}
-                        data-active={coachVisible}
-                        aria-pressed={coachVisible}
-                        aria-label={
-                          coachVisible ? t("app.hideCoach") : t("app.showCoach")
-                        }
-                      >
-                        <GraduationCapIcon />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom" align="end">
-                      <span>
-                        {coachVisible ? t("app.hideCoach") : t("app.showCoach")}
-                      </span>
-                    </TooltipContent>
-                  </Tooltip>
-                )}
               </>
             )}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="codex-chrome-button"
-                  onClick={toggleSmallWindow}
-                  data-active={smallWindow}
-                  aria-pressed={smallWindow}
-                  aria-label={
-                    smallWindow
+            {!smallWindow && (
+              <span className="codex-topbar-divider" aria-hidden />
+            )}
+            {/* View-toggle cluster: pinned to the far-right edge. */}
+            <div className="codex-topbar-group">
+              {!smallWindow && coachEligible && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="codex-chrome-button"
+                      onClick={toggleCoach}
+                      data-active={coachVisible}
+                      aria-pressed={coachVisible}
+                      aria-label={
+                        coachVisible ? t("app.hideCoach") : t("app.showCoach")
+                      }
+                    >
+                      <GraduationCapIcon />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" align="end">
+                    <span>
+                      {coachVisible ? t("app.hideCoach") : t("app.showCoach")}
+                    </span>
+                  </TooltipContent>
+                </Tooltip>
+              )}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="codex-chrome-button"
+                    onClick={toggleSmallWindow}
+                    data-active={smallWindow}
+                    aria-pressed={smallWindow}
+                    aria-label={
+                      smallWindow
+                        ? t("app.exitSmallWindow")
+                        : t("app.smallWindow")
+                    }
+                  >
+                    {smallWindow ? <Maximize2Icon /> : <Minimize2Icon />}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" align="end">
+                  <span>
+                    {smallWindow
                       ? t("app.exitSmallWindow")
-                      : t("app.smallWindow")
-                  }
-                >
-                  {smallWindow ? <Maximize2Icon /> : <Minimize2Icon />}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" align="end">
-                <span>
-                  {smallWindow
-                    ? t("app.exitSmallWindow")
-                    : t("app.smallWindow")}
-                </span>
-              </TooltipContent>
-            </Tooltip>
+                      : t("app.smallWindow")}
+                  </span>
+                </TooltipContent>
+              </Tooltip>
+            </div>
           </TooltipProvider>
         </div>
       </header>
@@ -942,7 +919,7 @@ function App() {
           onSelect={selectConversation}
           onNewChat={openDraftConversation}
           onStartQuickfire={openQuickfireDraft}
-          onStartLearningAgent={(id) => void startLearningAgent(id)}
+          onStartLearningAgent={openLearningAgentDraft}
           onRefreshLearningAgents={refreshLearningAgents}
           onDeriveConversation={(id, actionId) =>
             void deriveConversation(id, actionId)
@@ -971,9 +948,13 @@ function App() {
             conversationId={activeId}
             isDraft={chatIsDraft}
             isQuickfireDraft={chatIsDraft && draftKind === "quickfire"}
-            mode={activeConversation?.kind ?? "practice"}
+            isLearningAgentDraft={chatIsDraft && draftKind === "learning_agent"}
+            learningAgentDraft={activeDraftLearningAgent}
+            mode={currentChatKind}
             onCreateDraftConversation={materializeDraftConversation}
             onCreateQuickfireDraft={materializeQuickfireDraft}
+            onCreateTopicDraft={materializeTopicDraft}
+            onCreateLearningAgentDraft={materializeLearningAgentDraft}
             onActivity={() => void refresh()}
             onTurnsChange={setCoachTurns}
             onNavigateConversation={selectConversation}
@@ -1009,7 +990,7 @@ function App() {
         conversations={conversations}
         learningAgents={learningAgents}
         onSelectConversation={selectConversation}
-        onStartLearningAgent={(id) => void startLearningAgent(id)}
+        onStartLearningAgent={openLearningAgentDraft}
         onNewChat={openDraftConversation}
       />
 

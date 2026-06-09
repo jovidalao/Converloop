@@ -1,14 +1,14 @@
-import { ZapIcon } from "lucide-react";
+import { SparklesIcon } from "lucide-react";
 
 import { useTranslation } from "@/i18n";
 import type { QuickfireTopicsDebug } from "../orchestrator";
 import { TopicStartScreen } from "./TopicStartScreen";
 
-// Rapid-fire Q&A start page (shown on an empty quickfire draft): a default prompt up top and a set of recommended
-// umbrella-scenario chips generated in the background from the learner's records. Picking a chip — or typing a
-// scenario into the composer below — materializes the conversation and starts the drill. Thin wrapper over the
-// shared TopicStartScreen, which holds the chip / skeleton / refresh / debug markup.
-export function QuickfireStartScreen({
+// New-chat start page (shown on an empty practice draft): a short intro and a set of recommended conversation-topic
+// chips generated in the background from the learner's profile and recent topics. Picking a chip materializes the
+// conversation and the AI opens the chat on that topic; typing a first message in the composer below starts a normal
+// turn instead. Thin wrapper over the shared TopicStartScreen.
+export function NewChatStartScreen({
   topics,
   refreshing,
   debug,
@@ -23,18 +23,18 @@ export function QuickfireStartScreen({
   /** Diagnostics from the last fetch (raw response / fallback flag / counts), shown in a collapsible debug panel. */
   debug: QuickfireTopicsDebug | null;
   busy: boolean;
-  onPick: (scenario: string) => void;
+  onPick: (topic: string) => void;
   onRefresh: () => void;
 }) {
   const { t } = useTranslation();
   return (
     <TopicStartScreen
-      icon={<ZapIcon className="size-5 text-primary" />}
-      title={t("quickfire.startTitle")}
-      description={t("quickfire.startDescription")}
-      recommendedLabel={t("quickfire.recommendedTopics")}
-      refreshLabel={t("quickfire.refresh")}
-      debugTitle={t("quickfire.debugTitle")}
+      icon={<SparklesIcon className="size-5 text-primary" />}
+      title={t("newChat.startTitle")}
+      description={t("newChat.startDescription")}
+      recommendedLabel={t("newChat.recommendedTopics")}
+      refreshLabel={t("newChat.refresh")}
+      debugTitle={t("newChat.debugTitle")}
       topics={topics}
       refreshing={refreshing}
       debug={debug}

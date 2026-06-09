@@ -15,10 +15,12 @@ function stubProvider(
   };
 }
 
+// rng ≈ 1 makes the Fisher–Yates shuffle a no-op (identity), so these assertions can check exact order/content.
 const ctx = {
   targetLanguage: "English",
   nativeLanguage: "Chinese",
   level: "intermediate",
+  rng: () => 0.999999,
 };
 
 describe("generateQuickfireTopics", () => {
@@ -69,8 +71,23 @@ describe("generateQuickfireTopics", () => {
     );
     const topics = await generateQuickfireTopics(provider, ctx);
     expect(topics).not.toContain(longLabel);
-    expect(topics).toHaveLength(10);
+    expect(topics).toHaveLength(8);
     expect(topics[0]).toBe("场景0");
+  });
+
+  it("over-generates then samples down to the display count", async () => {
+    const many = Array.from({ length: 16 }, (_, i) => `选项${i}`);
+    const provider = stubProvider(() => JSON.stringify({ topics: many }));
+    // A non-identity rng so the shuffle actually reorders; result is still a deduped subset of the input.
+    let seed = 0;
+    const rng = () => {
+      seed = (seed + 0.37) % 1;
+      return seed;
+    };
+    const topics = await generateQuickfireTopics(provider, { ...ctx, rng });
+    expect(topics).toHaveLength(8);
+    expect(new Set(topics).size).toBe(8);
+    for (const t of topics) expect(many).toContain(t);
   });
 
   it("falls back to default topics when nothing parseable comes back", async () => {

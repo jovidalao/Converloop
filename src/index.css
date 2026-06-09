@@ -752,6 +752,16 @@
   right: 12px;
   z-index: 1;
 }
+.codex-topbar-group {
+  display: flex;
+  align-items: center;
+}
+.codex-topbar-divider {
+  width: 1px;
+  height: 18px;
+  margin: 0 6px;
+  background: color-mix(in srgb, var(--codex-border) 70%, transparent);
+}
 /* Windows uses the native OS title bar (window controls live top-right, and
    there are no macOS traffic lights top-left), so reclaim the left gap the
    topbar reserved for them. Glass is also force-disabled on Windows

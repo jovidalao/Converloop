@@ -62,6 +62,10 @@ import {
   truncateConversationFrom,
 } from "../db/conversations";
 import {
+  getLearningAgent,
+  type LearningAgentMeta,
+} from "../db/learning-agents";
+import {
   type ChatTurn,
   incrementBilingualCount,
   incrementExplainCount,
@@ -74,15 +78,19 @@ import {
   confirmLearningTurnMastery,
   generateAndSetConversationTitle,
   generateInputHintsForConversation,
+  loadCachedConversationTopics,
   loadCachedInputHints,
   loadCachedQuickfireTopics,
   MissingApiKeyError,
+  type QuickfireTopicsDebug,
+  recommendConversationTopics,
   recommendQuickfireTopics,
   regenerateReply,
   runTurn,
   startDerivedConversation,
   startLearningSession,
   startQuickfireSession,
+  startTopicConversation,
   suggestReply,
 } from "../orchestrator";
 import {
@@ -97,7 +105,9 @@ import { createReplySpeaker } from "../tts/stream";
 import { AnnotationIsland } from "./AnnotationIsland";
 import { useConfirm } from "./confirm";
 import { InlineCorrection, UserSentence } from "./InlineCorrection";
+import { LessonStartScreen } from "./LessonStartScreen";
 import { Markdown } from "./Markdown";
+import { NewChatStartScreen } from "./NewChatStartScreen";
 import { QuickfireStartScreen } from "./QuickfireStartScreen";
 import { ReplyExplanation } from "./ReplyExplanation";
 import { remarkBilingual } from "./remark-bilingual";
@@ -113,6 +123,13 @@ interface ChatViewProps {
   isDraft?: boolean;
   /** This draft is a Rapid Q&A start page (only meaningful when isDraft): show the start screen and treat the first commit as the umbrella scenario. */
   isQuickfireDraft?: boolean;
+  /** This draft is a lesson start page. The conversation row is created only when Start is pressed. */
+  isLearningAgentDraft?: boolean;
+  /** Metadata for the selected lesson draft, shown before the row exists in SQLite. */
+  learningAgentDraft?: Pick<
+    LearningAgentMeta,
+    "id" | "name" | "description"
+  > | null;
   mode?: "practice" | "learning_agent";
   /** Fires after a new turn is persisted (title may have changed, sidebar needs refresh). */
   onActivity?: () => void;
@@ -120,6 +137,10 @@ interface ChatViewProps {
   onCreateDraftConversation?: (id: string) => Promise<void>;
   /** Materialize a Rapid Q&A draft into a real conversation with the chosen umbrella scenario (called before the AI kickoff). */
   onCreateQuickfireDraft?: (id: string, scenario: string) => Promise<void>;
+  /** Materialize a new-chat draft into a real conversation seeded with the chosen topic (called before the AI opens the chat). */
+  onCreateTopicDraft?: (id: string, topic: string) => Promise<void>;
+  /** Materialize a lesson draft into a real learning-agent conversation before the AI kickoff. */
+  onCreateLearningAgentDraft?: (id: string, agentId: string) => Promise<void>;
   /** Reports all turns to the coach panel; re-reported when analysis arrives (read-only, doesn't affect this component's logic). */
   onTurnsChange?: (turns: ChatTurn[]) => void;
   /** Called when a conversation action creates a branch; App switches to the new conversation. */
@@ -1232,10 +1253,14 @@ export function ChatView({
   conversationId,
   isDraft = false,
   isQuickfireDraft = false,
+  isLearningAgentDraft = false,
+  learningAgentDraft = null,
   mode = "practice",
   onActivity,
   onCreateDraftConversation,
   onCreateQuickfireDraft,
+  onCreateTopicDraft,
+  onCreateLearningAgentDraft,
   onTurnsChange,
   onNavigateConversation,
   compact = false,
@@ -1261,13 +1286,33 @@ export function ChatView({
   const [quickfireScenario, setQuickfireScenario] = useState<string | null>(
     null,
   );
+  // Lesson start screen: name + intro of the picked 定制化学习 lesson, shown before its first turn fires (null until
+  // resolved, or once the lesson has started). The Start button kicks off the lesson.
+  const [lessonInfo, setLessonInfo] = useState<{
+    name: string;
+    description: string;
+  } | null>(null);
   // Rapid Q&A start page: recommended umbrella scenarios (null = still loading, [] = none → type-your-own).
   const [quickfireTopics, setQuickfireTopics] = useState<string[] | null>(null);
-  // True while a fresh recommendation fetch is in flight — drives the trailing loading box even when cached chips show.
+  // True while a fresh recommendation fetch is in flight — drives the loading skeletons while there are no chips.
   const [quickfireTopicsRefreshing, setQuickfireTopicsRefreshing] =
     useState(false);
+  // Diagnostics from the last recommendation fetch (raw response / fallback flag / counts) for the debug panel.
+  const [quickfireDebug, setQuickfireDebug] =
+    useState<QuickfireTopicsDebug | null>(null);
   // Bumped by the regenerate button to re-run the recommendation fetch.
   const [quickfireReloadTick, setQuickfireReloadTick] = useState(0);
+  // Topics on screen when regenerate was clicked — passed to the next fetch as "avoid these" so it returns a different set.
+  const quickfireAvoidRef = useRef<string[]>([]);
+  // New-chat start page: recommended conversation topics (null = still loading, [] = none → type-your-own), mirroring
+  // the Rapid Q&A topic state. Picking a chip lets the AI open the chat on that topic.
+  const [newChatTopics, setNewChatTopics] = useState<string[] | null>(null);
+  const [newChatTopicsRefreshing, setNewChatTopicsRefreshing] = useState(false);
+  const [newChatDebug, setNewChatDebug] = useState<QuickfireTopicsDebug | null>(
+    null,
+  );
+  const [newChatReloadTick, setNewChatReloadTick] = useState(0);
+  const newChatAvoidRef = useRef<string[]>([]);
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Retry entry for the last failed operation (send / regenerate / lesson start all share the bottom error bar).
@@ -1284,6 +1329,7 @@ export function ChatView({
   const kickoffStartedRef = useRef(false);
   const derivationStartedRef = useRef(false);
   const quickfireStartedRef = useRef(false);
+  const topicStartedRef = useRef(false);
   const liveTurnIdsRef = useRef<Set<string>>(new Set()); // turns sent in this session; auto-bilingual only applies to these
   const hintTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const config = useConfig();
@@ -1293,6 +1339,17 @@ export function ChatView({
   // Rapid Q&A start page: an uncommitted quickfire draft (no conversation row yet). Drives the start screen,
   // the scenario-input composer, and routing the first send through startQuickfireDraft instead of a graded turn.
   const quickfireDraftActive = isDraft && isQuickfireDraft;
+  // New-chat start page: a plain uncommitted practice draft (not Rapid Q&A / lesson). Drives the topic start screen;
+  // picking a chip materializes the conversation and the AI opens it on that topic. The composer still sends a normal
+  // first turn (type-your-own), so this only changes the empty-state, not the send path.
+  const newChatDraftActive =
+    isDraft && !isQuickfireDraft && !isLearningAgentDraft && !learningMode;
+  // Lesson start page: an uncommitted lesson draft (no conversation row yet). Start materializes it, then runs the
+  // same kickoff path as an existing empty lesson conversation.
+  const lessonDraftActive = isDraft && isLearningAgentDraft;
+  // Lesson start screen is up (learning conversation not yet kicked off): the composer is a no-op gate — the only way
+  // in is the Start button, so disable input and let the AI open the lesson as designed.
+  const lessonGateActive = learningMode && turns.length === 0;
   // Coaching hints are rendered as an animated overlay (not the native placeholder, which can't
   // transition between hints). Active only in practice mode, when hints exist and the input is empty.
   const hintsActive =
@@ -1376,7 +1433,8 @@ export function ChatView({
     el.style.height = "auto";
     let contentHeight = el.scrollHeight;
     const overlay = hintOverlayRef.current;
-    if (overlay) contentHeight = Math.max(contentHeight, overlay.scrollHeight + 8);
+    if (overlay)
+      contentHeight = Math.max(contentHeight, overlay.scrollHeight + 8);
     const nextHeight = Math.min(
       Math.max(contentHeight, INPUT_TEXTAREA_MIN_HEIGHT),
       INPUT_TEXTAREA_MAX_HEIGHT,
@@ -1413,6 +1471,7 @@ export function ChatView({
     let cancelled = false;
     setDerivedBanner(null);
     setQuickfireScenario(null);
+    setLessonInfo(null);
     setInputHints(null);
     setLastPromptTokens(null); // reset the context meter; repopulated on the next send in this conversation
     if (hintTimerRef.current) clearInterval(hintTimerRef.current);
@@ -1420,7 +1479,24 @@ export function ChatView({
       if (cancelled) return;
       setTurns(loaded);
       if (learningMode && loaded.length === 0 && !kickoffStartedRef.current) {
-        void startLesson();
+        if (lessonDraftActive) {
+          setLessonInfo({
+            name: learningAgentDraft?.name ?? t("app.customLearningFallback"),
+            description: learningAgentDraft?.description ?? "",
+          });
+          return;
+        }
+        // Don't fire the first turn yet: resolve the lesson and show the start screen (intro + Start button).
+        const conv = await getConversation(conversationId);
+        if (cancelled) return;
+        const agent = conv?.learningAgentId
+          ? await getLearningAgent(conv.learningAgentId)
+          : null;
+        if (cancelled) return;
+        setLessonInfo({
+          name: agent?.name ?? t("app.customLearningFallback"),
+          description: agent?.description ?? "",
+        });
         return;
       }
       if (!learningMode) {
@@ -1482,8 +1558,7 @@ export function ChatView({
   // Rapid Q&A start page: when the draft opens, show the last cached recommendations immediately (no empty flash),
   // then refresh them from the learner's records in the background. Clears when committed (quickfireDraftActive flips
   // false). A different draft has a new id, so ChatView remounts (key={activeId}) and this re-runs fresh — no need to
-  // depend on conversationId. quickfireReloadTick is a re-run trigger (its value is unused in the body).
-  // biome-ignore lint/correctness/useExhaustiveDependencies: quickfireReloadTick is an intentional re-run trigger
+  // depend on conversationId. Bumping quickfireReloadTick re-runs this as a manual regenerate.
   useEffect(() => {
     if (!quickfireDraftActive) {
       setQuickfireTopics(null);
@@ -1491,16 +1566,24 @@ export function ChatView({
       return;
     }
     let cancelled = false;
+    // tick 0 = initial open; > 0 = a manual regenerate, where we want a clearly different set.
+    const regenerate = quickfireReloadTick > 0;
+    const avoid = regenerate ? quickfireAvoidRef.current : [];
     setQuickfireTopicsRefreshing(true);
+    // On regenerate, clear the chips so the centered spinner shows and the new set is unmistakable.
+    if (regenerate) setQuickfireTopics(null);
     void (async () => {
-      // Keep whatever is already shown (cached, or a previous set on manual refresh) until fresh ones arrive.
-      const cached = await loadCachedQuickfireTopics();
+      // On first open, show the cached set immediately (no empty flash) while fresh ones load in the background.
+      if (!regenerate) {
+        const cached = await loadCachedQuickfireTopics();
+        if (cancelled) return;
+        if (cached.length > 0) setQuickfireTopics((cur) => cur ?? cached);
+      }
+      const result = await recommendQuickfireTopics({ avoid });
       if (cancelled) return;
-      if (cached.length > 0) setQuickfireTopics((cur) => cur ?? cached);
-      const result = await recommendQuickfireTopics();
-      if (cancelled) return;
+      setQuickfireDebug(result.debug);
       if (result.topics.length > 0) setQuickfireTopics(result.topics);
-      // Nothing available (no provider / error and no cache): stop the loading box.
+      // Nothing available (no provider / error and no cache): stop the skeletons.
       else setQuickfireTopics((cur) => cur ?? []);
       setQuickfireTopicsRefreshing(false);
     })();
@@ -1508,6 +1591,38 @@ export function ChatView({
       cancelled = true;
     };
   }, [quickfireDraftActive, quickfireReloadTick]);
+
+  // New-chat start page: same shape as the Rapid Q&A effect above — show the last cached topics immediately (no empty
+  // flash), then refresh from the learner's records in the background. Clears when the draft commits (newChatDraftActive
+  // flips false). Bumping newChatReloadTick re-runs this as a manual regenerate.
+  useEffect(() => {
+    if (!newChatDraftActive) {
+      setNewChatTopics(null);
+      setNewChatTopicsRefreshing(false);
+      return;
+    }
+    let cancelled = false;
+    const regenerate = newChatReloadTick > 0;
+    const avoid = regenerate ? newChatAvoidRef.current : [];
+    setNewChatTopicsRefreshing(true);
+    if (regenerate) setNewChatTopics(null);
+    void (async () => {
+      if (!regenerate) {
+        const cached = await loadCachedConversationTopics();
+        if (cancelled) return;
+        if (cached.length > 0) setNewChatTopics((cur) => cur ?? cached);
+      }
+      const result = await recommendConversationTopics({ avoid });
+      if (cancelled) return;
+      setNewChatDebug(result.debug);
+      if (result.topics.length > 0) setNewChatTopics(result.topics);
+      else setNewChatTopics((cur) => cur ?? []);
+      setNewChatTopicsRefreshing(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [newChatDraftActive, newChatReloadTick]);
 
   // All turns are reported to the coach panel. Turns are patched (new object) when analysis arrives, so re-reporting is automatic.
   useEffect(() => {
@@ -1550,6 +1665,12 @@ export function ChatView({
     setStreaming("");
     let acc = "";
     try {
+      if (lessonDraftActive) {
+        if (!learningAgentDraft || !onCreateLearningAgentDraft) {
+          throw new Error("This focused lesson has no learning agent linked");
+        }
+        await onCreateLearningAgentDraft(conversationId, learningAgentDraft.id);
+      }
       const result = await startLearningSession(
         conversationId,
         {
@@ -1777,7 +1898,7 @@ export function ChatView({
     }
   }
 
-  // Commit an umbrella scenario from the Rapid Q&A start page (chip / Random / typed-send): first materialize the real
+  // Commit an umbrella scenario from the Rapid Q&A start page (chip or typed-send): first materialize the real
   // quickfire conversation so the AI kickoff can read the scenario from its modifiers, then fire the first situation.
   async function startQuickfireDraft(scenario: string) {
     const s = scenario.trim();
@@ -1788,11 +1909,99 @@ export function ChatView({
     await startQuickfire();
   }
 
-  // "Random" button: start one of the recommended topics at random. No-op until recommendations have loaded.
-  function pickRandomQuickfireTopic() {
-    const topics = quickfireTopics;
-    if (!topics || topics.length === 0) return;
-    void startQuickfireDraft(topics[Math.floor(Math.random() * topics.length)]);
+  // New-chat topic kickoff: the AI opens the conversation on the chosen topic (AI speaks first, no grading), like a
+  // derived opening but with no context-generation step — the topic is passed straight to the opening instruction.
+  // After this, it is an ordinary practice conversation and subsequent learner answers go through the graded send().
+  async function startTopic(topic: string, replacingId?: string) {
+    if (learningMode || replyBusy || topicStartedRef.current) return;
+    stopSpeech();
+    topicStartedRef.current = true;
+    const turnGen = ++turnGenRef.current;
+    const turnId = crypto.randomUUID();
+    liveTurnIdsRef.current.add(turnId);
+    stickToBottomRef.current = true;
+    setError(null);
+    setRetry(null);
+    replyCommittedRef.current = false;
+    setTurns((prev) => [
+      ...(replacingId ? prev.filter((t) => t.id !== replacingId) : prev),
+      {
+        id: turnId,
+        userText: "",
+        analysis: null,
+        analysisPending: false,
+      },
+    ]);
+    setReplyBusy(true);
+    setStreaming("");
+    let acc = "";
+    const speaker = loadTtsConfig().autoSpeak ? createReplySpeaker() : null;
+    try {
+      const result = await startTopicConversation(
+        conversationId,
+        topic,
+        {
+          onReplyDelta: (d) => {
+            if (turnGenRef.current !== turnGen) return;
+            acc += d;
+            setStreaming(acc);
+          },
+          onReplyComplete: (reply) => {
+            if (turnGenRef.current !== turnGen) return;
+            replyCommittedRef.current = true;
+            commitPartnerReply(turnId, reply);
+            speaker?.finish(reply);
+          },
+          onContext: (tokens) => {
+            if (turnGenRef.current === turnGen) setLastPromptTokens(tokens);
+          },
+          onAnalysis: () => {
+            patchTurn(turnId, { analysisPending: false });
+          },
+        },
+        turnId,
+      );
+      if (turnGenRef.current === turnGen && !replyCommittedRef.current) {
+        commitPartnerReply(turnId, result.reply);
+        speaker?.finish(result.reply);
+      }
+      await touchConversation(conversationId);
+      onActivity?.();
+    } catch (e) {
+      stopSpeech();
+      speaker?.abort();
+      patchTurn(turnId, {
+        analysisPending: false,
+        analysisError: t("chat.topicStartFailed"),
+      });
+      setError(
+        e instanceof MissingApiKeyError
+          ? e.message
+          : e instanceof Error
+            ? e.message
+            : String(e),
+      );
+      // Release the kickoff guard so retry can restart; the failed turn is replaced on retry.
+      topicStartedRef.current = false;
+      setRetry({ run: () => void startTopic(topic, turnId) });
+    } finally {
+      if (turnGenRef.current === turnGen) {
+        setStreaming("");
+        setReplyBusy(false);
+      } else {
+        speaker?.abort();
+      }
+    }
+  }
+
+  // Commit a topic from the new-chat start page (chip): first materialize the real practice conversation so the AI
+  // opening has a conversation row to read from, then let the AI open the chat on that topic.
+  async function startTopicDraft(topic: string) {
+    const s = topic.trim();
+    if (!s || replyBusy || topicStartedRef.current) return;
+    setInput("");
+    await onCreateTopicDraft?.(conversationId, s);
+    await startTopic(s);
   }
 
   // opts.text: reuse original text on retry (don't pull from input box);
@@ -2064,6 +2273,8 @@ export function ChatView({
   // "action" type executes an existing conversation action; "meta" (/help) expands the full list;
   // non-commands send normally. Arrives here via Enter / Send when the menu is already closed.
   function submitInput() {
+    // Lesson start screen: the composer is a disabled gate — the lesson only begins via the Start button.
+    if (lessonGateActive) return;
     // Rapid Q&A start page: the composer takes a custom umbrella scenario, not a graded turn or a slash command.
     if (quickfireDraftActive) {
       void startQuickfireDraft(input);
@@ -2198,16 +2409,42 @@ export function ChatView({
             <QuickfireStartScreen
               topics={quickfireTopics}
               refreshing={quickfireTopicsRefreshing}
+              debug={quickfireDebug}
               busy={replyBusy}
               onPick={(s) => void startQuickfireDraft(s)}
-              onRandom={pickRandomQuickfireTopic}
-              onRefresh={() => setQuickfireReloadTick((n) => n + 1)}
+              onRefresh={() => {
+                quickfireAvoidRef.current = quickfireTopics ?? [];
+                setQuickfireReloadTick((n) => n + 1);
+              }}
+            />
+          ) : learningMode ? (
+            lessonInfo ? (
+              <LessonStartScreen
+                name={lessonInfo.name}
+                description={lessonInfo.description}
+                busy={replyBusy}
+                onStart={() => void startLesson()}
+              />
+            ) : (
+              <div className="m-auto text-center text-ui-body leading-relaxed text-ui-muted">
+                {t("chat.preparingLesson")}
+              </div>
+            )
+          ) : newChatDraftActive ? (
+            <NewChatStartScreen
+              topics={newChatTopics}
+              refreshing={newChatTopicsRefreshing}
+              debug={newChatDebug}
+              busy={replyBusy}
+              onPick={(topic) => void startTopicDraft(topic)}
+              onRefresh={() => {
+                newChatAvoidRef.current = newChatTopics ?? [];
+                setNewChatReloadTick((n) => n + 1);
+              }}
             />
           ) : (
             <div className="m-auto text-center text-ui-body leading-relaxed text-ui-muted">
-              {learningMode
-                ? t("chat.preparingLesson")
-                : t("chat.startConversation")}
+              {t("chat.startConversation")}
             </div>
           ))}
         {turns.map((turn) => (
@@ -2363,15 +2600,17 @@ export function ChatView({
                   }}
                   rows={1}
                   placeholder={
-                    learningMode
-                      ? t("chat.inputPlaceholderLesson")
-                      : quickfireDraftActive
-                        ? t("quickfire.scenarioPlaceholder")
-                        : !compact && inputHints && inputHints.length > 0
-                          ? "" // hint shown via the animated overlay below
-                          : t("chat.inputPlaceholderPractice")
+                    lessonGateActive
+                      ? t("chat.lessonStartHint")
+                      : learningMode
+                        ? t("chat.inputPlaceholderLesson")
+                        : quickfireDraftActive
+                          ? t("quickfire.scenarioPlaceholder")
+                          : !compact && inputHints && inputHints.length > 0
+                            ? "" // hint shown via the animated overlay below
+                            : t("chat.inputPlaceholderPractice")
                   }
-                  disabled={replyBusy}
+                  disabled={replyBusy || lessonGateActive}
                   className="max-h-[6.5rem] min-h-14 w-full min-w-0 resize-none border-none bg-transparent px-4 pt-3 pb-2 text-ui-chat outline-none placeholder:text-muted-foreground"
                 />
                 {hintsActive && (
@@ -2470,7 +2709,7 @@ export function ChatView({
                   type="submit"
                   size="icon"
                   className="size-8 rounded-full transition-transform active:scale-90"
-                  disabled={replyBusy || !input.trim()}
+                  disabled={replyBusy || lessonGateActive || !input.trim()}
                   title={t("chat.send")}
                   aria-label={t("chat.send")}
                 >

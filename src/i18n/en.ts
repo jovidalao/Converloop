@@ -235,9 +235,17 @@ export const en = {
     startDescription:
       "Give me a scenario and I'll fire concrete situations at you to respond to on the spot — a quick model answer comes before the next one.",
     recommendedTopics: "Recommended topics",
-    random: "Random",
     scenarioPlaceholder: "Describe a scenario… or pick one above",
     refresh: "Regenerate",
+    debugTitle: "Debug info",
+  },
+  newChat: {
+    startTitle: "Start a new conversation",
+    startDescription:
+      "Pick a topic and I'll open the conversation — you take it from there. Or just type your first message below.",
+    recommendedTopics: "Recommended topics",
+    refresh: "Regenerate",
+    debugTitle: "Debug info",
   },
   commandPalette: {
     ariaLabel: "Quick jump",
@@ -550,10 +558,13 @@ export const en = {
     practiceBadge: "Practice",
     quickfireBadge: "Rapid Q&A",
     quickfireStartFailed: "Failed to start rapid-fire Q&A",
+    topicStartFailed: "Failed to start the conversation",
     derivedBadge: "Derived",
     difficultyBadge: "Difficulty·{diff}",
     contextUsage: "~{used} / {limit} tokens · Context {pct}%",
     preparingLesson: "Preparing lesson…",
+    lessonStartButton: "Start lesson",
+    lessonStartHint: "Press “Start lesson” above to begin",
     startConversation: "Say something in your target language to start.",
     preparingContext: "Generating new conversation context…",
   },

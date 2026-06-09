@@ -230,9 +230,17 @@ export const zh: Messages = {
     startDescription:
       "给我一个场景,我会连续抛出具体情境让你即兴应答,下一题之前会先给一句示范说法。",
     recommendedTopics: "推荐话题",
-    random: "随机",
     scenarioPlaceholder: "描述一个场景…… 或从上方选一个",
     refresh: "重新生成",
+    debugTitle: "调试信息",
+  },
+  newChat: {
+    startTitle: "开始新对话",
+    startDescription:
+      "挑一个话题,我来起头,你接着聊。也可以直接在下方输入第一句话。",
+    recommendedTopics: "推荐话题",
+    refresh: "重新生成",
+    debugTitle: "调试信息",
   },
   commandPalette: {
     ariaLabel: "快速跳转",
@@ -534,10 +542,13 @@ export const zh: Messages = {
     practiceBadge: "练习",
     quickfireBadge: "快问快答",
     quickfireStartFailed: "快问快答启动失败",
+    topicStartFailed: "对话启动失败",
     derivedBadge: "推导",
     difficultyBadge: "难度·{diff}",
     contextUsage: "~{used} / {limit} 词·上下文 {pct}%",
     preparingLesson: "正在准备课程…",
+    lessonStartButton: "开始课程",
+    lessonStartHint: "点上方「开始课程」开始本节课",
     startConversation: "用目标语言说点什么，开始练习吧。",
     preparingContext: "正在生成新的对话情境…",
   },

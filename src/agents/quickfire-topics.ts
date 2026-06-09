@@ -13,6 +13,10 @@ export interface QuickfireTopicsContext {
   weakItems?: string[];
   /** Titles of recently practiced conversations (avoid repeating these). */
   recentTopics?: string[];
+  /** Scenarios just shown to the learner on a regenerate — return a clearly different set, not rewordings of these. */
+  avoid?: string[];
+  /** Random source — injectable so tests are deterministic; defaults to Math.random. Drives lens sampling + shuffle. */
+  rng?: () => number;
 }
 
 // Structured output: an object wrapper (json_schema requires an object root) around the topic list.
@@ -20,10 +24,15 @@ const QuickfireTopics = z.object({
   topics: z.array(z.string()).min(1),
 });
 
-const MAX_OUTPUT_TOKENS = 700;
+// Over-generate then sample: ask for OVERGEN_COUNT corner cases and randomly show TARGET_COUNT, so each refresh
+// surfaces a different slice. Generous token budget covers the larger list plus reasoning headroom — on thinking
+// models (e.g. Gemini *-flash) reasoning tokens count against maxOutputTokens, so too tight a cap gets consumed by
+// thinking and the model returns an empty text part.
+const MAX_OUTPUT_TOKENS = 3072;
 const MAX_TOPIC_CHARS = 56;
-const TARGET_COUNT = 8;
-const MAX_TOPICS = 10;
+const TARGET_COUNT = 8; // chips shown
+const OVERGEN_COUNT = 16; // scenarios requested from the model, before sampling down to TARGET_COUNT
+const LENS_SAMPLE = 4; // corner-case angles injected into the prompt per call
 const FALLBACK_TOPICS_ZH = [
   "处理快递送错地址",
   "向店员反馈多收费问题",
@@ -45,7 +54,21 @@ const FALLBACK_TOPICS_EN = [
   "Small talk with someone new",
 ];
 
-function prefersChineseLabels(nativeLanguage: string): boolean {
+// Corner-case "lenses": twist dimensions that turn an ordinary errand into the awkward, off-script version people
+// actually freeze on. A random few are injected each call so successive refreshes mine different kinds of corner case
+// (and the changing prompt is what gives the regenerate real variety).
+const CORNER_CASE_LENSES = [
+  "something goes wrong (item arrives broken, the system is down, your booking was lost, you were charged twice)",
+  "the other party resists (a clerk refuses, a landlord stalls, support keeps deflecting, a doctor brushes off your concern)",
+  "social awkwardness (you blanked on their name, you must correct someone senior, decline without offending, deflect an over-personal question)",
+  "an ambiguous gray area (is this covered by warranty, whose fault is it, the rule or policy is genuinely unclear)",
+  "time pressure or a surprise (an unexpected follow-up question, you have to backtrack or improvise on the spot)",
+  "a register or culture gap (you came off too formal or too casual, an idiom or joke you didn't catch, small talk drifting off-script)",
+  "the mistake is yours (you were late, you misread something, you broke or lost it and have to own up)",
+  "you have to push (negotiate, ask for an exception, chase someone who keeps putting you off)",
+];
+
+export function prefersChineseLabels(nativeLanguage: string): boolean {
   return /chinese|mandarin|zh|中文|汉语|漢語|普通话|普通話/i.test(
     nativeLanguage,
   );
@@ -65,12 +88,13 @@ function cleanTopicLabel(raw: string): string {
     /^(?:topic|scenario|item|label|话题|场景)\s*(?:\d+\s*)?[:：.)-]+\s*/i,
     "",
   );
-  s = s.replace(/\s+(?:[-–—]|:|：)\s+.+$/u, "");
+  // (Intentionally no trailing " — clause" / " : clause" strip: for corner cases the part after a dash/colon is
+  // usually the essential twist, not throwaway meta. Over-long labels are dropped by the MAX_TOPIC_CHARS filter.)
   s = s.replace(/^\*\*/, "").replace(/\*\*$/, "");
   return s.replace(/^["'`“”‘’]+|["'`“”‘’]+$/g, "").trim();
 }
 
-function dedupeAndFilterTopics(rawTopics: string[]): string[] {
+export function dedupeAndFilterTopics(rawTopics: string[]): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
   for (const raw of rawTopics) {
@@ -82,6 +106,16 @@ function dedupeAndFilterTopics(rawTopics: string[]): string[] {
     out.push(topic);
   }
   return out;
+}
+
+// Fisher–Yates shuffle. rng is injectable so tests stay deterministic (defaults to Math.random).
+export function shuffle<T>(arr: T[], rng: () => number): T[] {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
 }
 
 function parseLooseListLines(raw: string): string[] {
@@ -103,7 +137,7 @@ function parseLooseListLines(raw: string): string[] {
 // Pull topic strings out of a response when structured validation didn't apply (an endpoint that ignored json_schema
 // and emitted a bare/fenced array, or an object under a different field). Best-effort so we surface topics instead of
 // nothing rather than a clean failure.
-function salvageTopics(raw: string): string[] {
+export function salvageTopics(raw: string): string[] {
   const loose = parseStringArrayLoose(raw);
   if (loose.length > 0) return loose;
   const parsed = parseLLMJson(raw);
@@ -116,13 +150,24 @@ function salvageTopics(raw: string): string[] {
   return parseLooseListLines(raw);
 }
 
-// Recommend umbrella scenarios for a rapid-fire Q&A drill, grounded in the learner's records. Each topic is a short
-// chip label in the learner's native language; on commit it becomes the umbrella scenario fed to the quickfire agent.
-// Uses structured output so weaker OpenAI-compatible endpoints reliably return the full list (not 0–1 items).
+// Recommend umbrella scenarios for a rapid-fire Q&A drill, grounded in the learner's records. Rather than the obvious
+// everyday topics (which the model collapses onto), it mines CORNER CASES — the awkward, off-script moments people hit
+// but rarely rehearse — by injecting a random few "lens" angles each call and over-generating, then sampling down to
+// TARGET_COUNT. That variety in the prompt is what makes regenerate actually return different sets. Each topic is a
+// short chip label in the learner's native language; on commit it becomes the umbrella scenario fed to the quickfire
+// agent. Uses structured output so weaker OpenAI-compatible endpoints reliably return the full list (not 0–1 items).
 export async function generateQuickfireTopics(
   provider: ModelProvider,
   ctx: QuickfireTopicsContext,
+  // Diagnostics sink for the debug panel: the raw model response and whether we fell back to the hardcoded list
+  // (the latter is the tell-tale of a silently-failing fetch returning the same content every time).
+  onDebug?: (info: { raw: string; usedFallback: boolean }) => void,
 ): Promise<string[]> {
+  const rng = ctx.rng ?? Math.random;
+  const lensBlock = shuffle(CORNER_CASE_LENSES, rng)
+    .slice(0, LENS_SAMPLE)
+    .map((l) => `- ${l}`)
+    .join("\n");
   const profileBlock = ctx.profileSlice?.trim()
     ? `\nLearner profile (interests, goals, job/role — make topics personal to them):\n${ctx.profileSlice.trim()}\n`
     : "";
@@ -138,27 +183,38 @@ export async function generateQuickfireTopics(
           .map((tpc) => `- ${tpc}`)
           .join("\n")}\n`
       : "";
+  const avoidBlock =
+    ctx.avoid && ctx.avoid.length > 0
+      ? `\nThe learner just saw the scenarios below and asked for a DIFFERENT set. Do NOT return any of these or lightly reworded versions of them — propose genuinely new, distinct scenarios:\n${ctx.avoid
+          .map((a) => `- ${a}`)
+          .join("\n")}\n`
+      : "";
 
   const messages: ChatMessage[] = [
     {
       role: "user",
       content: `You are a ${ctx.targetLanguage} speaking coach for a ${ctx.nativeLanguage} speaker at ${ctx.level} level. You are proposing umbrella scenarios for a RAPID-FIRE Q&A drill: each scenario is a real-life setting in which you will later fire many small, concrete situations for the learner to respond to on the spot.
-${profileBlock}${weakBlock}${recentBlock}
-Propose exactly ${TARGET_COUNT} distinct umbrella scenarios that THIS learner is genuinely likely to face in everyday life and work. Include practical situations people rarely rehearse but actually run into (e.g. a parcel left at the wrong door, disputing a wrong charge, declining a meeting politely, a doctor asking unexpected follow-ups, small talk that drifts off-script, a landlord dodging a repair).
+${profileBlock}${weakBlock}${recentBlock}${avoidBlock}
+Dig out CORNER CASES: situations people genuinely run into but almost never rehearse — the moment something goes off-script and they freeze. Steer away from generic, comfortable topics (a bare "ordering coffee" or "returning an item" is too easy on its own).
+
+For THIS batch, lean into these angles — take ordinary settings and twist them into the awkward version:
+${lensBlock}
+
+Propose ${OVERGEN_COUNT} distinct corner-case scenarios this learner is genuinely likely to hit in everyday life and work.
 
 Rules:
-- Each topic is a SHORT label naming the scenario, written in ${ctx.nativeLanguage} (e.g. the ${ctx.nativeLanguage} for "Returning a faulty product", "Airport check-in problems", "Small talk with a new coworker").
-- Ground them in the learner's life: blend their profile/interests, the weak points above, and practical daily/work situations. When records are thin, fall back to common, useful real-life scenarios.
-- Span different settings (home, work, shops, travel, healthcare, social) — no two near-duplicates.
-- Keep each label short enough to fit on a chip (a few words).
+- Each scenario MUST carry a specific complication, not the bland version. E.g. not "returning an item" but "returning an item the clerk insists you already used"; not "seeing a doctor" but "a doctor pressing you on a symptom you hadn't thought about".
+- Each topic is a SHORT, sharp label in ${ctx.nativeLanguage} that conveys the twist in a single phrase (a handful of words, no colon/dash sub-clauses), short enough to fit on a chip.
+- Cross the angles above with this learner's life — their profile/interests, the weak points listed, and concrete daily/work settings. When records are thin, use common but still non-obvious real-life corner cases.
+- Span different settings and angles; no two near-duplicates, and don't relist anything in the avoid list.
 
-Return a JSON object of the form {"topics": ["…", "…"]} with exactly ${TARGET_COUNT} entries — nothing else.`,
+Return a JSON object of the form {"topics": ["…", "…"]} with ${OVERGEN_COUNT} entries — nothing else.`,
     },
   ];
 
   const raw = await provider.generate({
     messages,
-    temperature: 0.9,
+    temperature: 1.0,
     maxTokens: MAX_OUTPUT_TOKENS,
     jsonSchema: toJsonSchema("QuickfireTopics", QuickfireTopics),
     meta: { label: "quickfire-topics" },
@@ -172,10 +228,13 @@ Return a JSON object of the form {"topics": ["…", "…"]} with exactly ${TARGE
   }
   if (topics.length === 0) topics = salvageTopics(raw);
   const filtered = dedupeAndFilterTopics(topics);
-  const finalTopics =
-    filtered.length > 0
-      ? filtered
-      : dedupeAndFilterTopics(fallbackTopics(ctx.nativeLanguage));
+  const usedFallback = filtered.length === 0;
+  const pool = usedFallback
+    ? dedupeAndFilterTopics(fallbackTopics(ctx.nativeLanguage))
+    : filtered;
+  // Sample down: shuffle the (over-generated) pool and take TARGET_COUNT, so each refresh shows a different slice.
+  const finalTopics = shuffle(pool, rng).slice(0, TARGET_COUNT);
 
-  return finalTopics.slice(0, MAX_TOPICS);
+  onDebug?.({ raw, usedFallback });
+  return finalTopics;
 }

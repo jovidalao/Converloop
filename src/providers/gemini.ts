@@ -231,7 +231,21 @@ export function createGeminiProvider(cfg: GeminiConfig): ModelProvider {
         headers: authHeaders(cfg),
         body: buildGeminiRequestBody(opts),
       });
-      return extractText(JSON.parse(text));
+      const json = JSON.parse(text) as {
+        candidates?: { finishReason?: string }[];
+      };
+      const out = extractText(json);
+      // A 200 with no text is a silent failure for callers that expect content. The usual cause on thinking models
+      // is MAX_TOKENS: reasoning consumed the whole maxOutputTokens budget before any answer was emitted.
+      if (!out) {
+        const reason = json.candidates?.[0]?.finishReason;
+        throw new Error(
+          reason === "MAX_TOKENS"
+            ? "Gemini returned no text (finishReason: MAX_TOKENS) — reasoning used up the output budget; raise maxTokens."
+            : `Gemini returned an empty response${reason ? ` (finishReason: ${reason})` : ""}.`,
+        );
+      }
+      return out;
     },
 
     async stream(opts, onDelta) {

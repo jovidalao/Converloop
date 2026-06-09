@@ -1,6 +1,7 @@
 import { generateAutoTitle } from "./agents/auto-title";
 import { bilingual } from "./agents/bilingual";
 import { converse } from "./agents/conversation";
+import { generateConversationTopics } from "./agents/conversation-topics";
 import { explain } from "./agents/explain";
 import { generateInputHints } from "./agents/input-hints";
 import { generateLearningAgentDraft } from "./agents/learning-agent-builder";
@@ -22,7 +23,12 @@ import {
 } from "./agents/selection-learning-item";
 import { planLearningProject } from "./agents/task-agent";
 import { translate } from "./agents/translate";
-import { type AppConfig, getProvider, loadConfig } from "./config";
+import {
+  type AppConfig,
+  activeProvider,
+  getProvider,
+  loadConfig,
+} from "./config";
 import { applyDataEditInstruction, type DataEditResult } from "./data-edit";
 import { runTrackedAgentJob } from "./db/agent-jobs";
 import { getAppState, setAppState } from "./db/app-state";
@@ -686,6 +692,24 @@ export async function startQuickfireSession(
   );
 }
 
+// Open a normal practice conversation on a chosen topic (the AI speaks first). The learner picked a recommended chip
+// on the new-chat start page; from here it is an ordinary practice conversation (graded turns, no persistent modifier
+// — the topic only seeds this opening turn and then lives on in the conversation history).
+export async function startTopicConversation(
+  conversationId: string,
+  topic: string,
+  cb: TurnCallbacks,
+  turnId?: string,
+): Promise<TurnResult> {
+  const openingInstruction = `Open a fresh, casual conversation centered on this topic: "${topic.trim()}". Lead with your own angle or a question that gets the user talking about it, calibrated to their level. Keep it natural and inviting — don't summarize the topic back or quiz them mechanically. Keep your opening to one or two sentences in the target language.`;
+  return openConversationWithInstruction(
+    conversationId,
+    openingInstruction,
+    cb,
+    turnId,
+  );
+}
+
 async function runLearningTurn(
   userInput: string,
   conversationId: string,
@@ -1131,20 +1155,64 @@ export async function loadCachedQuickfireTopics(): Promise<string[]> {
   }
 }
 
+// Diagnostics surfaced on the start-page debug panel so a silently-empty/repeating result can be inspected: the raw
+// model response, whether it fell back to the hardcoded list, the avoid list sent on a regenerate, and timing.
+export interface QuickfireTopicsDebug {
+  at: number;
+  providerConfigured: boolean;
+  model: string;
+  weakCount: number;
+  recentCount: number;
+  profileChars: number;
+  avoidCount: number;
+  parsedCount: number;
+  usedFallback: boolean;
+  rawResponse?: string;
+  error?: string;
+  elapsedMs: number;
+}
+
 export interface QuickfireTopicsResult {
   topics: string[];
+  debug: QuickfireTopicsDebug;
 }
 
 // Recommend umbrella scenarios for the rapid-fire Q&A start page, drawn from the learner's records: weak mastery
 // items, profile, and recent conversation topics (with everyday corner cases when records are thin). Caches the
-// result for instant reuse next time. Never throws, so the start page can degrade to the cached set (or type-your-own).
-export async function recommendQuickfireTopics(): Promise<QuickfireTopicsResult> {
+// result for instant reuse next time. Never throws — returns an empty list plus a debug payload (raw response /
+// error / counts) so the start page can degrade to the cached set (or type-your-own) and still be inspectable.
+// opts.avoid: scenarios just shown to the learner (a regenerate) — excluded so the new set is actually different.
+export async function recommendQuickfireTopics(opts?: {
+  avoid?: string[];
+}): Promise<QuickfireTopicsResult> {
+  const started = Date.now();
   const config = loadConfig();
+  const model = activeProvider(config).model;
+  const avoid = opts?.avoid ?? [];
   const provider = await getProvider();
   if (!provider) {
-    return { topics: [] };
+    return {
+      topics: [],
+      debug: {
+        at: started,
+        providerConfigured: false,
+        model,
+        weakCount: 0,
+        recentCount: 0,
+        profileChars: 0,
+        avoidCount: avoid.length,
+        parsedCount: 0,
+        usedFallback: false,
+        elapsedMs: Date.now() - started,
+      },
+    };
   }
 
+  let rawResponse: string | undefined;
+  let usedFallback = false;
+  let weakCount = 0;
+  let recentCount = 0;
+  let profileChars = 0;
   try {
     const [weakList, profileMd, convs] = await Promise.all([
       getWeakList(),
@@ -1158,20 +1226,186 @@ export async function recommendQuickfireTopics(): Promise<QuickfireTopicsResult>
       .slice(0, 8)
       .map((c) => c.title);
     const profileSlice = profileSliceForConversation(profileMd);
+    weakCount = weakList.length;
+    recentCount = recentTopics.length;
+    profileChars = profileSlice.length;
 
-    const topics = await generateQuickfireTopics(provider, {
-      targetLanguage: config.targetLanguage,
-      nativeLanguage: config.nativeLanguage,
-      level: config.level,
-      profileSlice,
-      weakItems: weakList.map((w) => w.label),
-      recentTopics,
-    });
+    const topics = await generateQuickfireTopics(
+      provider,
+      {
+        targetLanguage: config.targetLanguage,
+        nativeLanguage: config.nativeLanguage,
+        level: config.level,
+        profileSlice,
+        weakItems: weakList.map((w) => w.label),
+        recentTopics,
+        avoid,
+      },
+      (info) => {
+        rawResponse = info.raw;
+        usedFallback = info.usedFallback;
+      },
+    );
     if (topics.length > 0) {
       await setAppState(QUICKFIRE_TOPICS_CACHE_KEY, JSON.stringify(topics));
     }
-    return { topics };
+    return {
+      topics,
+      debug: {
+        at: started,
+        providerConfigured: true,
+        model,
+        weakCount,
+        recentCount,
+        profileChars,
+        avoidCount: avoid.length,
+        parsedCount: topics.length,
+        usedFallback,
+        rawResponse: rawResponse?.slice(0, 4000),
+        elapsedMs: Date.now() - started,
+      },
+    };
+  } catch (e) {
+    return {
+      topics: [],
+      debug: {
+        at: started,
+        providerConfigured: true,
+        model,
+        weakCount,
+        recentCount,
+        profileChars,
+        avoidCount: avoid.length,
+        parsedCount: 0,
+        usedFallback,
+        rawResponse: rawResponse?.slice(0, 4000),
+        error: e instanceof Error ? `${e.name}: ${e.message}` : String(e),
+        elapsedMs: Date.now() - started,
+      },
+    };
+  }
+}
+
+// Cache of the most recent new-chat topic recommendations (a single global list, derived from the learner's profile
+// and recent topics rather than any one conversation). Shown immediately on the next start page while fresh ones
+// regenerate in the background, so the chips don't flash empty.
+const CONVERSATION_TOPICS_CACHE_KEY = "conversationTopics";
+
+export async function loadCachedConversationTopics(): Promise<string[]> {
+  const raw = await getAppState(CONVERSATION_TOPICS_CACHE_KEY);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed)
+      ? parsed.filter((s): s is string => typeof s === "string")
+      : [];
   } catch {
-    return { topics: [] };
+    return [];
+  }
+}
+
+// Recommend conversation topics for the new-chat start page, drawn from the learner's profile and recent conversation
+// topics (with broadly relatable everyday topics when records are thin). Caches the result for instant reuse next
+// time. Never throws — returns an empty list plus a debug payload (raw response / error / counts) so the start page
+// can degrade to the cached set (or type-your-own) and still be inspectable. Reuses QuickfireTopicsDebug as the
+// diagnostic shape (weakCount is always 0 here — topics aren't biased toward weak items).
+// opts.avoid: topics just shown to the learner (a regenerate) — excluded so the new set is actually different.
+export async function recommendConversationTopics(opts?: {
+  avoid?: string[];
+}): Promise<QuickfireTopicsResult> {
+  const started = Date.now();
+  const config = loadConfig();
+  const model = activeProvider(config).model;
+  const avoid = opts?.avoid ?? [];
+  const provider = await getProvider();
+  if (!provider) {
+    return {
+      topics: [],
+      debug: {
+        at: started,
+        providerConfigured: false,
+        model,
+        weakCount: 0,
+        recentCount: 0,
+        profileChars: 0,
+        avoidCount: avoid.length,
+        parsedCount: 0,
+        usedFallback: false,
+        elapsedMs: Date.now() - started,
+      },
+    };
+  }
+
+  let rawResponse: string | undefined;
+  let usedFallback = false;
+  let recentCount = 0;
+  let profileChars = 0;
+  try {
+    const [profileMd, convs] = await Promise.all([
+      readProfile(config),
+      listConversations(),
+    ]);
+    const recentTopics = convs
+      .filter(
+        (c) => c.kind === "practice" && c.title !== DEFAULT_CONVERSATION_TITLE,
+      )
+      .slice(0, 8)
+      .map((c) => c.title);
+    const profileSlice = profileSliceForConversation(profileMd);
+    recentCount = recentTopics.length;
+    profileChars = profileSlice.length;
+
+    const topics = await generateConversationTopics(
+      provider,
+      {
+        targetLanguage: config.targetLanguage,
+        nativeLanguage: config.nativeLanguage,
+        level: config.level,
+        profileSlice,
+        recentTopics,
+        avoid,
+      },
+      (info) => {
+        rawResponse = info.raw;
+        usedFallback = info.usedFallback;
+      },
+    );
+    if (topics.length > 0) {
+      await setAppState(CONVERSATION_TOPICS_CACHE_KEY, JSON.stringify(topics));
+    }
+    return {
+      topics,
+      debug: {
+        at: started,
+        providerConfigured: true,
+        model,
+        weakCount: 0,
+        recentCount,
+        profileChars,
+        avoidCount: avoid.length,
+        parsedCount: topics.length,
+        usedFallback,
+        rawResponse: rawResponse?.slice(0, 4000),
+        elapsedMs: Date.now() - started,
+      },
+    };
+  } catch (e) {
+    return {
+      topics: [],
+      debug: {
+        at: started,
+        providerConfigured: true,
+        model,
+        weakCount: 0,
+        recentCount,
+        profileChars,
+        avoidCount: avoid.length,
+        parsedCount: 0,
+        usedFallback,
+        rawResponse: rawResponse?.slice(0, 4000),
+        error: e instanceof Error ? `${e.name}: ${e.message}` : String(e),
+        elapsedMs: Date.now() - started,
+      },
+    };
   }
 }
