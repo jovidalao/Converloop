@@ -414,6 +414,7 @@ export const zh: Messages = {
       noSubscription: "该 provider 暂不支持订阅登录",
       testNoCredential: "还没有 API key / 未登录。",
       testOk: '✓ 连接正常 — 非流式: "{sample}" | 流式收到 {count} 字符',
+      modelAdded: "已将「{model}」加入模型列表。",
       testFailed: "✗ 失败:{error}",
       subscriptionLogin: "订阅登录 {state}",
       stateSignedIn: "· 已登录",

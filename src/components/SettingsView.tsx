@@ -37,7 +37,7 @@ import {
   type AppConfig,
   apiKeyAccount,
   effectiveJsonObjectFallback,
-  findProviderModelOption,
+  findModelOption,
   getProviderFor,
   inferContextLimit,
   isOAuthProvider,
@@ -49,6 +49,7 @@ import {
   type ProviderSettings,
   type ProviderType,
   providerModelLabel,
+  providerModels,
   saveConfig,
 } from "../config";
 import { deleteSecret, getSecret, setSecret } from "../keychain";
@@ -953,6 +954,7 @@ export function SettingsView({ section }: { section: SettingsSection }) {
       model: p.model,
       contextTokens: undefined,
       jsonObjectFallback: undefined,
+      customModels: undefined,
     });
   }
 
@@ -1024,13 +1026,21 @@ export function SettingsView({ section }: { section: SettingsSection }) {
           streamed += d;
         },
       );
-      setLlmStatus({
-        type,
-        text: t("settings.llm.testOk", {
-          sample: gen.trim().slice(0, 40),
-          count: streamed.length,
-        }),
+      let text = t("settings.llm.testOk", {
+        sample: gen.trim().slice(0, 40),
+        count: streamed.length,
       });
+      // A custom model id that just verified successfully gets saved to the list so it can be reselected later.
+      const entry = cfg.providers[type];
+      const model = entry.model.trim();
+      if (model && !findModelOption(type, entry, model)) {
+        updateProvider(type, {
+          customModels: [...(entry.customModels ?? []), model],
+        });
+        setCustomModel((prev) => ({ ...prev, [type]: false }));
+        text += ` ${t("settings.llm.modelAdded", { model })}`;
+      }
+      setLlmStatus({ type, text });
     } catch (e) {
       setLlmStatus({
         type,
@@ -1126,7 +1136,7 @@ export function SettingsView({ section }: { section: SettingsSection }) {
     const tokens = oauthTokens[type] ?? null;
     const hasKey = !!keyStatus[type];
     const configured = oauth ? !!tokens : hasKey;
-    const selectedModel = findProviderModelOption(type, entry.model);
+    const selectedModel = findModelOption(type, entry, entry.model);
     const isCustom = (customModel[type] ?? false) || !selectedModel;
     const modelValue =
       isCustom || !selectedModel ? CUSTOM_MODEL_VALUE : selectedModel.model;
@@ -1167,7 +1177,7 @@ export function SettingsView({ section }: { section: SettingsSection }) {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {preset.models.map((model) => (
+              {providerModels(type, entry).map((model) => (
                 <SelectItem key={model.model} value={model.model}>
                   {providerModelLabel(type, model.model)}
                 </SelectItem>

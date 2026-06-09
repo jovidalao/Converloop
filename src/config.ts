@@ -39,6 +39,8 @@ const ProviderSettingsSchema = z.object({
   /** Override the endpoint's json-schema capability: true forces the json_object fallback, false forces json_schema,
    *  unset = the provider preset's default (see effectiveJsonObjectFallback). Only used by OpenAI-wire providers. */
   jsonObjectFallback: z.boolean().optional(),
+  /** Custom model ids the user typed and verified via "test connection"; shown alongside the preset models. */
+  customModels: z.array(z.string()).optional(),
 });
 
 export type ProviderSettings = z.infer<typeof ProviderSettingsSchema>;
@@ -380,6 +382,34 @@ export function providerModelLabel(type: ProviderType, model: string): string {
     model.trim() ||
     "Custom Model";
   return `${preset.shortLabel} · ${modelLabel}`;
+}
+
+// Selectable model list for a provider: the preset models plus any user-added custom models
+// (typed then verified via "test connection"), appended after the presets and de-duplicated.
+export function providerModels(
+  type: ProviderType,
+  settings: ProviderSettings,
+): ProviderModelOption[] {
+  const presetModels = PROVIDER_PRESETS[type].models;
+  const seen = new Set(presetModels.map((m) => m.model));
+  const custom: ProviderModelOption[] = [];
+  for (const raw of settings.customModels ?? []) {
+    const model = raw.trim();
+    if (!model || seen.has(model)) continue;
+    seen.add(model);
+    custom.push({ label: model, model });
+  }
+  return [...presetModels, ...custom];
+}
+
+// Look up a model option among the preset list AND the provider's saved custom models.
+export function findModelOption(
+  type: ProviderType,
+  settings: ProviderSettings,
+  model: string,
+): ProviderModelOption | undefined {
+  const normalized = model.trim();
+  return providerModels(type, settings).find((m) => m.model === normalized);
 }
 
 const STORAGE_KEY = "lang-agent.config";

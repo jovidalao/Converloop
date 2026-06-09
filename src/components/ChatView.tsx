@@ -45,11 +45,12 @@ import {
 } from "../commands";
 import {
   activeProvider,
-  findProviderModelOption,
+  findModelOption,
   getContextLimit,
   PROVIDER_PRESETS,
   type ProviderType,
   providerModelLabel,
+  providerModels,
   saveConfig,
   useConfig,
   withActiveModel,
@@ -2362,8 +2363,9 @@ export function ChatView({
   }
   const active = activeProvider(config);
   const currentPreset = PROVIDER_PRESETS[config.providerType];
-  const currentModelOption = findProviderModelOption(
+  const currentModelOption = findModelOption(
     config.providerType,
+    active,
     active.model,
   );
   const usingPresetEndpoint = active.baseUrl.trim() === currentPreset.baseUrl;
@@ -2684,7 +2686,10 @@ export function ChatView({
                     )}
                     {MODEL_PROVIDERS.map((providerType) => {
                       const preset = PROVIDER_PRESETS[providerType];
-                      return preset.models.map((model) => (
+                      return providerModels(
+                        providerType,
+                        config.providers[providerType],
+                      ).map((model) => (
                         <SelectItem
                           key={`${providerType}:${model.model}`}
                           value={modelSelectValue(providerType, model.model)}

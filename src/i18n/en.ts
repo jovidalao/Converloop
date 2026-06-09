@@ -423,6 +423,7 @@ export const en = {
       testNoCredential: "No API key / not signed in yet.",
       testOk:
         '✓ Connection OK — non-streaming: "{sample}" | streaming received {count} chars',
+      modelAdded: "“{model}” added to the model list.",
       testFailed: "✗ Failed: {error}",
       subscriptionLogin: "Subscription login {state}",
       stateSignedIn: "· signed in",

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   effectiveJsonObjectFallback,
+  findModelOption,
   findProviderModelOption,
   inferContextLimit,
   isOAuthProvider,
@@ -10,6 +11,7 @@ import {
   type ProviderSettings,
   type ProviderType,
   providerModelLabel,
+  providerModels,
 } from "./config";
 
 // Providers whose preset speaks the OpenAI chat/completions wire format (routed through createOpenAIProvider
@@ -109,6 +111,40 @@ describe("provider registration completeness", () => {
     expect(PROVIDER_TYPES.filter(isOpenAIWireProvider).sort()).toEqual(
       [...OPENAI_WIRE].sort(),
     );
+  });
+});
+
+describe("custom models", () => {
+  const settings = (customModels?: string[]): ProviderSettings => ({
+    baseUrl: PROVIDER_PRESETS.openai.baseUrl,
+    model: PROVIDER_PRESETS.openai.model,
+    customModels,
+  });
+
+  it("appends custom models after the presets, de-duplicated", () => {
+    const models = providerModels("openai", settings(["my-model", "my-model"]));
+    const presetCount = PROVIDER_PRESETS.openai.models.length;
+    expect(models.length).toBe(presetCount + 1);
+    expect(models[models.length - 1]).toEqual({
+      label: "my-model",
+      model: "my-model",
+    });
+  });
+
+  it("drops blank ids and custom ids that duplicate a preset", () => {
+    const presetId = PROVIDER_PRESETS.openai.model;
+    const models = providerModels("openai", settings(["  ", presetId]));
+    expect(models.length).toBe(PROVIDER_PRESETS.openai.models.length);
+  });
+
+  it("findModelOption matches both presets and saved custom models", () => {
+    const s = settings(["my-model"]);
+    expect(findModelOption("openai", s, "my-model")?.model).toBe("my-model");
+    expect(
+      findModelOption("openai", s, PROVIDER_PRESETS.openai.model)?.model,
+    ).toBe(PROVIDER_PRESETS.openai.model);
+    // Not a preset and not saved → unknown (drives the "custom model" input in settings).
+    expect(findModelOption("openai", s, "unsaved-model")).toBeUndefined();
   });
 });
 
