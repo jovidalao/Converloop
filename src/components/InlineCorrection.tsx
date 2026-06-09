@@ -286,7 +286,10 @@ export function InlineCorrection({
     !error;
 
   return (
-    <div className="flex w-full flex-col items-end gap-1.5">
+    <div
+      className="flex w-full flex-col items-end gap-1.5"
+      data-selectable-context
+    >
       <div className="-mr-1 flex items-center gap-0.5">
         {leading}
         {showPending && (

@@ -446,8 +446,16 @@ export function normalizeTutorPayload(json: unknown): unknown {
     : [];
 
   // expression_gap is optional: when present, normalize key_items' mastery_type to valid values.
+  // Some models emit a placeholder string ("null"/"none") instead of JSON null for "no gap";
+  // coerce those to null so the schema (ExpressionGap.nullable()) doesn't reject the whole turn.
   let expression_gap = readAlias(o, ["expression_gap", "expressionGap", "gap"]);
-  if (expression_gap === undefined || expression_gap === "")
+  if (
+    expression_gap === undefined ||
+    (typeof expression_gap === "string" &&
+      ["", "null", "none", "n/a", "nil"].includes(
+        expression_gap.trim().toLowerCase(),
+      ))
+  )
     expression_gap = null;
   if (
     expression_gap &&

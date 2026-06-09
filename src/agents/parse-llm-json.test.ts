@@ -113,6 +113,22 @@ describe("normalizeTutorPayload", () => {
     }
   });
 
+  it('coerces a placeholder "null" string for expression_gap to null', () => {
+    // Some models emit the literal string "null" instead of JSON null; without
+    // coercion Zod rejects the whole turn (Expected object, received string).
+    const normalized = normalizeTutorPayload({
+      is_correct: false,
+      corrected: "Hi, I want to practice how to convince people.",
+      natural: "Hi, I'd like to practice how to convince people.",
+      issues: [],
+      mastery_updates: [],
+      expression_gap: "null",
+    });
+    const parsed = TutorAnalysis.safeParse(normalized);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) expect(parsed.data.expression_gap).toBeNull();
+  });
+
   it("handles Chinese and mixed enum labels", () => {
     const normalized = normalizeTutorPayload({
       is_correct: false,

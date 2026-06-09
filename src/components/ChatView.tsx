@@ -1059,7 +1059,10 @@ function UserTurn({
   }
   return (
     <div className="flex max-w-[min(88%,520px)] flex-col items-end gap-1.5 self-end">
-      <div className="whitespace-pre-wrap rounded-2xl rounded-br-sm border bg-secondary px-3.5 py-2.5 text-ui-chat text-foreground shadow-sm">
+      <div
+        className="whitespace-pre-wrap rounded-2xl rounded-br-sm border bg-secondary px-3.5 py-2.5 text-ui-chat text-foreground shadow-sm"
+        data-selectable-context
+      >
         <UserSentence
           text={turn.userText}
           analysis={turn.analysis}
