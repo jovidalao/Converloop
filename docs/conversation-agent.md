@@ -107,6 +107,15 @@ User message:
 {user_input}
 ```
 
+## `/btw` 独立问答模式
+
+`/btw ...` 是离档顺便问一句:仍显示在当前记录里,但本轮回复不读取当前会话 / 专项课 history、summary、复习候选或档案切片,也不触发导师批改。对话 agent 只拿到用户这一句 standalone side question,按语言学习助手回答:
+
+- 不延续当前对话或课程上下文;
+- 默认用母语解释,需要时给目标语例句;
+- 不编织复习项,不产出 correction-panel 风格反馈;
+- 仅当能帮助回答这个独立问题时才追问。
+
 ## 滚动摘要(自动压缩)
 
 长对话里,早期内容会被原文窗口挤出去 → agent「忘记前面」。解决:**阈值驱动的自动压缩**(实现见 `src/agents/summarize.ts` + `src/profile/summary-runner.ts`)。

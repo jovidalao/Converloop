@@ -99,6 +99,8 @@ interface BaseContext {
   /** Verbatim recent turns after the summary watermark, sent to the reply agents as real alternating user/assistant messages. */
   historyTurns: HistoryTurn[];
   callbacks: ConversationCallbacks;
+  /** Off-record side question: reply without surrounding chat/lesson context. */
+  standaloneQuestion?: boolean;
   /** Resolves once the turn row is persisted (= safe to write analysis_json); rejects if persistence fails.
    *  Observers wait for this before writing back, to avoid writing to a non-existent row. */
   turnPersisted: Promise<string>;

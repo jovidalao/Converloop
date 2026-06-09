@@ -34,8 +34,13 @@ describe("parseSlashInput", () => {
   it("parses a prompt command and builds the expanded prompt from args", () => {
     const p = parseSlashInput("/topic the CAP theorem");
     expect(p?.command.kind).toBe("prompt");
+    expect(p?.command.description).toBe("Switch the conversation to a topic");
     expect(p?.rest).toBe("the CAP theorem");
-    expect(p?.command.buildPrompt?.(p.rest)).toContain("the CAP theorem");
+    const prompt = p?.command.buildPrompt?.(p.rest) ?? "";
+    expect(prompt).toContain(
+      'Switch the conversation to this topic now: "the CAP theorem"',
+    );
+    expect(prompt).not.toContain("pasted");
   });
 
   it("/learn takes a subject and substitutes it into the prompt", () => {

@@ -29,7 +29,7 @@ export interface SlashCommand {
    * conversation as a turn — the bubble shows the verbatim command, the agent receives this expanded prompt.
    */
   buildPrompt?: (rest: string) => string;
-  /** For "prompt" kind: when true, an empty body does not send (e.g. /topic needs pasted material). */
+  /** For "prompt" kind: when true, an empty body does not send (e.g. /topic needs a topic). */
   requiresArgs?: boolean;
 }
 
@@ -52,9 +52,9 @@ export interface PromptMacroDef {
 export const BUILTIN_PROMPT_MACROS: PromptMacroDef[] = [
   {
     name: "topic",
-    description: "Center the conversation on pasted material",
-    argsHint: "<paste your material>",
-    template: `The user pasted the material below and wants this conversation to center on it. Read it, then naturally open a conversation about it — lead with your own angle or a question that gets the user talking about it. Don't summarize it back or quiz them mechanically. Material:\n\n${PROMPT_INPUT_TOKEN}`,
+    description: "Switch the conversation to a topic",
+    argsHint: "<topic>",
+    template: `Switch the conversation to this topic now: "${PROMPT_INPUT_TOKEN}". Treat this as an explicit topic change, not as learner speech and not as a request to continue the previous thread. Open naturally with your own angle or a question that gets the user talking about it. Don't summarize the topic back or quiz them mechanically. Keep it to one or two sentences in the target language.`,
   },
   {
     name: "learn",
@@ -75,7 +75,7 @@ export const BUILTIN_PROMPT_MACROS: PromptMacroDef[] = [
 const MESSAGE_META_COMMANDS: SlashCommand[] = [
   {
     name: "btw",
-    description: "Side question: excluded from context and grading",
+    description: "Standalone side question: excluded from context and grading",
     argsHint: "<ask the AI anything>",
     kind: "message",
   },

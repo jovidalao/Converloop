@@ -18,6 +18,7 @@ export interface ConversationContext {
   historyTurns: HistoryTurn[]; // verbatim recent turns, sent as real alternating user/assistant messages
   userInput: string;
   openingInstruction?: string; // hidden opening instruction triggered by the app (conversation derivation)
+  standaloneQuestion?: boolean; // /btw side question: answer this message without surrounding conversation context
   customInstructions?: string; // additional instructions appended by the user in the agent library
 }
 
@@ -57,6 +58,7 @@ function formatComfortableItems(items: ComfortableItem[]): string {
 
 // See docs/conversation-agent.md#system-prompt
 function systemPrompt(ctx: ConversationContext): string {
+  if (ctx.standaloneQuestion) return standaloneSystemPrompt(ctx);
   // When evidence is sufficient, include a dynamic reading as an extra calibration line; otherwise use only the static level.
   const calibrationLine = ctx.calibrationHint
     ? `\n- Current read on this learner from recent activity: ${ctx.calibrationHint} Let this fine-tune your difficulty and reply length.`
@@ -124,6 +126,22 @@ ${formatReviewItems(ctx.reviewItems)}${storyBlock}`;
   return appendUserInstructions(base, ctx.customInstructions);
 }
 
+function standaloneSystemPrompt(ctx: ConversationContext): string {
+  const base = `You are a helpful language-learning assistant for a ${ctx.nativeLanguage} speaker learning ${ctx.targetLanguage} at roughly ${ctx.level} level.
+
+RULES
+- Treat the latest message as a standalone side question. Do not use, infer from, or continue any surrounding chat or lesson context.
+- Answer the question directly and self-containedly.
+- Use ${ctx.nativeLanguage} for explanations unless the learner asks for another language. Use ${ctx.targetLanguage} examples when they help.
+- If the learner asks how to say something in ${ctx.targetLanguage}, give natural options, brief usage notes, and a compact example.
+- Do not grade the learner's message, do not create a correction-panel style response, and do not weave in review items.
+- Ask a follow-up only when it directly helps answer the standalone question.
+
+=== LEARNER EXPERIENCE PREFERENCES ===
+${ctx.experiencePreferences || "(none)"}`;
+  return appendUserInstructions(base, ctx.customInstructions);
+}
+
 // The latest learner message (or the hidden app kickoff for a derived conversation).
 function latestUserMessage(ctx: ConversationContext): string {
   return ctx.openingInstruction?.trim()
@@ -142,7 +160,7 @@ export async function converse(
 ): Promise<string> {
   const messages: ChatMessage[] = [
     { role: "system", content: systemPrompt(ctx) },
-    ...buildHistoryMessages(ctx.historyTurns),
+    ...(ctx.standaloneQuestion ? [] : buildHistoryMessages(ctx.historyTurns)),
     { role: "user", content: latestUserMessage(ctx) },
   ];
   // Report the local estimate immediately for a responsive meter; refine to the provider's real prompt size

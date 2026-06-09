@@ -56,7 +56,7 @@ export interface ChatTurn {
   analysisProse?: string | null;
   analysisPending?: boolean;
   analysisError?: string | null;
-  /** /btw off-record turn: still shown in history, but excluded from future context and not corrected. */
+  /** /btw off-record turn: still shown in history, answered standalone, excluded from future context and not corrected. */
   excludeFromContext?: boolean;
   /** Prompt-macro turn (/topic, /learn, /surprise): verbatim command text to render in the bubble instead of userText. */
   displayText?: string;

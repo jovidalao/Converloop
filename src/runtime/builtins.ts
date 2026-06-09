@@ -142,6 +142,7 @@ const conversationReply: ReplyProducer = {
         historyTurns: ctx.historyTurns,
         userInput: ctx.userInput,
         openingInstruction: ctx.openingInstruction,
+        standaloneQuestion: ctx.standaloneQuestion,
         customInstructions: getBuiltinAgentOverride("builtin:conversation")
           ?.instructions,
       },

@@ -2007,7 +2007,7 @@ export function ChatView({
 
   // opts.text: reuse original text on retry (don't pull from input box);
   // opts.replacingId: replace the failed old turn;
-  // opts.offRecord: /btw off-record turn — replied to normally but not graded, not in context (bubble has a marker).
+  // opts.offRecord: /btw off-record turn — answered as a standalone side question, not graded, not in context (bubble has a marker).
   // opts.displayText: prompt-macro turn (/topic, /learn, /surprise) — text is the expanded prompt sent to the agent,
   //   displayText is the verbatim command shown in the bubble; these turns are kept in context but not graded.
   // opts.titleSeed: text to seed the auto-title from instead of `text` (the expanded prompt is a poor title source).

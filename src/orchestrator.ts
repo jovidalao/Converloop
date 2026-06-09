@@ -102,6 +102,82 @@ export class MissingApiKeyError extends Error {
   }
 }
 
+// Off-record slash turn (/btw): answer one standalone question with no chat/lesson history,
+// no review weaving, no correction, and no future context footprint.
+async function runStandaloneSideQuestion(
+  userInput: string,
+  conversationId: string,
+  cb: TurnCallbacks,
+  turnId?: string,
+): Promise<TurnResult> {
+  const provider = await getProvider();
+  if (!provider) throw new MissingApiKeyError();
+
+  const config = loadConfig();
+  const profileMd = await readProfile(config);
+  const id = turnId ?? crypto.randomUUID();
+  let resolvePersisted!: (value: string) => void;
+  let rejectPersisted!: (reason: unknown) => void;
+  const turnPersisted = new Promise<string>((resolve, reject) => {
+    resolvePersisted = resolve;
+    rejectPersisted = reject;
+  });
+  void turnPersisted.catch(() => {});
+
+  const ctx: PracticeContext = {
+    kind: "practice",
+    provider,
+    conversationId,
+    turnId: id,
+    userInput,
+    langs: {
+      nativeLanguage: config.nativeLanguage,
+      targetLanguage: config.targetLanguage,
+      level: config.level,
+    },
+    profileSlice: "",
+    conversationPreferences: formatExperiencePreferences(
+      profileMd,
+      "conversation",
+    ),
+    tutorPreferences: "",
+    tutorFlags: {
+      ignoreCapitalizationIssues: false,
+      ignorePunctuationIssues: false,
+    },
+    summary: "",
+    historyTurns: [],
+    tutorHistory: "",
+    weakList: [],
+    keyHints: [],
+    comfortableItems: [],
+    reviewItems: [],
+    proficiency: await getProficiencySnapshot(),
+    agentModifiers: {},
+    callbacks: cb,
+    standaloneQuestion: true,
+    turnPersisted,
+  };
+
+  const replyPromise = dispatchReply(ctx, cb.onReplyDelta);
+  cb.onAnalysis(null);
+
+  let reply: string;
+  try {
+    reply = await replyPromise;
+  } catch (e) {
+    rejectPersisted(e);
+    throw e;
+  }
+
+  await persistTurn(conversationId, userInput, reply, null, id, {
+    excludeFromContext: true,
+  });
+  resolvePersisted(id);
+  cb.onReplyComplete?.(reply);
+  return { reply, analysis: null };
+}
+
 function tailTurnsByChars<T extends { userInput: string; reply: string }>(
   turns: T[],
   charBudget: number,
@@ -389,12 +465,15 @@ export async function runTurn(
   turnId?: string,
   opts: { offRecord?: boolean; displayText?: string } = {},
 ): Promise<TurnResult> {
-  // Off-record turn (/btw "by the way"): reads context + streams a reply as normal, but no correction, not counted in future context, no compression.
+  // Off-record turn (/btw "by the way"): standalone helper answer, no correction, not counted in future context, no compression.
   const offRecord = opts.offRecord ?? false;
   // Prompt-macro turn (/topic, /learn, /surprise): userInput is the expanded English prompt — fed to the agent as an
   // APP INSTRUCTION and kept in context, but not graded. The bubble shows opts.displayText (the verbatim command).
   const isPromptMacro = opts.displayText !== undefined;
   const conversation = await getConversation(conversationId);
+  if (offRecord) {
+    return runStandaloneSideQuestion(userInput, conversationId, cb, turnId);
+  }
   if (conversation?.kind === "learning_agent") {
     return runLearningTurn(
       userInput,
