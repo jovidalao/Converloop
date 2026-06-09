@@ -283,17 +283,12 @@ function ProviderCard({
 }) {
   const { t } = useTranslation();
   return (
-    <div
-      className={cn(
-        "overflow-hidden rounded-xl border bg-card/80 shadow-minimal-flat transition-colors",
-        active ? "border-primary/50 bg-primary/[0.04]" : "border-border/80",
-      )}
-    >
+    <div className="border-b border-border/50 last:border-0">
       <button
         type="button"
         onClick={onToggle}
         aria-expanded={expanded}
-        className="flex w-full items-center gap-3.5 px-4 py-4 text-left transition-colors hover:bg-accent/45"
+        className="flex w-full items-center gap-3.5 rounded-lg px-3 py-3.5 text-left transition-colors hover:bg-accent/40"
       >
         {icon}
         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
@@ -334,13 +329,13 @@ function ProviderCard({
       </button>
 
       {expanded && (
-        <div className="border-t border-border/70 bg-background/45 px-5 py-5">
+        <div className="ml-3 space-y-5 border-l border-border/50 pt-1 pb-6 pl-5">
           {active ? (
-            <p className="mb-5 text-ui-caption text-ui-muted">
+            <p className="text-ui-caption text-ui-muted">
               {t("settings.card.current")}
             </p>
           ) : (
-            <Button size="sm" className="mb-5" onClick={onActivate}>
+            <Button size="sm" onClick={onActivate}>
               {t("settings.card.setCurrent")}
             </Button>
           )}
@@ -452,7 +447,7 @@ function MacroCard({
   children: ReactNode;
 }) {
   return (
-    <div className="space-y-3 rounded-lg border bg-card px-4 py-4">
+    <div className="space-y-3 rounded-lg border border-border/60 px-4 py-4">
       <div className="flex items-center justify-between gap-2">
         <span className="font-mono text-ui-body font-semibold text-foreground">
           {title}
@@ -565,9 +560,9 @@ function CommandsSettings() {
         </p>
       </div>
 
-      <div className="rounded-lg border bg-muted/30 px-4 py-3 text-ui-body text-ui-muted">
+      <p className="max-w-2xl text-ui-body leading-relaxed text-ui-muted">
         {t("settings.commands.inputTokenHint")}
-      </div>
+      </p>
 
       <div className="space-y-4">
         <h3 className="text-ui-meta font-semibold uppercase tracking-wide text-ui-muted">
@@ -1443,7 +1438,7 @@ export function SettingsView({ section }: { section: SettingsSection }) {
               </p>
             </div>
 
-            <div className="flex flex-col gap-4">
+            <div className="flex flex-col">
               {PROVIDER_TYPES.map(renderLlmCard)}
             </div>
           </section>
@@ -1468,7 +1463,7 @@ export function SettingsView({ section }: { section: SettingsSection }) {
               onChange={(v) => updateTts("autoSpeak", v)}
             />
 
-            <div className="flex flex-col gap-4">
+            <div className="flex flex-col">
               <ProviderCard
                 icon={<SparklesIcon className="size-5 shrink-0 text-brand" />}
                 title={t("settings.tts.mimoTitle")}
