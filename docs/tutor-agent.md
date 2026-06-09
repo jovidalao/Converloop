@@ -196,3 +196,5 @@ function applySignal(item, signal) {
 - **空响应分级回退**:拿原始文本时按 json_schema → json_object → **纯文本(不带 response_format)** 三级降级。有的端点(reasoning 模型、宽松的 OpenAI 兼容代理)一旦设了 `response_format` 就吐空 content,纯文本模式却正常 —— 第三级把 JSON 捞回来,从而仍能写 mastery,而不是降级成只给 prose
 - **预算重试**:provider 的非流式 `generate` 把 finish reason 通过 `onFinish` 上报;若空响应且 `finish_reason=length`(reasoning 烧光了 4096 预算),自动用 8192 重试一次。最终 finish reason 也会写进诊断,方便排查
 - **修复回退**:`TutorAnalysis.safeParse()` 失败后先让模型做一次 JSON repair / re-analyze;仍失败才退回纯文本批改(显示给用户,但本轮不更新 mastery),别让整轮崩掉
+- **按需瘦 schema**:纯目标语输入不可能有表达缺口,这时发**不含 `expression_gap` 的 core schema + 不带 EXPRESSION GAP 段的 prompt**(`tutorJsonSchema(false)`);只有母语/混说(`likelyContainsNativeFallback`)或听写才用完整嵌套 schema。嵌套越浅,模型越少把嵌套字段二次编码/截断。解析端始终按完整 `TutorAnalysis` 校验(缺 `expression_gap` 归一化成 `null`),互不影响
+- **反二次编码**:有的模型(尤其 Anthropic 强制 `tool_use`)会把 `issues` / `expression_gap` 等嵌套字段塞成 JSON **字符串**而非真数组/对象;`normalizeTutorPayload` 对这些字段统一「是 JSON 字符串就 parse 回来」,否则 `issues` 会被静默吞成 `[]`

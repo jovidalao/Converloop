@@ -66,22 +66,34 @@ export const ExpressionGap = z.object({
 });
 export type ExpressionGap = z.infer<typeof ExpressionGap>;
 
-export const TutorAnalysis = z.object({
+// Core correction shape, without expression_gap. Used as the provider schema for the common case —
+// pure target-language input, where a gap can never apply — so the hot path stays shallow. Deeply
+// nested schemas are what make models double-encode/truncate nested fields; keeping this flat raises
+// first-pass structured-output success.
+export const TutorAnalysisCore = z.object({
   is_correct: z.boolean(),
   corrected: z.string(),
   natural: z.string(),
   issues: z.array(Issue),
   mastery_updates: z.array(MasteryUpdate),
+});
+
+export const TutorAnalysis = TutorAnalysisCore.extend({
   // Must be null for pure target-language input; filled when native or mixed input (mixed can coexist with issues).
   expression_gap: ExpressionGap.nullable(),
 });
 export type TutorAnalysis = z.infer<typeof TutorAnalysis>;
 
-// JSON schema for provider structured output: inline refs, strip $schema,
-// so OpenAI-compatible endpoints can consume it directly.
-export function tutorJsonSchema(): {
+// JSON schema for provider structured output: inline refs, strip $schema, so OpenAI-compatible
+// endpoints can consume it directly. includeGap=false sends the shallow core schema for turns that
+// cannot have an expression gap; parsing still validates against the full TutorAnalysis (a missing
+// expression_gap normalizes to null), so the response side is unaffected.
+export function tutorJsonSchema(includeGap = true): {
   name: string;
   schema: Record<string, unknown>;
 } {
-  return toJsonSchema("TutorAnalysis", TutorAnalysis);
+  return toJsonSchema(
+    "TutorAnalysis",
+    includeGap ? TutorAnalysis : TutorAnalysisCore,
+  );
 }

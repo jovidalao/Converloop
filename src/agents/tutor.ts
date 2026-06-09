@@ -132,18 +132,24 @@ ${ctx.experiencePreferences || "(none)"}`;
   return appendUserInstructions(base, ctx.customInstructions);
 }
 
-// See docs/tutor-agent.md#system-prompt
-function systemPrompt(ctx: TutorContext): string {
+// See docs/tutor-agent.md#system-prompt. includeGap toggles the expression-gap (native/mixed input)
+// half of the prompt; omit it for pure target-language turns so it matches the shallow core schema.
+function systemPrompt(ctx: TutorContext, includeGap: boolean): string {
   if (ctx.standardAnswer) return dictationSystemPrompt(ctx);
   const base = `You are a precise language tutor analyzing a single message from a
 ${ctx.nativeLanguage} speaker learning ${ctx.targetLanguage} at ${ctx.level} level. You give
 structured feedback only — a separate conversation agent handles the chat.
-
+${
+  includeGap
+    ? `
 The user is supposed to write in ${ctx.targetLanguage}, but sometimes falls back to
 ${ctx.nativeLanguage} (fully or mixed) because they don't know how to say something.
 Handle the two cases differently.
 
-A) ERRORS — the user DID produce ${ctx.targetLanguage} but got it wrong.
+A) ERRORS — the user DID produce ${ctx.targetLanguage} but got it wrong.`
+    : `
+ERRORS — the user produced ${ctx.targetLanguage}; correct only real errors.`
+}
 - Correct only real errors. Do NOT rewrite acceptable stylistic choices. If
   something is grammatical but unnatural, use severity="minor",
   category="naturalness" — don't treat it as an error.
@@ -159,8 +165,12 @@ A) ERRORS — the user DID produce ${ctx.targetLanguage} but got it wrong.
   IN ${ctx.nativeLanguage}.
 - If "corrected" changes the user's original message beyond ignored
   formatting/transcription artifacts, issues[] MUST contain at least one issue
-  explaining the substantive change. Never set is_correct=false with issues=[]
-  unless expression_gap explains the missing native/mixed-language part.
+  explaining the substantive change. Never set is_correct=false with issues=[]${
+    includeGap
+      ? `
+  unless expression_gap explains the missing native/mixed-language part.`
+      : "."
+  }
 - Use a consistent lowercase snake_case mastery_key per recurring problem type
   (e.g. "grammar:article_usage"). Same problem ⇒ same key, every time. Reuse the
   keys already present in the weak list below whenever they apply.
@@ -175,7 +185,9 @@ A) ERRORS — the user DID produce ${ctx.targetLanguage} but got it wrong.
   what the partner just said) — not just a sentence fixed in isolation. When a
   more idiomatic or context-fitting alternative exists, make "natural" a
   distinct alternative; copy "corrected" only when it is already the most natural
-  phrasing.
+  phrasing.${
+    includeGap
+      ? `
 
 B) EXPRESSION GAP — the message is wholly or partly in ${ctx.nativeLanguage}, or the
    user explicitly signals they don't know how to say something. Do NOT use
@@ -197,7 +209,9 @@ B) EXPRESSION GAP — the message is wholly or partly in ${ctx.nativeLanguage}, 
      (e.g. "gap:decline_request_politely"); mastery_label: human-readable in
      ${ctx.nativeLanguage}.
    MIXED input: still fill issues[] for the ${ctx.targetLanguage} part AND expression_gap
-   for the ${ctx.nativeLanguage} part. is_correct concerns only the ${ctx.targetLanguage} part.
+   for the ${ctx.nativeLanguage} part. is_correct concerns only the ${ctx.targetLanguage} part.`
+      : ""
+  }
 
 BOOKKEEPING (mastery_updates)
 - Do NOT list the user's errors here (they come from issues) and do NOT list
@@ -215,8 +229,8 @@ Never output counts, scores, or confidence — only discrete observations.
 OUTPUT CONTRACT
 - Return exactly ONE JSON object. No markdown fences, no prose, no reasoning.
 - Always include these top-level keys: is_correct, corrected, natural, issues,
-  mastery_updates, expression_gap.
-- Use [] for empty arrays. Use expression_gap:null when there is no expression gap.
+  mastery_updates${includeGap ? ", expression_gap" : ""}.
+- Use [] for empty arrays.${includeGap ? " Use expression_gap:null when there is no expression gap." : ""}
 - Do not include keys outside the schema.
 
 === LEARNER EXPERIENCE PREFERENCES ===
@@ -553,8 +567,9 @@ function fallbackMessages(
 async function requestStructuredTutorRaw(
   provider: ModelProvider,
   messages: ChatMessage[],
+  includeGap: boolean,
 ): Promise<TutorRawResult> {
-  const schema = tutorJsonSchema();
+  const schema = tutorJsonSchema(includeGap);
 
   // Tier 1: native json_schema structured output.
   try {
@@ -608,8 +623,9 @@ async function requestRepairedTutorRaw(
   ctx: TutorContext,
   badOutput: string,
   parseError: string,
+  includeGap: boolean,
 ): Promise<TutorRawResult> {
-  const schema = tutorJsonSchema();
+  const schema = tutorJsonSchema(includeGap);
   const messages: ChatMessage[] = [
     {
       role: "system",
@@ -623,7 +639,9 @@ If the previous output is unusable, re-analyze the source message directly.${
         ctx.standardAnswer
           ? `\nThis is a DICTATION drill: grade the transcription by comparing it to the standard answer below.
 corrected = the standard answer verbatim; natural = the same; issues = what was missed or misheard.`
-          : `\nFor normal ${ctx.targetLanguage} input, set expression_gap:null.`
+          : includeGap
+            ? `\nFor normal ${ctx.targetLanguage} input, set expression_gap:null.`
+            : ""
       }
 Use [] for empty mastery_updates.`,
     },
@@ -726,8 +744,13 @@ export async function analyze(
   provider: ModelProvider,
   ctx: TutorContext,
 ): Promise<AnalyzeResult> {
+  // Pure target-language turns can never carry an expression gap, so we send the shallow core
+  // schema/prompt; only native, mixed, or dictation turns need the full nested schema. Mirrors
+  // sanitizeExpressionGap, which strips any gap the model emits when this is false.
+  const includeGap =
+    Boolean(ctx.standardAnswer) || likelyContainsNativeFallback(ctx);
   const messages: ChatMessage[] = [
-    { role: "system", content: systemPrompt(ctx) },
+    { role: "system", content: systemPrompt(ctx, includeGap) },
     { role: "user", content: userPrompt(ctx) },
   ];
   try {
@@ -740,6 +763,7 @@ export async function analyze(
     const structuredResult = await requestStructuredTutorRaw(
       provider,
       messages,
+      includeGap,
     );
     const structured = parseTutorRaw(structuredResult.raw, ctx);
     if (structured.analysis) {
@@ -763,6 +787,7 @@ export async function analyze(
             ctx,
             structuredResult.raw,
             `Contract violation: ${violation}. Re-analyze the latest user message and include issues[] for every substantive corrected change.`,
+            includeGap,
           );
           const repaired = parseTutorRaw(repairedResult.raw, ctx);
           if (repaired.analysis) {
@@ -834,6 +859,7 @@ export async function analyze(
         ctx,
         structuredResult.raw,
         parseFailureText(structured.error),
+        includeGap,
       );
       const repaired = parseTutorRaw(repairedResult.raw, ctx);
       if (repaired.analysis) {

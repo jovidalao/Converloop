@@ -160,6 +160,40 @@ describe("analyze", () => {
     expect(result.error).toContain("repair json_schema");
   });
 
+  it("sends the shallow core schema (no expression_gap) for pure target-language input", async () => {
+    const calls: GenerateOptions[] = [];
+    const provider = stubProvider((opts) => {
+      calls.push(opts);
+      return validAnalysis;
+    });
+
+    await analyze(provider, ctx); // userInput "I go home yesterday." — no native script, no gap cue
+
+    const props = (calls[0].jsonSchema?.schema as any).properties;
+    expect(props).toHaveProperty("issues");
+    expect(props).not.toHaveProperty("expression_gap");
+    const system = calls[0].messages[0]?.content as string;
+    expect(system).not.toContain("EXPRESSION GAP");
+  });
+
+  it("sends the full schema with expression_gap when the input falls back to the native language", async () => {
+    const calls: GenerateOptions[] = [];
+    const provider = stubProvider((opts) => {
+      calls.push(opts);
+      return validAnalysis;
+    });
+
+    await analyze(provider, {
+      ...ctx,
+      userInput: "我想说 I go home 但是不会说",
+    });
+
+    const props = (calls[0].jsonSchema?.schema as any).properties;
+    expect(props).toHaveProperty("expression_gap");
+    const system = calls[0].messages[0]?.content as string;
+    expect(system).toContain("EXPRESSION GAP");
+  });
+
   it("includes experience preferences in the structured tutor prompt", async () => {
     const calls: GenerateOptions[] = [];
     const provider = stubProvider((opts) => {

@@ -115,4 +115,12 @@ describe("tutorJsonSchema", () => {
     expect((schema as any).properties).toHaveProperty("mastery_updates");
     expect((schema as any).required).toContain("expression_gap");
   });
+
+  it("omits expression_gap in the shallow core schema (includeGap=false)", () => {
+    const { name, schema } = tutorJsonSchema(false);
+    expect(name).toBe("TutorAnalysis");
+    expect((schema as any).properties).toHaveProperty("issues");
+    expect((schema as any).properties).not.toHaveProperty("expression_gap");
+    expect((schema as any).required).not.toContain("expression_gap");
+  });
 });
