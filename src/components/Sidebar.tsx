@@ -4,10 +4,11 @@ import {
   BookOpenCheckIcon,
   BotIcon,
   ChevronRightIcon,
+  HeadphonesIcon,
   ListChecksIcon,
+  MessageSquareIcon,
   PencilIcon,
   PencilRulerIcon,
-  PlusIcon,
   ScrollTextIcon,
   SettingsIcon,
   SlidersHorizontalIcon,
@@ -25,22 +26,14 @@ import {
   type ReactNode,
   type PointerEvent as ReactPointerEvent,
   useEffect,
-  useMemo,
   useState,
 } from "react";
 import { type Locale, staticT, useTranslation } from "@/i18n";
 import { actionAriaKeyshortcuts, actionShortcutLabel } from "@/lib/app-actions";
-import type { ConversationMeta } from "../db/conversations";
-import {
-  deleteLearningAgent,
-  type LearningAgentDraft,
-  type LearningAgentMeta,
-  updateLearningAgent,
-} from "../db/learning-agents";
+import { type ConversationMeta, conversationType } from "../db/conversations";
 import { getActions, isAgentEnabled } from "../runtime";
 import { useConfirm } from "./confirm";
-import { EntityRow, EntityRowAction, EntitySection } from "./EntityRow";
-import { LearningAgentEditDialog } from "./LearningAgentEditDialog";
+import { EntityRow, EntityRowAction } from "./EntityRow";
 
 export type MainView =
   | "chat"
@@ -48,6 +41,7 @@ export type MainView =
   | "mastery"
   | "records"
   | "learning"
+  | "learning-gallery"
   | "design"
   | "agents"
   | "settings-logs"
@@ -77,19 +71,35 @@ export function formatRelativeTime(ts: number, locale: Locale): string {
   return rtf.format(-Math.floor(day / 365), "year");
 }
 
+// Type badge shown on each history row so the conversation kind (plain chat /
+// rapid Q&A / dictation / custom learning) is scannable at a glance. Mirrors
+// the icons used on the sidebar entries that start each kind.
+function conversationTypeIcon(c: ConversationMeta): ReactNode {
+  switch (conversationType(c)) {
+    case "learning_agent":
+      return <BookOpenCheckIcon className="size-3.5 shrink-0" />;
+    case "quickfire":
+      return <ZapIcon className="size-3.5 shrink-0" />;
+    case "dictation":
+      return <HeadphonesIcon className="size-3.5 shrink-0" />;
+    default:
+      return <MessageSquareIcon className="size-3.5 shrink-0" />;
+  }
+}
+
 interface SidebarProps {
   conversations: ConversationMeta[];
-  learningAgents: LearningAgentMeta[];
   activeId: string;
   newChatActive: boolean;
   /** The current draft is a Rapid Q&A start page (highlights the quickfire entry). */
   quickfireActive: boolean;
+  /** The current draft is a dictation start page (highlights the dictation entry). */
+  dictationActive: boolean;
   view: MainView;
   onSelect: (id: string) => void;
   onNewChat: () => void;
   onStartQuickfire: () => void;
-  onStartLearningAgent: (agentId: string) => void;
-  onRefreshLearningAgents: () => Promise<void>;
+  onStartDictation: () => void;
   onDeriveConversation: (conversationId: string, actionId: string) => void;
   onRename: (id: string, title: string) => void;
   onDelete: (id: string) => void;
@@ -106,16 +116,15 @@ interface SidebarProps {
 
 export function Sidebar({
   conversations,
-  learningAgents,
   activeId,
   newChatActive,
   quickfireActive,
+  dictationActive,
   view,
   onSelect,
   onNewChat,
   onStartQuickfire,
-  onStartLearningAgent,
-  onRefreshLearningAgents,
+  onStartDictation,
   onDeriveConversation,
   onRename,
   onDelete,
@@ -131,8 +140,6 @@ export function Sidebar({
   const { t, locale } = useTranslation();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
-  const [learningCollapsed, setLearningCollapsed] = useState(false);
-  const [editingAgentId, setEditingAgentId] = useState<string | null>(null);
   const [conversationMenu, setConversationMenu] = useState<{
     conv: ConversationMeta;
     x: number;
@@ -141,14 +148,6 @@ export function Sidebar({
 
   const derivationActions = getActions("session").filter((a) =>
     isAgentEnabled(a.id),
-  );
-  // Learning lessons (capped at 5) all live in the animated body, so collapsing
-  // the section hides every one — nothing peeks while collapsed.
-  const visibleLearningAgents = learningAgents.slice(0, 5);
-
-  const editingAgent = useMemo(
-    () => learningAgents.find((a) => a.id === editingAgentId) ?? null,
-    [learningAgents, editingAgentId],
   );
 
   useEffect(() => {
@@ -193,25 +192,6 @@ export function Sidebar({
       x: Math.max(8, Math.min(r.right - 256, window.innerWidth - 276)),
       y: Math.max(8, Math.min(r.bottom + 4, window.innerHeight - 320)),
     });
-  }
-
-  async function saveAgent(id: string, patch: Partial<LearningAgentDraft>) {
-    await updateLearningAgent(id, patch);
-    await onRefreshLearningAgents();
-    setEditingAgentId(null);
-  }
-
-  async function removeAgent(agent: LearningAgentMeta) {
-    if (agent.builtIn) return;
-    if (
-      !(await confirm({
-        title: t("sidebar.deleteLessonTitle", { name: agent.name }),
-        description: t("sidebar.deleteLessonDescription"),
-      }))
-    )
-      return;
-    await deleteLearningAgent(agent.id);
-    await onRefreshLearningAgents();
   }
 
   function startEdit(c: ConversationMeta) {
@@ -265,38 +245,6 @@ export function Sidebar({
     window.addEventListener("pointerup", finishResize);
     window.addEventListener("pointercancel", finishResize);
   }
-
-  const renderAgentRow = (agent: LearningAgentMeta) => (
-    <EntityRow
-      key={agent.id}
-      className="codex-sidebar-child-row"
-      title={agent.name}
-      tooltip={agent.description}
-      onSelect={() => onStartLearningAgent(agent.id)}
-      actions={
-        <>
-          <EntityRowAction
-            label={t("common.edit")}
-            icon={<PencilIcon className="size-3.5" />}
-            onClick={(e) => {
-              e.stopPropagation();
-              setEditingAgentId(agent.id);
-            }}
-          />
-          {!agent.builtIn && (
-            <EntityRowAction
-              label={t("common.delete")}
-              icon={<Trash2Icon className="size-3.5" />}
-              onClick={(e) => {
-                e.stopPropagation();
-                void removeAgent(agent);
-              }}
-            />
-          )}
-        </>
-      }
-    />
-  );
 
   // A row in the settings sub-menu: same .codex-sidebar-action style as the
   // "New chat" / "Settings" entries, with the selected state driven by data-active.
@@ -354,24 +302,33 @@ export function Sidebar({
                 </span>
                 <span>{t("sidebar.quickfire")}</span>
               </button>
+              <button
+                type="button"
+                className="codex-sidebar-action"
+                data-active={dictationActive}
+                onClick={onStartDictation}
+                title={t("sidebar.dictationTooltip")}
+              >
+                <span className="codex-sidebar-leading-icon">
+                  <HeadphonesIcon className="size-4" />
+                </span>
+                <span>{t("sidebar.dictation")}</span>
+              </button>
+              <button
+                type="button"
+                className="codex-sidebar-action"
+                data-active={view === "learning-gallery"}
+                onClick={() => onOpenView("learning-gallery")}
+                title={t("sidebar.customLearningTooltip")}
+              >
+                <span className="codex-sidebar-leading-icon">
+                  <BookOpenCheckIcon className="size-4" />
+                </span>
+                <span>{t("sidebar.customLearning")}</span>
+              </button>
             </div>
 
             <nav className="codex-sidebar-scroll">
-              <EntitySection
-                icon={<BookOpenCheckIcon className="size-4 shrink-0" />}
-                label={t("sidebar.customLearning")}
-                collapsed={learningCollapsed}
-                onToggle={() => setLearningCollapsed((v) => !v)}
-              >
-                {visibleLearningAgents.map(renderAgentRow)}
-                <EntityRow
-                  className="codex-sidebar-child-row"
-                  icon={<PlusIcon className="size-3.5 shrink-0" />}
-                  title={t("sidebar.createLesson")}
-                  onSelect={() => onOpenView("learning")}
-                />
-              </EntitySection>
-
               <div className="codex-section-label">{t("sidebar.recent")}</div>
               {conversations.map((c) => {
                 const active = view === "chat" && c.id === activeId;
@@ -396,11 +353,7 @@ export function Sidebar({
                   <EntityRow
                     key={c.id}
                     active={active}
-                    icon={
-                      c.kind === "learning_agent" ? (
-                        <BookOpenCheckIcon className="size-3.5 shrink-0" />
-                      ) : undefined
-                    }
+                    icon={conversationTypeIcon(c)}
                     title={c.title}
                     meta={formatRelativeTime(c.updatedAt, locale)}
                     onSelect={() => onSelect(c.id)}
@@ -610,14 +563,6 @@ export function Sidebar({
             ))}
           </div>
         </div>
-      )}
-
-      {editingAgent && (
-        <LearningAgentEditDialog
-          agent={editingAgent}
-          onSave={(patch) => void saveAgent(editingAgent.id, patch)}
-          onCancel={() => setEditingAgentId(null)}
-        />
       )}
     </aside>
   );

@@ -59,6 +59,8 @@ import {
   getConversation,
   type NewConversationContext,
   parseAgentModifiers,
+  parseDictationReply,
+  streamingDictationFeedback,
   touchConversation,
   truncateConversationFrom,
 } from "../db/conversations";
@@ -88,6 +90,7 @@ import {
   regenerateReply,
   runTurn,
   startDerivedConversation,
+  startDictationSession,
   startLearningSession,
   startQuickfireSession,
   startTopicConversation,
@@ -101,9 +104,12 @@ import {
 } from "../runtime";
 import { loadTtsConfig } from "../tts/config";
 import { stopSpeech } from "../tts/playback";
+import { speakText } from "../tts/speak";
 import { createReplySpeaker } from "../tts/stream";
 import { AnnotationIsland } from "./AnnotationIsland";
 import { useConfirm } from "./confirm";
+import { DictationReply } from "./DictationReply";
+import { DictationStartScreen } from "./DictationStartScreen";
 import { InlineCorrection, UserSentence } from "./InlineCorrection";
 import { LessonStartScreen } from "./LessonStartScreen";
 import { Markdown } from "./Markdown";
@@ -123,6 +129,8 @@ interface ChatViewProps {
   isDraft?: boolean;
   /** This draft is a Rapid Q&A start page (only meaningful when isDraft): show the start screen and treat the first commit as the umbrella scenario. */
   isQuickfireDraft?: boolean;
+  /** This draft is a dictation start page (only meaningful when isDraft): show the start screen and treat the first commit as the theme. */
+  isDictationDraft?: boolean;
   /** This draft is a lesson start page. The conversation row is created only when Start is pressed. */
   isLearningAgentDraft?: boolean;
   /** Metadata for the selected lesson draft, shown before the row exists in SQLite. */
@@ -137,6 +145,8 @@ interface ChatViewProps {
   onCreateDraftConversation?: (id: string) => Promise<void>;
   /** Materialize a Rapid Q&A draft into a real conversation with the chosen umbrella scenario (called before the AI kickoff). */
   onCreateQuickfireDraft?: (id: string, scenario: string) => Promise<void>;
+  /** Materialize a dictation draft into a real conversation with the chosen theme (called before the AI kickoff). */
+  onCreateDictationDraft?: (id: string, theme: string) => Promise<void>;
   /** Materialize a new-chat draft into a real conversation seeded with the chosen topic (called before the AI opens the chat). */
   onCreateTopicDraft?: (id: string, topic: string) => Promise<void>;
   /** Materialize a lesson draft into a real learning-agent conversation before the AI kickoff. */
@@ -697,6 +707,7 @@ function PartnerReply({
   text,
   autoOpen = false,
   learningMode = false,
+  variant,
   offRecord = false,
   onFirstExplain,
   onFirstBilingual,
@@ -710,6 +721,8 @@ function PartnerReply({
   text: string;
   autoOpen?: boolean;
   learningMode?: boolean;
+  // Rapid-fire model answers are not part of a thread, so the "reply suggestion" (next-sentence) action is hidden.
+  variant?: "quickfire";
   /** /btw off-record reply: hide "Reply suggestion" (it looks up context by turnId; off-record turns are excluded and would error). */
   offRecord?: boolean;
   /** Fired once on the user's first manual open of explain/bilingual (signals comprehension difficulty; auto-open doesn't count). */
@@ -738,9 +751,9 @@ function PartnerReply({
   });
   // When a transformer capability is "deleted" (hidden), its trigger button is also hidden.
   const bilingualHidden = isAgentHidden("builtin:transformer:bilingual");
-  const suggestionHidden = isAgentHidden(
-    "builtin:transformer:reply_suggestion",
-  );
+  const suggestionHidden =
+    isAgentHidden("builtin:transformer:reply_suggestion") ||
+    variant === "quickfire";
 
   // When a reply is replaced by "Regenerate", the old bilingual view no longer corresponds to it
   // — collapse and reset. Skip on first mount to avoid fighting with autoOpen.
@@ -944,6 +957,8 @@ function UserMessageActions({
   onEditFrom,
   onTurnAction,
   editDisabled = false,
+  showReplySuggestion = true,
+  showBranch = true,
 }: {
   turn: ChatTurn;
   suggestion: ReplySuggestionControl;
@@ -952,6 +967,10 @@ function UserMessageActions({
   onTurnAction: (actionId: string) => void;
   // "Edit from here" is disabled while any turn is being graded — truncation would discard in-flight analysis.
   editDisabled?: boolean;
+  // Drill modes hide actions that don't apply: dictation has no "reply suggestion" (you transcribe, not reply),
+  // and neither dictation nor rapid-fire benefit from "branch from here" (deriving a conversation off a drill turn).
+  showReplySuggestion?: boolean;
+  showBranch?: boolean;
 }) {
   const analysis = turn.analysis;
   const corrected = analysis?.corrected?.trim() || turn.userText;
@@ -961,22 +980,23 @@ function UserMessageActions({
     <>
       <CopyButton text={corrected} />
       {canSpeak && <SpeakButton text={speakTarget} />}
-      <ReplySuggestionButton suggestion={suggestion} />
+      {showReplySuggestion && <ReplySuggestionButton suggestion={suggestion} />}
       <EditFromHereButton onClick={onEditFrom} disabled={editDisabled} />
-      {getActions("turn")
-        .filter((a) => isAgentEnabled(a.id))
-        .map((a) => (
-          <Button
-            key={a.id}
-            type="button"
-            variant="action"
-            size="action"
-            title={`${a.label}:${a.description ?? ""}`}
-            onClick={() => onTurnAction(a.id)}
-          >
-            <GitBranchIcon size={16} />
-          </Button>
-        ))}
+      {showBranch &&
+        getActions("turn")
+          .filter((a) => isAgentEnabled(a.id))
+          .map((a) => (
+            <Button
+              key={a.id}
+              type="button"
+              variant="action"
+              size="action"
+              title={`${a.label}:${a.description ?? ""}`}
+              onClick={() => onTurnAction(a.id)}
+            >
+              <GitBranchIcon size={16} />
+            </Button>
+          ))}
     </>
   );
 }
@@ -988,6 +1008,7 @@ function UserTurn({
   conversationId,
   nativeLanguage,
   learningMode,
+  variant,
   onEditFrom,
   onTurnAction,
   onLayoutChange,
@@ -998,6 +1019,9 @@ function UserTurn({
   conversationId: string;
   nativeLanguage: string;
   learningMode: boolean;
+  // Practice sub-mode driving which actions apply: dictation hides reply-suggestion / "more natural" / branch
+  // (you transcribe a known sentence); quickfire hides only branch. undefined = ordinary practice (all actions).
+  variant?: "quickfire" | "dictation";
   onEditFrom: () => void;
   onTurnAction: (actionId: string) => void;
   onLayoutChange?: () => void;
@@ -1005,7 +1029,9 @@ function UserTurn({
   editDisabled?: boolean;
 }) {
   const { t } = useTranslation();
-  const idiomatic = idiomaticText(turn.analysis);
+  // Dictation transcribes a fixed target sentence: there is no "more natural" rendering of the learner's attempt.
+  const idiomatic =
+    variant === "dictation" ? null : idiomaticText(turn.analysis);
   const [naturalOpen, setNaturalOpen] = useState(true);
   const replySuggestion = useReplySuggestion({
     conversationId,
@@ -1113,6 +1139,8 @@ function UserTurn({
             onEditFrom={onEditFrom}
             onTurnAction={onTurnAction}
             editDisabled={editDisabled}
+            showReplySuggestion={variant !== "dictation"}
+            showBranch={variant === undefined}
           />
         }
         natural={
@@ -1121,10 +1149,12 @@ function UserTurn({
             : undefined
         }
       />
-      <ReplySuggestionPanel
-        suggestion={replySuggestion}
-        onUse={onUseSuggestion}
-      />
+      {variant !== "dictation" && (
+        <ReplySuggestionPanel
+          suggestion={replySuggestion}
+          onUse={onUseSuggestion}
+        />
+      )}
     </div>
   );
 }
@@ -1253,12 +1283,14 @@ export function ChatView({
   conversationId,
   isDraft = false,
   isQuickfireDraft = false,
+  isDictationDraft = false,
   isLearningAgentDraft = false,
   learningAgentDraft = null,
   mode = "practice",
   onActivity,
   onCreateDraftConversation,
   onCreateQuickfireDraft,
+  onCreateDictationDraft,
   onCreateTopicDraft,
   onCreateLearningAgentDraft,
   onTurnsChange,
@@ -1286,6 +1318,12 @@ export function ChatView({
   const [quickfireScenario, setQuickfireScenario] = useState<string | null>(
     null,
   );
+  // Theme of a dictation conversation (null for non-dictation); drives the mode badge + the masked sentence rendering.
+  const [dictationTheme, setDictationTheme] = useState<string | null>(null);
+  // After a transcription is graded, the next sentence is generated + its audio prefetched in the background, but it is
+  // NOT spoken and the listen card is replaced by a "next question" gate. The learner reads their correction, then taps
+  // the gate to start the next item (plays the audio, re-enables input). True only between submit and that tap.
+  const [dictationAwaitingEnter, setDictationAwaitingEnter] = useState(false);
   // Lesson start screen: name + intro of the picked 定制化学习 lesson, shown before its first turn fires (null until
   // resolved, or once the lesson has started). The Start button kicks off the lesson.
   const [lessonInfo, setLessonInfo] = useState<{
@@ -1301,6 +1339,13 @@ export function ChatView({
   const [quickfireReloadTick, setQuickfireReloadTick] = useState(0);
   // Topics on screen when regenerate was clicked — passed to the next fetch as "avoid these" so it returns a different set.
   const quickfireAvoidRef = useRef<string[]>([]);
+  // Dictation start page: recommended themes (null = still loading, [] = none → type-your-own), mirroring the Rapid Q&A
+  // topic state. Picking a chip (or typing a theme) starts the listening drill on that theme.
+  const [dictationTopics, setDictationTopics] = useState<string[] | null>(null);
+  const [dictationTopicsRefreshing, setDictationTopicsRefreshing] =
+    useState(false);
+  const [dictationReloadTick, setDictationReloadTick] = useState(0);
+  const dictationAvoidRef = useRef<string[]>([]);
   // New-chat start page: recommended conversation topics (null = still loading, [] = none → type-your-own), mirroring
   // the Rapid Q&A topic state. Picking a chip lets the AI open the chat on that topic.
   const [newChatTopics, setNewChatTopics] = useState<string[] | null>(null);
@@ -1323,6 +1368,7 @@ export function ChatView({
   const kickoffStartedRef = useRef(false);
   const derivationStartedRef = useRef(false);
   const quickfireStartedRef = useRef(false);
+  const dictationStartedRef = useRef(false);
   const topicStartedRef = useRef(false);
   const liveTurnIdsRef = useRef<Set<string>>(new Set()); // turns sent in this session; auto-bilingual only applies to these
   const hintTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -1333,11 +1379,26 @@ export function ChatView({
   // Rapid Q&A start page: an uncommitted quickfire draft (no conversation row yet). Drives the start screen,
   // the scenario-input composer, and routing the first send through startQuickfireDraft instead of a graded turn.
   const quickfireDraftActive = isDraft && isQuickfireDraft;
-  // New-chat start page: a plain uncommitted practice draft (not Rapid Q&A / lesson). Drives the topic start screen;
-  // picking a chip materializes the conversation and the AI opens it on that topic. The composer still sends a normal
-  // first turn (type-your-own), so this only changes the empty-state, not the send path.
+  // Dictation start page: an uncommitted dictation draft (no conversation row yet). Drives the theme start screen and
+  // routes the first commit (chip / typed-send) through startDictationDraft instead of a graded turn.
+  const dictationDraftActive = isDraft && isDictationDraft;
+  // A dictation conversation (draft or materialized): drives the masked-sentence rendering + the mode badge.
+  const isDictation = dictationDraftActive || dictationTheme !== null;
+  // Practice sub-mode for the turn renderers: dictation and rapid-fire each trim actions that don't apply.
+  const practiceVariant: "quickfire" | "dictation" | undefined = isDictation
+    ? "dictation"
+    : quickfireScenario !== null
+      ? "quickfire"
+      : undefined;
+  // New-chat start page: a plain uncommitted practice draft (not Rapid Q&A / dictation / lesson). Drives the topic start
+  // screen; picking a chip materializes the conversation and the AI opens it on that topic. The composer still sends a
+  // normal first turn (type-your-own), so this only changes the empty-state, not the send path.
   const newChatDraftActive =
-    isDraft && !isQuickfireDraft && !isLearningAgentDraft && !learningMode;
+    isDraft &&
+    !isQuickfireDraft &&
+    !isDictationDraft &&
+    !isLearningAgentDraft &&
+    !learningMode;
   // Lesson start page: an uncommitted lesson draft (no conversation row yet). Start materializes it, then runs the
   // same kickoff path as an existing empty lesson conversation.
   const lessonDraftActive = isDraft && isLearningAgentDraft;
@@ -1349,6 +1410,7 @@ export function ChatView({
   const hintsActive =
     !compact &&
     !learningMode &&
+    !isDictation &&
     !!inputHints &&
     inputHints.length > 0 &&
     input.length === 0;
@@ -1392,7 +1454,10 @@ export function ChatView({
     [slashToken, slashDismissed, canDerive, learningMode],
   );
   const slashOpen =
-    !compact && !quickfireDraftActive && slashCommands.length > 0;
+    !compact &&
+    !quickfireDraftActive &&
+    !dictationDraftActive &&
+    slashCommands.length > 0;
 
   // When leaving the command context (no token), clear the "Esc-closed" flag so the next / re-opens the menu.
   useEffect(() => {
@@ -1465,6 +1530,8 @@ export function ChatView({
     let cancelled = false;
     setDerivedBanner(null);
     setQuickfireScenario(null);
+    setDictationTheme(null);
+    setDictationAwaitingEnter(false);
     setLessonInfo(null);
     setInputHints(null);
     setLastPromptTokens(null); // reset the context meter; repopulated on the next send in this conversation
@@ -1474,10 +1541,9 @@ export function ChatView({
       setTurns(loaded);
       if (learningMode && loaded.length === 0 && !kickoffStartedRef.current) {
         if (lessonDraftActive) {
-          setLessonInfo({
-            name: learningAgentDraft?.name ?? t("app.customLearningFallback"),
-            description: learningAgentDraft?.description ?? "",
-          });
+          // The gallery / command palette already showed the intro, so a lesson draft starts immediately —
+          // no intermediate start screen. startLesson materializes the draft, then runs the kickoff.
+          void startLesson();
           return;
         }
         // Don't fire the first turn yet: resolve the lesson and show the start screen (intro + Start button).
@@ -1503,6 +1569,7 @@ export function ChatView({
             label: mods.derivation?.actionLabel,
           });
         if (mods.quickfire) setQuickfireScenario(mods.quickfire.scenario);
+        if (mods.dictation) setDictationTheme(mods.dictation.theme);
         if (
           loaded.length === 0 &&
           !derivationStartedRef.current &&
@@ -1518,6 +1585,15 @@ export function ChatView({
           mods.quickfire
         ) {
           void startQuickfire();
+          return;
+        }
+        // Dictation: the AI opens by presenting the first sentence to transcribe (spoken, hidden).
+        if (
+          loaded.length === 0 &&
+          !dictationStartedRef.current &&
+          mods.dictation
+        ) {
+          void startDictation();
           return;
         }
         // Restore input hints for the reopened conversation. The watermark is the last
@@ -1624,6 +1700,42 @@ export function ChatView({
       cancelled = true;
     };
   }, [newChatDraftActive, newChatReloadTick]);
+
+  // Dictation start page: same shape as the Rapid Q&A / new-chat effects — reuse cached topics verbatim on open, and
+  // generate only on a cold cache or a manual regenerate. Themes are general conversation topics, so this shares the
+  // conversation-topic recommender. Clears when the draft commits (dictationDraftActive flips false).
+  useEffect(() => {
+    if (!dictationDraftActive) {
+      setDictationTopics(null);
+      setDictationTopicsRefreshing(false);
+      return;
+    }
+    let cancelled = false;
+    const regenerate = dictationReloadTick > 0;
+    setDictationTopicsRefreshing(true);
+    if (regenerate) setDictationTopics(null);
+    void (async () => {
+      if (!regenerate) {
+        const cached = await loadCachedConversationTopics();
+        if (cancelled) return;
+        if (cached.length > 0) {
+          setDictationTopics(cached);
+          setDictationTopicsRefreshing(false);
+          return;
+        }
+      }
+      const result = await recommendConversationTopics({
+        avoid: regenerate ? dictationAvoidRef.current : [],
+      });
+      if (cancelled) return;
+      if (result.length > 0) setDictationTopics(result);
+      else setDictationTopics((cur) => cur ?? []);
+      setDictationTopicsRefreshing(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [dictationDraftActive, dictationReloadTick]);
 
   // All turns are reported to the coach panel. Turns are patched (new object) when analysis arrives, so re-reporting is automatic.
   useEffect(() => {
@@ -1910,6 +2022,120 @@ export function ChatView({
     await startQuickfire();
   }
 
+  // Dictation kickoff: the AI presents the first sentence to transcribe into an empty dictation conversation (AI speaks
+  // first, no grading). The theme already lives in the conversation's modifiers, so there is no context-generation
+  // step. The sentence is spoken (TTS) but its text stays hidden until the learner answers; subsequent transcriptions
+  // go through the normal graded send().
+  async function startDictation(replacingId?: string) {
+    if (learningMode || replyBusy || dictationStartedRef.current) return;
+    stopSpeech();
+    dictationStartedRef.current = true;
+    const turnGen = ++turnGenRef.current;
+    const turnId = crypto.randomUUID();
+    liveTurnIdsRef.current.add(turnId);
+    stickToBottomRef.current = true;
+    setError(null);
+    setRetry(null);
+    replyCommittedRef.current = false;
+    setTurns((prev) => [
+      ...(replacingId ? prev.filter((t) => t.id !== replacingId) : prev),
+      {
+        id: turnId,
+        userText: "",
+        analysis: null,
+        analysisPending: false,
+      },
+    ]);
+    setReplyBusy(true);
+    setStreaming("");
+    let acc = "";
+    // Dictation always speaks (that is the whole point), regardless of the global auto-speak setting; and it speaks
+    // ONLY the to-dictate sentence, never the feedback text.
+    const speaker = createReplySpeaker();
+    try {
+      const result = await startDictationSession(
+        conversationId,
+        {
+          onReplyDelta: (d) => {
+            if (turnGenRef.current !== turnGen) return;
+            acc += d;
+            setStreaming(acc);
+          },
+          onReplyComplete: (reply) => {
+            if (turnGenRef.current !== turnGen) return;
+            replyCommittedRef.current = true;
+            commitPartnerReply(turnId, reply);
+            speaker.finish(parseDictationReply(reply).sentence);
+          },
+          onContext: (tokens) => {
+            if (turnGenRef.current === turnGen) setLastPromptTokens(tokens);
+          },
+          onAnalysis: () => {
+            patchTurn(turnId, { analysisPending: false });
+          },
+        },
+        turnId,
+      );
+      if (turnGenRef.current === turnGen && !replyCommittedRef.current) {
+        commitPartnerReply(turnId, result.reply);
+        speaker.finish(parseDictationReply(result.reply).sentence);
+      }
+      await touchConversation(conversationId);
+      onActivity?.();
+    } catch (e) {
+      stopSpeech();
+      speaker.abort();
+      patchTurn(turnId, {
+        analysisPending: false,
+        analysisError: t("chat.dictationStartFailed"),
+      });
+      setError(
+        e instanceof MissingApiKeyError
+          ? e.message
+          : e instanceof Error
+            ? e.message
+            : String(e),
+      );
+      // Release the kickoff guard so retry can restart; the failed turn is replaced on retry.
+      dictationStartedRef.current = false;
+      setRetry({ run: () => void startDictation(turnId) });
+    } finally {
+      if (turnGenRef.current === turnGen) {
+        setStreaming("");
+        setReplyBusy(false);
+      } else {
+        speaker.abort();
+      }
+    }
+  }
+
+  // Commit a theme from the dictation start page (chip or typed-send): first materialize the real dictation
+  // conversation so the AI kickoff can read the theme from its modifiers, then present the first sentence.
+  async function startDictationDraft(theme: string) {
+    const s = theme.trim();
+    if (!s || replyBusy || dictationStartedRef.current) return;
+    setInput("");
+    await onCreateDictationDraft?.(conversationId, s);
+    setDictationTheme(s); // drive the mode badge + masked rendering immediately
+    await startDictation();
+  }
+
+  // "Next question" gate tap: the next sentence + its audio were prepared in the background after the last
+  // transcription. Reveal the listen card, play the (cached) sentence once, and re-enable transcription.
+  function enterNextDictation() {
+    if (!dictationAwaitingEnter) return;
+    setDictationAwaitingEnter(false);
+    const last = turns[turns.length - 1];
+    const sentence = last?.partnerText
+      ? parseDictationReply(last.partnerText).sentence
+      : "";
+    if (sentence) {
+      stopSpeech();
+      createReplySpeaker().finish(sentence);
+    }
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }
+
   // New-chat topic kickoff: the AI opens the conversation on the chosen topic (AI speaks first, no grading), like a
   // derived opening but with no context-generation step — the topic is passed straight to the opening instruction.
   // After this, it is an ordinary practice conversation and subsequent learner answers go through the graded send().
@@ -2059,8 +2285,20 @@ export function ChatView({
     let acc = "";
     // Auto-speak: synthesizes and plays the full reply as a single TTS request once streaming completes.
     // Not created when "auto-speak" is off in settings (the speaker icon can still be used manually).
+    // Dictation never auto-plays the next sentence here — it is gated behind the "next question" tap (see speakReply).
     const speaker =
-      !learningMode && loadTtsConfig().autoSpeak ? createReplySpeaker() : null;
+      !learningMode && !isDictation && loadTtsConfig().autoSpeak
+        ? createReplySpeaker()
+        : null;
+    const speakReply = (reply: string) => {
+      // Dictation: pre-synthesize the next sentence (warms the TTS cache, no playback) so tapping "next question"
+      // plays it instantly; the tap is what triggers the first playback. Never speak the feedback prose.
+      if (isDictation) {
+        void speakText(parseDictationReply(reply).sentence).catch(() => {});
+        return;
+      }
+      speaker?.finish(reply);
+    };
     try {
       const result = await runTurn(
         text,
@@ -2074,7 +2312,7 @@ export function ChatView({
             if (turnGenRef.current !== turnGen) return;
             replyCommittedRef.current = true;
             commitPartnerReply(turnId, reply);
-            speaker?.finish(reply);
+            speakReply(reply);
           },
           onContext: (tokens) => {
             if (turnGenRef.current === turnGen) setLastPromptTokens(tokens);
@@ -2093,7 +2331,12 @@ export function ChatView({
       );
       if (turnGenRef.current === turnGen && !replyCommittedRef.current) {
         commitPartnerReply(turnId, result.reply);
-        speaker?.finish(result.reply);
+        speakReply(result.reply);
+      }
+      // Dictation: the next sentence is now ready (and its audio prefetched). Gate it behind the "next question" tap so
+      // the learner reads the correction first; the tap plays the audio and re-enables transcription.
+      if (turnGenRef.current === turnGen && isDictation) {
+        setDictationAwaitingEnter(true);
       }
       if (draftAtSend) await onCreateDraftConversation?.(conversationId);
       // Turn persisted: update conversation sort order, auto-name on first message, then refresh sidebar.
@@ -2108,8 +2351,9 @@ export function ChatView({
           () => onActivity?.(),
         );
       } else onActivity?.();
-      // Fire hint generation in the background after the reply is committed; silently ignore errors.
-      if (!offRecord && !learningMode) {
+      // Fire hint generation in the background after the reply is committed; silently ignore errors. Dictation has no
+      // reply-coaching hints (the learner transcribes, not composes), so skip it there.
+      if (!offRecord && !learningMode && !isDictation) {
         const capturedGen = turnGen;
         void generateInputHintsForConversation(conversationId).then((hints) => {
           if (turnGenRef.current === capturedGen && hints.length > 0)
@@ -2281,6 +2525,11 @@ export function ChatView({
       void startQuickfireDraft(input);
       return;
     }
+    // Dictation start page: the composer takes a custom theme, not a graded turn or a slash command.
+    if (dictationDraftActive) {
+      void startDictationDraft(input);
+      return;
+    }
     const parsed = parseSlashInput(input);
     if (!parsed) {
       void send();
@@ -2338,6 +2587,20 @@ export function ChatView({
   let lastReplyTurnId: string | undefined;
   for (const turn of turns) if (turn.partnerText) lastReplyTurnId = turn.id;
 
+  // Dictation masking: the sentence still awaiting transcription is the one in the LAST turn's reply (no turn follows
+  // it). All earlier sentences have been answered and are revealed. While a new reply is still streaming, the last turn
+  // is the optimistic user-transcription turn (no partnerText), so nothing is masked and the previous sentence reveals.
+  const dictationMaskedTurnId =
+    isDictation && turns.length > 0 && turns[turns.length - 1].partnerText
+      ? turns[turns.length - 1].id
+      : undefined;
+
+  // While a dictation reply streams, show only the feedback portion — the sentence stays hidden until it is committed
+  // (then it renders as a masked "listen" card). For non-dictation the full streamed text shows as usual.
+  const streamingVisible = isDictation
+    ? streamingDictationFeedback(streaming)
+    : streaming;
+
   // "Edit from here" truncates the conversation and discards in-flight analysis — disabled until all grading completes.
   const analyzing = turns.some((turn) => turn.analysisPending);
 
@@ -2347,7 +2610,9 @@ export function ChatView({
       ? { label: t("chat.lessonBadge"), tone: "info" }
       : quickfireScenario || quickfireDraftActive
         ? { label: t("chat.quickfireBadge"), tone: "info" }
-        : { label: t("chat.practiceBadge"), tone: "muted" },
+        : isDictation
+          ? { label: t("chat.dictationBadge"), tone: "info" }
+          : { label: t("chat.practiceBadge"), tone: "muted" },
   ];
   if (derivedBanner) {
     optionBadges.push({
@@ -2418,6 +2683,17 @@ export function ChatView({
                 setQuickfireReloadTick((n) => n + 1);
               }}
             />
+          ) : dictationDraftActive ? (
+            <DictationStartScreen
+              topics={dictationTopics}
+              refreshing={dictationTopicsRefreshing}
+              busy={replyBusy}
+              onPick={(theme) => void startDictationDraft(theme)}
+              onRefresh={() => {
+                dictationAvoidRef.current = dictationTopics ?? [];
+                setDictationReloadTick((n) => n + 1);
+              }}
+            />
           ) : learningMode ? (
             lessonInfo ? (
               <LessonStartScreen
@@ -2459,6 +2735,7 @@ export function ChatView({
                 conversationId={conversationId}
                 nativeLanguage={nativeLanguage}
                 learningMode={learningMode}
+                variant={practiceVariant}
                 onLayoutChange={requestLayoutScroll}
                 editDisabled={analyzing}
                 onEditFrom={() => void editFromHere(turn.id)}
@@ -2468,32 +2745,43 @@ export function ChatView({
                 onUseSuggestion={useSuggestedReply}
               />
             )}
-            {turn.partnerText && (
-              <PartnerReply
-                conversationId={conversationId}
-                turnId={turn.id}
-                text={turn.partnerText}
-                learningMode={learningMode}
-                offRecord={turn.excludeFromContext}
-                autoOpen={
-                  !learningMode &&
-                  autoBilingual &&
-                  liveTurnIdsRef.current.has(turn.id)
-                }
-                onFirstExplain={() => void incrementExplainCount(turn.id)}
-                onFirstBilingual={() => void incrementBilingualCount(turn.id)}
-                onLayoutChange={requestLayoutScroll}
-                onUseSuggestion={useSuggestedReply}
-                onRegenerate={
-                  !learningMode &&
-                  !turn.excludeFromContext &&
-                  turn.id === lastReplyTurnId
-                    ? () => void regenerate(turn.id)
-                    : undefined
-                }
-                regenerating={regeneratingId === turn.id}
-              />
-            )}
+            {turn.partnerText &&
+              (isDictation ? (
+                <DictationReply
+                  text={turn.partnerText}
+                  masked={turn.id === dictationMaskedTurnId}
+                  awaitingEnter={
+                    turn.id === dictationMaskedTurnId && dictationAwaitingEnter
+                  }
+                  onEnter={enterNextDictation}
+                />
+              ) : (
+                <PartnerReply
+                  conversationId={conversationId}
+                  turnId={turn.id}
+                  text={turn.partnerText}
+                  learningMode={learningMode}
+                  variant={quickfireScenario !== null ? "quickfire" : undefined}
+                  offRecord={turn.excludeFromContext}
+                  autoOpen={
+                    !learningMode &&
+                    autoBilingual &&
+                    liveTurnIdsRef.current.has(turn.id)
+                  }
+                  onFirstExplain={() => void incrementExplainCount(turn.id)}
+                  onFirstBilingual={() => void incrementBilingualCount(turn.id)}
+                  onLayoutChange={requestLayoutScroll}
+                  onUseSuggestion={useSuggestedReply}
+                  onRegenerate={
+                    !learningMode &&
+                    !turn.excludeFromContext &&
+                    turn.id === lastReplyTurnId
+                      ? () => void regenerate(turn.id)
+                      : undefined
+                  }
+                  regenerating={regeneratingId === turn.id}
+                />
+              ))}
           </TurnCard>
         ))}
         {derivationPreparing && (
@@ -2502,12 +2790,14 @@ export function ChatView({
             <span>{t("chat.preparingContext")}</span>
           </div>
         )}
-        {replyBusy && !derivationPreparing && streaming.trim().length < 2 && (
-          <ThinkingIndicator className="self-stretch py-0.5" />
-        )}
-        {streaming.trim().length >= 2 && (
+        {replyBusy &&
+          !derivationPreparing &&
+          streamingVisible.trim().length < 2 && (
+            <ThinkingIndicator className="self-stretch py-0.5" />
+          )}
+        {streamingVisible.trim().length >= 2 && (
           <div className="self-stretch py-0.5 text-ui-secondary">
-            <Markdown>{streaming}</Markdown>
+            <Markdown>{streamingVisible}</Markdown>
           </div>
         )}
         <div ref={endRef} />
@@ -2606,11 +2896,21 @@ export function ChatView({
                         ? t("chat.inputPlaceholderLesson")
                         : quickfireDraftActive
                           ? t("quickfire.scenarioPlaceholder")
-                          : !compact && inputHints && inputHints.length > 0
-                            ? "" // hint shown via the animated overlay below
-                            : t("chat.inputPlaceholderPractice")
+                          : dictationDraftActive
+                            ? t("dictation.themePlaceholder")
+                            : isDictation
+                              ? dictationAwaitingEnter
+                                ? t("dictation.awaitingEnterPlaceholder")
+                                : t("dictation.transcriptionPlaceholder")
+                              : !compact && inputHints && inputHints.length > 0
+                                ? "" // hint shown via the animated overlay below
+                                : t("chat.inputPlaceholderPractice")
                   }
-                  disabled={replyBusy || lessonGateActive}
+                  disabled={
+                    replyBusy ||
+                    lessonGateActive ||
+                    (isDictation && dictationAwaitingEnter)
+                  }
                   className="max-h-[6.5rem] min-h-14 w-full min-w-0 resize-none border-none bg-transparent px-4 pt-3 pb-2 text-ui-chat outline-none placeholder:text-muted-foreground"
                 />
                 {hintsActive && (
@@ -2712,7 +3012,12 @@ export function ChatView({
                   type="submit"
                   size="icon"
                   className="size-8 rounded-full transition-transform active:scale-90"
-                  disabled={replyBusy || lessonGateActive || !input.trim()}
+                  disabled={
+                    replyBusy ||
+                    lessonGateActive ||
+                    !input.trim() ||
+                    (isDictation && dictationAwaitingEnter)
+                  }
                   title={t("chat.send")}
                   aria-label={t("chat.send")}
                 >

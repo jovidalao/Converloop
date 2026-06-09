@@ -55,6 +55,14 @@ export interface QuickfireModifiers {
   scenario: string;
 }
 
+// Dictation drill: the conversation agent presents one sentence per turn (spoken aloud by the UI, its text hidden via
+// the [[SAY]] tags until the learner answers), gives brief feedback on the previous transcription, then the next
+// sentence. A practice-kind conversation reshaped by this marker via formatModifierInstructions — the tutor still
+// grades each transcription as usual. Theme is the only thing carried here.
+export interface DictationModifiers {
+  theme: string;
+}
+
 // Session-level adjustments: behavior changes the reply agent should follow. LLM observes; behavior is injected by code (formatted as instructions).
 export interface AgentModifiers {
   difficultyDelta?: number; // +1 harder / -1 easier
@@ -64,6 +72,7 @@ export interface AgentModifiers {
   derivation?: ConversationDerivationState;
   derivedContext?: NewConversationContext;
   quickfire?: QuickfireModifiers;
+  dictation?: DictationModifiers;
 }
 
 export function parseAgentModifiers(json: string | null): AgentModifiers {
@@ -77,6 +86,22 @@ export function parseAgentModifiers(json: string | null): AgentModifiers {
     // Corrupted JSON falls back to no adjustments
   }
   return {};
+}
+
+// The user-facing type of a conversation, used to badge each history row with an icon. Quickfire and dictation are
+// both practice-kind rows distinguished only by their modifier; everything else practice-kind is a plain conversation.
+export type ConversationType =
+  | "practice"
+  | "quickfire"
+  | "dictation"
+  | "learning_agent";
+
+export function conversationType(c: ConversationMeta): ConversationType {
+  if (c.kind === "learning_agent") return "learning_agent";
+  const mods = parseAgentModifiers(c.agentModifiersJson);
+  if (mods.quickfire) return "quickfire";
+  if (mods.dictation) return "dictation";
+  return "practice";
 }
 
 // Convert session-level adjustments into English instructions fed to the conversation agent; returns empty string when there are no adjustments.
@@ -126,6 +151,16 @@ export function formatModifierInstructions(mods: AgentModifiers): string {
   After the learner answers, your next message has TWO short parts: FIRST a brief model answer in the target language showing one natural way to do the task they just attempted (handle / describe / narrate / explain / etc., one or two sentences, introduced with a short lead-in); keep the model answer itself clean and natural, no need to load it with emoji. THEN immediately present the NEXT prompt (target-language scene + emoji, as above). Keep the whole turn short and energetic.
   Do NOT correct or critique the learner's answer — another agent handles that. Do NOT chit-chat or ask how they are doing; just model, then next prompt.`);
   }
+  if (mods.dictation) {
+    const theme = mods.dictation.theme.trim() || "everyday life";
+    lines.push(`- DICTATION DRILL — this overrides the default "keep a flowing conversation" behavior.
+  Theme the learner chose: "${theme}".
+  You are running a LISTENING DICTATION. Each turn you present ONE sentence for the learner to transcribe by ear; they type exactly what they hear. The app SPEAKS your sentence aloud and HIDES its text until they answer.
+  STRICT OUTPUT FORMAT — follow it on EVERY turn:
+    • If the learner just submitted a transcription, FIRST write a brief note in the learner's NATIVE language (1–3 short lines): whether they got it, the exact words they missed or misheard, and one quick listening tip. Do NOT restate the full correct sentence — the app reveals it automatically — and do not enumerate every spelling slip (a separate grader marks the transcription precisely); keep it to an encouraging, human read of how they did.
+    • THEN, as the LAST thing in your message, output the next sentence to dictate wrapped EXACTLY as: ${DICTATION_SAY_OPEN}the sentence${DICTATION_SAY_CLOSE} with nothing after the closing tag.
+  The text inside ${DICTATION_SAY_OPEN}…${DICTATION_SAY_CLOSE} MUST be a single, complete, natural sentence in the TARGET language, calibrated to the learner's level, fitting the theme, and clearly different from earlier ones. Put ONLY that sentence between the tags. NEVER write the upcoming sentence anywhere except inside the tags, and never describe it in advance.`);
+  }
   if (mods.note?.trim()) lines.push(`- ${mods.note.trim()}`);
   return lines.join("\n");
 }
@@ -133,6 +168,46 @@ export function formatModifierInstructions(mods: AgentModifiers): string {
 // Opening instruction for the AI's first turn of a rapid-fire drill: present the first prompt only, no model answer yet.
 export const QUICKFIRE_OPENING_INSTRUCTION =
   "Start the rapid-fire Q&A drill now. Present the FIRST prompt within the umbrella scenario for the learner — it can be a situation to handle, or something to describe, narrate, or explain. Follow the drill rules: keep the prompt in the target language (calibrated to their level) with a fitting emoji. Do not give a model answer yet — there is nothing to model on the first turn.";
+
+// Sentinel tags wrapping the sentence to dictate in a dictation reply. The agent is instructed to emit the
+// to-be-transcribed sentence (and only that) between these, so the UI can hide its text and speak it on its own while
+// still showing any feedback that precedes it. Kept here so the agent contract and the UI parser share one definition.
+export const DICTATION_SAY_OPEN = "[[SAY]]";
+export const DICTATION_SAY_CLOSE = "[[/SAY]]";
+
+// Opening instruction for the AI's first turn of a dictation drill: just the first sentence, wrapped, no preamble.
+export const DICTATION_OPENING_INSTRUCTION = `Start the dictation drill now. Output ONLY the first sentence to dictate, wrapped exactly as ${DICTATION_SAY_OPEN}the sentence${DICTATION_SAY_CLOSE} — no greeting, no preamble, nothing before or after the tags.`;
+
+export interface DictationReplyParts {
+  /** Feedback on the learner's previous transcription (shown). Empty on the opening turn. */
+  feedback: string;
+  /** The sentence to dictate (spoken; hidden until answered). Falls back to the whole reply if the agent omits the tags. */
+  sentence: string;
+}
+
+// Split a dictation reply into the visible feedback and the to-dictate sentence. When the agent omits the sentinel we
+// treat the whole reply as the sentence (so the text is never accidentally revealed), with no feedback.
+export function parseDictationReply(reply: string): DictationReplyParts {
+  const open = reply.indexOf(DICTATION_SAY_OPEN);
+  const close = reply.indexOf(
+    DICTATION_SAY_CLOSE,
+    open + DICTATION_SAY_OPEN.length,
+  );
+  if (open >= 0 && close > open) {
+    const sentence = reply
+      .slice(open + DICTATION_SAY_OPEN.length, close)
+      .trim();
+    return { feedback: reply.slice(0, open).trim(), sentence };
+  }
+  return { feedback: "", sentence: reply.trim() };
+}
+
+// The portion of a still-streaming dictation reply that is safe to show: everything before the sentinel begins (the
+// feedback). Cuts at the first "[[" so a partial "[[SAY" tag never leaks the hidden sentence.
+export function streamingDictationFeedback(streamed: string): string {
+  const i = streamed.indexOf("[[");
+  return (i >= 0 ? streamed.slice(0, i) : streamed).trim();
+}
 
 // Placeholder title for new conversations; ChatView changes it to truncated input content after the first message is sent (ChatGPT style).
 export const DEFAULT_CONVERSATION_TITLE = "New conversation";
@@ -198,6 +273,29 @@ export async function createQuickfireConversation(
   await db.insert(conversation).values({
     id,
     title: titleFromInput(scenario),
+    createdAt: now,
+    updatedAt: now,
+    kind: "practice",
+    learningAgentId: null,
+    agentModifiersJson: JSON.stringify(modifiers),
+  });
+  return id;
+}
+
+// Create a dictation drill conversation: a practice-kind row carrying the dictation marker (theme). The drill UI reads
+// the theme from the modifier to generate level-appropriate sentences; there is no AI "opening" turn — the first
+// sentence is synthesized and spoken on the start page, and only answered items are persisted as turns.
+export async function createDictationConversation(
+  theme: string,
+  id: string = crypto.randomUUID(),
+): Promise<string> {
+  const now = Date.now();
+  const modifiers: AgentModifiers = {
+    dictation: { theme: theme.trim() },
+  };
+  await db.insert(conversation).values({
+    id,
+    title: titleFromInput(theme),
     createdAt: now,
     updatedAt: now,
     kind: "practice",

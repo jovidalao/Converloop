@@ -169,7 +169,7 @@ export const en = {
   learningAgents: {
     title: "Create lesson",
     description:
-      'A "lesson" opens a new conversation with a teacher-style system prompt; it can explain in your native language or drill in your target language. After creating it, it appears under "Custom learning" on the left, where you can start or edit it.',
+      'A "lesson" opens a new conversation with a teacher-style system prompt; it can explain in your native language or drill in your target language. After creating it, it appears in "Custom learning", where you can start or edit it.',
     projectTitle: "Learning project",
     projectPlaceholder:
       "e.g. I have a frontend job interview in English next month — help me build a practice plan.",
@@ -192,7 +192,7 @@ export const en = {
     autoCreate: "Auto-create",
     projectCreated: "Created a learning project and generated {n} lessons.",
     lessonCreated:
-      'Lesson created. It\'s been added to "Custom learning" on the left — start it directly or edit it there.',
+      'Lesson created. It\'s been added to "Custom learning" — start it directly or edit it there.',
     exported: 'Exported to the package text box under "Import / export" below.',
     imported: "Package imported: {lessons} lessons, {skills} skills.",
   },
@@ -203,8 +203,11 @@ export const en = {
     quickfire: "Rapid Q&A",
     quickfireTooltip:
       "Rapid-fire Q&A drill: set one scenario, answer situations on the spot",
+    dictation: "Dictation",
+    dictationTooltip:
+      "Dictation drill: listen to a sentence and type exactly what you hear",
     customLearning: "Custom learning",
-    createLesson: "Create lesson",
+    customLearningTooltip: "Browse focused lessons and start one in a click",
     recent: "Recent",
     noConversations: "No conversations yet",
     settings: "Settings",
@@ -245,6 +248,25 @@ export const en = {
     recommendedTopics: "Recommended topics",
     refresh: "Regenerate",
   },
+  dictation: {
+    startTitle: "Dictation",
+    startDescription:
+      "Pick a theme and I'll read out sentences one at a time — type exactly what you hear, then I'll mark it and explain what you missed.",
+    recommendedTopics: "Recommended themes",
+    themePlaceholder: "Describe a theme… or pick one above",
+    transcriptionPlaceholder: "Type what you hear…",
+    awaitingEnterPlaceholder: "Tap “Next question” to continue…",
+    listenPrompt: "Listen and type what you hear",
+    nextQuestion: "Next question",
+    refresh: "Regenerate",
+  },
+  customLearning: {
+    title: "Custom learning",
+    description:
+      "Pick a focused lesson to start it right away — each opens a new teacher-style conversation built around your data.",
+    manage: "Create / manage",
+    empty: "No lessons yet. Create one from the button above.",
+  },
   commandPalette: {
     ariaLabel: "Quick jump",
     searchPlaceholder: "Search conversations, lessons…",
@@ -260,6 +282,7 @@ export const en = {
     back: "Back",
     forward: "Forward",
     newChat: "New chat",
+    dictation: "Dictation",
     search: "Search",
     deriveNewConversation: "Derive new conversation",
     deriving: "Generating…",
@@ -293,6 +316,7 @@ export const en = {
     mastery: "Learning data",
     records: "Achievements",
     learning: "Create lesson",
+    customLearning: "Custom learning",
     design: "Design notes",
     agents: "Capabilities",
     logs: "Logs",
@@ -557,6 +581,8 @@ export const en = {
     practiceBadge: "Practice",
     quickfireBadge: "Rapid Q&A",
     quickfireStartFailed: "Failed to start rapid-fire Q&A",
+    dictationBadge: "Dictation",
+    dictationStartFailed: "Failed to start dictation",
     topicStartFailed: "Failed to start the conversation",
     derivedBadge: "Derived",
     difficultyBadge: "Difficulty·{diff}",

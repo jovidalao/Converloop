@@ -37,6 +37,9 @@ export interface TutorContext {
   history: string; // last few conversation turns, plain text
   userInput: string;
   customInstructions?: string; // additional instructions appended by the user in the agent library
+  /** Dictation drill: the exact sentence that was spoken. When set, grading is a comparison to this standard answer
+   *  (missed/misheard words, spelling) rather than free-form conversation correction. */
+  standardAnswer?: string;
 }
 
 export interface AnalyzeResult {
@@ -86,8 +89,47 @@ function formatKeyHints(items: MasteryKeyHint[] | undefined): string {
     .join("\n");
 }
 
+// Dictation grading: the learner listened to one sentence and typed what they heard. We KNOW the correct sentence
+// (the standard answer), so correction is a direct comparison — what they missed or misheard — not a free-form
+// conversational correction. Output is the same TutorAnalysis shape so the UI renders identically.
+function dictationSystemPrompt(ctx: TutorContext): string {
+  const base = `You are a precise dictation grader for a ${ctx.nativeLanguage} speaker
+learning ${ctx.targetLanguage} at ${ctx.level} level. The learner just LISTENED to ONE
+${ctx.targetLanguage} sentence and TYPED what they heard. You are given the EXACT sentence that was
+spoken — the standard answer. Grade their transcription ONLY by comparing it to that standard answer.
+Do NOT "improve" the sentence, suggest alternatives, or judge it as a conversational reply — there is
+exactly one correct target.
+
+RULES
+- "corrected" = the standard answer, verbatim. "natural" = the same standard answer (no alternatives).
+- For each place the transcription differs from the standard answer (a missed word, a misheard/wrong
+  word, a spelling slip, wrong or missing word order), emit ONE issue:
+  - span_original = what the learner typed at that spot (or the surrounding words where something is missing),
+  - span_corrected = the standard answer's wording there,
+  - category = the closest of spelling | word_choice | grammar | punctuation,
+  - severity by how much it changes the meaning,
+  - explanation IN ${ctx.nativeLanguage}: what they misheard or missed, plus a quick listening tip.
+  - Set mastery_key="dictation:transcription", mastery_label (in ${ctx.nativeLanguage}, e.g. "听写：听漏/听错"),
+    mastery_type="error_pattern" for every issue (these are not tracked as production weaknesses).
+- Apply the learner experience preferences below: if they opt out of capitalization or punctuation, do NOT
+  flag differences that are ONLY capitalization/punctuation.
+- If the transcription matches the standard answer (ignoring any opted-out capitalization/punctuation):
+  is_correct=true, issues=[].
+- ALWAYS set mastery_updates=[] and expression_gap=null.
+
+OUTPUT CONTRACT
+- Return exactly ONE JSON object. No markdown fences, no prose, no reasoning.
+- Always include: is_correct, corrected, natural, issues, mastery_updates, expression_gap.
+- Use [] for empty arrays and expression_gap:null. Do not include keys outside the schema.
+
+=== LEARNER EXPERIENCE PREFERENCES ===
+${ctx.experiencePreferences || "(none)"}`;
+  return appendUserInstructions(base, ctx.customInstructions);
+}
+
 // See docs/tutor-agent.md#system-prompt
 function systemPrompt(ctx: TutorContext): string {
+  if (ctx.standardAnswer) return dictationSystemPrompt(ctx);
   const base = `You are a precise language tutor analyzing a single message from a
 ${ctx.nativeLanguage} speaker learning ${ctx.targetLanguage} at ${ctx.level} level. You give
 structured feedback only — a separate conversation agent handles the chat.
@@ -173,6 +215,13 @@ ${formatKeyHints(ctx.keyHints)}`;
 }
 
 function userPrompt(ctx: TutorContext): string {
+  if (ctx.standardAnswer) {
+    return `=== STANDARD ANSWER (the exact sentence that was spoken) ===
+${ctx.standardAnswer}
+
+=== LEARNER'S TRANSCRIPTION TO GRADE ===
+${ctx.userInput}`;
+  }
   return `=== RECENT CONVERSATION ===
 ${ctx.history || "(none)"}
 
@@ -182,9 +231,15 @@ ${ctx.userInput}`;
 
 // Fallback: does not rely on JSON schema; fixed plain-text format for direct UI rendering.
 function proseSystemPrompt(ctx: TutorContext): string {
+  const dictationNote = ctx.standardAnswer
+    ? `\nThis is a DICTATION drill: the user typed what they heard. The STANDARD ANSWER (the exact sentence
+spoken) is given in the user message. Grade their transcription ONLY by comparing it to that standard
+answer — 改正句 is the standard answer verbatim, 更地道 is "同改正句", and 问题列表 lists what they missed or
+misheard.\n`
+    : "";
   const base = `You are a precise language tutor. A separate agent handles chat;
 you only analyze the user's latest message in ${ctx.targetLanguage}.
-
+${dictationNote}
 Reply in ${ctx.nativeLanguage} using EXACTLY this plain-text template (no JSON, no markdown code fences, no reasoning):
 
 【总评】正确
@@ -358,9 +413,13 @@ Return exactly ONE valid JSON object only. No markdown, no prose, no reasoning.
 It MUST match this schema:
 ${JSON.stringify(schema.schema)}
 
-If the previous output is unusable, re-analyze the source message directly.
-For normal ${ctx.targetLanguage} input, set expression_gap:null.
-Use [] for empty issues and mastery_updates.`,
+If the previous output is unusable, re-analyze the source message directly.${
+        ctx.standardAnswer
+          ? `\nThis is a DICTATION drill: grade the transcription by comparing it to the standard answer below.
+corrected = the standard answer verbatim; natural = the same; issues = what was missed or misheard.`
+          : `\nFor normal ${ctx.targetLanguage} input, set expression_gap:null.`
+      }
+Use [] for empty mastery_updates.`,
     },
     {
       role: "user",
@@ -379,11 +438,19 @@ ${formatKeyHints(ctx.keyHints)}
 === LEARNER EXPERIENCE PREFERENCES ===
 ${ctx.experiencePreferences || "(none)"}
 
-=== RECENT CONVERSATION ===
+${
+  ctx.standardAnswer
+    ? `=== STANDARD ANSWER (the exact sentence that was spoken) ===
+${ctx.standardAnswer}
+
+=== LEARNER'S TRANSCRIPTION TO GRADE ===
+${ctx.userInput}`
+    : `=== RECENT CONVERSATION ===
 ${ctx.history || "(none)"}
 
 === USER MESSAGE TO ANALYZE ===
-${ctx.userInput}`,
+${ctx.userInput}`
+}`,
     },
   ];
   return provider.generate({

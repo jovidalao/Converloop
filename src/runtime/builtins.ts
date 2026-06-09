@@ -218,6 +218,7 @@ const tutorObserver: Observer = {
         keyHints: ctx.keyHints,
         history: ctx.tutorHistory,
         userInput: ctx.userInput,
+        standardAnswer: ctx.dictationStandardAnswer,
         customInstructions:
           getBuiltinAgentOverride("builtin:tutor")?.instructions,
       },
@@ -234,9 +235,13 @@ const tutorObserver: Observer = {
     if (analysis) {
       ctx.callbacks.onAnalysis(analysis);
       try {
-        await recordAnalysis(analysis, turnId);
+        // Dictation slips are listening/spelling, not production weaknesses — show + persist the correction for the
+        // turn, but do NOT feed them into the mastery table (that would pollute the weak list with mishearings).
+        if (!ctx.dictationStandardAnswer) {
+          await recordAnalysis(analysis, turnId);
+        }
         await updateTurnAnalysis(turnId, analysis);
-        void maybeRunMaintainer();
+        if (!ctx.dictationStandardAnswer) void maybeRunMaintainer();
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         logError("turn", "Correction bookkeeping failed", e);

@@ -30,12 +30,14 @@ import { getAppState, setAppState } from "./db/app-state";
 import {
   completeDerivedConversation,
   DEFAULT_CONVERSATION_TITLE,
+  DICTATION_OPENING_INSTRUCTION,
   failDerivedConversation,
   formatModifierInstructions,
   getConversation,
   getSummary,
   listConversations,
   parseAgentModifiers,
+  parseDictationReply,
   QUICKFIRE_OPENING_INSTRUCTION,
   renameConversation,
 } from "./db/conversations";
@@ -540,6 +542,13 @@ export async function runTurn(
   const agentModifiers = parseAgentModifiers(
     conversation?.agentModifiersJson ?? null,
   );
+  // Dictation: the sentence being transcribed is the one the prior AI turn spoke (the last verbatim reply). Hand it to
+  // the tutor as the standard answer so grading is a comparison, not free-form correction. Undefined for non-dictation
+  // (or a missing prior turn), in which case the tutor grades as usual.
+  const dictationStandardAnswer = agentModifiers.dictation
+    ? parseDictationReply(verbatimTurns[verbatimTurns.length - 1]?.reply ?? "")
+        .sentence || undefined
+    : undefined;
 
   // Reuse the turnId generated during optimistic rendering on the frontend (if provided): gives the UI bubble and the persisted DB row the same id,
   // so "start from here" (truncate by id) and "regenerate" (locate by id) can target this turn even before a refresh.
@@ -576,6 +585,7 @@ export async function runTurn(
     reviewItems,
     proficiency,
     agentModifiers,
+    dictationStandardAnswer,
     callbacks: cb,
     turnPersisted,
   };
@@ -761,6 +771,23 @@ export async function startQuickfireSession(
   return openConversationWithInstruction(
     conversationId,
     QUICKFIRE_OPENING_INSTRUCTION,
+    cb,
+    turnId,
+  );
+}
+
+// Kick off a dictation drill: the AI presents the first sentence to transcribe (spoken by the UI, text hidden until
+// answered). The dictation theme/rules live in agent_modifiers_json and reach the reply agent through SESSION
+// ADJUSTMENTS, exactly like rapid-fire; subsequent learner transcriptions go through the normal practice runTurn and
+// are graded by the tutor as usual.
+export async function startDictationSession(
+  conversationId: string,
+  cb: TurnCallbacks,
+  turnId?: string,
+): Promise<TurnResult> {
+  return openConversationWithInstruction(
+    conversationId,
+    DICTATION_OPENING_INSTRUCTION,
     cb,
     turnId,
   );

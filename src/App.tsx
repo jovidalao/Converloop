@@ -30,6 +30,7 @@ import { AppDesignView } from "./components/AppDesignView";
 import { ChatView } from "./components/ChatView";
 import { CoachPanel } from "./components/CoachPanel";
 import { CommandPalette } from "./components/CommandPalette";
+import { CustomLearningView } from "./components/CustomLearningView";
 import { KeyboardShortcutsDialog } from "./components/KeyboardShortcutsDialog";
 import { LearningAgentsView } from "./components/LearningAgentsView";
 import { LearningRecordsView } from "./components/LearningRecordsView";
@@ -49,6 +50,7 @@ import {
   type ConversationMeta,
   clearActiveConversationId,
   createConversation,
+  createDictationConversation,
   createQuickfireConversation,
   deleteConversation,
   ensureActiveConversation,
@@ -93,7 +95,7 @@ type AppLocation = {
   activeId: string;
 };
 
-type DraftKind = "chat" | "quickfire" | "learning_agent";
+type DraftKind = "chat" | "quickfire" | "dictation" | "learning_agent";
 
 function sameLocation(a: AppLocation, b: AppLocation): boolean {
   return a.view === b.view && a.activeId === b.activeId;
@@ -351,6 +353,16 @@ function App() {
     navigateTo({ view: "chat", activeId: id });
   }, [navigateTo]);
 
+  // Dictation: like Rapid Q&A, enter a fresh start page — no conversation row until the learner commits a theme,
+  // which materializes it via materializeDictationDraft and starts the listening drill.
+  const openDictationDraft = useCallback(() => {
+    const id = crypto.randomUUID();
+    setDraftId(id);
+    setDraftKind("dictation");
+    setDraftLearningAgentId(null);
+    navigateTo({ view: "chat", activeId: id });
+  }, [navigateTo]);
+
   // Lesson drafts mirror Rapid Q&A: selecting a lesson opens a frontend-only start page. The conversation row is
   // created only after the learner presses Start.
   const openLearningAgentDraft = useCallback(
@@ -487,6 +499,16 @@ function App() {
   // ChatView before the AI kickoff, so the conversation row (with the quickfire modifier) exists when the drill opens.
   async function materializeQuickfireDraft(id: string, scenario: string) {
     await createQuickfireConversation(scenario, id);
+    setActiveConversationId(id);
+    setDraftId((current) => (current === id ? crypto.randomUUID() : current));
+    setDraftKind("chat");
+    await refresh();
+  }
+
+  // Materialize a dictation draft into a real dictation conversation seeded with the chosen theme. Called by ChatView
+  // before the first sentence, so the conversation row (with the dictation modifier) exists when the drill starts.
+  async function materializeDictationDraft(id: string, theme: string) {
+    await createDictationConversation(theme, id);
     setActiveConversationId(id);
     setDraftId((current) => (current === id ? crypto.randomUUID() : current));
     setDraftKind("chat");
@@ -645,6 +667,7 @@ function App() {
     mastery: t("viewTitles.mastery"),
     records: t("viewTitles.records"),
     learning: t("viewTitles.learning"),
+    "learning-gallery": t("viewTitles.customLearning"),
     design: t("viewTitles.design"),
     agents: t("viewTitles.agents"),
     "settings-logs": t("viewTitles.logs"),
@@ -659,7 +682,9 @@ function App() {
       ? draftActive
         ? draftKind === "learning_agent"
           ? (activeDraftLearningAgent?.name ?? t("app.customLearningFallback"))
-          : t("app.newChat")
+          : draftKind === "dictation"
+            ? t("app.dictation")
+            : t("app.newChat")
         : (activeConversation?.title ?? "")
       : (TOPBAR_TITLES[view] ?? "");
 
@@ -672,6 +697,12 @@ function App() {
       <LearningRecordsView />
     ) : view === "learning" ? (
       <LearningAgentsView onRefresh={refreshLearningAgents} />
+    ) : view === "learning-gallery" ? (
+      <CustomLearningView
+        onStartLesson={openLearningAgentDraft}
+        onOpenCreate={() => navigateTo({ view: "learning", activeId })}
+        onRefresh={refreshLearningAgents}
+      />
     ) : view === "design" ? (
       <AppDesignView />
     ) : view === "agents" ? (
@@ -911,16 +942,15 @@ function App() {
       <div className="contents" data-focus-zone="sidebar">
         <Sidebar
           conversations={conversations}
-          learningAgents={learningAgents}
           activeId={activeId}
           newChatActive={draftActive && draftKind === "chat"}
           quickfireActive={draftActive && draftKind === "quickfire"}
+          dictationActive={draftActive && draftKind === "dictation"}
           view={view}
           onSelect={selectConversation}
           onNewChat={openDraftConversation}
           onStartQuickfire={openQuickfireDraft}
-          onStartLearningAgent={openLearningAgentDraft}
-          onRefreshLearningAgents={refreshLearningAgents}
+          onStartDictation={openDictationDraft}
           onDeriveConversation={(id, actionId) =>
             void deriveConversation(id, actionId)
           }
@@ -948,11 +978,13 @@ function App() {
             conversationId={activeId}
             isDraft={chatIsDraft}
             isQuickfireDraft={chatIsDraft && draftKind === "quickfire"}
+            isDictationDraft={chatIsDraft && draftKind === "dictation"}
             isLearningAgentDraft={chatIsDraft && draftKind === "learning_agent"}
             learningAgentDraft={activeDraftLearningAgent}
             mode={currentChatKind}
             onCreateDraftConversation={materializeDraftConversation}
             onCreateQuickfireDraft={materializeQuickfireDraft}
+            onCreateDictationDraft={materializeDictationDraft}
             onCreateTopicDraft={materializeTopicDraft}
             onCreateLearningAgentDraft={materializeLearningAgentDraft}
             onActivity={() => void refresh()}

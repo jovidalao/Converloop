@@ -25,6 +25,7 @@ export function PreferencesPanel({
   preferences,
   smartDraft,
   smartBusy,
+  variant = "card",
   onSmartDraftChange,
   onSmartApply,
   onScopeChange,
@@ -33,6 +34,7 @@ export function PreferencesPanel({
   preferences: ProfilePreferences;
   smartDraft: string;
   smartBusy: boolean;
+  variant?: "card" | "plain";
   onSmartDraftChange: (value: string) => void;
   onSmartApply: () => void;
   onScopeChange: (scope: PreferenceScope, value: string) => void;
@@ -40,7 +42,13 @@ export function PreferencesPanel({
 }) {
   const { t } = useTranslation();
   return (
-    <section className="rounded-md border border-border/70 bg-card/80 p-4 shadow-minimal-flat">
+    <section
+      className={
+        variant === "card"
+          ? "rounded-md border border-border/70 bg-card/80 p-4 shadow-minimal-flat"
+          : undefined
+      }
+    >
       <div className="mb-4 flex flex-col gap-2">
         <div>
           <h3 className="m-0 text-ui-body font-semibold">

@@ -809,6 +809,7 @@ function AiCustomizeSettings() {
         preferences={preferences}
         smartDraft={smartDraft}
         smartBusy={smartBusy}
+        variant="plain"
         onSmartDraftChange={setSmartDraft}
         onSmartApply={() => void applySmart()}
         onScopeChange={updatePreference}

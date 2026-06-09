@@ -1,9 +1,11 @@
 import {
   BookOpenCheckIcon,
   GraduationCapIcon,
+  HeadphonesIcon,
   MessageSquareIcon,
   SearchIcon,
   SquarePenIcon,
+  ZapIcon,
 } from "lucide-react";
 import {
   type KeyboardEvent as ReactKeyboardEvent,
@@ -14,9 +16,26 @@ import {
 } from "react";
 import { type Locale, type TFunction, useTranslation } from "@/i18n";
 import { actionShortcutLabel } from "@/lib/app-actions";
-import type { ConversationMeta } from "../db/conversations";
+import { type ConversationMeta, conversationType } from "../db/conversations";
 import type { LearningAgentMeta } from "../db/learning-agents";
 import { formatRelativeTime } from "./Sidebar";
+
+// Type badge for a past-conversation row, mirroring the sidebar history icons
+// so each kind (plain chat / rapid Q&A / dictation / custom learning) reads the
+// same in both surfaces.
+function conversationIcon(c: ConversationMeta) {
+  const cls = "size-4 shrink-0 text-ui-muted";
+  switch (conversationType(c)) {
+    case "learning_agent":
+      return <BookOpenCheckIcon className={cls} />;
+    case "quickfire":
+      return <ZapIcon className={cls} />;
+    case "dictation":
+      return <HeadphonesIcon className={cls} />;
+    default:
+      return <MessageSquareIcon className={cls} />;
+  }
+}
 
 // The three kinds of targets the command palette can jump to / trigger: start a
 // new chat, start a new session of a lesson, or open a past conversation.
@@ -250,11 +269,7 @@ function PaletteRow({
   }
   return (
     <>
-      {item.conv.kind === "learning_agent" ? (
-        <BookOpenCheckIcon className="size-4 shrink-0 text-ui-muted" />
-      ) : (
-        <MessageSquareIcon className="size-4 shrink-0 text-ui-muted" />
-      )}
+      {conversationIcon(item.conv)}
       <span className="min-w-0 flex-1 truncate">{item.conv.title}</span>
       <span className="shrink-0 text-ui-caption text-ui-muted">
         {formatRelativeTime(item.conv.updatedAt, locale)}

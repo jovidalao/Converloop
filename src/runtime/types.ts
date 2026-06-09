@@ -121,6 +121,9 @@ export interface PracticeContext extends BaseContext {
   proficiency: ProficiencySnapshot;
   /** Session-level adjustments (difficulty/role/next-day from branches); empty object for normal conversations. */
   agentModifiers: AgentModifiers;
+  /** Dictation drill only: the exact sentence the learner just heard (the prior AI turn's spoken sentence). When set,
+   *  the tutor grades the transcription against this standard answer instead of as free-form conversation. */
+  dictationStandardAnswer?: string;
 }
 
 export interface LearningContext extends BaseContext {
