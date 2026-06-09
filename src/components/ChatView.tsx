@@ -26,6 +26,7 @@ import {
   PencilIcon,
   RefreshCwIcon,
   SparklesIcon,
+  SquareIcon,
 } from "lucide-react";
 import {
   type Dispatch,
@@ -1418,6 +1419,11 @@ export function ChatView({
   // affordance so streamed replies arriving below the fold aren't missed.
   const [showJumpButton, setShowJumpButton] = useState(false);
   const [replyBusy, setReplyBusy] = useState(false);
+  // True while a graded send is streaming and can be stopped; drives the Stop
+  // button. Only the practice send path is abortable — AI-initiated openings
+  // (lesson/derived/drill kickoffs) are short and leave this false.
+  const [stoppable, setStoppable] = useState(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
   const [derivationPreparing, setDerivationPreparing] = useState(false);
   // Derived conversation context (shown in the collapsible header); null for regular conversations.
@@ -2409,6 +2415,10 @@ export function ChatView({
     ]);
     setReplyBusy(true);
     setStreaming("");
+    // Abortable: "stop generating" resolves the reply with whatever streamed so far.
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    setStoppable(true);
     let acc = "";
     // Auto-speak: synthesizes and plays the full reply as a single TTS request once streaming completes.
     // Not created when "auto-speak" is off in settings (the speaker icon can still be used manually).
@@ -2454,7 +2464,7 @@ export function ChatView({
           },
         },
         turnId,
-        { offRecord, displayText },
+        { offRecord, displayText, signal: controller.signal },
       );
       if (turnGenRef.current === turnGen && !replyCommittedRef.current) {
         commitPartnerReply(turnId, result.reply);
@@ -2517,10 +2527,18 @@ export function ChatView({
       if (turnGenRef.current === turnGen) {
         setStreaming("");
         setReplyBusy(false);
+        setStoppable(false);
+        abortControllerRef.current = null;
       } else {
         speaker?.abort(); // turn superseded by a new message; stop synthesis (playback already handed off to new send's stopSpeech)
       }
     }
+  }
+
+  // Stop generating: resolve the in-flight reply with the partial streamed so far
+  // (the orchestrator persists it and the normal completion path commits it).
+  function stopGenerating() {
+    abortControllerRef.current?.abort();
   }
 
   // "Edit from here": after confirmation, discard this turn and all following turns,
@@ -3173,25 +3191,38 @@ export function ChatView({
                     })}
                   </SelectContent>
                 </Select>
-                <Button
-                  type="submit"
-                  size="icon"
-                  className="size-8 rounded-full transition-transform active:scale-90"
-                  disabled={
-                    replyBusy ||
-                    lessonGateActive ||
-                    !input.trim() ||
-                    (isDictation && dictationAwaitingEnter)
-                  }
-                  title={t("chat.send")}
-                  aria-label={t("chat.send")}
-                >
-                  {replyBusy ? (
-                    <Spinner className="size-3.5" />
-                  ) : (
-                    <ArrowUpIcon className="size-4" />
-                  )}
-                </Button>
+                {replyBusy && stoppable ? (
+                  <Button
+                    type="button"
+                    size="icon"
+                    onClick={stopGenerating}
+                    className="size-8 rounded-full transition-transform active:scale-90"
+                    title={t("chat.stopGenerating")}
+                    aria-label={t("chat.stopGenerating")}
+                  >
+                    <SquareIcon className="size-3 fill-current" />
+                  </Button>
+                ) : (
+                  <Button
+                    type="submit"
+                    size="icon"
+                    className="size-8 rounded-full transition-transform active:scale-90"
+                    disabled={
+                      replyBusy ||
+                      lessonGateActive ||
+                      !input.trim() ||
+                      (isDictation && dictationAwaitingEnter)
+                    }
+                    title={t("chat.send")}
+                    aria-label={t("chat.send")}
+                  >
+                    {replyBusy ? (
+                      <Spinner className="size-3.5" />
+                    ) : (
+                      <ArrowUpIcon className="size-4" />
+                    )}
+                  </Button>
+                )}
               </div>
             </form>
           </div>

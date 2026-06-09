@@ -77,6 +77,7 @@ import {
   updateTurnReply,
 } from "./db/turns";
 import { buildLearningDataContext } from "./learning-data";
+import { runAbortableStream } from "./lib/abortable-stream";
 import { rankMasteryItemsForInput } from "./lib/mastery-relevance";
 import { estimateTokens } from "./lib/tokens";
 import {
@@ -572,7 +573,11 @@ export async function runTurn(
   conversationId: string,
   cb: TurnCallbacks,
   turnId?: string,
-  opts: { offRecord?: boolean; displayText?: string } = {},
+  opts: {
+    offRecord?: boolean;
+    displayText?: string;
+    signal?: AbortSignal;
+  } = {},
 ): Promise<TurnResult> {
   // Off-record turn (/btw "by the way"): standalone helper answer, no correction, not counted in future context, no compression.
   const offRecord = opts.offRecord ?? false;
@@ -699,7 +704,12 @@ export async function runTurn(
 
   // Reply ∥ observer triggered in parallel. Observers are fire-and-forget; they wait for turnPersisted themselves before running accounting.
   // Off-record turns are not corrected: do not dispatch observers; instead tell the UI immediately that this turn has no correction (clears the "analyzing" state).
-  const replyPromise = dispatchReply(ctx, cb.onReplyDelta);
+  // The reply is abortable (stop generating): on abort it resolves with the partial streamed so far, which is then persisted normally.
+  const replyPromise = runAbortableStream(
+    (onDelta) => dispatchReply(ctx, onDelta),
+    cb.onReplyDelta,
+    opts.signal,
+  );
   // Neither off-record nor prompt-macro turns are graded: the former is a side question, the latter an app directive.
   if (offRecord || isPromptMacro) cb.onAnalysis(null);
   else dispatchObservers(ctx);
