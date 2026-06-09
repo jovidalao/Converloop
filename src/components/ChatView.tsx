@@ -787,8 +787,6 @@ function PartnerReply({
   conversationId,
   turnId,
   text,
-  activePanelId,
-  setActivePanelId,
   autoOpen = false,
   variant,
   offRecord = false,
@@ -801,8 +799,6 @@ function PartnerReply({
   conversationId: string;
   turnId: string;
   text: string;
-  activePanelId: ActivePanelId;
-  setActivePanelId: Dispatch<SetStateAction<ActivePanelId>>;
   autoOpen?: boolean;
   // Rapid-fire model answers are not part of a thread, so the "reply suggestion" (next-sentence) action is hidden.
   variant?: "quickfire";
@@ -818,12 +814,16 @@ function PartnerReply({
 }) {
   const { t } = useTranslation();
   const { actionLabels } = useConfig();
+  // One open drop-below popup at a time within this reply (explanation / reply
+  // suggestion). Bilingual reading replaces the bubble text in place rather than
+  // dropping below, so it is independent and not part of this coordination.
+  const [activePanelId, setActivePanelId] = useState<ActivePanelId>(null);
   const [loading, setLoading] = useState(false);
   const [view, setView] = useState<string | null>(null); // bilingual Markdown
+  const [open, setOpen] = useState(false); // whether bilingual view is shown
   const [error, setError] = useState<string | null>(null);
   const didAutoOpen = useRef(false);
   const prevTextRef = useRef(text);
-  const bilingualPanelId = `${turnId}:partner:bilingual`;
   const replySuggestion = useReplySuggestion({
     conversationId,
     turnId,
@@ -834,7 +834,6 @@ function PartnerReply({
     resetKey: `${turnId}:${text}`,
     onLayoutChange,
   });
-  const open = activePanelId === bilingualPanelId;
   // When a transformer capability is "deleted" (hidden), its trigger button is also hidden.
   const bilingualHidden = isAgentHidden("builtin:transformer:bilingual");
   const suggestionHidden =
@@ -846,12 +845,10 @@ function PartnerReply({
   useEffect(() => {
     if (prevTextRef.current === text) return;
     prevTextRef.current = text;
-    setActivePanelId((current) =>
-      current === bilingualPanelId ? null : current,
-    );
+    setOpen(false);
     setView(null);
     setError(null);
-  }, [bilingualPanelId, setActivePanelId, text]);
+  }, [text]);
 
   async function generate() {
     setLoading(true);
@@ -875,14 +872,12 @@ function PartnerReply({
   function toggle() {
     if (loading) return;
     if (!view && !error) {
-      setActivePanelId(bilingualPanelId);
+      setOpen(true);
       onFirstBilingual?.(); // user explicitly requested bilingual → comprehension-difficulty signal
       void generate();
       return;
     }
-    setActivePanelId((current) =>
-      current === bilingualPanelId ? null : bilingualPanelId,
-    );
+    setOpen((o) => !o);
   }
 
   // When "auto-open bilingual reading" is enabled in settings, a new reply expands and generates once on mount.
@@ -890,10 +885,10 @@ function PartnerReply({
   useEffect(() => {
     if (autoOpen && !didAutoOpen.current && !bilingualHidden) {
       didAutoOpen.current = true;
-      setActivePanelId(bilingualPanelId);
+      setOpen(true);
       void generate();
     }
-  }, [autoOpen, bilingualHidden, bilingualPanelId, setActivePanelId]);
+  }, [autoOpen, bilingualHidden]);
 
   useEffect(() => {
     if (open || loading || view || error) onLayoutChange?.();
@@ -1087,8 +1082,6 @@ function UserTurn({
   conversationId,
   nativeLanguage,
   learningMode,
-  activePanelId,
-  setActivePanelId,
   variant,
   onEditFrom,
   onTurnAction,
@@ -1099,8 +1092,6 @@ function UserTurn({
   conversationId: string;
   nativeLanguage: string;
   learningMode: boolean;
-  activePanelId: ActivePanelId;
-  setActivePanelId: Dispatch<SetStateAction<ActivePanelId>>;
   // Practice sub-mode driving which actions apply: dictation hides reply-suggestion / "more natural" / branch
   // (you transcribe a known sentence); quickfire hides only branch. undefined = ordinary practice (all actions).
   variant?: "quickfire" | "dictation";
@@ -1110,12 +1101,16 @@ function UserTurn({
   editDisabled?: boolean;
 }) {
   const { t } = useTranslation();
+  // One open drop-below popup at a time within this message (reply suggestion /
+  // corrected sentence / expression-gap explanation / grammar details). The
+  // "more natural" rewrite renders inside the bubble rather than dropping below,
+  // so it is independent and not part of this coordination.
+  const [activePanelId, setActivePanelId] = useState<ActivePanelId>(null);
   // Dictation transcribes a fixed target sentence: there is no "more natural" rendering of the learner's attempt.
   const idiomatic =
     variant === "dictation" ? null : idiomaticText(turn.analysis);
   const suggestionPanelId = `${turn.id}:user:suggestion`;
   const correctionPanelId = `${turn.id}:user:correction`;
-  const naturalPanelId = `${turn.id}:user:natural`;
   const gapPanelId = `${turn.id}:user:gap`;
   const grammarPanelId = `${turn.id}:user:grammar`;
   const correctedSentence = hasCorrectedSentenceChange(
@@ -1135,7 +1130,7 @@ function UserTurn({
     onLayoutChange,
   });
   const correctionOpen = activePanelId === correctionPanelId;
-  const naturalOpen = activePanelId === naturalPanelId;
+  const [naturalOpen, setNaturalOpen] = useState(true);
   // Off-record turn (/btw): dashed bubble + "not in context" label; no grading or correction/suggestion/branch actions.
   if (turn.excludeFromContext) {
     return (
@@ -1258,10 +1253,7 @@ function UserTurn({
           idiomatic
             ? {
                 open: naturalOpen,
-                onToggle: () =>
-                  setActivePanelId((current) =>
-                    current === naturalPanelId ? null : naturalPanelId,
-                  ),
+                onToggle: () => setNaturalOpen((v) => !v),
               }
             : undefined
         }
@@ -1417,7 +1409,6 @@ export function ChatView({
   const [turns, setTurns] = useState<ChatTurn[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState("");
-  const [activePanelId, setActivePanelId] = useState<ActivePanelId>(null);
   // Estimated prompt size (tokens) of the last turn actually sent to the model — the real context the model
   // received (system prompt + scaffolds + summary + history + input), reported by the reply agent via onContext.
   // null until the first send this session; the context meter then falls back to a bubble-only estimate.
@@ -1647,7 +1638,6 @@ export function ChatView({
   useEffect(() => {
     let cancelled = false;
     setDerivedBanner(null);
-    setActivePanelId(null);
     setQuickfireScenario(null);
     setDictationTheme(null);
     setDictationAwaitingEnter(false);
@@ -2857,8 +2847,6 @@ export function ChatView({
                 conversationId={conversationId}
                 nativeLanguage={nativeLanguage}
                 learningMode={learningMode}
-                activePanelId={activePanelId}
-                setActivePanelId={setActivePanelId}
                 variant={practiceVariant}
                 onLayoutChange={requestLayoutScroll}
                 editDisabled={analyzing}
@@ -2883,8 +2871,6 @@ export function ChatView({
                   conversationId={conversationId}
                   turnId={turn.id}
                   text={turn.partnerText}
-                  activePanelId={activePanelId}
-                  setActivePanelId={setActivePanelId}
                   variant={quickfireScenario !== null ? "quickfire" : undefined}
                   offRecord={turn.excludeFromContext}
                   autoOpen={
