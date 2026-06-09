@@ -1414,6 +1414,9 @@ export function ChatView({
   // null until the first send this session; the context meter then falls back to a bubble-only estimate.
   const [lastPromptTokens, setLastPromptTokens] = useState<number | null>(null);
   const [layoutTick, setLayoutTick] = useState(0);
+  // Shown when the user has scrolled up away from the bottom: a "jump to latest"
+  // affordance so streamed replies arriving below the fold aren't missed.
+  const [showJumpButton, setShowJumpButton] = useState(false);
   const [replyBusy, setReplyBusy] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
   const [derivationPreparing, setDerivationPreparing] = useState(false);
@@ -1623,7 +1626,16 @@ export function ChatView({
     const el = messagesRef.current;
     if (!el) return;
     const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-    stickToBottomRef.current = distanceFromBottom < 80;
+    const atBottom = distanceFromBottom < 80;
+    stickToBottomRef.current = atBottom;
+    // Only offer the jump affordance when there's a meaningful amount scrolled past.
+    setShowJumpButton(!atBottom && distanceFromBottom > 120);
+  }
+
+  function jumpToLatest() {
+    stickToBottomRef.current = true;
+    setShowJumpButton(false);
+    endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }
 
   const requestLayoutScroll = useCallback(() => {
@@ -1853,7 +1865,13 @@ export function ChatView({
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: turns/streaming/layoutTick are intentional scroll triggers; the effect reads refs only
   useEffect(() => {
-    if (!stickToBottomRef.current) return;
+    // New content arrived while the user is reading further up — surface the
+    // jump affordance instead of yanking them down.
+    if (!stickToBottomRef.current) {
+      setShowJumpButton(true);
+      return;
+    }
+    setShowJumpButton(false);
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [turns, streaming, layoutTick]);
 
@@ -2770,148 +2788,166 @@ export function ChatView({
 
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col">
-      <div
-        className="chat-scroll-mask flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain px-4 pt-3 pb-3"
-        ref={messagesRef}
-        onScroll={syncStickToBottom}
-      >
-        {!compact && derivedBanner && (
-          <DerivedContextBanner
-            conversationId={conversationId}
-            context={derivedBanner.context}
-            label={derivedBanner.label}
-          />
-        )}
-        {turns.length === 0 &&
-          !streaming &&
-          (quickfireDraftActive ? (
-            <QuickfireStartScreen
-              topics={quickfireTopics}
-              refreshing={quickfireTopicsRefreshing}
-              busy={replyBusy}
-              onPick={(s) => void startQuickfireDraft(s)}
-              onRefresh={() => {
-                quickfireAvoidRef.current = quickfireTopics ?? [];
-                setQuickfireReloadTick((n) => n + 1);
-              }}
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        <div
+          className="chat-scroll-mask flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain px-4 pt-3 pb-3"
+          ref={messagesRef}
+          onScroll={syncStickToBottom}
+        >
+          {!compact && derivedBanner && (
+            <DerivedContextBanner
+              conversationId={conversationId}
+              context={derivedBanner.context}
+              label={derivedBanner.label}
             />
-          ) : dictationDraftActive ? (
-            <DictationStartScreen
-              topics={dictationTopics}
-              refreshing={dictationTopicsRefreshing}
-              busy={replyBusy}
-              onPick={(theme) => void startDictationDraft(theme)}
-              onRefresh={() => {
-                dictationAvoidRef.current = dictationTopics ?? [];
-                setDictationReloadTick((n) => n + 1);
-              }}
-            />
-          ) : learningMode ? (
-            lessonInfo ? (
-              <LessonStartScreen
-                name={lessonInfo.name}
-                description={lessonInfo.description}
+          )}
+          {turns.length === 0 &&
+            !streaming &&
+            (quickfireDraftActive ? (
+              <QuickfireStartScreen
+                topics={quickfireTopics}
+                refreshing={quickfireTopicsRefreshing}
                 busy={replyBusy}
-                onStart={() => void startLesson()}
+                onPick={(s) => void startQuickfireDraft(s)}
+                onRefresh={() => {
+                  quickfireAvoidRef.current = quickfireTopics ?? [];
+                  setQuickfireReloadTick((n) => n + 1);
+                }}
+              />
+            ) : dictationDraftActive ? (
+              <DictationStartScreen
+                topics={dictationTopics}
+                refreshing={dictationTopicsRefreshing}
+                busy={replyBusy}
+                onPick={(theme) => void startDictationDraft(theme)}
+                onRefresh={() => {
+                  dictationAvoidRef.current = dictationTopics ?? [];
+                  setDictationReloadTick((n) => n + 1);
+                }}
+              />
+            ) : learningMode ? (
+              lessonInfo ? (
+                <LessonStartScreen
+                  name={lessonInfo.name}
+                  description={lessonInfo.description}
+                  busy={replyBusy}
+                  onStart={() => void startLesson()}
+                />
+              ) : (
+                <div className="m-auto text-center text-ui-body leading-relaxed text-ui-muted">
+                  {t("chat.preparingLesson")}
+                </div>
+              )
+            ) : newChatDraftActive ? (
+              <NewChatStartScreen
+                topics={newChatTopics}
+                refreshing={newChatTopicsRefreshing}
+                busy={replyBusy}
+                onPick={(topic) => void startTopicDraft(topic)}
+                onRefresh={() => {
+                  newChatAvoidRef.current = newChatTopics ?? [];
+                  setNewChatReloadTick((n) => n + 1);
+                }}
               />
             ) : (
               <div className="m-auto text-center text-ui-body leading-relaxed text-ui-muted">
-                {t("chat.preparingLesson")}
+                {t("chat.startConversation")}
               </div>
-            )
-          ) : newChatDraftActive ? (
-            <NewChatStartScreen
-              topics={newChatTopics}
-              refreshing={newChatTopicsRefreshing}
-              busy={replyBusy}
-              onPick={(topic) => void startTopicDraft(topic)}
-              onRefresh={() => {
-                newChatAvoidRef.current = newChatTopics ?? [];
-                setNewChatReloadTick((n) => n + 1);
-              }}
-            />
-          ) : (
-            <div className="m-auto text-center text-ui-body leading-relaxed text-ui-muted">
-              {t("chat.startConversation")}
-            </div>
-          ))}
-        {turns.map((turn) => (
-          <TurnCard
-            key={turn.id}
-            turnId={turn.id}
-            live={liveTurnIdsRef.current.has(turn.id)}
-          >
-            {turn.userText.trim() && (
-              <UserTurn
-                turn={turn}
-                conversationId={conversationId}
-                nativeLanguage={nativeLanguage}
-                learningMode={learningMode}
-                variant={practiceVariant}
-                onLayoutChange={requestLayoutScroll}
-                editDisabled={analyzing}
-                onEditFrom={() => void editFromHere(turn.id)}
-                onTurnAction={(actionId) =>
-                  void runConversationAction(actionId, turn.id)
-                }
-              />
-            )}
-            {turn.partnerText &&
-              (isDictation ? (
-                <DictationReply
-                  text={turn.partnerText}
-                  masked={turn.id === dictationMaskedTurnId}
-                  awaitingEnter={
-                    turn.id === dictationMaskedTurnId && dictationAwaitingEnter
-                  }
-                  onEnter={enterNextDictation}
-                />
-              ) : (
-                <PartnerReply
+            ))}
+          {turns.map((turn) => (
+            <TurnCard
+              key={turn.id}
+              turnId={turn.id}
+              live={liveTurnIdsRef.current.has(turn.id)}
+            >
+              {turn.userText.trim() && (
+                <UserTurn
+                  turn={turn}
                   conversationId={conversationId}
-                  turnId={turn.id}
-                  text={turn.partnerText}
-                  variant={quickfireScenario !== null ? "quickfire" : undefined}
-                  offRecord={turn.excludeFromContext}
-                  autoOpen={
-                    !learningMode &&
-                    autoBilingual &&
-                    liveTurnIdsRef.current.has(turn.id)
-                  }
-                  onFirstExplain={() => void incrementExplainCount(turn.id)}
-                  onFirstBilingual={() => void incrementBilingualCount(turn.id)}
+                  nativeLanguage={nativeLanguage}
+                  learningMode={learningMode}
+                  variant={practiceVariant}
                   onLayoutChange={requestLayoutScroll}
-                  onRegenerate={
-                    !learningMode &&
-                    !turn.excludeFromContext &&
-                    turn.id === lastReplyTurnId
-                      ? () => void regenerate(turn.id)
-                      : undefined
+                  editDisabled={analyzing}
+                  onEditFrom={() => void editFromHere(turn.id)}
+                  onTurnAction={(actionId) =>
+                    void runConversationAction(actionId, turn.id)
                   }
-                  regenerating={regeneratingId === turn.id}
                 />
-              ))}
-          </TurnCard>
-        ))}
-        {derivationPreparing && (
-          <div className="m-auto flex flex-col items-center gap-2 text-center text-ui-body leading-relaxed text-ui-muted">
-            <Spinner />
-            <span>{t("chat.preparingContext")}</span>
-          </div>
-        )}
-        {replyBusy &&
-          !derivationPreparing &&
-          streamingVisible.trim().length < 2 && (
-            <ThinkingIndicator className="self-stretch py-0.5" />
+              )}
+              {turn.partnerText &&
+                (isDictation ? (
+                  <DictationReply
+                    text={turn.partnerText}
+                    masked={turn.id === dictationMaskedTurnId}
+                    awaitingEnter={
+                      turn.id === dictationMaskedTurnId &&
+                      dictationAwaitingEnter
+                    }
+                    onEnter={enterNextDictation}
+                  />
+                ) : (
+                  <PartnerReply
+                    conversationId={conversationId}
+                    turnId={turn.id}
+                    text={turn.partnerText}
+                    variant={
+                      quickfireScenario !== null ? "quickfire" : undefined
+                    }
+                    offRecord={turn.excludeFromContext}
+                    autoOpen={
+                      !learningMode &&
+                      autoBilingual &&
+                      liveTurnIdsRef.current.has(turn.id)
+                    }
+                    onFirstExplain={() => void incrementExplainCount(turn.id)}
+                    onFirstBilingual={() =>
+                      void incrementBilingualCount(turn.id)
+                    }
+                    onLayoutChange={requestLayoutScroll}
+                    onRegenerate={
+                      !learningMode &&
+                      !turn.excludeFromContext &&
+                      turn.id === lastReplyTurnId
+                        ? () => void regenerate(turn.id)
+                        : undefined
+                    }
+                    regenerating={regeneratingId === turn.id}
+                  />
+                ))}
+            </TurnCard>
+          ))}
+          {derivationPreparing && (
+            <div className="m-auto flex flex-col items-center gap-2 text-center text-ui-body leading-relaxed text-ui-muted">
+              <Spinner />
+              <span>{t("chat.preparingContext")}</span>
+            </div>
           )}
-        {streamingVisible.trim().length >= 2 && (
-          <div className="self-stretch py-0.5 text-ui-secondary">
-            <Markdown>{streamingVisible}</Markdown>
-          </div>
+          {replyBusy &&
+            !derivationPreparing &&
+            streamingVisible.trim().length < 2 && (
+              <ThinkingIndicator className="self-stretch py-0.5" />
+            )}
+          {streamingVisible.trim().length >= 2 && (
+            <div className="self-stretch py-0.5 text-ui-secondary">
+              <Markdown>{streamingVisible}</Markdown>
+            </div>
+          )}
+          <div ref={endRef} />
+        </div>
+        <AnnotationIsland containerRef={messagesRef} />
+        {showJumpButton && (
+          <button
+            type="button"
+            onClick={jumpToLatest}
+            className="-translate-x-1/2 absolute bottom-3 left-1/2 z-20 flex animate-in items-center gap-1.5 rounded-full border bg-card px-3 py-1.5 text-ui-caption text-ui-muted shadow-md transition-colors fade-in-0 slide-in-from-bottom-1 hover:text-foreground"
+            aria-label={t("chat.jumpToLatest")}
+          >
+            <ChevronDownIcon size={14} />
+            {t("chat.jumpToLatest")}
+          </button>
         )}
-        <div ref={endRef} />
       </div>
-      <AnnotationIsland containerRef={messagesRef} />
       {error && (
         <div className="mx-4 flex items-center gap-3 rounded-md bg-destructive/15 px-3 py-2 text-ui-body text-destructive">
           <span className="min-w-0 flex-1">{error}</span>

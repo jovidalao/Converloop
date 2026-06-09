@@ -343,6 +343,10 @@ export function Sidebar({
                       onChange={(e) => setDraft(e.target.value)}
                       onBlur={commitEdit}
                       onKeyDown={(e) => {
+                        // Let the IME consume Enter/Escape while composing (a CJK
+                        // user confirming/cancelling a candidate must not commit
+                        // or abort the rename mid-composition).
+                        if (e.nativeEvent.isComposing) return;
                         if (e.key === "Enter") commitEdit();
                         if (e.key === "Escape") setEditingId(null);
                       }}

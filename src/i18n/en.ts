@@ -578,6 +578,8 @@ export const en = {
     compactFeedback: "{n} feedback item(s) ready in full view.",
     compactOpenFull: "View",
     regenerateReply: "Regenerate reply",
+    jumpToLatest: "Jump to latest",
+    stopGenerating: "Stop generating",
     bilingualTitle: "Target / native language sentence by sentence",
     bilingualReading: "Bilingual reading",
     btwLabel: "By the way · not in context",

@@ -560,6 +560,8 @@ export const zh: Messages = {
     compactFeedback: "完整视图中有 {n} 条学习反馈可查看。",
     compactOpenFull: "查看",
     regenerateReply: "重新生成回复",
+    jumpToLatest: "回到最新",
+    stopGenerating: "停止生成",
     bilingualTitle: "目标语言 / 母语逐句对照",
     bilingualReading: "双语阅读",
     btwLabel: "顺便一问 · 不计入上下文",

@@ -146,6 +146,10 @@ export function CommandPalette({
   }
 
   function onKeyDown(e: ReactKeyboardEvent) {
+    // Don't intercept navigation/activation keys while an IME is composing —
+    // arrows move through candidates and Enter confirms one; only act once the
+    // composition has committed (search-by-Chinese must not fire on candidate Enter).
+    if (e.nativeEvent.isComposing) return;
     if (e.key === "ArrowDown") {
       e.preventDefault();
       setSelected((s) => (flat.length ? (s + 1) % flat.length : 0));
