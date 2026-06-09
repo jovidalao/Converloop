@@ -137,7 +137,7 @@ export function Sidebar({
   onResizeEnd,
 }: SidebarProps) {
   const confirm = useConfirm();
-  const { t, locale } = useTranslation();
+  const { t } = useTranslation();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [conversationMenu, setConversationMenu] = useState<{
@@ -355,7 +355,6 @@ export function Sidebar({
                     active={active}
                     icon={conversationTypeIcon(c)}
                     title={c.title}
-                    meta={formatRelativeTime(c.updatedAt, locale)}
                     onSelect={() => onSelect(c.id)}
                     onContextMenu={(e) => openConversationMenu(e, c)}
                     onDoubleClick={() => startEdit(c)}
