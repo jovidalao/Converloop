@@ -566,7 +566,6 @@ export const en = {
       "Reply suggestion truncated due to output length limit ({provider}:{raw}). You can retry; include the reason in parentheses when reporting the issue.",
     generateReplySuggestion: "Generate reply suggestion",
     replySuggestion: "Reply suggestion",
-    fillInput: "Fill input",
     generatingReplySuggestion: "Generating reply suggestion…",
     editFromHereGrading:
       "Grading in progress — you can re-edit after it finishes",

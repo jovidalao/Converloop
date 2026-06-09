@@ -3,6 +3,7 @@ import {
   type RefObject,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
@@ -22,8 +23,9 @@ import { Markdown } from "./Markdown";
 import { Spinner } from "./ui/spinner";
 
 interface Anchor {
-  left: number; // viewport coordinates: end of the selection
-  top: number;
+  left: number; // viewport x: end of the selection
+  top: number; // viewport y: top of the selection's last line
+  bottom: number; // viewport y: bottom of the selection's last line
 }
 
 interface Pick {
@@ -72,17 +74,32 @@ function readPick(container: HTMLElement): Pick | null {
   return {
     selection: text,
     context: (ctxEl.textContent || text).trim(),
-    anchor: { left: last.right, top: last.bottom },
+    anchor: { left: last.right, top: last.top, bottom: last.bottom },
   };
 }
 
-function clampPosition(anchor: Anchor, width: number) {
+const GAP = 8; // space between the selection and the island
+const MARGIN = 8; // keep the island this far from the viewport edges
+
+// Place the island near the selection given its measured size. Opens below the
+// selection, but flips above when the content doesn't fit below (and there's
+// more room above), then clamps to the viewport so the island is never cut off
+// by the window edge.
+function place(anchor: Anchor, width: number, height: number) {
   const left = Math.min(
-    Math.max(8, anchor.left),
-    Math.max(8, window.innerWidth - width - 8),
+    Math.max(MARGIN, anchor.left),
+    Math.max(MARGIN, window.innerWidth - width - MARGIN),
   );
-  const top = Math.min(Math.max(8, anchor.top + 8), window.innerHeight - 88);
-  return { left, top };
+
+  const roomBelow = window.innerHeight - anchor.bottom - GAP - MARGIN;
+  const roomAbove = anchor.top - GAP - MARGIN;
+  const top =
+    height <= roomBelow || roomBelow >= roomAbove
+      ? anchor.bottom + GAP
+      : anchor.top - GAP - height;
+
+  const maxTop = Math.max(MARGIN, window.innerHeight - height - MARGIN);
+  return { left, top: Math.min(Math.max(MARGIN, top), maxTop) };
 }
 
 function IslandButton({
@@ -137,11 +154,16 @@ export function AnnotationIsland({
   const [status, setStatus] = useState<Status | null>(null);
   const [learningPreview, setLearningPreview] =
     useState<SelectionLearningItemPreview | null>(null);
+  const [position, setPosition] = useState<{
+    left: number;
+    top: number;
+  } | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const genRef = useRef(0); // invalidate in-flight streaming analysis
 
   const dismiss = useCallback(() => {
     setPick(null);
+    setPosition(null);
     setView("actions");
     setResult("");
     setAnalysisError(null);
@@ -295,9 +317,26 @@ export function AnnotationIsland({
     };
   }, [containerRef, dismiss]);
 
-  if (!pick) return null;
+  // Position next to the selection, measuring the island's real size so it
+  // flips above / clamps to the viewport instead of being cut off by the window
+  // edge when the content is tall or the selection sits near an edge. The
+  // ResizeObserver re-runs this as the body grows (analysis streaming in,
+  // preview appearing); useLayoutEffect commits the position before paint, so
+  // there's no visible jump.
+  useLayoutEffect(() => {
+    const el = rootRef.current;
+    if (!pick || !el) return;
+    const update = () => {
+      const rect = el.getBoundingClientRect();
+      setPosition(place(pick.anchor, rect.width, rect.height));
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [pick]);
 
-  const position = clampPosition(pick.anchor, ISLAND_WIDTH);
+  if (!pick) return null;
 
   // position: fixed coordinates come from getClientRects()'s viewport coords.
   // Portaling to body makes the fixed positioning relative to the viewport —
@@ -312,7 +351,12 @@ export function AnnotationIsland({
       role="dialog"
       aria-label={t("annotationIsland.ariaLabel")}
       className="fixed z-[400]"
-      style={{ left: position.left, top: position.top, width: ISLAND_WIDTH }}
+      style={{
+        left: position?.left ?? 0,
+        top: position?.top ?? 0,
+        width: ISLAND_WIDTH,
+        visibility: position ? "visible" : "hidden",
+      }}
       onMouseDown={(e) => e.preventDefault()}
     >
       {/* Semi-transparent frosted-glass material + soft shadow, close to the

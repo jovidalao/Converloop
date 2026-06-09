@@ -75,7 +75,7 @@ function SignalList({ signals }: { signals: Signal[] }) {
             <span className="rounded bg-background px-1.5 py-0.5 text-ui-caption font-medium text-ui-muted">
               {t(`coach.type.${s.type}`)}
             </span>
-            <span className="min-w-0 flex-1 truncate font-medium text-foreground">
+            <span className="min-w-0 flex-1 truncate text-ui-meta font-medium text-foreground">
               {s.label}
             </span>
             <span

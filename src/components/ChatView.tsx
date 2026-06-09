@@ -553,10 +553,8 @@ function ReplySuggestionButton({
 
 function ReplySuggestionPanel({
   suggestion,
-  onUse,
 }: {
   suggestion: ReplySuggestionControl;
-  onUse?: (text: string) => void;
 }) {
   const { t } = useTranslation();
   if (
@@ -587,32 +585,18 @@ function ReplySuggestionPanel({
           </Button>
         </div>
       ) : suggestion.text ? (
-        <div className="flex items-start gap-2">
-          <div className="min-w-0 flex-1 space-y-2">
-            {suggestion.warning && (
-              <p className="m-0 rounded-md bg-warning/10 px-2 py-1.5 text-ui-caption leading-snug text-warning">
-                {suggestion.warning}
-              </p>
-            )}
-            <div
-              className="text-ui-body leading-normal text-foreground"
-              data-selectable-context
-            >
-              <Markdown>{suggestion.text}</Markdown>
-            </div>
-          </div>
-          <Button
-            type="button"
-            variant="action"
-            size="action"
-            className="size-7 p-0"
-            disabled={suggestion.loading}
-            onClick={() => onUse?.(suggestion.text)}
-            title={t("chat.fillInput")}
-            aria-label={t("chat.fillInput")}
+        <div className="min-w-0 space-y-2">
+          {suggestion.warning && (
+            <p className="m-0 rounded-md bg-warning/10 px-2 py-1.5 text-ui-caption leading-snug text-warning">
+              {suggestion.warning}
+            </p>
+          )}
+          <div
+            className="text-ui-body leading-normal text-foreground"
+            data-selectable-context
           >
-            <PencilIcon size={14} />
-          </Button>
+            <Markdown>{suggestion.text}</Markdown>
+          </div>
         </div>
       ) : (
         <span className="inline-flex items-center gap-1.5 text-ui-body text-ui-muted">
@@ -812,7 +796,6 @@ function PartnerReply({
   onFirstBilingual,
   onLayoutChange,
   onRegenerate,
-  onUseSuggestion,
   regenerating = false,
 }: {
   conversationId: string;
@@ -831,7 +814,6 @@ function PartnerReply({
   onLayoutChange?: () => void;
   /** When provided, shows the "Regenerate reply" button (only attached to the latest reply). */
   onRegenerate?: () => void;
-  onUseSuggestion?: (text: string) => void;
   regenerating?: boolean;
 }) {
   const { t } = useTranslation();
@@ -989,10 +971,7 @@ function PartnerReply({
         }
         extraPanels={
           offRecord || suggestionHidden ? null : (
-            <ReplySuggestionPanel
-              suggestion={replySuggestion}
-              onUse={onUseSuggestion}
-            />
+            <ReplySuggestionPanel suggestion={replySuggestion} />
           )
         }
         trailingActions={
@@ -1114,7 +1093,6 @@ function UserTurn({
   onEditFrom,
   onTurnAction,
   onLayoutChange,
-  onUseSuggestion,
   editDisabled = false,
 }: {
   turn: ChatTurn;
@@ -1129,7 +1107,6 @@ function UserTurn({
   onEditFrom: () => void;
   onTurnAction: (actionId: string) => void;
   onLayoutChange?: () => void;
-  onUseSuggestion?: (text: string) => void;
   editDisabled?: boolean;
 }) {
   const { t } = useTranslation();
@@ -1216,10 +1193,7 @@ function UserTurn({
           />
           <EditFromHereButton onClick={onEditFrom} disabled={editDisabled} />
         </div>
-        <ReplySuggestionPanel
-          suggestion={replySuggestion}
-          onUse={onUseSuggestion}
-        />
+        <ReplySuggestionPanel suggestion={replySuggestion} />
       </div>
     );
   }
@@ -1293,10 +1267,7 @@ function UserTurn({
         }
       />
       {variant !== "dictation" && (
-        <ReplySuggestionPanel
-          suggestion={replySuggestion}
-          onUse={onUseSuggestion}
-        />
+        <ReplySuggestionPanel suggestion={replySuggestion} />
       )}
     </div>
   );
@@ -1666,13 +1637,6 @@ export function ChatView({
 
   const requestLayoutScroll = useCallback(() => {
     setLayoutTick((n) => n + 1);
-  }, []);
-
-  const useSuggestedReply = useCallback((text: string) => {
-    const next = text.trim();
-    if (!next) return;
-    setInput(next);
-    requestAnimationFrame(() => inputRef.current?.focus());
   }, []);
 
   function patchTurn(id: string, patch: Partial<ChatTurn>) {
@@ -2902,7 +2866,6 @@ export function ChatView({
                 onTurnAction={(actionId) =>
                   void runConversationAction(actionId, turn.id)
                 }
-                onUseSuggestion={useSuggestedReply}
               />
             )}
             {turn.partnerText &&
@@ -2932,7 +2895,6 @@ export function ChatView({
                   onFirstExplain={() => void incrementExplainCount(turn.id)}
                   onFirstBilingual={() => void incrementBilingualCount(turn.id)}
                   onLayoutChange={requestLayoutScroll}
-                  onUseSuggestion={useSuggestedReply}
                   onRegenerate={
                     !learningMode &&
                     !turn.excludeFromContext &&

@@ -1,13 +1,24 @@
 import { type ClassValue, clsx } from "clsx";
 import { extendTailwindMerge } from "tailwind-merge";
 
-// Register the project's custom box-shadow utilities (defined in index.css) so
-// tailwind-merge treats them as part of the shadow group. Otherwise a later
-// `shadow-none`/`shadow-*` override silently fails to replace them and both
-// classes survive, leaving the custom shadow to win by CSS source order.
+// Register project utilities defined in index.css so tailwind-merge does not
+// misclassify custom text sizes as colors, and so custom shadows can be
+// replaced by later `shadow-none`/`shadow-*` classes.
 const twMerge = extendTailwindMerge({
   extend: {
     classGroups: {
+      "font-size": [
+        {
+          text: [
+            "ui-micro",
+            "ui-caption",
+            "ui-meta",
+            "ui-body",
+            "ui-chat",
+            "ui-title",
+          ],
+        },
+      ],
       shadow: [
         { shadow: ["minimal", "minimal-flat", "modal-small", "tinted"] },
       ],

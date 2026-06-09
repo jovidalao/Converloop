@@ -550,7 +550,6 @@ export const zh: Messages = {
       "推荐回复因输出长度限制被截断（{provider}:{raw}）。可以重试，反馈问题时请在括号里附上原因。",
     generateReplySuggestion: "生成推荐回复",
     replySuggestion: "推荐回复",
-    fillInput: "填入输入框",
     generatingReplySuggestion: "正在生成推荐回复…",
     editFromHereGrading: "批改中，完成后可以重新编辑",
     editFromHere: "从这里重新编辑：修改这条消息，丢弃后续内容",
