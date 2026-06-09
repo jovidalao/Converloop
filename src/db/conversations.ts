@@ -48,9 +48,9 @@ export interface ConversationDerivationState {
   error?: string | null;
 }
 
-// Rapid-fire Q&A drill: the learner sets one umbrella scenario, the reply agent invents a fresh concrete
-// situation each turn for them to respond to (see formatModifierInstructions). Still a practice-kind
-// conversation, so tutor correction / mastery / coach panel all run as usual.
+// Rapid-fire Q&A drill: the learner sets one umbrella scenario, the reply agent invents a fresh micro-prompt each
+// turn — rotating task types (respond / describe / narrate / explain / opinion), not only "respond" (see
+// formatModifierInstructions). Still a practice-kind conversation, so tutor correction / mastery / coach all run.
 export interface QuickfireModifiers {
   scenario: string;
 }
@@ -115,17 +115,24 @@ export function formatModifierInstructions(mods: AgentModifiers): string {
   if (mods.quickfire?.scenario.trim()) {
     lines.push(`- RAPID-FIRE Q&A DRILL — this overrides the default "keep a flowing conversation" behavior.
   Umbrella scenario the learner chose: "${mods.quickfire.scenario.trim()}".
-  Run a fast drill. Every turn, invent ONE fresh, specific, concrete micro-situation that fits this umbrella scenario, and prompt the learner to respond to it in the target language. Make each situation a vivid one-liner (who says/does what, where) and clearly different from the previous ones — do NOT build a continuous storyline.
-  After the learner answers a situation, your next message has TWO short parts: FIRST a brief model answer in the target language showing one natural way to handle the situation they just responded to (one or two sentences, introduced with a short lead-in); THEN immediately present the NEXT situation. Keep the whole turn short and energetic.
-  Do NOT correct or critique the learner's answer — another agent handles that. Do NOT chit-chat or ask how they are doing; just model, then next situation.`);
+  Run a fast, energetic drill. Every turn, invent ONE fresh, specific micro-prompt that fits this umbrella scenario for the learner to speak to in the target language. VARY the task type across turns — do NOT make every prompt "reply to what someone said". Rotate among:
+    (a) RESPOND — react to / handle a concrete situation (someone says or does something);
+    (b) DESCRIBE — describe an object, place, person, or what they're seeing in the scene;
+    (c) NARRATE — recount what just happened, or a related experience ("tell them about the time…");
+    (d) EXPLAIN — explain how or why (how they'd do something, why something went wrong);
+    (e) OPINION — give a quick opinion or preference with a reason.
+  KEEP THE WHOLE PROMPT IN THE TARGET LANGUAGE — scene, set-up, and the ask — calibrated to the learner's level so it reads at a glance; they perform the task OUT LOUD in the target language. (The app has a bilingual reading mode the learner can toggle for a native-language gloss, so do NOT mix in their native language yourself — a monolingual target-language message is what renders cleanly.) When you set the scene, do NOT spell out the exact words or phrases the ideal answer needs — paint the SITUATION and let them produce the language themselves, so it stays a real production challenge rather than a copying task.
+  Make every micro-prompt vivid and fun: open with a fitting emoji and sprinkle a few more through the scene (e.g. 🛬 🧾 🙇 😬 ⏰ 🛒 🤝) so it reads like a lively flash card rather than a dry exam question. Keep it to one or two punchy sentences, clearly different from the previous prompts in BOTH task type and content — do NOT build a continuous storyline.
+  After the learner answers, your next message has TWO short parts: FIRST a brief model answer in the target language showing one natural way to do the task they just attempted (handle / describe / narrate / explain / etc., one or two sentences, introduced with a short lead-in); keep the model answer itself clean and natural, no need to load it with emoji. THEN immediately present the NEXT prompt (target-language scene + emoji, as above). Keep the whole turn short and energetic.
+  Do NOT correct or critique the learner's answer — another agent handles that. Do NOT chit-chat or ask how they are doing; just model, then next prompt.`);
   }
   if (mods.note?.trim()) lines.push(`- ${mods.note.trim()}`);
   return lines.join("\n");
 }
 
-// Opening instruction for the AI's first turn of a rapid-fire drill: present the first situation only, no model answer yet.
+// Opening instruction for the AI's first turn of a rapid-fire drill: present the first prompt only, no model answer yet.
 export const QUICKFIRE_OPENING_INSTRUCTION =
-  "Start the rapid-fire Q&A drill now. Present the FIRST specific situation within the umbrella scenario for the learner to respond to. Do not give a model answer yet — there is nothing to model on the first turn.";
+  "Start the rapid-fire Q&A drill now. Present the FIRST prompt within the umbrella scenario for the learner — it can be a situation to handle, or something to describe, narrate, or explain. Follow the drill rules: keep the prompt in the target language (calibrated to their level) with a fitting emoji. Do not give a model answer yet — there is nothing to model on the first turn.";
 
 // Placeholder title for new conversations; ChatView changes it to truncated input content after the first message is sent (ChatGPT style).
 export const DEFAULT_CONVERSATION_TITLE = "New conversation";
