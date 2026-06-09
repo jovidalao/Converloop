@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { computeStreaks, localDayNumber } from "./learning-stats";
+import {
+  computeStreaks,
+  isCountablePracticeTurn,
+  localDayNumber,
+} from "./learning-stats";
 
 describe("computeStreaks", () => {
   it("counts a current streak ending today", () => {
@@ -40,5 +44,41 @@ describe("localDayNumber", () => {
     const nextDay = localDayNumber(new Date(2026, 0, 2, 0, 30).getTime());
     expect(morning).toBe(night);
     expect(nextDay).toBe(morning + 1);
+  });
+});
+
+describe("isCountablePracticeTurn", () => {
+  it("counts real on-record learner input", () => {
+    expect(
+      isCountablePracticeTurn({
+        userInput: "I went to work.",
+        displayText: null,
+        excludeFromContext: 0,
+      }),
+    ).toBe(true);
+  });
+
+  it("ignores empty openings, off-record turns, and prompt macros", () => {
+    expect(
+      isCountablePracticeTurn({
+        userInput: "",
+        displayText: null,
+        excludeFromContext: 0,
+      }),
+    ).toBe(false);
+    expect(
+      isCountablePracticeTurn({
+        userInput: "side question",
+        displayText: null,
+        excludeFromContext: 1,
+      }),
+    ).toBe(false);
+    expect(
+      isCountablePracticeTurn({
+        userInput: "expanded instruction",
+        displayText: "/topic work",
+        excludeFromContext: 0,
+      }),
+    ).toBe(false);
   });
 });

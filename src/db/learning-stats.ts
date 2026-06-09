@@ -47,6 +47,16 @@ export function computeStreaks(
   return { current, longest };
 }
 
+export function isCountablePracticeTurn(input: {
+  userInput: string;
+  displayText: string | null;
+  excludeFromContext: number;
+}): boolean {
+  if (input.excludeFromContext) return false;
+  if (input.displayText) return false;
+  return input.userInput.trim().length > 0;
+}
+
 export interface MistakeRow {
   key: string;
   label: string;
@@ -78,7 +88,16 @@ const MISTAKE_LIMIT = 12;
 export async function getLearningStats(): Promise<LearningStats> {
   const today = localDayNumber(Date.now());
 
-  const turns = await db.select({ createdAt: turn.createdAt }).from(turn);
+  const turns = (
+    await db
+      .select({
+        createdAt: turn.createdAt,
+        userInput: turn.userInput,
+        displayText: turn.displayText,
+        excludeFromContext: turn.excludeFromContext,
+      })
+      .from(turn)
+  ).filter(isCountablePracticeTurn);
   const dayCounts = new Map<number, number>();
   for (const row of turns) {
     const day = localDayNumber(row.createdAt);

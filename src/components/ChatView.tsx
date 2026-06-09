@@ -77,14 +77,15 @@ import {
 import { staticT, useTranslation } from "../i18n";
 import { estimatePromptTokens } from "../lib/tokens";
 import {
+  applyLearningTurnMasteryPreview,
   bilingualReply,
-  confirmLearningTurnMastery,
   generateAndSetConversationTitle,
   generateInputHintsForConversation,
   loadCachedConversationTopics,
   loadCachedInputHints,
   loadCachedQuickfireTopics,
   MissingApiKeyError,
+  previewLearningTurnMastery,
   recommendConversationTopics,
   recommendQuickfireTopics,
   regenerateReply,
@@ -157,6 +158,10 @@ interface ChatViewProps {
   onNavigateConversation?: (id: string) => void;
   /** Small-window mode: strip to bare chat — message bubbles + copy + composer; hide explain/speak/suggestions/corrections/badges/slash menu. */
   compact?: boolean;
+  /** Text requested by another panel (currently Coach hints) to draft into the composer. */
+  externalDraft?: { text: string; nonce: number } | null;
+  /** Small-window affordance: leave compact mode to inspect full feedback. */
+  onExitCompact?: () => void;
 }
 
 const MODEL_PROVIDERS = Object.keys(PROVIDER_PRESETS) as ProviderType[];
@@ -642,21 +647,23 @@ function LessonMasteryButton({
 }) {
   const { t } = useTranslation();
   const [busy, setBusy] = useState(false);
+  const [applying, setApplying] = useState(false);
+  const [preview, setPreview] = useState<Awaited<
+    ReturnType<typeof previewLearningTurnMastery>
+  > | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function run() {
+  async function previewRun() {
     if (busy || disabled) return;
     setBusy(true);
+    setPreview(null);
     setMessage(null);
     setError(null);
     try {
-      const result = await confirmLearningTurnMastery(conversationId, turnId);
-      setMessage(
-        result.applied > 0
-          ? t("chat.masteryWritten", { n: result.applied })
-          : result.summary,
-      );
+      const result = await previewLearningTurnMastery(conversationId, turnId);
+      setPreview(result);
+      if (result.signals.length === 0) setMessage(result.summary);
       onChanged?.();
     } catch (e) {
       setError(
@@ -671,18 +678,95 @@ function LessonMasteryButton({
     }
   }
 
+  async function applyRun() {
+    if (!preview || applying || disabled) return;
+    setApplying(true);
+    setMessage(null);
+    setError(null);
+    try {
+      const result = await applyLearningTurnMasteryPreview(
+        conversationId,
+        turnId,
+        preview,
+      );
+      setMessage(
+        result.applied > 0
+          ? t("chat.masteryWritten", { n: result.applied })
+          : result.summary,
+      );
+      setPreview(null);
+      onChanged?.();
+    } catch (e) {
+      setError(
+        e instanceof MissingApiKeyError
+          ? e.message
+          : e instanceof Error
+            ? e.message
+            : String(e),
+      );
+    } finally {
+      setApplying(false);
+    }
+  }
+
   return (
-    <span className="inline-flex items-center gap-1">
+    <span className="relative inline-flex items-center gap-1">
       <Button
         type="button"
         variant="action"
         size="action"
         title={t("chat.recordMastery")}
         disabled={disabled || busy}
-        onClick={() => void run()}
+        onClick={() => void previewRun()}
       >
         {busy ? <Spinner /> : <CheckCircle2Icon size={16} />}
       </Button>
+      {preview && preview.signals.length > 0 && (
+        <span className="absolute right-0 top-7 z-20 flex w-80 max-w-[80vw] flex-col gap-2 rounded-lg border bg-popover p-3 text-left shadow-lg">
+          <span className="text-ui-body font-medium text-foreground">
+            {t("chat.masteryPreviewTitle")}
+          </span>
+          <span className="text-ui-caption leading-snug text-ui-muted">
+            {preview.summary}
+          </span>
+          <span className="flex max-h-32 flex-col gap-1 overflow-y-auto">
+            {preview.signals.map((signal) => (
+              <span
+                key={signal.key}
+                className="rounded-md bg-muted px-2 py-1.5 text-ui-caption leading-snug text-foreground"
+              >
+                <span className="font-medium">{signal.label}</span>
+                <span className="ml-1 text-ui-muted">({signal.type})</span>
+                <span className="mt-0.5 block truncate text-ui-muted">
+                  {signal.example}
+                </span>
+              </span>
+            ))}
+          </span>
+          <span className="flex justify-end gap-1.5">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7"
+              disabled={applying}
+              onClick={() => setPreview(null)}
+            >
+              {t("common.cancel")}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              className="h-7"
+              disabled={applying}
+              onClick={() => void applyRun()}
+            >
+              {applying ? <Spinner /> : <CheckCircle2Icon size={14} />}
+              {t("chat.masteryPreviewApply")}
+            </Button>
+          </span>
+        </span>
+      )}
       {message && (
         <span className="max-w-44 truncate text-ui-caption text-success">
           {message}
@@ -706,7 +790,6 @@ function PartnerReply({
   turnId,
   text,
   autoOpen = false,
-  learningMode = false,
   variant,
   offRecord = false,
   onFirstExplain,
@@ -720,7 +803,6 @@ function PartnerReply({
   turnId: string;
   text: string;
   autoOpen?: boolean;
-  learningMode?: boolean;
   // Rapid-fire model answers are not part of a thread, so the "reply suggestion" (next-sentence) action is hidden.
   variant?: "quickfire";
   /** /btw off-record reply: hide "Reply suggestion" (it looks up context by turnId; off-record turns are excluded and would error). */
@@ -810,31 +892,6 @@ function PartnerReply({
   }, [open, loading, view, error, onLayoutChange]);
 
   const showBilingual = open && (view || error);
-
-  if (learningMode) {
-    return (
-      <div className="flex max-w-none flex-col items-start gap-1.5 self-stretch">
-        <div
-          className="self-stretch py-0.5 text-foreground"
-          data-selectable-context
-        >
-          <Markdown>{text}</Markdown>
-        </div>
-        <div className="-ml-1 flex items-center gap-0.5">
-          <CopyButton text={text} />
-          {!offRecord && !suggestionHidden && (
-            <ReplySuggestionButton suggestion={replySuggestion} />
-          )}
-        </div>
-        {!offRecord && !suggestionHidden && (
-          <ReplySuggestionPanel
-            suggestion={replySuggestion}
-            onUse={onUseSuggestion}
-          />
-        )}
-      </div>
-    );
-  }
 
   return (
     <div className="flex max-w-none flex-col items-start gap-1.5 self-stretch">
@@ -945,6 +1002,20 @@ function idiomaticText(analysis: TutorAnalysis | null): string | null {
   if (!natural) return null;
   const corrected = analysis.corrected?.trim();
   return natural === corrected ? null : natural;
+}
+
+function hasLearningFeedback(turn: ChatTurn): boolean {
+  const analysis = turn.analysis;
+  if (!analysis) return false;
+  if (analysis.expression_gap) return true;
+  if (analysis.issues.length > 0) return true;
+  const corrected = analysis.corrected?.trim();
+  const natural = analysis.natural?.trim();
+  const userText = turn.userText.trim();
+  return (
+    (!!corrected && corrected !== userText) ||
+    (!!natural && natural !== userText)
+  );
 }
 
 // User message actions: copy + speak. TTS prefers the "more natural" rewrite;
@@ -1296,6 +1367,8 @@ export function ChatView({
   onTurnsChange,
   onNavigateConversation,
   compact = false,
+  externalDraft = null,
+  onExitCompact,
 }: ChatViewProps) {
   const { t } = useTranslation();
   const [turns, setTurns] = useState<ChatTurn[]>([]);
@@ -1376,6 +1449,14 @@ export function ChatView({
   const { nativeLanguage, autoBilingual } = config;
   const confirm = useConfirm();
   const learningMode = mode === "learning_agent";
+
+  useEffect(() => {
+    if (!externalDraft) return;
+    setInput(externalDraft.text);
+    setInputHints(null);
+    setHintIndex(0);
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }, [externalDraft]);
   // Rapid Q&A start page: an uncommitted quickfire draft (no conversation row yet). Drives the start screen,
   // the scenario-input composer, and routing the first send through startQuickfireDraft instead of a graded turn.
   const quickfireDraftActive = isDraft && isQuickfireDraft;
@@ -2626,6 +2707,9 @@ export function ChatView({
         tone: "muted",
       });
   }
+  const compactFeedbackCount = compact
+    ? turns.filter(hasLearningFeedback).length
+    : 0;
   const active = activeProvider(config);
   const currentPreset = PROVIDER_PRESETS[config.providerType];
   const currentModelOption = findModelOption(
@@ -2760,7 +2844,6 @@ export function ChatView({
                   conversationId={conversationId}
                   turnId={turn.id}
                   text={turn.partnerText}
-                  learningMode={learningMode}
                   variant={quickfireScenario !== null ? "quickfire" : undefined}
                   offRecord={turn.excludeFromContext}
                   autoOpen={
@@ -2816,6 +2899,26 @@ export function ChatView({
             >
               <RefreshCwIcon size={14} />
               {t("common.retry")}
+            </Button>
+          )}
+        </div>
+      )}
+      {compact && compactFeedbackCount > 0 && (
+        <div className="mx-3 mb-1 flex items-center gap-2 rounded-md border bg-card px-3 py-2 text-ui-caption text-ui-muted">
+          <span className="min-w-0 flex-1">
+            {t("chat.compactFeedback", {
+              n: String(compactFeedbackCount),
+            })}
+          </span>
+          {onExitCompact && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 shrink-0"
+              onClick={onExitCompact}
+            >
+              {t("chat.compactOpenFull")}
             </Button>
           )}
         </div>

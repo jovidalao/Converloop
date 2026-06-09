@@ -46,6 +46,9 @@ export const zh: Messages = {
     speaking: "正在朗读选中文本",
     selectTextHint: "请选择包含文字或数字的内容",
     added: "已加入学习数据:{label}",
+    previewTitle: "学习条目预览",
+    confirmAdd: "加入条目",
+    saving: "保存中…",
   },
   corrections: {
     category: {
@@ -137,6 +140,7 @@ export const zh: Messages = {
       empty: "对方回复后,这里会给你几种可以直接借用、把对话接下去的说法。",
       regenerate: "重新生成",
       regenerating: "正在重新生成…",
+      use: "使用这个开头",
     },
   },
   logs: {
@@ -173,6 +177,12 @@ export const zh: Messages = {
     planning: "规划中…",
     generateProject: "生成项目",
     existingProjects: "已有学习项目",
+    nextActions: "下一步",
+    generatedLessons: "已生成专项课：{lessons}",
+    statusActive: "进行中",
+    statusCompleted: "已完成",
+    statusArchived: "已归档",
+    projectStatusUpdated: "项目状态已更新。",
     packageSection: "专项课导入/导出",
     packageNote:
       "分享包只包含 prompt、权限和课程结构,不包含你的学习数据、对话历史或密钥。",
@@ -181,6 +191,11 @@ export const zh: Messages = {
     packageSummary: "{summary} · 读取: {reads} · 写入: {writes}",
     importing: "导入中…",
     importPackage: "导入包",
+    importConfirmTitle: "导入「{name}」？",
+    importConfirmDesc:
+      "{summary}。运行时技能会默认关闭导入；专项课导入后可用。",
+    importEnabled: "导入后启用",
+    importDisabled: "默认关闭导入",
     nlCreate: "自然语言创建",
     lessonPlaceholder:
       "例如: 帮我创建一个专门练商务邮件开头和结尾的老师,根据我的表达缺口出题。",
@@ -201,7 +216,7 @@ export const zh: Messages = {
     dictation: "听写",
     dictationTooltip: "听写训练:听一句话,把听到的内容原样打出来",
     customLearning: "定制化学习",
-    customLearningTooltip: "浏览专项课,点开即开始",
+    customLearningTooltip: "浏览专项课,开始前先预览",
     recent: "最近",
     noConversations: "还没有对话",
     settings: "设置",
@@ -257,9 +272,11 @@ export const zh: Messages = {
   customLearning: {
     title: "定制化学习",
     description:
-      "挑一门专项课,点开即开始 —— 每门课都会新开一个老师型对话,围绕你的学习数据带你练习。",
+      "挑一门专项课,点开先预览 —— 每门课都会新开一个老师型对话,围绕你的学习数据带你练习。",
     manage: "创建 / 管理",
     empty: "还没有专项课。点上方按钮创建一个。",
+    previewHint: "开始新课程会话前，先确认这门课是否符合当前目标。",
+    startLesson: "开始课程",
   },
   commandPalette: {
     ariaLabel: "快速跳转",
@@ -538,6 +555,10 @@ export const zh: Messages = {
     editFromHere: "从这里重新编辑：修改这条消息，丢弃后续内容",
     masteryWritten: "已写入 {n} 条掌握程度记录。",
     recordMastery: "将这条课程回答记录为掌握度证据",
+    masteryPreviewTitle: "掌握证据预览",
+    masteryPreviewApply: "写入证据",
+    compactFeedback: "完整视图中有 {n} 条学习反馈可查看。",
+    compactOpenFull: "查看",
     regenerateReply: "重新生成回复",
     bilingualTitle: "目标语言 / 母语逐句对照",
     bilingualReading: "双语阅读",
@@ -634,6 +655,9 @@ export const zh: Messages = {
       "系统会先把请求转换为一组有限的数据操作，再由代码执行，不会直接修改计数。",
     processing: "处理中…",
     apply: "应用",
+    preview: "预览",
+    previewTitle: "变更预览",
+    applyPreview: "应用预览",
     applied: "{summary} 已应用 {n} 条。{skipped}",
     skippedSuffix: " 跳过：{items}",
   },
@@ -705,6 +729,10 @@ export const zh: Messages = {
     refreshedStatus: "✓ 档案已更新（通过合理性检查）。",
     refreshNotUpdated: "未更新：{reason}",
     refreshFailed: "刷新失败：{error}",
+    refreshDiffTitle: "AI 刷新变更",
+    refreshDiffBefore: "之前",
+    refreshDiffAfter: "之后",
+    refreshDiffDismiss: "看起来没问题",
     noUndoVersion: "没有可恢复的版本。",
     undoneStatus: "✓ 已恢复到 AI 刷新前的版本。",
   },
@@ -764,6 +792,11 @@ export const zh: Messages = {
     packagePlaceholder:
       "粘贴 lang-agent.package JSON；旧版 lang-agent.agent-package 也兼容。导出的包会出现在这里。",
     importPackage: "导入包",
+    importConfirmTitle: "导入「{name}」？",
+    importConfirmDesc:
+      "{summary}。运行时技能会默认关闭导入；专项课导入后可用。",
+    importEnabled: "导入后启用",
+    importDisabled: "默认关闭导入",
     importedPackage: "包已导入：{skills} 个技能，{lessons} 个课程。",
     logsLink: "运行日志已移至「设置 → 日志」",
     outputPreviewObserver:

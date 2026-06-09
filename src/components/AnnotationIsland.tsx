@@ -10,7 +10,9 @@ import { createPortal } from "react-dom";
 import { useTranslation } from "@/i18n";
 import { cn } from "@/lib/utils";
 import {
-  addSelectionToLearningData,
+  createSelectionLearningItem,
+  previewSelectionLearningItem,
+  type SelectionLearningItemPreview,
   translateSelection,
 } from "../orchestrator";
 import { isAgentHidden } from "../runtime";
@@ -133,6 +135,8 @@ export function AnnotationIsland({
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [busy, setBusy] = useState<Busy | null>(null);
   const [status, setStatus] = useState<Status | null>(null);
+  const [learningPreview, setLearningPreview] =
+    useState<SelectionLearningItemPreview | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const genRef = useRef(0); // invalidate in-flight streaming analysis
 
@@ -142,6 +146,7 @@ export function AnnotationIsland({
     setResult("");
     setAnalysisError(null);
     setStatus(null);
+    setLearningPreview(null);
     setBusy(null);
     genRef.current++;
     // Clear leftover highlights, otherwise clicking blank space (mousedown
@@ -206,16 +211,32 @@ export function AnnotationIsland({
   async function addToLearningData() {
     if (!pick || busy) return;
     setStatus(null);
+    setLearningPreview(null);
     if (!pick.selection.trim()) {
       setStatus({ tone: "error", text: t("annotationIsland.selectTextHint") });
       return;
     }
     setBusy("save");
     try {
-      const item = await addSelectionToLearningData(
+      const item = await previewSelectionLearningItem(
         pick.selection,
         pick.context,
       );
+      setLearningPreview(item);
+    } catch (e) {
+      setStatus({ tone: "error", text: errText(e) });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function confirmLearningPreview() {
+    if (!learningPreview || busy) return;
+    setStatus(null);
+    setBusy("save");
+    try {
+      const item = await createSelectionLearningItem(learningPreview);
+      setLearningPreview(null);
       setStatus({
         tone: "success",
         text: t("annotationIsland.added", { label: item.label }),
@@ -245,6 +266,7 @@ export function AnnotationIsland({
       setResult("");
       setAnalysisError(null);
       setStatus(null);
+      setLearningPreview(null);
       setBusy(null);
       genRef.current++;
     }
@@ -360,6 +382,53 @@ export function AnnotationIsland({
                   {t("annotationIsland.analyzing")}
                 </span>
               )}
+            </div>
+          )}
+          {learningPreview && (
+            <div className="mt-2 rounded-md border bg-background px-2.5 py-2 text-ui-caption leading-snug">
+              <div className="font-medium text-foreground">
+                {t("annotationIsland.previewTitle")}
+              </div>
+              <div className="mt-1 text-foreground">
+                {learningPreview.label}
+                <span className="ml-1 text-ui-muted">
+                  ({learningPreview.type})
+                </span>
+              </div>
+              <div className="mt-1 font-mono text-ui-muted">
+                {learningPreview.key}
+              </div>
+              {learningPreview.example && (
+                <div className="mt-1 text-ui-muted">
+                  {learningPreview.example}
+                </div>
+              )}
+              {learningPreview.notes && (
+                <div className="mt-1 text-ui-muted">
+                  {learningPreview.notes}
+                </div>
+              )}
+              <div className="mt-2 flex justify-end gap-1.5">
+                <button
+                  type="button"
+                  className="rounded-md px-2 py-1 text-ui-caption text-ui-muted hover:bg-accent hover:text-foreground"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => setLearningPreview(null)}
+                >
+                  {t("common.cancel")}
+                </button>
+                <button
+                  type="button"
+                  className="rounded-md bg-primary px-2 py-1 text-ui-caption font-medium text-primary-foreground disabled:opacity-50"
+                  disabled={busy === "save"}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => void confirmLearningPreview()}
+                >
+                  {busy === "save"
+                    ? t("annotationIsland.saving")
+                    : t("annotationIsland.confirmAdd")}
+                </button>
+              </div>
             </div>
           )}
           {status && (

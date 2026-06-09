@@ -147,6 +147,10 @@ function App() {
   );
   const prevWindowSizeRef = useRef<PhysicalSize | null>(null);
   const [coachTurns, setCoachTurns] = useState<ChatTurn[]>([]);
+  const [coachDraft, setCoachDraft] = useState<{
+    text: string;
+    nonce: number;
+  } | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [derivationBusy, setDerivationBusy] = useState(false);
@@ -289,6 +293,7 @@ function App() {
         setActiveConversationId(loc.activeId);
       }
       withViewTransition(() => {
+        setCoachDraft(null);
         setActiveId(loc.activeId);
         setView(loc.view);
       });
@@ -991,6 +996,8 @@ function App() {
             onTurnsChange={setCoachTurns}
             onNavigateConversation={selectConversation}
             compact={smallWindow}
+            externalDraft={coachDraft}
+            onExitCompact={() => setSmallWindow(false)}
           />
         </div>
         {!smallWindow && secondaryView && (
@@ -1012,6 +1019,12 @@ function App() {
             conversationId={activeId}
             onOpenView={(v) => navigateTo({ view: v, activeId })}
             onJumpToTurn={jumpToTurn}
+            onUseHint={(text) =>
+              setCoachDraft((cur) => ({
+                text,
+                nonce: (cur?.nonce ?? 0) + 1,
+              }))
+            }
           />
         </aside>
       )}

@@ -23,6 +23,11 @@ export interface DataEditResult {
   skipped: string[];
 }
 
+export interface DataEditPreview {
+  summary: string;
+  operations: DataEditOperation[];
+}
+
 function validType(type: string | undefined): type is MasteryType {
   return MASTERY_TYPE_VALUES.includes(type as MasteryType);
 }
@@ -117,9 +122,18 @@ export async function applyDataEditInstruction(
   instruction: string,
   config: AppConfig,
 ): Promise<DataEditResult> {
+  const plan = await planDataEditInstruction(provider, instruction, config);
+  return applyDataEditOperations(plan.operations, plan.summary);
+}
+
+export async function planDataEditInstruction(
+  provider: ModelProvider,
+  instruction: string,
+  config: AppConfig,
+): Promise<DataEditPreview> {
   const items = await getAllMastery();
   const plan = await planDataEdit(provider, instruction, items, {
     nativeLanguage: config.nativeLanguage,
   });
-  return applyDataEditOperations(plan.operations, plan.summary);
+  return { summary: plan.summary, operations: plan.operations };
 }

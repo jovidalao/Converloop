@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "@/i18n";
+import type { DataEditPreview } from "../data-edit";
 import {
   deleteMasteryItem,
   getAllMastery,
@@ -17,12 +18,14 @@ import {
 } from "../db/mastery";
 import type { MasteryItem } from "../db/schema";
 import {
-  editLearningDataWithInstruction,
+  applyLearningDataEditPreview,
   MissingApiKeyError,
+  previewLearningDataEditWithInstruction,
 } from "../orchestrator";
 import { useConfirm } from "./confirm";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
+import { Spinner } from "./ui/spinner";
 import { Textarea } from "./ui/textarea";
 
 const TYPE_LABEL: Record<string, string> = {
@@ -70,6 +73,17 @@ function Badge({
       {children}
     </span>
   );
+}
+
+function operationLabel(op: DataEditPreview["operations"][number]): string {
+  const parts = [`${op.action}: ${op.key}`];
+  if (op.target_key) parts.push(`→ ${op.target_key}`);
+  if (op.label) parts.push(`label="${op.label}"`);
+  if (op.type) parts.push(`type=${op.type}`);
+  if (op.status) parts.push(`status=${op.status}`);
+  if (op.example) parts.push(`example="${op.example}"`);
+  if (op.notes) parts.push(`notes="${op.notes}"`);
+  return parts.join(" · ");
 }
 
 function MasteryRow({
@@ -251,6 +265,8 @@ export function MasteryView() {
   const [type, setType] = useState("all");
   const [editText, setEditText] = useState("");
   const [editBusy, setEditBusy] = useState(false);
+  const [applyBusy, setApplyBusy] = useState(false);
+  const [editPreview, setEditPreview] = useState<DataEditPreview | null>(null);
   const [editResult, setEditResult] = useState<string | null>(null);
   const [editError, setEditError] = useState<string | null>(null);
 
@@ -278,16 +294,40 @@ export function MasteryView() {
     [items],
   );
 
-  async function applyNaturalEdit() {
+  async function previewNaturalEdit() {
     const text = editText.trim();
     if (!text || editBusy) return;
     setEditBusy(true);
+    setEditPreview(null);
     setEditResult(null);
     setEditError(null);
     try {
-      const result = await editLearningDataWithInstruction(text);
+      const result = await previewLearningDataEditWithInstruction(text);
+      setEditPreview(result);
+      if (result.operations.length === 0) setEditResult(result.summary);
+    } catch (e) {
+      setEditError(
+        e instanceof MissingApiKeyError
+          ? e.message
+          : e instanceof Error
+            ? e.message
+            : String(e),
+      );
+    } finally {
+      setEditBusy(false);
+    }
+  }
+
+  async function applyNaturalEditPreview() {
+    if (!editPreview || applyBusy) return;
+    setApplyBusy(true);
+    setEditResult(null);
+    setEditError(null);
+    try {
+      const result = await applyLearningDataEditPreview(editPreview);
       await refresh();
       setEditText("");
+      setEditPreview(null);
       const skipped = result.skipped.length
         ? t("mastery.skippedSuffix", { items: result.skipped.join(", ") })
         : "";
@@ -307,7 +347,7 @@ export function MasteryView() {
             : String(e),
       );
     } finally {
-      setEditBusy(false);
+      setApplyBusy(false);
     }
   }
 
@@ -373,7 +413,11 @@ export function MasteryView() {
         </div>
         <Textarea
           value={editText}
-          onChange={(e) => setEditText(e.target.value)}
+          onChange={(e) => {
+            setEditText(e.target.value);
+            setEditPreview(null);
+            setEditResult(null);
+          }}
           placeholder={t("mastery.naturalEditPlaceholder")}
           className="min-h-24 resize-none"
         />
@@ -383,13 +427,53 @@ export function MasteryView() {
           </p>
           <Button
             type="button"
-            onClick={() => void applyNaturalEdit()}
+            onClick={() => void previewNaturalEdit()}
             disabled={editBusy || !editText.trim()}
           >
             <SendIcon size={15} />
-            {editBusy ? t("mastery.processing") : t("mastery.apply")}
+            {editBusy ? t("mastery.processing") : t("mastery.preview")}
           </Button>
         </div>
+        {editPreview && editPreview.operations.length > 0 && (
+          <div className="mt-3 rounded-md border bg-background px-3 py-2">
+            <div className="text-ui-body font-medium">
+              {t("mastery.previewTitle")}
+            </div>
+            <p className="mt-1 mb-2 text-ui-caption leading-snug text-ui-muted">
+              {editPreview.summary}
+            </p>
+            <div className="grid max-h-48 gap-1 overflow-y-auto">
+              {editPreview.operations.map((op, i) => (
+                <div
+                  key={`${op.action}:${op.key}:${i}`}
+                  className="rounded bg-muted px-2 py-1.5 font-mono text-ui-caption leading-snug text-foreground"
+                >
+                  {operationLabel(op)}
+                </div>
+              ))}
+            </div>
+            <div className="mt-2 flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={applyBusy}
+                onClick={() => setEditPreview(null)}
+              >
+                {t("common.cancel")}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                disabled={applyBusy}
+                onClick={() => void applyNaturalEditPreview()}
+              >
+                {applyBusy ? <Spinner /> : <CheckCircle2Icon size={14} />}
+                {t("mastery.applyPreview")}
+              </Button>
+            </div>
+          </div>
+        )}
         {editResult && (
           <div className="mt-2 rounded-md bg-primary/10 px-3 py-2 text-ui-body text-primary">
             {editResult}

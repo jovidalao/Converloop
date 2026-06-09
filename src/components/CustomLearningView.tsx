@@ -38,6 +38,7 @@ export function CustomLearningView({
   const confirm = useConfirm();
   const [lessons, setLessons] = useState<LearningAgentMeta[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [expandedLessonId, setExpandedLessonId] = useState<string | null>(null);
 
   const reload = useCallback(() => listLearningAgents().then(setLessons), []);
 
@@ -105,11 +106,17 @@ export function CustomLearningView({
                 role="button"
                 tabIndex={0}
                 className="group relative block w-full break-inside-avoid cursor-pointer rounded-lg border bg-card p-4 text-left transition-colors hover:border-primary/50 hover:bg-accent/40"
-                onClick={() => onStartLesson(lesson.id)}
+                onClick={() =>
+                  setExpandedLessonId((cur) =>
+                    cur === lesson.id ? null : lesson.id,
+                  )
+                }
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault();
-                    onStartLesson(lesson.id);
+                    setExpandedLessonId((cur) =>
+                      cur === lesson.id ? null : lesson.id,
+                    );
                   }
                 }}
               >
@@ -123,6 +130,25 @@ export function CustomLearningView({
                   <p className="m-0 mt-1.5 text-ui-body leading-relaxed text-ui-muted">
                     {lesson.description}
                   </p>
+                )}
+                {expandedLessonId === lesson.id && (
+                  <div className="mt-3 border-t pt-3">
+                    <p className="m-0 text-ui-caption leading-snug text-ui-muted">
+                      {t("customLearning.previewHint")}
+                    </p>
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="mt-2"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onStartLesson(lesson.id);
+                      }}
+                    >
+                      <BookOpenCheckIcon className="size-3.5" />
+                      {t("customLearning.startLesson")}
+                    </Button>
+                  </div>
                 )}
                 {!lesson.builtIn && (
                   <div className="absolute top-2.5 right-2.5 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">

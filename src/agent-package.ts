@@ -127,6 +127,16 @@ export interface AgentPackageReview {
   runtimeSkillCount: number;
   lessonCount: number;
   courseCount: number;
+  items: AgentPackageReviewItem[];
+}
+
+export interface AgentPackageReviewItem {
+  type: "skill" | "lesson" | "course";
+  name: string;
+  description: string;
+  reads: string;
+  writes: string;
+  enabledByDefault: boolean;
 }
 
 export interface ImportAgentPackageOptions {
@@ -340,15 +350,27 @@ export async function exportAgentPackage(agentId: string): Promise<string> {
 
 function reviewLegacy(raw: string): AgentPackageReview {
   const parsed = LegacyAgentPackageSchema.parse(JSON.parse(raw));
+  const reads = scopeLabels(parsed.agent.dataScopes);
+  const writes = writePolicyLabel([parsed.agent.writebackPolicy]);
   return {
     name: parsed.agent.name,
     kind: parsed.agent.kind,
-    reads: scopeLabels(parsed.agent.dataScopes),
-    writes: writePolicyLabel([parsed.agent.writebackPolicy]),
+    reads,
+    writes,
     itemSummary: "1 skill",
     runtimeSkillCount: 1,
     lessonCount: 0,
     courseCount: 0,
+    items: [
+      {
+        type: "skill",
+        name: parsed.agent.name,
+        description: parsed.agent.description,
+        reads,
+        writes,
+        enabledByDefault: false,
+      },
+    ],
   };
 }
 
@@ -357,16 +379,43 @@ function reviewShare(raw: string): AgentPackageReview {
   const counts = itemCounts(parsed.items);
   const scopes: string[] = [];
   const policies: string[] = [];
+  const items: AgentPackageReviewItem[] = [];
   for (const item of parsed.items) {
     if (item.type === "course") {
+      items.push({
+        type: "course",
+        name: item.title,
+        description: item.description ?? item.goal,
+        reads: scopeLabels(item.lessons.flatMap((lesson) => lesson.dataScopes)),
+        writes: writePolicyLabel(
+          item.lessons.map((lesson) => lesson.writebackPolicy),
+        ),
+        enabledByDefault: true,
+      });
       for (const lesson of item.lessons) {
         scopes.push(...lesson.dataScopes);
         policies.push(lesson.writebackPolicy);
+        items.push({
+          type: "lesson",
+          name: lesson.name,
+          description: lesson.description,
+          reads: scopeLabels(lesson.dataScopes),
+          writes: writePolicyLabel([lesson.writebackPolicy]),
+          enabledByDefault: true,
+        });
       }
       continue;
     }
     scopes.push(...item.dataScopes);
     policies.push(item.writebackPolicy);
+    items.push({
+      type: item.type,
+      name: item.name,
+      description: item.description,
+      reads: scopeLabels(item.dataScopes),
+      writes: writePolicyLabel([item.writebackPolicy]),
+      enabledByDefault: item.type === "lesson",
+    });
   }
   const parts = [
     counts.runtimeSkillCount ? `${counts.runtimeSkillCount} skill(s)` : null,
@@ -379,6 +428,7 @@ function reviewShare(raw: string): AgentPackageReview {
     reads: scopeLabels(scopes),
     writes: writePolicyLabel(policies),
     itemSummary: parts.join(" · ") || "empty package",
+    items,
     ...counts,
   };
 }
@@ -464,7 +514,7 @@ async function importLegacyPackage(
         examples: parsed.files["examples.json"],
       },
       {
-        enabled: opts.enableRuntimeAgents ?? true,
+        enabled: opts.enableRuntimeAgents ?? false,
         packageMeta: packageMeta({
           format: LEGACY_FORMAT,
           packageId,

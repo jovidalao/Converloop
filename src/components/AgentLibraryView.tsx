@@ -550,13 +550,25 @@ export function AgentLibraryView({
   }
 
   async function importPackage() {
-    if (!packageText.trim() || busy) return;
+    if (!packageText.trim() || busy || !packageReview) return;
+    if (
+      !(await confirm({
+        title: t("agentLibrary.importConfirmTitle", {
+          name: packageReview.name,
+        }),
+        description: t("agentLibrary.importConfirmDesc", {
+          summary: packageReview.itemSummary,
+        }),
+        confirmText: t("agentLibrary.importPackage"),
+      }))
+    )
+      return;
     setBusy(true);
     setError(null);
     setMessage(null);
     try {
       const result = await importAgentPackage(packageText, {
-        enableRuntimeAgents: true,
+        enableRuntimeAgents: false,
         enableLessons: true,
       });
       await refreshCatalog();
@@ -810,6 +822,33 @@ export function AgentLibraryView({
                   {packageReview.itemSummary} · {t("agentLibrary.reads")}:{" "}
                   {packageReview.reads} ·{t("agentLibrary.writes")}:{" "}
                   {packageReview.writes}
+                </div>
+                <div className="mt-2 grid gap-1">
+                  {packageReview.items.map((item, i) => (
+                    <div
+                      key={`${item.type}:${item.name}:${i}`}
+                      className="rounded border bg-background px-2 py-1.5"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="truncate font-medium">
+                          {item.name}
+                        </span>
+                        <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-ui-caption text-ui-muted">
+                          {item.type}
+                        </span>
+                      </div>
+                      <div className="mt-0.5 line-clamp-2 text-ui-muted">
+                        {item.description}
+                      </div>
+                      <div className="mt-1 text-ui-muted">
+                        {item.enabledByDefault
+                          ? t("agentLibrary.importEnabled")
+                          : t("agentLibrary.importDisabled")}
+                        {" · "}
+                        {item.reads}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}

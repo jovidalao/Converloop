@@ -391,9 +391,11 @@ function MasteryLink({
 function ConversationHints({
   hints,
   regenerating,
+  onUseHint,
 }: {
   hints: string[];
   regenerating: boolean;
+  onUseHint?: (text: string) => void;
 }) {
   const { t } = useTranslation();
   if (hints.length === 0) {
@@ -414,14 +416,21 @@ function ConversationHints({
         return (
           <li
             key={`${i}:${hint}`}
-            className="flex flex-col gap-1 rounded-lg border bg-card px-3 py-2.5 text-ui-body"
+            className="rounded-lg border bg-card text-ui-body"
           >
-            {cue && (
-              <span className="text-ui-caption font-medium text-ui-muted">
-                {cue}
-              </span>
-            )}
-            <span className="leading-relaxed text-foreground">{opener}</span>
+            <button
+              type="button"
+              className="flex w-full flex-col gap-1 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-accent"
+              onClick={() => onUseHint?.(opener)}
+              title={t("coach.hints.use")}
+            >
+              {cue && (
+                <span className="text-ui-caption font-medium text-ui-muted">
+                  {cue}
+                </span>
+              )}
+              <span className="leading-relaxed text-foreground">{opener}</span>
+            </button>
           </li>
         );
       })}
@@ -434,11 +443,13 @@ export function CoachPanel({
   conversationId,
   onOpenView,
   onJumpToTurn,
+  onUseHint,
 }: {
   turns: ChatTurn[];
   conversationId: string | null;
   onOpenView?: (view: MainView) => void;
   onJumpToTurn?: (turnId: string) => void;
+  onUseHint?: (text: string) => void;
 }) {
   const { t } = useTranslation();
   const [annotations, setAnnotations] = useState<TurnAnnotation[]>([]);
@@ -626,7 +637,11 @@ export function CoachPanel({
                 </button>
               }
             >
-              <ConversationHints hints={hints} regenerating={regenerating} />
+              <ConversationHints
+                hints={hints}
+                regenerating={regenerating}
+                onUseHint={onUseHint}
+              />
             </Section>
             {learnerTurns.length > 0 && (
               <Section title={t("coach.reviewTitle")}>

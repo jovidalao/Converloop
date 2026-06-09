@@ -24,7 +24,13 @@ import {
 import { planLearningProject } from "./agents/task-agent";
 import { translate } from "./agents/translate";
 import { type AppConfig, getProvider, loadConfig } from "./config";
-import { applyDataEditInstruction, type DataEditResult } from "./data-edit";
+import {
+  applyDataEditInstruction,
+  applyDataEditOperations,
+  type DataEditPreview,
+  type DataEditResult,
+  planDataEditInstruction,
+} from "./data-edit";
 import { runTrackedAgentJob } from "./db/agent-jobs";
 import { getAppState, setAppState } from "./db/app-state";
 import {
@@ -41,7 +47,11 @@ import {
   QUICKFIRE_OPENING_INSTRUCTION,
   renameConversation,
 } from "./db/conversations";
-import { createLearningAgent, getLearningAgent } from "./db/learning-agents";
+import {
+  createLearningAgent,
+  getLearningAgent,
+  type LearningAgentMeta,
+} from "./db/learning-agents";
 import { createLearningProject } from "./db/learning-projects";
 import {
   createManualMasteryItem,
@@ -52,7 +62,11 @@ import {
   getWeakList,
   recordSignals,
 } from "./db/mastery";
-import { normalizeKey } from "./db/mastery-logic";
+import {
+  type MasteryType,
+  normalizeKey,
+  type Signal,
+} from "./db/mastery-logic";
 import { getProficiencySnapshot } from "./db/proficiency";
 import {
   formatTurns,
@@ -336,10 +350,56 @@ export async function editLearningDataWithInstruction(
   return applyDataEditInstruction(provider, instruction, loadConfig());
 }
 
-export async function confirmLearningTurnMastery(
+export async function previewLearningDataEditWithInstruction(
+  instruction: string,
+): Promise<DataEditPreview> {
+  const provider = await getProvider();
+  if (!provider) throw new MissingApiKeyError();
+  return planDataEditInstruction(provider, instruction, loadConfig());
+}
+
+export async function applyLearningDataEditPreview(
+  preview: DataEditPreview,
+): Promise<DataEditResult> {
+  return applyDataEditOperations(preview.operations, preview.summary);
+}
+
+export interface LessonMasteryPreviewSignal {
+  key: string;
+  label: string;
+  type: string;
+  example: string;
+}
+
+export interface LessonMasteryPreview {
+  summary: string;
+  signals: LessonMasteryPreviewSignal[];
+}
+
+function lessonPreviewToSignals(
+  preview: LessonMasteryPreview,
+  agent: LearningAgentMeta,
+): Signal[] {
+  return preview.signals.map((signal) => ({
+    key: signal.key,
+    label: signal.label,
+    type: signal.type as MasteryType,
+    kind: "correct",
+    example: signal.example,
+    payload: {
+      lesson_writeback: {
+        lessonAgentId: agent.id,
+        lessonName: agent.name,
+        summary: preview.summary,
+      },
+    },
+  }));
+}
+
+export async function previewLearningTurnMastery(
   conversationId: string,
   turnId: string,
-): Promise<{ summary: string; applied: number }> {
+): Promise<LessonMasteryPreview> {
   const provider = await getProvider();
   if (!provider) throw new MissingApiKeyError();
 
@@ -361,7 +421,7 @@ export async function confirmLearningTurnMastery(
   if (!turn.userInput.trim()) {
     return {
       summary: "This turn is not learner output; nothing was written.",
-      applied: 0,
+      signals: [],
     };
   }
 
@@ -378,7 +438,7 @@ export async function confirmLearningTurnMastery(
     .slice(0, 40)
     .map(toLessonWritebackCandidate);
   if (candidates.length === 0) {
-    return { summary: "No learning items to write back.", applied: 0 };
+    return { summary: "No learning items to write back.", signals: [] };
   }
   const idx = lessonTurns.findIndex((item) => item.id === turnId);
   const history = formatTurns(
@@ -407,22 +467,46 @@ export async function confirmLearningTurnMastery(
         key: item.key,
         label: item.label,
         type: item.type,
-        kind: "correct" as const,
         example: signal.evidence?.trim() || turn.userInput,
-        payload: {
-          lesson_writeback: {
-            lessonAgentId: agent.id,
-            lessonName: agent.name,
-            summary: result.summary,
-          },
-        },
       },
     ];
   });
+  return { summary: result.summary, signals };
+}
+
+export async function applyLearningTurnMasteryPreview(
+  conversationId: string,
+  turnId: string,
+  preview: LessonMasteryPreview,
+): Promise<{ summary: string; applied: number }> {
+  const conversation = await getConversation(conversationId);
+  if (conversation?.kind !== "learning_agent") {
+    throw new Error(
+      "Only focused-lesson sessions can confirm lesson mastery signals",
+    );
+  }
+  const agentId = conversation.learningAgentId;
+  if (!agentId)
+    throw new Error("This focused lesson has no learning agent linked");
+  const agent = await getLearningAgent(agentId);
+  if (!agent) throw new Error("Learning agent not found");
+  const turn = await getTurn(turnId);
+  if (!turn || turn.conversationId !== conversationId) {
+    throw new Error("Focused-lesson turn not found");
+  }
+  const signals = lessonPreviewToSignals(preview, agent);
   if (signals.length > 0) {
     await recordSignals(signals, turnId, "review");
   }
-  return { summary: result.summary, applied: signals.length };
+  return { summary: preview.summary, applied: signals.length };
+}
+
+export async function confirmLearningTurnMastery(
+  conversationId: string,
+  turnId: string,
+): Promise<{ summary: string; applied: number }> {
+  const preview = await previewLearningTurnMastery(conversationId, turnId);
+  return applyLearningTurnMasteryPreview(conversationId, turnId, preview);
 }
 
 export async function applyProfilePreferenceInstruction(
@@ -443,9 +527,27 @@ export async function addSelectionToLearningData(
   selection: string,
   context: string,
 ): Promise<{ key: string; label: string; type: string }> {
+  const draft = await previewSelectionLearningItem(selection, context);
+  await createSelectionLearningItem(draft);
+  return { key: draft.key, label: draft.label, type: draft.type };
+}
+
+export interface SelectionLearningItemPreview {
+  key: string;
+  label: string;
+  type: MasteryType;
+  status?: "learning" | "struggling" | "known";
+  example?: string | null;
+  notes?: string | null;
+}
+
+export async function previewSelectionLearningItem(
+  selection: string,
+  context: string,
+): Promise<SelectionLearningItemPreview> {
   const config = loadConfig();
   const provider = await getProvider();
-  const draft = provider
+  return provider
     ? await generateSelectionLearningItem(provider, {
         nativeLanguage: config.nativeLanguage,
         targetLanguage: config.targetLanguage,
@@ -454,6 +556,11 @@ export async function addSelectionToLearningData(
         existingKeys: (await getMasteryKeyHints(60)).map((h) => h.key),
       })
     : fallbackSelectionLearningItem(selection, context);
+}
+
+export async function createSelectionLearningItem(
+  draft: SelectionLearningItemPreview,
+): Promise<{ key: string; label: string; type: string }> {
   await createManualMasteryItem(draft);
   return { key: draft.key, label: draft.label, type: draft.type };
 }

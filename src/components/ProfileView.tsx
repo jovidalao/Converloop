@@ -37,6 +37,7 @@ import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
 
 type Owner = "user" | "shared" | "ai";
+type ProfileDiffItem = { title: string; before: string; after: string };
 
 // Section title → ownership. Ownership determines badge, hint, and editability (ai = read-only).
 const SECTION_META: Record<string, { key: string; owner: Owner }> = {
@@ -87,6 +88,20 @@ function isEffectivelyEmpty(body: string): boolean {
 
 function normalizeProfileMd(md: string): string {
   return serializeProfile(ensureSections(parseProfile(md)));
+}
+
+function profileDiff(beforeMd: string, afterMd: string): ProfileDiffItem[] {
+  const before = ensureSections(parseProfile(beforeMd)).sections;
+  const after = ensureSections(parseProfile(afterMd)).sections;
+  const beforeMap = new Map(before.map((section) => [section.title, section]));
+  return after.flatMap((section) => {
+    const prev = beforeMap.get(section.title);
+    const beforeBody = prev ? displayBody(prev) : "";
+    const afterBody = displayBody(section);
+    return beforeBody === afterBody
+      ? []
+      : [{ title: section.title, before: beforeBody, after: afterBody }];
+  });
 }
 
 // Cold-start nudge: shown only while "About me" is still empty. The maintainer
@@ -310,10 +325,12 @@ function ProfileActions({
   busy,
   canUndo,
   status,
+  diff,
   onSave,
   onRefresh,
   onUndo,
   onToggleRaw,
+  onDismissDiff,
 }: {
   raw: boolean;
   dirty: boolean;
@@ -321,10 +338,12 @@ function ProfileActions({
   busy: boolean;
   canUndo: boolean;
   status: string | null;
+  diff: ProfileDiffItem[] | null;
   onSave: () => void;
   onRefresh: () => void;
   onUndo: () => void;
   onToggleRaw: () => void;
+  onDismissDiff: () => void;
 }) {
   const { t } = useTranslation();
   return (
@@ -391,6 +410,49 @@ function ProfileActions({
           {status}
         </p>
       )}
+      {diff && diff.length > 0 && (
+        <div className="mt-3 rounded-md border bg-background px-3 py-2">
+          <div className="text-ui-body font-medium">
+            {t("profile.refreshDiffTitle")}
+          </div>
+          <div className="mt-2 grid max-h-80 gap-2 overflow-y-auto">
+            {diff.map((item) => (
+              <div key={item.title} className="rounded bg-muted px-2 py-2">
+                <div className="text-ui-caption font-medium text-foreground">
+                  {sectionLabel(item.title, t)}
+                </div>
+                <div className="mt-1 grid gap-1 text-ui-caption leading-snug md:grid-cols-2">
+                  <div>
+                    <div className="mb-0.5 text-ui-muted">
+                      {t("profile.refreshDiffBefore")}
+                    </div>
+                    <div className="line-clamp-5 whitespace-pre-wrap text-foreground">
+                      {item.before || t("profile.emptySection")}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="mb-0.5 text-ui-muted">
+                      {t("profile.refreshDiffAfter")}
+                    </div>
+                    <div className="line-clamp-5 whitespace-pre-wrap text-foreground">
+                      {item.after || t("profile.emptySection")}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="mt-2"
+            onClick={onDismissDiff}
+          >
+            {t("profile.refreshDiffDismiss")}
+          </Button>
+        </div>
+      )}
     </section>
   );
 }
@@ -407,6 +469,9 @@ export function ProfileView() {
   const [smartDraft, setSmartDraft] = useState("");
   const [smartBusy, setSmartBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+  const [refreshDiff, setRefreshDiff] = useState<ProfileDiffItem[] | null>(
+    null,
+  );
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
 
@@ -581,6 +646,7 @@ export function ProfileView() {
     if (!loaded) return;
     await writeProfile(currentMd);
     setSavedMd(currentMd);
+    setRefreshDiff(null);
     setStatus(t("profile.savedStatus"));
   }
 
@@ -594,6 +660,7 @@ export function ProfileView() {
       await snapshotProfile();
       const r = await runMaintainerNow();
       if (r.written && r.profile) {
+        const diff = profileDiff(currentMd, r.profile);
         if (raw) {
           setRawText(r.profile);
           setSavedMd(r.profile);
@@ -601,6 +668,7 @@ export function ProfileView() {
           load(r.profile);
         }
         setCanUndo(true);
+        setRefreshDiff(diff);
         setStatus(t("profile.refreshedStatus"));
       } else {
         setStatus(t("profile.refreshNotUpdated", { reason: r.reason ?? "" }));
@@ -629,6 +697,7 @@ export function ProfileView() {
       load(restored);
     }
     setCanUndo(false);
+    setRefreshDiff(null);
     setStatus(t("profile.undoneStatus"));
   }
 
@@ -685,10 +754,12 @@ export function ProfileView() {
               busy={busy}
               canUndo={canUndo}
               status={status}
+              diff={refreshDiff}
               onSave={() => void save()}
               onRefresh={() => void refresh()}
               onUndo={() => void undo()}
               onToggleRaw={toggleRaw}
+              onDismissDiff={() => setRefreshDiff(null)}
             />
           </div>
         ) : (
@@ -743,10 +814,12 @@ export function ProfileView() {
                 busy={busy}
                 canUndo={canUndo}
                 status={status}
+                diff={refreshDiff}
                 onSave={() => void save()}
                 onRefresh={() => void refresh()}
                 onUndo={() => void undo()}
                 onToggleRaw={toggleRaw}
+                onDismissDiff={() => setRefreshDiff(null)}
               />
             </aside>
           </div>

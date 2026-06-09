@@ -45,6 +45,9 @@ export const en = {
     speaking: "Reading the selected text",
     selectTextHint: "Please select content that contains text or numbers",
     added: "Added to learning data: {label}",
+    previewTitle: "Preview learning item",
+    confirmAdd: "Add item",
+    saving: "Saving…",
   },
   corrections: {
     category: {
@@ -139,6 +142,7 @@ export const en = {
         "Once a reply comes in, this shows a few ready-to-borrow ways to keep the conversation going.",
       regenerate: "Regenerate",
       regenerating: "Regenerating…",
+      use: "Use this opener",
     },
   },
   logs: {
@@ -176,6 +180,12 @@ export const en = {
     planning: "Planning…",
     generateProject: "Generate project",
     existingProjects: "Existing learning projects",
+    nextActions: "Next actions",
+    generatedLessons: "Generated lessons: {lessons}",
+    statusActive: "Active",
+    statusCompleted: "Completed",
+    statusArchived: "Archived",
+    projectStatusUpdated: "Project status updated.",
     packageSection: "Import / export lessons",
     packageNote:
       "A share package only contains the prompt, permissions, and lesson structure — not your learning data, conversation history, or keys.",
@@ -185,6 +195,11 @@ export const en = {
     packageSummary: "{summary} · Reads: {reads} · Writes: {writes}",
     importing: "Importing…",
     importPackage: "Import package",
+    importConfirmTitle: 'Import "{name}"?',
+    importConfirmDesc:
+      "{summary}. Runtime skills are imported disabled by default; lessons are available after import.",
+    importEnabled: "Enabled after import",
+    importDisabled: "Imported disabled by default",
     nlCreate: "Create from natural language",
     lessonPlaceholder:
       "e.g. Create a teacher that drills business email openings and closings, generating exercises from my expression gaps.",
@@ -207,7 +222,8 @@ export const en = {
     dictationTooltip:
       "Dictation drill: listen to a sentence and type exactly what you hear",
     customLearning: "Custom learning",
-    customLearningTooltip: "Browse focused lessons and start one in a click",
+    customLearningTooltip:
+      "Browse focused lessons and preview one before starting",
     recent: "Recent",
     noConversations: "No conversations yet",
     settings: "Settings",
@@ -263,9 +279,11 @@ export const en = {
   customLearning: {
     title: "Custom learning",
     description:
-      "Pick a focused lesson to start it right away — each opens a new teacher-style conversation built around your data.",
+      "Pick a focused lesson to preview it before starting — each opens a new teacher-style conversation built around your data.",
     manage: "Create / manage",
     empty: "No lessons yet. Create one from the button above.",
+    previewHint: "Review this lesson before starting a new session.",
+    startLesson: "Start lesson",
   },
   commandPalette: {
     ariaLabel: "Quick jump",
@@ -555,6 +573,10 @@ export const en = {
       "Re-edit from here: edit this message, discarding what follows",
     masteryWritten: "Wrote {n} mastery evidence item(s).",
     recordMastery: "Record this lesson answer as mastery evidence",
+    masteryPreviewTitle: "Mastery evidence preview",
+    masteryPreviewApply: "Write evidence",
+    compactFeedback: "{n} feedback item(s) ready in full view.",
+    compactOpenFull: "View",
     regenerateReply: "Regenerate reply",
     bilingualTitle: "Target / native language sentence by sentence",
     bilingualReading: "Bilingual reading",
@@ -651,6 +673,9 @@ export const en = {
       "The system converts the request to a limited set of data operations before code executes it; it does not directly modify counts.",
     processing: "Processing…",
     apply: "Apply",
+    preview: "Preview",
+    previewTitle: "Preview changes",
+    applyPreview: "Apply preview",
     applied: "{summary} Applied {n} item(s).{skipped}",
     skippedSuffix: " Skipped: {items}",
   },
@@ -726,6 +751,10 @@ export const en = {
     refreshedStatus: "✓ Profile updated (passed sanity check).",
     refreshNotUpdated: "Not updated: {reason}",
     refreshFailed: "Refresh failed: {error}",
+    refreshDiffTitle: "AI refresh changes",
+    refreshDiffBefore: "Before",
+    refreshDiffAfter: "After",
+    refreshDiffDismiss: "Looks good",
     noUndoVersion: "No version to restore.",
     undoneStatus: "✓ Restored to the version before AI refresh.",
   },
@@ -793,6 +822,11 @@ export const en = {
     packagePlaceholder:
       "Paste lang-agent.package JSON; old lang-agent.agent-package is also compatible. Exported packages appear here.",
     importPackage: "Import package",
+    importConfirmTitle: 'Import "{name}"?',
+    importConfirmDesc:
+      "{summary}. Runtime skills are imported disabled by default; lessons are available after import.",
+    importEnabled: "Enabled after import",
+    importDisabled: "Imported disabled by default",
     importedPackage:
       "Package imported: {skills} skill(s), {lessons} lesson(s).",
     logsLink: 'Run logs have moved to "Settings → Logs"',

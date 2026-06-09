@@ -22,12 +22,15 @@ import {
 import {
   type LearningProject,
   listLearningProjects,
+  updateLearningProject,
 } from "../db/learning-projects";
 import {
   createCustomLearningAgentFromDescription,
   createLearningProjectFromGoal,
   MissingApiKeyError,
 } from "../orchestrator";
+import { useConfirm } from "./confirm";
+import { Markdown } from "./Markdown";
 import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
 
@@ -39,8 +42,39 @@ function scopeName(scope: LearningDataScope): string {
   return DATA_SCOPE_LABELS[scope].split(":")[0];
 }
 
+function parseProjectPlan(project: LearningProject): {
+  nextActions: string[];
+  lessonNames: string[];
+} {
+  try {
+    const raw = project.taskPlanJson ? JSON.parse(project.taskPlanJson) : null;
+    if (!raw || typeof raw !== "object") {
+      return { nextActions: [], lessonNames: [] };
+    }
+    const obj = raw as Record<string, unknown>;
+    const nextActions = Array.isArray(obj.next_actions)
+      ? obj.next_actions.filter(
+          (item): item is string => typeof item === "string",
+        )
+      : [];
+    const lessonNames = Array.isArray(obj.suggested_lessons)
+      ? obj.suggested_lessons
+          .map((item) =>
+            item && typeof item === "object"
+              ? (item as Record<string, unknown>).name
+              : null,
+          )
+          .filter((item): item is string => typeof item === "string")
+      : [];
+    return { nextActions, lessonNames };
+  } catch {
+    return { nextActions: [], lessonNames: [] };
+  }
+}
+
 export function LearningAgentsView({ onRefresh }: LearningAgentsViewProps) {
   const { t } = useTranslation();
+  const confirm = useConfirm();
   const [lessonRequest, setLessonRequest] = useState("");
   const [lessonBusy, setLessonBusy] = useState(false);
   const [projectRequest, setProjectRequest] = useState("");
@@ -50,6 +84,9 @@ export function LearningAgentsView({ onRefresh }: LearningAgentsViewProps) {
   const [packageText, setPackageText] = useState("");
   const [packageBusy, setPackageBusy] = useState(false);
   const [packageOpen, setPackageOpen] = useState(false);
+  const [expandedProjectId, setExpandedProjectId] = useState<string | null>(
+    null,
+  );
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -134,13 +171,25 @@ export function LearningAgentsView({ onRefresh }: LearningAgentsViewProps) {
   }
 
   async function importPackage() {
-    if (!packageText.trim() || packageBusy) return;
+    if (!packageText.trim() || packageBusy || !packageReview) return;
+    if (
+      !(await confirm({
+        title: t("learningAgents.importConfirmTitle", {
+          name: packageReview.name,
+        }),
+        description: t("learningAgents.importConfirmDesc", {
+          summary: packageReview.itemSummary,
+        }),
+        confirmText: t("learningAgents.importPackage"),
+      }))
+    )
+      return;
     setPackageBusy(true);
     setError(null);
     setMessage(null);
     try {
       const result = await importAgentPackage(packageText, {
-        enableRuntimeAgents: true,
+        enableRuntimeAgents: false,
         enableLessons: true,
       });
       await refreshLocalItems();
@@ -155,6 +204,21 @@ export function LearningAgentsView({ onRefresh }: LearningAgentsViewProps) {
       reportError(e);
     } finally {
       setPackageBusy(false);
+    }
+  }
+
+  async function setProjectStatus(
+    project: LearningProject,
+    status: LearningProject["status"],
+  ) {
+    setError(null);
+    setMessage(null);
+    try {
+      await updateLearningProject(project.id, { status });
+      await refreshLocalItems();
+      setMessage(t("learningAgents.projectStatusUpdated"));
+    } catch (e) {
+      reportError(e);
     }
   }
 
@@ -222,19 +286,115 @@ export function LearningAgentsView({ onRefresh }: LearningAgentsViewProps) {
             {t("learningAgents.existingProjects")}
           </div>
           <div className="grid gap-2">
-            {projects.map((project) => (
-              <div key={project.id} className="text-ui-body leading-snug">
-                <div className="flex items-center gap-2">
-                  <span className="font-medium text-foreground">
-                    {project.title}
-                  </span>
-                  <span className="rounded border px-1.5 py-0.5 text-ui-caption text-ui-muted">
-                    {project.status}
-                  </span>
+            {projects.map((project) => {
+              const open = expandedProjectId === project.id;
+              const details = parseProjectPlan(project);
+              return (
+                <div
+                  key={project.id}
+                  className="rounded-md border bg-card text-ui-body leading-snug"
+                >
+                  <button
+                    type="button"
+                    className="flex w-full items-start gap-2 px-3 py-2.5 text-left"
+                    onClick={() =>
+                      setExpandedProjectId(open ? null : project.id)
+                    }
+                  >
+                    <ChevronDownIcon
+                      size={15}
+                      className={open ? "mt-0.5 rotate-180" : "mt-0.5"}
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-2">
+                        <span className="font-medium text-foreground">
+                          {project.title}
+                        </span>
+                        <span className="rounded border px-1.5 py-0.5 text-ui-caption text-ui-muted">
+                          {project.status}
+                        </span>
+                      </span>
+                      <span className="mt-1 block text-ui-muted">
+                        {project.goal}
+                      </span>
+                    </span>
+                  </button>
+                  {open && (
+                    <div className="border-t px-3 py-3">
+                      {details.nextActions.length > 0 && (
+                        <div className="mb-3">
+                          <div className="mb-1 text-ui-caption font-medium text-ui-muted">
+                            {t("learningAgents.nextActions")}
+                          </div>
+                          <ul className="m-0 grid gap-1 pl-4 text-ui-body text-foreground">
+                            {details.nextActions.map((item) => (
+                              <li key={item}>{item}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {details.lessonNames.length > 0 && (
+                        <div className="mb-3 text-ui-caption text-ui-muted">
+                          {t("learningAgents.generatedLessons", {
+                            lessons: details.lessonNames.join(", "),
+                          })}
+                        </div>
+                      )}
+                      <div className="rounded-md bg-background px-3 py-2 text-ui-body leading-relaxed">
+                        <Markdown>{project.planMd}</Markdown>
+                      </div>
+                      {project.notesMd && (
+                        <div className="mt-2 rounded-md bg-muted px-3 py-2 text-ui-caption leading-relaxed text-ui-muted">
+                          <Markdown>{project.notesMd}</Markdown>
+                        </div>
+                      )}
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          variant={
+                            project.status === "active" ? "secondary" : "ghost"
+                          }
+                          size="sm"
+                          onClick={() =>
+                            void setProjectStatus(project, "active")
+                          }
+                        >
+                          {t("learningAgents.statusActive")}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant={
+                            project.status === "completed"
+                              ? "secondary"
+                              : "ghost"
+                          }
+                          size="sm"
+                          onClick={() =>
+                            void setProjectStatus(project, "completed")
+                          }
+                        >
+                          {t("learningAgents.statusCompleted")}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant={
+                            project.status === "archived"
+                              ? "secondary"
+                              : "ghost"
+                          }
+                          size="sm"
+                          onClick={() =>
+                            void setProjectStatus(project, "archived")
+                          }
+                        >
+                          {t("learningAgents.statusArchived")}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <div className="mt-1 text-ui-muted">{project.goal}</div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -299,6 +459,33 @@ export function LearningAgentsView({ onRefresh }: LearningAgentsViewProps) {
                     reads: packageReview.reads,
                     writes: packageReview.writes,
                   })}
+                </div>
+                <div className="mt-2 grid gap-1">
+                  {packageReview.items.map((item, i) => (
+                    <div
+                      key={`${item.type}:${item.name}:${i}`}
+                      className="rounded border bg-background px-2 py-1.5"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="truncate font-medium">
+                          {item.name}
+                        </span>
+                        <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-ui-caption text-ui-muted">
+                          {item.type}
+                        </span>
+                      </div>
+                      <div className="mt-0.5 line-clamp-2 text-ui-muted">
+                        {item.description}
+                      </div>
+                      <div className="mt-1 text-ui-muted">
+                        {item.enabledByDefault
+                          ? t("learningAgents.importEnabled")
+                          : t("learningAgents.importDisabled")}
+                        {" · "}
+                        {item.reads}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
