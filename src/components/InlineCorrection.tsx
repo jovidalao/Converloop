@@ -5,7 +5,7 @@ import {
   LanguagesIcon,
   SparklesIcon,
 } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import type { Dispatch, ReactNode, SetStateAction } from "react";
 import { useTranslation } from "@/i18n";
 import { cn } from "@/lib/utils";
 import type { Issue, TutorAnalysis } from "../agents/schema";
@@ -158,6 +158,16 @@ export function buildWholeSentenceDiff(
   return segments;
 }
 
+export function hasCorrectedSentenceChange(
+  text: string,
+  analysis: TutorAnalysis | null,
+): boolean {
+  if (!analysis || analysis.expression_gap || analysis.issues.length > 0)
+    return false;
+  const corrected = analysis.corrected?.trim();
+  return !!corrected && !analysis.is_correct && corrected !== text.trim();
+}
+
 // Renders diff segments as inline red strikethrough + green correction. del/ins
 // are rendered conditionally so pure insertions/deletions (only in the
 // whole-sentence fallback) don't leave an empty strikethrough or stray space.
@@ -247,6 +257,10 @@ export function InlineCorrection({
   pending,
   error,
   leading,
+  activePanelId,
+  setActivePanelId,
+  panelIds,
+  correction,
   natural,
 }: {
   analysis: TutorAnalysis | null;
@@ -256,19 +270,31 @@ export function InlineCorrection({
   // Other actions rendered earlier on the same row (copy / play), to the left of
   // the toggle buttons.
   leading?: ReactNode;
+  activePanelId: string | null;
+  setActivePanelId: Dispatch<SetStateAction<string | null>>;
+  panelIds: {
+    gap?: string;
+    grammar?: string;
+  };
+  // Whole-sentence correction fallback: the bubble already shows an inline diff,
+  // but the action row still needs a concrete correction affordance instead of
+  // falling through to "no changes".
+  correction?: { text: string; open: boolean; onToggle: () => void };
   // "Natural expression" toggle: the content shows inside the user's bubble (see
   // ChatView); here we only provide the toggle button.
   natural?: { open: boolean; onToggle: () => void };
 }) {
   const { t } = useTranslation();
   const { actionLabels } = useConfig();
-  // Explanation expanded by default, grammar details collapsed by default; each
-  // icon toggles its own.
-  const [gapOpen, setGapOpen] = useState(true);
-  const [grammarOpen, setGrammarOpen] = useState(false);
 
   const gap = analysis?.expression_gap ?? null;
   const hasIssues = !!analysis && analysis.issues.length > 0;
+  const gapOpen = !!panelIds.gap && activePanelId === panelIds.gap;
+  const grammarOpen = !!panelIds.grammar && activePanelId === panelIds.grammar;
+  const togglePanel = (panelId: string | undefined) => {
+    if (!panelId) return;
+    setActivePanelId((current) => (current === panelId ? null : panelId));
+  };
   const allCorrect = !!analysis && !gap && analysis.is_correct && !hasIssues;
   const showPending = pending && !analysis && !proseFeedback;
   const showProse = !analysis && !!proseFeedback?.trim();
@@ -281,6 +307,7 @@ export function InlineCorrection({
     !allCorrect &&
     !gap &&
     !hasIssues &&
+    !correction &&
     !natural &&
     !showProse &&
     !error;
@@ -323,10 +350,24 @@ export function InlineCorrection({
             data-active={gapOpen}
             aria-expanded={gapOpen}
             title={t("corrections.explain")}
-            onClick={() => setGapOpen((v) => !v)}
+            onClick={() => togglePanel(panelIds.gap)}
           >
             <LanguagesIcon />
             {actionLabels && <span>{t("corrections.explain")}</span>}
+          </Button>
+        )}
+        {correction && (
+          <Button
+            type="button"
+            variant="action"
+            size="action"
+            data-active={correction.open}
+            aria-expanded={correction.open}
+            title={t("corrections.languageCorrection")}
+            onClick={correction.onToggle}
+          >
+            <BookOpenIcon />
+            {actionLabels && <span>{t("corrections.languageCorrection")}</span>}
           </Button>
         )}
         {natural && (
@@ -351,7 +392,7 @@ export function InlineCorrection({
             data-active={grammarOpen}
             aria-expanded={grammarOpen}
             title={t("corrections.grammarDetails")}
-            onClick={() => setGrammarOpen((v) => !v)}
+            onClick={() => togglePanel(panelIds.grammar)}
           >
             <BookOpenIcon />
             {actionLabels && <span>{t("corrections.grammarDetails")}</span>}
@@ -417,6 +458,15 @@ export function InlineCorrection({
               {gap.usage_note.trim()}
             </p>
           )}
+        </div>
+      )}
+
+      {correction?.open && (
+        <div className="flex w-full animate-in flex-col gap-1.5 rounded-lg border bg-card p-3 text-ui-body shadow-sm fade-in-0 slide-in-from-bottom-1 duration-200">
+          <span className="text-ui-caption font-semibold uppercase tracking-wide text-ui-muted">
+            {t("corrections.correctedSentence")}
+          </span>
+          <SpeakableText text={correction.text} />
         </div>
       )}
 

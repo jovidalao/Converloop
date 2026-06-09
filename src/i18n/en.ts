@@ -70,6 +70,8 @@ export const en = {
     noChanges: "No corrections needed",
     unavailable: "Correction unavailable",
     explain: "Explain",
+    languageCorrection: "Language correction",
+    correctedSentence: "Corrected sentence",
     naturalExpression: "Natural expression",
     expressionTemplate: "Reusable pattern",
     grammarDetails: "Grammar details",

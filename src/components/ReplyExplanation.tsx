@@ -1,5 +1,12 @@
 import { BookOpenIcon, RefreshCwIcon } from "lucide-react";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import {
+  type Dispatch,
+  type ReactNode,
+  type SetStateAction,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { useTranslation } from "@/i18n";
 import { useConfig } from "../config";
 import { explainReply, MissingApiKeyError } from "../orchestrator";
@@ -9,11 +16,14 @@ import { Button } from "./ui/button";
 import { Spinner } from "./ui/spinner";
 
 // The "Explain" button: one click streams an explanation of this reply tailored
-// to what the user has mastered. State stays inside the component (transient, not
-// persisted) — clicking again collapses/expands, and an already-generated
-// explanation is reused. `actions`: other actions rendered earlier on the same
-// row (copy / pronounce).
+// to what the user has mastered. Generated content stays inside the component
+// (transient, not persisted), while expanded/collapsed state is coordinated by
+// ChatView so only one chat panel is open at a time. `actions`: other actions
+// rendered earlier on the same row (copy / pronounce).
 export function ReplyExplanation({
+  panelId,
+  activePanelId,
+  setActivePanelId,
   text,
   actions,
   trailingActions,
@@ -21,6 +31,9 @@ export function ReplyExplanation({
   onFirstOpen,
   onLayoutChange,
 }: {
+  panelId: string;
+  activePanelId: string | null;
+  setActivePanelId: Dispatch<SetStateAction<string | null>>;
   text: string;
   actions?: ReactNode;
   trailingActions?: ReactNode;
@@ -34,21 +47,21 @@ export function ReplyExplanation({
 }) {
   const { t } = useTranslation();
   const { actionLabels } = useConfig();
-  const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [explanation, setExplanation] = useState("");
   const [error, setError] = useState<string | null>(null);
   const prevTextRef = useRef(text);
+  const open = activePanelId === panelId;
 
   // Once the reply is replaced by a "regenerate", the old explanation no longer
   // matches, so collapse and reset.
   useEffect(() => {
     if (prevTextRef.current === text) return;
     prevTextRef.current = text;
-    setOpen(false);
+    setActivePanelId((current) => (current === panelId ? null : current));
     setExplanation("");
     setError(null);
-  }, [text]);
+  }, [panelId, setActivePanelId, text]);
 
   useEffect(() => {
     if (open || loading || explanation || error) onLayoutChange?.();
@@ -80,12 +93,12 @@ export function ReplyExplanation({
   function handleClick() {
     if (loading) return;
     if (!explanation && !error) {
-      setOpen(true);
+      setActivePanelId(panelId);
       onFirstOpen?.(); // user actively requested an explanation → struggling-to-understand signal
       void generate();
       return;
     }
-    setOpen((o) => !o);
+    setActivePanelId((current) => (current === panelId ? null : panelId));
   }
 
   const expanded = open && (explanation || error);

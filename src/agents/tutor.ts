@@ -157,6 +157,10 @@ A) ERRORS — the user DID produce ${ctx.targetLanguage} but got it wrong.
   present.
 - For each error give the smallest wrong span, its fix, and a short explanation
   IN ${ctx.nativeLanguage}.
+- If "corrected" changes the user's original message beyond ignored
+  formatting/transcription artifacts, issues[] MUST contain at least one issue
+  explaining the substantive change. Never set is_correct=false with issues=[]
+  unless expression_gap explains the missing native/mixed-language part.
 - Use a consistent lowercase snake_case mastery_key per recurring problem type
   (e.g. "grammar:article_usage"). Same problem ⇒ same key, every time. Reuse the
   keys already present in the weak list below whenever they apply.
@@ -168,10 +172,16 @@ A) ERRORS — the user DID produce ${ctx.targetLanguage} but got it wrong.
   "corrected"). The user's message is a reply in the conversation above, so read
   the partner's most recent line in RECENT CONVERSATION and make "natural" flow
   as a natural response to it (right register, connectives, and references to
-  what the partner just said) — not just a sentence fixed in isolation.
+  what the partner just said) — not just a sentence fixed in isolation. When a
+  more idiomatic or context-fitting alternative exists, make "natural" a
+  distinct alternative; copy "corrected" only when it is already the most natural
+  phrasing.
 
 B) EXPRESSION GAP — the message is wholly or partly in ${ctx.nativeLanguage}, or the
-   user signals they don't know how to say something. Do NOT grammar-correct
+   user explicitly signals they don't know how to say something. Do NOT use
+   expression_gap for a message that is already composed in ${ctx.targetLanguage}
+   but is awkward, unclear, or grammatically wrong; handle that under ERRORS.
+   Do NOT grammar-correct
    ${ctx.nativeLanguage}; instead TEACH how to build the sentence. Set "expression_gap"
    (leave it null otherwise) with:
    - original: the user's message verbatim (the thing they couldn't say).
@@ -191,7 +201,8 @@ B) EXPRESSION GAP — the message is wholly or partly in ${ctx.nativeLanguage}, 
 
 BOOKKEEPING (mastery_updates)
 - Do NOT list the user's errors here (they come from issues) and do NOT list
-  expression_gap key_items here (handled separately). Only:
+  expression_gap key_items here (handled separately). Look ONLY at the latest
+  user message, not previous turns or the partner's reply. Only:
   - "correct": user correctly used something from their weak list / notable.
     This INCLUDES "gap:" items: if the user now produces, in ${ctx.targetLanguage}
     and unaided, an expression matching a "gap:" key in the weak list, emit a
@@ -327,6 +338,136 @@ function applyCorrectionPreferences(
   };
 }
 
+type ScriptName = "latin" | "han" | "kana" | "hangul" | "cyrillic";
+
+const SCRIPT_PATTERNS: Record<ScriptName, string> = {
+  latin: "\\p{Script=Latin}",
+  han: "\\p{Script=Han}",
+  kana: "[\\p{Script=Hiragana}\\p{Script=Katakana}]",
+  hangul: "\\p{Script=Hangul}",
+  cyrillic: "\\p{Script=Cyrillic}",
+};
+
+function scriptsForLanguage(language: string): ScriptName[] | null {
+  const l = language.toLocaleLowerCase();
+  if (/(chinese|mandarin|中文|汉语|漢語)/i.test(l)) return ["han"];
+  if (/(japanese|日本|日语|日語)/i.test(l)) return ["kana", "han"];
+  if (/(korean|한국|韩语|韓語|朝鲜语)/i.test(l)) return ["hangul"];
+  if (/(russian|русский|俄语|俄語)/i.test(l)) return ["cyrillic"];
+  if (
+    /(english|spanish|french|german|portuguese|italian|英语|英語|西班牙|法语|法語|德语|德語|葡萄牙|意大利)/i.test(
+      l,
+    )
+  )
+    return ["latin"];
+  return null;
+}
+
+function scriptsOverlap(a: ScriptName[], b: ScriptName[]): boolean {
+  return a.some((script) => b.includes(script));
+}
+
+function countScripts(text: string, scripts: ScriptName[]): number {
+  return scripts.reduce((sum, script) => {
+    const re = new RegExp(SCRIPT_PATTERNS[script], "gu");
+    return sum + (text.match(re)?.length ?? 0);
+  }, 0);
+}
+
+function hasExplicitGapCue(text: string): boolean {
+  return /(\bhow (do|can|would) i say\b|\bhow to (say|express)\b|\bwhat'?s the word for\b|\bi don'?t know how to say\b|怎么说|如何表达|不会说|不知道.*说|用.+怎么说)/iu.test(
+    text,
+  );
+}
+
+function likelyContainsNativeFallback(ctx: TutorContext): boolean {
+  if (hasExplicitGapCue(ctx.userInput)) return true;
+  const nativeScripts = scriptsForLanguage(ctx.nativeLanguage);
+  const targetScripts = scriptsForLanguage(ctx.targetLanguage);
+  if (!nativeScripts || !targetScripts) return true;
+  if (scriptsOverlap(nativeScripts, targetScripts)) return true;
+  return countScripts(ctx.userInput, nativeScripts) > 0;
+}
+
+function textDiffersAfterPreferences(
+  a: string | undefined,
+  b: string | undefined,
+  ctx: Pick<
+    TutorContext,
+    "ignoreCapitalizationIssues" | "ignorePunctuationIssues"
+  >,
+): boolean {
+  const left = normalizeIgnoredText(a ?? "", ctx);
+  const right = normalizeIgnoredText(b ?? "", ctx);
+  return !!left && !!right && left !== right;
+}
+
+function sanitizeExpressionGap(
+  analysis: TutorAnalysis,
+  ctx: TutorContext,
+): TutorAnalysis {
+  const gap = analysis.expression_gap;
+  if (!gap || likelyContainsNativeFallback(ctx)) return analysis;
+
+  const target = gap.target_expression?.trim();
+  const user = ctx.userInput.trim();
+  const corrected = analysis.corrected?.trim();
+  const natural = analysis.natural?.trim();
+  const correctedLooksOriginal =
+    !corrected || !textDiffersAfterPreferences(corrected, user, ctx);
+  const naturalLooksOriginal =
+    !natural || !textDiffersAfterPreferences(natural, user, ctx);
+  const nextCorrected =
+    correctedLooksOriginal && target ? target : analysis.corrected;
+  const nextNatural =
+    naturalLooksOriginal && target ? target : analysis.natural;
+  const hasCorrection =
+    analysis.issues.length > 0 ||
+    textDiffersAfterPreferences(nextCorrected, user, ctx);
+
+  console.warn(
+    "Tutor emitted expression_gap for a message without native-language script; treating it as target-language correction",
+  );
+  return {
+    ...analysis,
+    is_correct: hasCorrection ? false : analysis.is_correct,
+    corrected: nextCorrected,
+    natural: nextNatural,
+    expression_gap: null,
+  };
+}
+
+function contractViolation(
+  analysis: TutorAnalysis,
+  ctx: TutorContext,
+): string | null {
+  if (analysis.expression_gap) return null;
+  if (
+    !analysis.is_correct &&
+    analysis.issues.length === 0 &&
+    textDiffersAfterPreferences(analysis.corrected, ctx.userInput, ctx)
+  ) {
+    return "corrected differs from the user input, but issues[] is empty";
+  }
+  return null;
+}
+
+function neutralizeUnsafeMasteryUpdates(
+  analysis: TutorAnalysis,
+  ctx: TutorContext,
+): TutorAnalysis {
+  return contractViolation(analysis, ctx)
+    ? { ...analysis, mastery_updates: [] }
+    : analysis;
+}
+
+function finalizeTutorAnalysis(
+  analysis: TutorAnalysis,
+  ctx: TutorContext,
+): TutorAnalysis {
+  return sanitizeExpressionGap(analysis, ctx);
+}
+
 function parseTutorRaw(raw: string, ctx: TutorContext): TutorParseResult {
   const parsedJson = parseLLMJson(raw);
   if (!parsedJson.ok) {
@@ -339,7 +480,12 @@ function parseTutorRaw(raw: string, ctx: TutorContext): TutorParseResult {
   const normalized = normalizeTutorPayload(parsedJson.value);
   const validated = TutorAnalysis.safeParse(normalized);
   if (validated.success) {
-    return { analysis: applyCorrectionPreferences(validated.data, ctx) };
+    return {
+      analysis: finalizeTutorAnalysis(
+        applyCorrectionPreferences(validated.data, ctx),
+        ctx,
+      ),
+    };
   }
 
   return {
@@ -597,6 +743,74 @@ export async function analyze(
     );
     const structured = parseTutorRaw(structuredResult.raw, ctx);
     if (structured.analysis) {
+      const violation = contractViolation(structured.analysis, ctx);
+      if (violation) {
+        diagnosticAttempts.push({
+          label: "initial json_schema",
+          failure: `contract: ${violation}`,
+          raw: structuredResult.raw,
+          finish: structuredResult.finish?.raw,
+        });
+        console.warn(
+          "Tutor structured response violated contract, trying JSON repair:",
+          violation,
+          "raw:",
+          structuredResult.raw.slice(0, 400),
+        );
+        try {
+          const repairedResult = await requestRepairedTutorRaw(
+            provider,
+            ctx,
+            structuredResult.raw,
+            `Contract violation: ${violation}. Re-analyze the latest user message and include issues[] for every substantive corrected change.`,
+          );
+          const repaired = parseTutorRaw(repairedResult.raw, ctx);
+          if (repaired.analysis) {
+            const repairViolation = contractViolation(repaired.analysis, ctx);
+            if (!repairViolation) {
+              recordTutorOutcome("structured");
+              return repaired;
+            }
+            diagnosticAttempts.push({
+              label: "repair json_schema",
+              failure: `contract: ${repairViolation}`,
+              raw: repairedResult.raw,
+              finish: repairedResult.finish?.raw,
+            });
+            console.warn(
+              "Tutor JSON repair still violated contract; returning correction without mastery updates:",
+              repairViolation,
+            );
+            recordTutorOutcome("structured");
+            return {
+              analysis: neutralizeUnsafeMasteryUpdates(repaired.analysis, ctx),
+              diagnostic: formatTutorDiagnostic(diagnosticAttempts),
+            };
+          }
+          diagnosticAttempts.push({
+            label: "repair json_schema",
+            failure: parseFailureText(repaired.error),
+            raw: repairedResult.raw,
+            finish: repairedResult.finish?.raw,
+          });
+        } catch (e) {
+          diagnosticAttempts.push({
+            label: "repair json_schema",
+            failure: `request_failed: ${
+              e instanceof Error ? e.message : String(e)
+            }`,
+          });
+          console.warn(
+            "Tutor JSON repair request failed after contract violation; returning correction without mastery updates:",
+            e,
+          );
+        }
+        recordTutorOutcome("structured");
+        return {
+          analysis: neutralizeUnsafeMasteryUpdates(structured.analysis, ctx),
+          diagnostic: formatTutorDiagnostic(diagnosticAttempts),
+        };
+      }
       recordTutorOutcome("structured");
       return structured;
     }
@@ -623,6 +837,24 @@ export async function analyze(
       );
       const repaired = parseTutorRaw(repairedResult.raw, ctx);
       if (repaired.analysis) {
+        const repairViolation = contractViolation(repaired.analysis, ctx);
+        if (repairViolation) {
+          diagnosticAttempts.push({
+            label: "repair json_schema",
+            failure: `contract: ${repairViolation}`,
+            raw: repairedResult.raw,
+            finish: repairedResult.finish?.raw,
+          });
+          console.warn(
+            "Tutor JSON repair violated contract; returning correction without mastery updates:",
+            repairViolation,
+          );
+          recordTutorOutcome("structured");
+          return {
+            analysis: neutralizeUnsafeMasteryUpdates(repaired.analysis, ctx),
+            diagnostic: formatTutorDiagnostic(diagnosticAttempts),
+          };
+        }
         recordTutorOutcome("structured");
         return repaired;
       }

@@ -28,7 +28,9 @@ import {
   SparklesIcon,
 } from "lucide-react";
 import {
+  type Dispatch,
   type ReactNode,
+  type SetStateAction,
   useCallback,
   useEffect,
   useMemo,
@@ -111,7 +113,11 @@ import { AnnotationIsland } from "./AnnotationIsland";
 import { useConfirm } from "./confirm";
 import { DictationReply } from "./DictationReply";
 import { DictationStartScreen } from "./DictationStartScreen";
-import { InlineCorrection, UserSentence } from "./InlineCorrection";
+import {
+  hasCorrectedSentenceChange,
+  InlineCorrection,
+  UserSentence,
+} from "./InlineCorrection";
 import { LessonStartScreen } from "./LessonStartScreen";
 import { Markdown } from "./Markdown";
 import { NewChatStartScreen } from "./NewChatStartScreen";
@@ -163,6 +169,8 @@ interface ChatViewProps {
   /** Small-window affordance: leave compact mode to inspect full feedback. */
   onExitCompact?: () => void;
 }
+
+type ActivePanelId = string | null;
 
 const MODEL_PROVIDERS = Object.keys(PROVIDER_PRESETS) as ProviderType[];
 const CURRENT_MODEL_VALUE = "current";
@@ -418,34 +426,40 @@ function useReplySuggestion({
   conversationId,
   turnId,
   source,
+  panelId,
+  activePanelId,
+  setActivePanelId,
   resetKey,
   onLayoutChange,
 }: {
   conversationId: string;
   turnId: string;
   source: ReplySuggestionSource;
+  panelId: string;
+  activePanelId: ActivePanelId;
+  setActivePanelId: Dispatch<SetStateAction<ActivePanelId>>;
   resetKey: string;
   onLayoutChange?: () => void;
 }): ReplySuggestionControl {
   const { t } = useTranslation();
-  const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
   const requestIdRef = useRef(0);
   const previousResetKeyRef = useRef(resetKey);
+  const open = activePanelId === panelId;
 
   useEffect(() => {
     if (previousResetKeyRef.current === resetKey) return;
     previousResetKeyRef.current = resetKey;
     requestIdRef.current++;
-    setOpen(false);
+    setActivePanelId((current) => (current === panelId ? null : current));
     setLoading(false);
     setText("");
     setError(null);
     setWarning(null);
-  }, [resetKey]);
+  }, [panelId, resetKey, setActivePanelId]);
 
   useEffect(() => {
     if (open || loading || text || error || warning) onLayoutChange?.();
@@ -492,11 +506,11 @@ function useReplySuggestion({
   function toggle() {
     if (loading) return;
     if (!text && !error) {
-      setOpen(true);
+      setActivePanelId(panelId);
       void generate();
       return;
     }
-    setOpen((v) => !v);
+    setActivePanelId((current) => (current === panelId ? null : panelId));
   }
 
   return {
@@ -783,12 +797,14 @@ function LessonMasteryButton({
 
 // One AI reply: bubble (original / bilingual toggle) + action row (copy / speak / explain / bilingual).
 // Bilingual view is generated on demand and replaces the original; clicking again restores it.
-// State is local to the component and not persisted.
+// Generated bilingual/suggestion/explanation content is local; expanded state is coordinated by ChatView.
 // Key invariant: TTS always reads the original (target-language) text; SpeakButton always receives the raw text.
 function PartnerReply({
   conversationId,
   turnId,
   text,
+  activePanelId,
+  setActivePanelId,
   autoOpen = false,
   variant,
   offRecord = false,
@@ -802,6 +818,8 @@ function PartnerReply({
   conversationId: string;
   turnId: string;
   text: string;
+  activePanelId: ActivePanelId;
+  setActivePanelId: Dispatch<SetStateAction<ActivePanelId>>;
   autoOpen?: boolean;
   // Rapid-fire model answers are not part of a thread, so the "reply suggestion" (next-sentence) action is hidden.
   variant?: "quickfire";
@@ -818,19 +836,23 @@ function PartnerReply({
 }) {
   const { t } = useTranslation();
   const { actionLabels } = useConfig();
-  const [open, setOpen] = useState(false); // whether bilingual view is currently shown
   const [loading, setLoading] = useState(false);
   const [view, setView] = useState<string | null>(null); // bilingual Markdown
   const [error, setError] = useState<string | null>(null);
   const didAutoOpen = useRef(false);
   const prevTextRef = useRef(text);
+  const bilingualPanelId = `${turnId}:partner:bilingual`;
   const replySuggestion = useReplySuggestion({
     conversationId,
     turnId,
     source: "partner_reply",
+    panelId: `${turnId}:partner:suggestion`,
+    activePanelId,
+    setActivePanelId,
     resetKey: `${turnId}:${text}`,
     onLayoutChange,
   });
+  const open = activePanelId === bilingualPanelId;
   // When a transformer capability is "deleted" (hidden), its trigger button is also hidden.
   const bilingualHidden = isAgentHidden("builtin:transformer:bilingual");
   const suggestionHidden =
@@ -842,10 +864,12 @@ function PartnerReply({
   useEffect(() => {
     if (prevTextRef.current === text) return;
     prevTextRef.current = text;
-    setOpen(false);
+    setActivePanelId((current) =>
+      current === bilingualPanelId ? null : current,
+    );
     setView(null);
     setError(null);
-  }, [text]);
+  }, [bilingualPanelId, setActivePanelId, text]);
 
   async function generate() {
     setLoading(true);
@@ -869,12 +893,14 @@ function PartnerReply({
   function toggle() {
     if (loading) return;
     if (!view && !error) {
-      setOpen(true);
+      setActivePanelId(bilingualPanelId);
       onFirstBilingual?.(); // user explicitly requested bilingual → comprehension-difficulty signal
       void generate();
       return;
     }
-    setOpen((o) => !o);
+    setActivePanelId((current) =>
+      current === bilingualPanelId ? null : bilingualPanelId,
+    );
   }
 
   // When "auto-open bilingual reading" is enabled in settings, a new reply expands and generates once on mount.
@@ -882,10 +908,10 @@ function PartnerReply({
   useEffect(() => {
     if (autoOpen && !didAutoOpen.current && !bilingualHidden) {
       didAutoOpen.current = true;
-      setOpen(true);
+      setActivePanelId(bilingualPanelId);
       void generate();
     }
-  }, [autoOpen, bilingualHidden]);
+  }, [autoOpen, bilingualHidden, bilingualPanelId, setActivePanelId]);
 
   useEffect(() => {
     if (open || loading || view || error) onLayoutChange?.();
@@ -934,6 +960,9 @@ function PartnerReply({
         )}
       </div>
       <ReplyExplanation
+        panelId={`${turnId}:partner:explain`}
+        activePanelId={activePanelId}
+        setActivePanelId={setActivePanelId}
         text={text}
         onFirstOpen={onFirstExplain}
         onLayoutChange={onLayoutChange}
@@ -1079,6 +1108,8 @@ function UserTurn({
   conversationId,
   nativeLanguage,
   learningMode,
+  activePanelId,
+  setActivePanelId,
   variant,
   onEditFrom,
   onTurnAction,
@@ -1090,6 +1121,8 @@ function UserTurn({
   conversationId: string;
   nativeLanguage: string;
   learningMode: boolean;
+  activePanelId: ActivePanelId;
+  setActivePanelId: Dispatch<SetStateAction<ActivePanelId>>;
   // Practice sub-mode driving which actions apply: dictation hides reply-suggestion / "more natural" / branch
   // (you transcribe a known sentence); quickfire hides only branch. undefined = ordinary practice (all actions).
   variant?: "quickfire" | "dictation";
@@ -1103,14 +1136,29 @@ function UserTurn({
   // Dictation transcribes a fixed target sentence: there is no "more natural" rendering of the learner's attempt.
   const idiomatic =
     variant === "dictation" ? null : idiomaticText(turn.analysis);
-  const [naturalOpen, setNaturalOpen] = useState(true);
+  const suggestionPanelId = `${turn.id}:user:suggestion`;
+  const correctionPanelId = `${turn.id}:user:correction`;
+  const naturalPanelId = `${turn.id}:user:natural`;
+  const gapPanelId = `${turn.id}:user:gap`;
+  const grammarPanelId = `${turn.id}:user:grammar`;
+  const correctedSentence = hasCorrectedSentenceChange(
+    turn.userText,
+    turn.analysis,
+  )
+    ? turn.analysis!.corrected.trim()
+    : null;
   const replySuggestion = useReplySuggestion({
     conversationId,
     turnId: turn.id,
     source: "user_message",
+    panelId: suggestionPanelId,
+    activePanelId,
+    setActivePanelId,
     resetKey: `${turn.id}:${turn.userText}`,
     onLayoutChange,
   });
+  const correctionOpen = activePanelId === correctionPanelId;
+  const naturalOpen = activePanelId === naturalPanelId;
   // Off-record turn (/btw): dashed bubble + "not in context" label; no grading or correction/suggestion/branch actions.
   if (turn.excludeFromContext) {
     return (
@@ -1203,6 +1251,12 @@ function UserTurn({
         proseFeedback={turn.analysisProse}
         pending={!!turn.analysisPending}
         error={turn.analysisError}
+        activePanelId={activePanelId}
+        setActivePanelId={setActivePanelId}
+        panelIds={{
+          gap: gapPanelId,
+          grammar: grammarPanelId,
+        }}
         leading={
           <UserMessageActions
             turn={turn}
@@ -1214,9 +1268,27 @@ function UserTurn({
             showBranch={variant === undefined}
           />
         }
+        correction={
+          correctedSentence
+            ? {
+                text: correctedSentence,
+                open: correctionOpen,
+                onToggle: () =>
+                  setActivePanelId((current) =>
+                    current === correctionPanelId ? null : correctionPanelId,
+                  ),
+              }
+            : undefined
+        }
         natural={
           idiomatic
-            ? { open: naturalOpen, onToggle: () => setNaturalOpen((v) => !v) }
+            ? {
+                open: naturalOpen,
+                onToggle: () =>
+                  setActivePanelId((current) =>
+                    current === naturalPanelId ? null : naturalPanelId,
+                  ),
+              }
             : undefined
         }
       />
@@ -1374,6 +1446,7 @@ export function ChatView({
   const [turns, setTurns] = useState<ChatTurn[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState("");
+  const [activePanelId, setActivePanelId] = useState<ActivePanelId>(null);
   // Estimated prompt size (tokens) of the last turn actually sent to the model — the real context the model
   // received (system prompt + scaffolds + summary + history + input), reported by the reply agent via onContext.
   // null until the first send this session; the context meter then falls back to a bubble-only estimate.
@@ -1610,6 +1683,7 @@ export function ChatView({
   useEffect(() => {
     let cancelled = false;
     setDerivedBanner(null);
+    setActivePanelId(null);
     setQuickfireScenario(null);
     setDictationTheme(null);
     setDictationAwaitingEnter(false);
@@ -2819,6 +2893,8 @@ export function ChatView({
                 conversationId={conversationId}
                 nativeLanguage={nativeLanguage}
                 learningMode={learningMode}
+                activePanelId={activePanelId}
+                setActivePanelId={setActivePanelId}
                 variant={practiceVariant}
                 onLayoutChange={requestLayoutScroll}
                 editDisabled={analyzing}
@@ -2844,6 +2920,8 @@ export function ChatView({
                   conversationId={conversationId}
                   turnId={turn.id}
                   text={turn.partnerText}
+                  activePanelId={activePanelId}
+                  setActivePanelId={setActivePanelId}
                   variant={quickfireScenario !== null ? "quickfire" : undefined}
                   offRecord={turn.excludeFromContext}
                   autoOpen={

@@ -71,6 +71,8 @@ export const zh: Messages = {
     noChanges: "无需改动",
     unavailable: "未生成纠错",
     explain: "讲解",
+    languageCorrection: "语言纠正",
+    correctedSentence: "改正句",
     naturalExpression: "地道表达",
     expressionTemplate: "可复用句型",
     grammarDetails: "语法详解",

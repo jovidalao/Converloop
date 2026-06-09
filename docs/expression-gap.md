@@ -65,7 +65,7 @@ export const TutorAnalysis = z.object({
 
 ### 检测规则(写进 tutor prompt)
 
-tutor 在以下情况填 `expression_gap`:输入整句或部分是母语、或用户显式表示「不知道怎么说 X」。识别意图 → 给地道整句 + 可复用模板(空槽 `___`)+ 1–3 个关键词(稳定 key)+ 母语场景说明。完整 prompt(含 EXPRESSION GAP 段)在 `src/agents/tutor.ts`,改 prompt 记得同步 [tutor-agent.md](./tutor-agent.md) 契约。
+tutor 在以下情况填 `expression_gap`:输入整句或部分是母语、或用户显式表示「不知道怎么说 X」。**如果用户已经用目标语输出,只是语法不对、不地道或含义不够清楚,不要填 `expression_gap`;走普通 `issues[]` / `natural` 纠正链路。** 识别意图 → 给地道整句 + 可复用模板(空槽 `___`)+ 1–3 个关键词(稳定 key)+ 母语场景说明。完整 prompt(含 EXPRESSION GAP 段)在 `src/agents/tutor.ts`,改 prompt 记得同步 [tutor-agent.md](./tutor-agent.md) 契约。
 
 ### Rust 迁移?——不需要
 

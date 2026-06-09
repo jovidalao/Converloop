@@ -202,6 +202,104 @@ describe("analyze", () => {
     expect(system).toContain("grammar:past_tense");
   });
 
+  it("repairs structured output when corrected changes but issues are empty", async () => {
+    const calls: GenerateOptions[] = [];
+    const incomplete = JSON.stringify({
+      is_correct: false,
+      corrected: "I'd pick Silicon Valley.",
+      natural: "I'd pick Silicon Valley.",
+      issues: [],
+      mastery_updates: [
+        {
+          key: "grammar:conditionals",
+          label: "Conditionals",
+          type: "grammar",
+          signal: "introduced",
+        },
+      ],
+      expression_gap: null,
+    });
+    const repaired = JSON.stringify({
+      is_correct: false,
+      corrected: "I'd pick Silicon Valley.",
+      natural: "I'd pick Silicon Valley.",
+      issues: [
+        {
+          category: "grammar",
+          span_original: "I’ll",
+          span_corrected: "I'd",
+          explanation: "这是回答假设问题，用 would 比 will 更自然、准确。",
+          severity: "moderate",
+          mastery_key: "grammar:would_for_hypotheticals",
+          mastery_label: "用 would 回答假设问题",
+          mastery_type: "grammar",
+        },
+      ],
+      mastery_updates: [],
+      expression_gap: null,
+    });
+    const provider = stubProvider((opts, call) => {
+      calls.push(opts);
+      return call === 1 ? incomplete : repaired;
+    });
+
+    const result = await analyze(provider, {
+      ...ctx,
+      userInput: "I’ll pick Silicon Valley.",
+    });
+
+    expect(result.analysis?.issues).toHaveLength(1);
+    expect(result.analysis?.issues[0]).toMatchObject({
+      span_original: "I’ll",
+      span_corrected: "I'd",
+    });
+    expect(result.analysis?.mastery_updates).toEqual([]);
+    expect(calls).toHaveLength(2);
+    expect(calls[1].meta?.label).toBe("tutor_repair");
+  });
+
+  it("drops a spurious expression_gap for pure target-language input", async () => {
+    const provider = stubProvider(() =>
+      JSON.stringify({
+        is_correct: false,
+        corrected: "I'd like to enjoy the tech industry.",
+        natural:
+          "I'd love to enjoy both — being part of the tech industry and soaking up that creative vibe.",
+        issues: [
+          {
+            category: "grammar",
+            span_original: "Tech industry",
+            span_corrected: "the tech industry",
+            explanation: "需要加定冠词 the。",
+            severity: "moderate",
+            mastery_key: "grammar:article_usage",
+            mastery_label: "冠词 a/an/the 的用法",
+            mastery_type: "grammar",
+          },
+        ],
+        mastery_updates: [],
+        expression_gap: {
+          mastery_key: "gap:expressing_preference_in_context",
+          mastery_label: "在对话中表达偏好",
+          original: "I'd like to enjoy Tech industry",
+          target_expression:
+            "I'd love to enjoy both — being part of the tech industry and soaking up that creative vibe.",
+          explanation: "This was incorrectly classified as a gap.",
+          key_items: [],
+        },
+      }),
+    );
+
+    const result = await analyze(provider, {
+      ...ctx,
+      userInput: "I'd like to enjoy Tech industry",
+    });
+
+    expect(result.analysis?.expression_gap).toBeNull();
+    expect(result.analysis?.issues).toHaveLength(1);
+    expect(result.analysis?.natural).toContain("tech industry");
+  });
+
   it("Chinese/mixed enums from the LLM do not cause real corrections to fall back to plain text", async () => {
     const provider = stubProvider(() =>
       JSON.stringify({

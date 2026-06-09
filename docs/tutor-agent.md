@@ -110,18 +110,27 @@ FEEDBACK
   present.
 - For each error give the smallest wrong span, its fix, and a short explanation
   IN {native_language}.
+- If "corrected" changes the user's original message beyond ignored
+  formatting/transcription artifacts, issues[] MUST contain at least one issue
+  explaining the substantive change. Never set is_correct=false with issues=[]
+  unless expression_gap explains the missing native/mixed-language part.
 - Use a consistent lowercase snake_case mastery_key per recurring problem type
   (e.g. "grammar:article_usage"). Same problem ⇒ same key, every time. Reuse the
   keys already present in the weak list below whenever they apply.
 - Before inventing a new mastery_key, check recent mastery key hints. If one is
   the same underlying problem, use that exact key.
 - If the message is fully correct: is_correct=true, issues=[].
-- "natural" = a more idiomatic rendering (may equal "corrected").
+- "natural" = a more idiomatic rendering (may equal "corrected"). When a more
+  idiomatic or context-fitting alternative exists, make "natural" a distinct
+  alternative; copy "corrected" only when it is already the most natural
+  phrasing.
 
 BOOKKEEPING (mastery_updates)
 - Do NOT list the user's errors here — those come from issues.
+- Look ONLY at the latest user message, not previous turns or the partner's
+  reply.
 - Add a "correct" signal when the user correctly used something from their weak
-  list, or anything notable they got right.
+  list in the latest message, or anything notable they got right.
 - Add an "introduced" signal for any new word/structure you introduced.
 
 Return ONLY the structured object defined by the schema.

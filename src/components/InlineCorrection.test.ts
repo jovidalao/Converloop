@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { Issue } from "../agents/schema";
-import { buildDiffSegments, buildWholeSentenceDiff } from "./InlineCorrection";
+import {
+  buildDiffSegments,
+  buildWholeSentenceDiff,
+  hasCorrectedSentenceChange,
+} from "./InlineCorrection";
 
 function issue(span_original: string, span_corrected: string): Issue {
   return {
@@ -80,5 +84,33 @@ describe("buildWholeSentenceDiff", () => {
   it("has no change segment when the sentences match", () => {
     const segments = buildWholeSentenceDiff("I have a cat", "I have a cat");
     expect(segments.some((s) => s.kind === "change")).toBe(false);
+  });
+});
+
+describe("hasCorrectedSentenceChange", () => {
+  it("detects corrected-only tutor output so the action row does not show no-changes", () => {
+    expect(
+      hasCorrectedSentenceChange("I’ll pick Silicon Valley.", {
+        is_correct: false,
+        corrected: "I'd pick Silicon Valley.",
+        natural: "I'd pick Silicon Valley.",
+        issues: [],
+        mastery_updates: [],
+        expression_gap: null,
+      }),
+    ).toBe(true);
+  });
+
+  it("stays false when regular issue details are present", () => {
+    expect(
+      hasCorrectedSentenceChange("I has a cat", {
+        is_correct: false,
+        corrected: "I have a cat",
+        natural: "I have a cat",
+        issues: [issue("has", "have")],
+        mastery_updates: [],
+        expression_gap: null,
+      }),
+    ).toBe(false);
   });
 });
