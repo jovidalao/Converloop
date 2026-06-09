@@ -266,7 +266,12 @@ export function createAnthropicProvider(cfg: AnthropicConfig): ModelProvider {
         headers: authHeaders(cfg),
         body: buildAnthropicRequestBody(cfg, opts, false),
       });
-      return extractAnthropicContent(JSON.parse(text));
+      const json = JSON.parse(text) as { stop_reason?: string };
+      const content = extractAnthropicContent(json);
+      // Surface the stop reason so callers can detect max_tokens truncation (empty text on reasoning models).
+      const reason = finishReason(json.stop_reason);
+      if (reason) opts.onFinish?.(reason);
+      return content;
     },
 
     async stream(opts, onDelta) {

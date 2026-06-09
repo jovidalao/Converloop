@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import type { GenerateOptions, ModelProvider } from "../providers/types";
+import type {
+  FinishReason,
+  GenerateOptions,
+  ModelProvider,
+} from "../providers/types";
 import { analyze, type TutorContext } from "./tutor";
 
 const ctx: TutorContext = {
@@ -66,6 +70,79 @@ describe("analyze", () => {
     expect(calls[1].meta?.label).toBe("tutor_repair");
     expect(calls[1].jsonSchema?.name).toBe("TutorAnalysis");
     expect(calls[1].jsonObject).toBeUndefined();
+  });
+
+  it("recovers structured analysis via plain-text JSON when response_format returns empty", async () => {
+    const calls: GenerateOptions[] = [];
+    const provider = stubProvider((opts) => {
+      calls.push(opts);
+      // Endpoint emits empty content whenever response_format is set, but answers in plain text.
+      if (opts.jsonSchema || opts.jsonObject) return "";
+      return validAnalysis;
+    });
+
+    const result = await analyze(provider, ctx);
+
+    expect(result.analysis?.corrected).toBe("I went home yesterday.");
+    expect(result.proseFeedback).toBeUndefined();
+    // tier 1 json_schema (empty) → tier 2 json_object (empty) → tier 3 plain text (ok)
+    expect(calls).toHaveLength(3);
+    expect(calls[0].jsonSchema?.name).toBe("TutorAnalysis");
+    expect(calls[1].jsonObject).toBe(true);
+    expect(calls[2].jsonSchema).toBeUndefined();
+    expect(calls[2].jsonObject).toBeUndefined();
+  });
+
+  it("retries with a larger token budget when the model truncates on reasoning (finish_reason length)", async () => {
+    const length: FinishReason = {
+      kind: "length",
+      raw: "length",
+      provider: "openai",
+    };
+    const calls: GenerateOptions[] = [];
+    const provider: ModelProvider = {
+      async generate(opts) {
+        calls.push(opts);
+        if (calls.length === 1) {
+          opts.onFinish?.(length); // reasoning ate the budget before any answer
+          return "";
+        }
+        return validAnalysis;
+      },
+      async stream() {
+        throw new Error("not used");
+      },
+    };
+
+    const result = await analyze(provider, ctx);
+
+    expect(result.analysis?.corrected).toBe("I went home yesterday.");
+    expect(calls).toHaveLength(2);
+    expect(calls[0].maxTokens).toBe(4096);
+    expect(calls[1].maxTokens).toBe(8192);
+    expect(calls[1].jsonSchema?.name).toBe("TutorAnalysis");
+  });
+
+  it("surfaces the provider finish reason in the failure diagnostic", async () => {
+    const length: FinishReason = {
+      kind: "length",
+      raw: "length",
+      provider: "openai",
+    };
+    const provider: ModelProvider = {
+      async generate(opts) {
+        opts.onFinish?.(length);
+        return ""; // never produces content, even after the budget retry
+      },
+      async stream() {
+        throw new Error("not used");
+      },
+    };
+
+    const result = await analyze(provider, ctx);
+
+    expect(result.analysis).toBeNull();
+    expect(result.error).toContain("finish reason: length");
   });
 
   it("falls back to plain-text correction only when JSON repair also fails", async () => {

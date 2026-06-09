@@ -1,5 +1,10 @@
 import { recordTutorOutcome } from "../lib/tutor-stats";
-import type { ChatMessage, ModelProvider } from "../providers/types";
+import type {
+  ChatMessage,
+  FinishReason,
+  GenerateOptions,
+  ModelProvider,
+} from "../providers/types";
 import { appendUserInstructions } from "./custom-instructions";
 import {
   formatZodError,
@@ -347,6 +352,42 @@ function parseTutorRaw(raw: string, ctx: TutorContext): TutorParseResult {
 }
 
 const TUTOR_MAX_OUTPUT_TOKENS = 4096;
+// Reasoning models can spend the whole budget thinking before emitting any answer (finish_reason length +
+// empty text). Retry once with a larger cap so the JSON still fits after the reasoning.
+const TUTOR_RETRY_MAX_OUTPUT_TOKENS = 8192;
+
+interface TutorRawResult {
+  raw: string;
+  /** Provider finish reason for the (final) attempt; surfaced in diagnostics. */
+  finish?: FinishReason;
+}
+
+// Single generate call that captures the provider finish reason and, when the model truncated on reasoning
+// (finish_reason length) without producing text, retries once with a larger token budget.
+async function generateTutorRaw(
+  provider: ModelProvider,
+  opts: Omit<GenerateOptions, "onFinish" | "maxTokens">,
+): Promise<TutorRawResult> {
+  let finish: FinishReason | undefined;
+  const run = (maxTokens: number) => {
+    finish = undefined;
+    return provider.generate({
+      ...opts,
+      maxTokens,
+      onFinish: (reason) => {
+        finish = reason;
+      },
+    });
+  };
+  let raw = await run(TUTOR_MAX_OUTPUT_TOKENS);
+  if (!raw.trim() && finish?.kind === "length") {
+    console.warn(
+      "Tutor output truncated on reasoning (finish_reason length) with empty text; retrying with a larger token budget",
+    );
+    raw = await run(TUTOR_RETRY_MAX_OUTPUT_TOKENS);
+  }
+  return { raw, finish };
+}
 
 function fallbackMessages(
   messages: ChatMessage[],
@@ -366,18 +407,18 @@ function fallbackMessages(
 async function requestStructuredTutorRaw(
   provider: ModelProvider,
   messages: ChatMessage[],
-): Promise<string> {
+): Promise<TutorRawResult> {
   const schema = tutorJsonSchema();
-  const base = {
-    messages,
-    temperature: 0,
-    maxTokens: TUTOR_MAX_OUTPUT_TOKENS,
-    meta: { label: "tutor" },
-  } as const;
 
+  // Tier 1: native json_schema structured output.
   try {
-    const raw = await provider.generate({ ...base, jsonSchema: schema });
-    if (raw.trim()) return raw;
+    const result = await generateTutorRaw(provider, {
+      messages,
+      temperature: 0,
+      jsonSchema: schema,
+      meta: { label: "tutor" },
+    });
+    if (result.raw.trim()) return result;
     console.warn(
       "json_schema mode returned empty content, trying json_object fallback",
     );
@@ -388,12 +429,31 @@ async function requestStructuredTutorRaw(
     );
   }
 
-  return provider.generate({
+  // Tier 2: json_object mode with the schema carried in the prompt (endpoints without json_schema support).
+  try {
+    const result = await generateTutorRaw(provider, {
+      messages: fallbackMessages(messages, schema),
+      temperature: 0,
+      jsonObject: true,
+      meta: { label: "tutor_json_object" },
+    });
+    if (result.raw.trim()) return result;
+    console.warn(
+      "json_object mode returned empty content, trying plain-text JSON fallback",
+    );
+  } catch (e) {
+    console.warn(
+      "json_object mode request failed, trying plain-text JSON fallback:",
+      e,
+    );
+  }
+
+  // Tier 3: plain text, no response_format. Some endpoints (reasoning models, lax OpenAI-compatible proxies)
+  // emit empty content whenever response_format is set but answer correctly in plain text — recover the JSON here.
+  return generateTutorRaw(provider, {
     messages: fallbackMessages(messages, schema),
     temperature: 0,
-    maxTokens: TUTOR_MAX_OUTPUT_TOKENS,
-    jsonObject: true,
-    meta: { label: "tutor_json_object" },
+    meta: { label: "tutor_plaintext" },
   });
 }
 
@@ -402,7 +462,7 @@ async function requestRepairedTutorRaw(
   ctx: TutorContext,
   badOutput: string,
   parseError: string,
-): Promise<string> {
+): Promise<TutorRawResult> {
   const schema = tutorJsonSchema();
   const messages: ChatMessage[] = [
     {
@@ -453,10 +513,9 @@ ${ctx.userInput}`
 }`,
     },
   ];
-  return provider.generate({
+  return generateTutorRaw(provider, {
     messages,
     temperature: 0,
-    maxTokens: TUTOR_MAX_OUTPUT_TOKENS,
     jsonSchema: schema,
     meta: { label: "tutor_repair" },
   });
@@ -465,15 +524,15 @@ ${ctx.userInput}`
 async function requestProseFeedback(
   provider: ModelProvider,
   ctx: TutorContext,
-): Promise<string> {
+): Promise<TutorRawResult> {
   const messages: ChatMessage[] = [
     { role: "system", content: proseSystemPrompt(ctx) },
     { role: "user", content: userPrompt(ctx) },
   ];
-  return provider.generate({
+  return generateTutorRaw(provider, {
     messages,
     temperature: 0.2,
-    maxTokens: TUTOR_MAX_OUTPUT_TOKENS,
+    meta: { label: "tutor_prose" },
   });
 }
 
@@ -494,7 +553,12 @@ function rawPreview(raw: string, max = 1200): string {
 }
 
 function formatTutorDiagnostic(
-  attempts: { label: string; failure: string; raw?: string }[],
+  attempts: {
+    label: string;
+    failure: string;
+    raw?: string;
+    finish?: string;
+  }[],
 ): string {
   const lines = [
     "Structured correction degraded to plain text; mastery not written this turn.",
@@ -502,6 +566,7 @@ function formatTutorDiagnostic(
   ];
   for (const [i, attempt] of attempts.entries()) {
     lines.push(`${i + 1}. ${attempt.label}: ${attempt.failure}`);
+    if (attempt.finish) lines.push(`finish reason: ${attempt.finish}`);
     if (attempt.raw !== undefined) {
       lines.push("raw preview:");
       lines.push(rawPreview(attempt.raw));
@@ -524,9 +589,13 @@ export async function analyze(
       label: string;
       failure: string;
       raw?: string;
+      finish?: string;
     }[] = [];
-    const raw = await requestStructuredTutorRaw(provider, messages);
-    const structured = parseTutorRaw(raw, ctx);
+    const structuredResult = await requestStructuredTutorRaw(
+      provider,
+      messages,
+    );
+    const structured = parseTutorRaw(structuredResult.raw, ctx);
     if (structured.analysis) {
       recordTutorOutcome("structured");
       return structured;
@@ -534,24 +603,25 @@ export async function analyze(
     diagnosticAttempts.push({
       label: "initial json_schema",
       failure: parseFailureText(structured.error),
-      raw,
+      raw: structuredResult.raw,
+      finish: structuredResult.finish?.raw,
     });
 
     console.warn(
       "Tutor structured parse failed, enabling plain-text fallback:",
       parseFailureText(structured.error),
       "raw:",
-      raw.slice(0, 400),
+      structuredResult.raw.slice(0, 400),
     );
 
     try {
-      const repairedRaw = await requestRepairedTutorRaw(
+      const repairedResult = await requestRepairedTutorRaw(
         provider,
         ctx,
-        raw,
+        structuredResult.raw,
         parseFailureText(structured.error),
       );
-      const repaired = parseTutorRaw(repairedRaw, ctx);
+      const repaired = parseTutorRaw(repairedResult.raw, ctx);
       if (repaired.analysis) {
         recordTutorOutcome("structured");
         return repaired;
@@ -559,13 +629,14 @@ export async function analyze(
       diagnosticAttempts.push({
         label: "repair json_schema",
         failure: parseFailureText(repaired.error),
-        raw: repairedRaw,
+        raw: repairedResult.raw,
+        finish: repairedResult.finish?.raw,
       });
       console.warn(
         "Tutor JSON repair still failed, enabling plain-text fallback:",
         parseFailureText(repaired.error),
         "raw:",
-        repairedRaw.slice(0, 400),
+        repairedResult.raw.slice(0, 400),
       );
     } catch (e) {
       diagnosticAttempts.push({
@@ -578,8 +649,8 @@ export async function analyze(
       );
     }
 
-    const proseRaw = await requestProseFeedback(provider, ctx);
-    const proseFeedback = stripModelFences(proseRaw);
+    const proseResult = await requestProseFeedback(provider, ctx);
+    const proseFeedback = stripModelFences(proseResult.raw);
     if (proseFeedback.trim()) {
       recordTutorOutcome("prose"); // correction shown, but not recorded in mastery this turn
       const diagnostic = formatTutorDiagnostic(diagnosticAttempts);
@@ -592,7 +663,8 @@ export async function analyze(
       {
         label: "prose fallback",
         failure: "empty_output",
-        raw: proseRaw,
+        raw: proseResult.raw,
+        finish: proseResult.finish?.raw,
       },
     ]);
     return {

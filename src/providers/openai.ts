@@ -173,7 +173,12 @@ export function createOpenAIProvider(cfg: OpenAIConfig): ModelProvider {
         body: buildBody(cfg, opts, false),
       });
       const json = JSON.parse(text);
-      return extractOpenAIMessageContent(json);
+      const content = extractOpenAIMessageContent(json);
+      // Report the finish reason so callers can tell an empty response apart (length = reasoning ate the
+      // token budget; content_filter = blocked; stop with empty text = endpoint ignored response_format).
+      const reason = finishReason(json?.choices?.[0]?.finish_reason);
+      if (reason) opts.onFinish?.(reason);
+      return content;
     },
 
     async stream(opts, onDelta) {

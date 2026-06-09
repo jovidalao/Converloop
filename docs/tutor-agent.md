@@ -184,4 +184,6 @@ function applySignal(item, signal) {
 - **Anthropic**:把 schema 作为单个 tool 的 input_schema,强制调用
 - **Gemini**:`responseSchema`,代码把 Zod 的 nullable anyOf 转成 Gemini 的 `nullable:true`
 - 三者都用 `zod-to-json-schema` 从上面的 Zod 生成,一份 schema 多处用
+- **空响应分级回退**:拿原始文本时按 json_schema → json_object → **纯文本(不带 response_format)** 三级降级。有的端点(reasoning 模型、宽松的 OpenAI 兼容代理)一旦设了 `response_format` 就吐空 content,纯文本模式却正常 —— 第三级把 JSON 捞回来,从而仍能写 mastery,而不是降级成只给 prose
+- **预算重试**:provider 的非流式 `generate` 把 finish reason 通过 `onFinish` 上报;若空响应且 `finish_reason=length`(reasoning 烧光了 4096 预算),自动用 8192 重试一次。最终 finish reason 也会写进诊断,方便排查
 - **修复回退**:`TutorAnalysis.safeParse()` 失败后先让模型做一次 JSON repair / re-analyze;仍失败才退回纯文本批改(显示给用户,但本轮不更新 mastery),别让整轮崩掉
