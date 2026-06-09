@@ -1403,13 +1403,13 @@ export function ChatView({
     setSlashSelected((s) => (s < slashCommands.length ? s : 0));
   }, [slashCommands.length]);
 
-  // Cycle placeholder hints every 5 s when available; clean up on unmount or when hints change.
+  // Cycle placeholder hints every 10 s when available; clean up on unmount or when hints change.
   useEffect(() => {
     if (!inputHints || inputHints.length === 0) return;
     setHintIndex(0);
     hintTimerRef.current = setInterval(() => {
       setHintIndex((i) => (i + 1) % inputHints.length);
-    }, 5000);
+    }, 10_000);
     return () => {
       if (hintTimerRef.current) clearInterval(hintTimerRef.current);
     };
