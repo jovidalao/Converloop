@@ -129,6 +129,62 @@ describe("normalizeTutorPayload", () => {
     if (parsed.success) expect(parsed.data.expression_gap).toBeNull();
   });
 
+  it("parses a double-encoded JSON-string expression_gap into an object", () => {
+    // Some models stringify the whole gap object instead of nesting it; without
+    // parsing it back Zod rejects the turn (expression_gap: Expected object,
+    // received string) and the correction degrades to plain text.
+    const gap = {
+      mastery_key: "gap:expressing_agreement",
+      mastery_label: "表达赞同/附和对方",
+      original: "I think refund",
+      target_expression: "I think so too! It's a must-listen.",
+      template: "I think so too! It's ___.",
+      explanation: '附和对方时英文固定说法是 "I think so too"。',
+      key_items: [
+        {
+          text: "I think so too",
+          gloss: "我也这么认为（固定附和表达）",
+          mastery_key: "collocation:expressing_agreement",
+          mastery_label: "附和对方的固定说法",
+          mastery_type: "collocation",
+        },
+      ],
+      usage_note: "",
+    };
+    const normalized = normalizeTutorPayload({
+      is_correct: false,
+      corrected: "I think so too.",
+      natural: "I think so too — it's such a great song!",
+      issues: [],
+      mastery_updates: [],
+      expression_gap: JSON.stringify(gap),
+    });
+    const parsed = TutorAnalysis.safeParse(normalized);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.expression_gap).toMatchObject({
+        mastery_key: "gap:expressing_agreement",
+        original: "I think refund",
+      });
+      expect(parsed.data.expression_gap?.key_items[0].mastery_type).toBe(
+        "collocation",
+      );
+    }
+  });
+
+  it("leaves a non-JSON expression_gap string untouched (degrades as before)", () => {
+    const normalized = normalizeTutorPayload({
+      is_correct: false,
+      corrected: "Hi.",
+      natural: "Hi.",
+      issues: [],
+      mastery_updates: [],
+      expression_gap: "just some prose, not JSON",
+    }) as { expression_gap: unknown };
+    expect(normalized.expression_gap).toBe("just some prose, not JSON");
+    expect(TutorAnalysis.safeParse(normalized).success).toBe(false);
+  });
+
   it("handles Chinese and mixed enum labels", () => {
     const normalized = normalizeTutorPayload({
       is_correct: false,

@@ -457,6 +457,18 @@ export function normalizeTutorPayload(json: unknown): unknown {
       ))
   )
     expression_gap = null;
+  // Some models double-encode the gap as a JSON string instead of an object;
+  // parse it back so the schema (which expects an object) accepts it. If it
+  // doesn't parse to an object, leave it untouched and let schema validation
+  // trigger the existing repair/prose fallback.
+  if (typeof expression_gap === "string") {
+    try {
+      const parsed = JSON.parse(expression_gap);
+      if (isRecord(parsed)) expression_gap = parsed;
+    } catch {
+      // Not JSON; fall through unchanged.
+    }
+  }
   if (
     expression_gap &&
     typeof expression_gap === "object" &&
