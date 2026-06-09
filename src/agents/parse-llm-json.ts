@@ -324,6 +324,22 @@ function coerceBoolean(value: unknown): unknown {
   return value;
 }
 
+// Some models double-encode a nested array/object field as a JSON string (notably via forced
+// tool_use, where issues/expression_gap arrive as "[…]"/"{…}" instead of real structure). When a
+// field that should be a container arrives as a JSON-looking string, parse it back so the array/
+// object normalizers below see structure instead of silently dropping it to []. Non-JSON strings
+// pass through unchanged and let schema validation trigger the repair/prose fallback.
+function parseJsonContainerString(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("[") && !trimmed.startsWith("{")) return value;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return value;
+  }
+}
+
 function unwrapTutorPayload(json: unknown): unknown {
   if (Array.isArray(json) && json.length === 1)
     return unwrapTutorPayload(json[0]);
@@ -352,7 +368,9 @@ export function normalizeTutorPayload(json: unknown): unknown {
   if (!json || typeof json !== "object" || Array.isArray(json)) return json;
   const o = json as Record<string, unknown>;
 
-  const rawIssues = readAlias(o, ["issues", "errors", "corrections"]);
+  const rawIssues = parseJsonContainerString(
+    readAlias(o, ["issues", "errors", "corrections"]),
+  );
   const issues = Array.isArray(rawIssues)
     ? rawIssues.map((item) => {
         if (!isRecord(item)) return item;
@@ -413,13 +431,15 @@ export function normalizeTutorPayload(json: unknown): unknown {
       })
     : [];
 
-  const rawUpdates = readAlias(o, [
-    "mastery_updates",
-    "masteryUpdates",
-    "updates",
-    "mastery_signals",
-    "masterySignals",
-  ]);
+  const rawUpdates = parseJsonContainerString(
+    readAlias(o, [
+      "mastery_updates",
+      "masteryUpdates",
+      "updates",
+      "mastery_signals",
+      "masterySignals",
+    ]),
+  );
   const mastery_updates = Array.isArray(rawUpdates)
     ? rawUpdates.map((item) => {
         if (!isRecord(item)) return item;
@@ -475,7 +495,9 @@ export function normalizeTutorPayload(json: unknown): unknown {
     !Array.isArray(expression_gap)
   ) {
     const g = expression_gap as Record<string, unknown>;
-    const rawKeyItems = readAlias(g, ["key_items", "keyItems", "items"]);
+    const rawKeyItems = parseJsonContainerString(
+      readAlias(g, ["key_items", "keyItems", "items"]),
+    );
     const key_items = Array.isArray(rawKeyItems)
       ? rawKeyItems.map((item) => {
           if (!isRecord(item)) return item;

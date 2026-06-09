@@ -172,6 +172,42 @@ describe("normalizeTutorPayload", () => {
     }
   });
 
+  it("parses a double-encoded JSON-string issues array into objects", () => {
+    // Forced tool_use sometimes serializes issues as a JSON string ("[…]") instead of a real
+    // array. Without parsing it back, Array.isArray is false and the issues are silently dropped
+    // to [], so the correction loses every flagged error (the bug report's failing payload).
+    const issues = [
+      {
+        category: "grammar",
+        span_original: "There is a bug",
+        span_corrected: "There was a bug",
+        explanation: "描述过去发生的事，用过去时 was。",
+        severity: "moderate",
+        mastery_key: "grammar:past_tense",
+        mastery_label: "一般过去时",
+        mastery_type: "grammar",
+      },
+    ];
+    const normalized = normalizeTutorPayload({
+      is_correct: false,
+      corrected: "There was a bug, I fixed it, and it taught me a lot.",
+      natural: "There was a bug, I fixed it, and it taught me a lot.",
+      issues: JSON.stringify(issues),
+      mastery_updates: "[]",
+      expression_gap: null,
+    });
+    const parsed = TutorAnalysis.safeParse(normalized);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.issues).toHaveLength(1);
+      expect(parsed.data.issues[0]).toMatchObject({
+        category: "grammar",
+        span_corrected: "There was a bug",
+        mastery_key: "grammar:past_tense",
+      });
+    }
+  });
+
   it("leaves a non-JSON expression_gap string untouched (degrades as before)", () => {
     const normalized = normalizeTutorPayload({
       is_correct: false,
