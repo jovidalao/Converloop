@@ -32,8 +32,17 @@ fn config_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
 }
 
 /// 写文件并(unix 下)收紧到 0600,避免同机其他用户读取。
+/// 新文件直接以 0600 创建(而不是创建后再 chmod,避免短暂的 0644 窗口);
+/// set_permissions 仍保留,用于收紧旧版本以默认权限创建的存量文件。
 fn write_private(path: &Path, bytes: &[u8]) -> Result<(), String> {
-    let mut f = fs::File::create(path).map_err(|e| e.to_string())?;
+    let mut opts = fs::OpenOptions::new();
+    opts.write(true).create(true).truncate(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        opts.mode(0o600);
+    }
+    let mut f = opts.open(path).map_err(|e| e.to_string())?;
     f.write_all(bytes).map_err(|e| e.to_string())?;
     f.sync_all().map_err(|e| e.to_string())?;
     #[cfg(unix)]

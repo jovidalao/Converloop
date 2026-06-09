@@ -2,14 +2,24 @@
 //! provider/SSE 解析全在 TS 侧的 ModelProvider 里(保持 agent-core provider 无关)。
 use futures_util::StreamExt;
 use std::collections::HashMap;
+use std::sync::LazyLock;
 use tauri::ipc::Channel;
+
+// 进程级共享 Client:复用连接池/TLS 会话(每请求新建 Client 会丢掉 keep-alive)。
+// 只设连接超时,不设总超时——LLM 流式响应可能持续数分钟。
+pub(crate) static HTTP: LazyLock<reqwest::Client> = LazyLock::new(|| {
+    reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(30))
+        .build()
+        .expect("failed to build reqwest client")
+});
 
 fn build_request(
     url: &str,
     headers: &HashMap<String, String>,
     body: &serde_json::Value,
 ) -> reqwest::RequestBuilder {
-    let mut req = reqwest::Client::new().post(url).json(body);
+    let mut req = HTTP.post(url).json(body);
     for (k, v) in headers {
         req = req.header(k, v);
     }

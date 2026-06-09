@@ -24,7 +24,16 @@ justify-content:center;height:100vh;margin:0;background:#1c1c1e;color:#f2f2f7\">
 <div style=\"text-align:center\"><h2 style=\"font-weight:600\">✓ 登录完成</h2>\
 <p style=\"opacity:.7\">已捕获授权码,可以关闭此页面回到 app。</p></div>";
 
+/// detail 可能来自回调 query 的 error 参数(攻击者可经浏览器注入),插入 HTML 前转义。
+fn html_escape(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+}
+
 fn error_html(detail: &str) -> String {
+    let detail = html_escape(detail);
     format!(
         "<!doctype html><meta charset=utf-8><title>登录失败</title>\
 <body style=\"font-family:-apple-system,system-ui,sans-serif;display:flex;align-items:center;\
@@ -214,7 +223,7 @@ pub async fn oauth_token_post(
     url: String,
     form: std::collections::HashMap<String, String>,
 ) -> Result<String, String> {
-    let resp = reqwest::Client::new()
+    let resp = crate::llm::HTTP
         .post(&url)
         .form(&form)
         .send()
