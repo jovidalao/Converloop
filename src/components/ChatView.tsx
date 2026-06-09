@@ -82,7 +82,6 @@ import {
   loadCachedInputHints,
   loadCachedQuickfireTopics,
   MissingApiKeyError,
-  type QuickfireTopicsDebug,
   recommendConversationTopics,
   recommendQuickfireTopics,
   regenerateReply,
@@ -1297,9 +1296,6 @@ export function ChatView({
   // True while a fresh recommendation fetch is in flight — drives the loading skeletons while there are no chips.
   const [quickfireTopicsRefreshing, setQuickfireTopicsRefreshing] =
     useState(false);
-  // Diagnostics from the last recommendation fetch (raw response / fallback flag / counts) for the debug panel.
-  const [quickfireDebug, setQuickfireDebug] =
-    useState<QuickfireTopicsDebug | null>(null);
   // Bumped by the regenerate button to re-run the recommendation fetch.
   const [quickfireReloadTick, setQuickfireReloadTick] = useState(0);
   // Topics on screen when regenerate was clicked — passed to the next fetch as "avoid these" so it returns a different set.
@@ -1308,9 +1304,6 @@ export function ChatView({
   // the Rapid Q&A topic state. Picking a chip lets the AI open the chat on that topic.
   const [newChatTopics, setNewChatTopics] = useState<string[] | null>(null);
   const [newChatTopicsRefreshing, setNewChatTopicsRefreshing] = useState(false);
-  const [newChatDebug, setNewChatDebug] = useState<QuickfireTopicsDebug | null>(
-    null,
-  );
   const [newChatReloadTick, setNewChatReloadTick] = useState(0);
   const newChatAvoidRef = useRef<string[]>([]);
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
@@ -1555,10 +1548,10 @@ export function ChatView({
     };
   }, [conversationId, learningMode]);
 
-  // Rapid Q&A start page: when the draft opens, show the last cached recommendations immediately (no empty flash),
-  // then refresh them from the learner's records in the background. Clears when committed (quickfireDraftActive flips
-  // false). A different draft has a new id, so ChatView remounts (key={activeId}) and this re-runs fresh — no need to
-  // depend on conversationId. Bumping quickfireReloadTick re-runs this as a manual regenerate.
+  // Rapid Q&A start page: when the draft opens, reuse the cached recommendations verbatim — no model call, no record
+  // reads. Only a cold cache (first ever) or the Regenerate button generates a fresh set. Clears when committed
+  // (quickfireDraftActive flips false). A different draft has a new id, so ChatView remounts (key={activeId}) and this
+  // re-runs fresh — no need to depend on conversationId. Bumping quickfireReloadTick re-runs this as a manual regenerate.
   useEffect(() => {
     if (!quickfireDraftActive) {
       setQuickfireTopics(null);
@@ -1568,21 +1561,25 @@ export function ChatView({
     let cancelled = false;
     // tick 0 = initial open; > 0 = a manual regenerate, where we want a clearly different set.
     const regenerate = quickfireReloadTick > 0;
-    const avoid = regenerate ? quickfireAvoidRef.current : [];
     setQuickfireTopicsRefreshing(true);
     // On regenerate, clear the chips so the centered spinner shows and the new set is unmistakable.
     if (regenerate) setQuickfireTopics(null);
     void (async () => {
-      // On first open, show the cached set immediately (no empty flash) while fresh ones load in the background.
+      // Initial open: reuse the cached chips verbatim and stop — no model call, no record reads. Generate only on a
+      // cold cache.
       if (!regenerate) {
         const cached = await loadCachedQuickfireTopics();
         if (cancelled) return;
-        if (cached.length > 0) setQuickfireTopics((cur) => cur ?? cached);
+        if (cached.length > 0) {
+          setQuickfireTopics(cached);
+          setQuickfireTopicsRefreshing(false);
+          return;
+        }
       }
+      const avoid = regenerate ? quickfireAvoidRef.current : [];
       const result = await recommendQuickfireTopics({ avoid });
       if (cancelled) return;
-      setQuickfireDebug(result.debug);
-      if (result.topics.length > 0) setQuickfireTopics(result.topics);
+      if (result.length > 0) setQuickfireTopics(result);
       // Nothing available (no provider / error and no cache): stop the skeletons.
       else setQuickfireTopics((cur) => cur ?? []);
       setQuickfireTopicsRefreshing(false);
@@ -1592,9 +1589,9 @@ export function ChatView({
     };
   }, [quickfireDraftActive, quickfireReloadTick]);
 
-  // New-chat start page: same shape as the Rapid Q&A effect above — show the last cached topics immediately (no empty
-  // flash), then refresh from the learner's records in the background. Clears when the draft commits (newChatDraftActive
-  // flips false). Bumping newChatReloadTick re-runs this as a manual regenerate.
+  // New-chat start page: same shape as the Rapid Q&A effect above — reuse the cached topics verbatim on open (no model
+  // call, no record reads); generate only on a cold cache or a manual regenerate. Clears when the draft commits
+  // (newChatDraftActive flips false). Bumping newChatReloadTick re-runs this as a manual regenerate.
   useEffect(() => {
     if (!newChatDraftActive) {
       setNewChatTopics(null);
@@ -1603,19 +1600,22 @@ export function ChatView({
     }
     let cancelled = false;
     const regenerate = newChatReloadTick > 0;
-    const avoid = regenerate ? newChatAvoidRef.current : [];
     setNewChatTopicsRefreshing(true);
     if (regenerate) setNewChatTopics(null);
     void (async () => {
       if (!regenerate) {
         const cached = await loadCachedConversationTopics();
         if (cancelled) return;
-        if (cached.length > 0) setNewChatTopics((cur) => cur ?? cached);
+        if (cached.length > 0) {
+          setNewChatTopics(cached);
+          setNewChatTopicsRefreshing(false);
+          return;
+        }
       }
+      const avoid = regenerate ? newChatAvoidRef.current : [];
       const result = await recommendConversationTopics({ avoid });
       if (cancelled) return;
-      setNewChatDebug(result.debug);
-      if (result.topics.length > 0) setNewChatTopics(result.topics);
+      if (result.length > 0) setNewChatTopics(result);
       else setNewChatTopics((cur) => cur ?? []);
       setNewChatTopicsRefreshing(false);
     })();
@@ -2409,7 +2409,6 @@ export function ChatView({
             <QuickfireStartScreen
               topics={quickfireTopics}
               refreshing={quickfireTopicsRefreshing}
-              debug={quickfireDebug}
               busy={replyBusy}
               onPick={(s) => void startQuickfireDraft(s)}
               onRefresh={() => {
@@ -2434,7 +2433,6 @@ export function ChatView({
             <NewChatStartScreen
               topics={newChatTopics}
               refreshing={newChatTopicsRefreshing}
-              debug={newChatDebug}
               busy={replyBusy}
               onPick={(topic) => void startTopicDraft(topic)}
               onRefresh={() => {

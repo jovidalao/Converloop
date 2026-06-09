@@ -1,17 +1,15 @@
 import { ZapIcon } from "lucide-react";
 
 import { useTranslation } from "@/i18n";
-import type { QuickfireTopicsDebug } from "../orchestrator";
 import { TopicStartScreen } from "./TopicStartScreen";
 
 // Rapid-fire Q&A start page (shown on an empty quickfire draft): a default prompt up top and a set of recommended
 // umbrella-scenario chips generated in the background from the learner's records. Picking a chip — or typing a
 // scenario into the composer below — materializes the conversation and starts the drill. Thin wrapper over the
-// shared TopicStartScreen, which holds the chip / skeleton / refresh / debug markup.
+// shared TopicStartScreen, which holds the chip / skeleton / refresh markup.
 export function QuickfireStartScreen({
   topics,
   refreshing,
-  debug,
   busy,
   onPick,
   onRefresh,
@@ -20,8 +18,6 @@ export function QuickfireStartScreen({
   topics: string[] | null;
   /** A fresh recommendation fetch is in flight — show the loading skeletons while there are no chips. */
   refreshing: boolean;
-  /** Diagnostics from the last fetch (raw response / fallback flag / counts), shown in a collapsible debug panel. */
-  debug: QuickfireTopicsDebug | null;
   busy: boolean;
   onPick: (scenario: string) => void;
   onRefresh: () => void;
@@ -34,10 +30,8 @@ export function QuickfireStartScreen({
       description={t("quickfire.startDescription")}
       recommendedLabel={t("quickfire.recommendedTopics")}
       refreshLabel={t("quickfire.refresh")}
-      debugTitle={t("quickfire.debugTitle")}
       topics={topics}
       refreshing={refreshing}
-      debug={debug}
       busy={busy}
       onPick={onPick}
       onRefresh={onRefresh}

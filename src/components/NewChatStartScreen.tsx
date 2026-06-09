@@ -1,7 +1,6 @@
 import { SparklesIcon } from "lucide-react";
 
 import { useTranslation } from "@/i18n";
-import type { QuickfireTopicsDebug } from "../orchestrator";
 import { TopicStartScreen } from "./TopicStartScreen";
 
 // New-chat start page (shown on an empty practice draft): a short intro and a set of recommended conversation-topic
@@ -11,7 +10,6 @@ import { TopicStartScreen } from "./TopicStartScreen";
 export function NewChatStartScreen({
   topics,
   refreshing,
-  debug,
   busy,
   onPick,
   onRefresh,
@@ -20,8 +18,6 @@ export function NewChatStartScreen({
   topics: string[] | null;
   /** A fresh recommendation fetch is in flight — show the loading skeletons while there are no chips. */
   refreshing: boolean;
-  /** Diagnostics from the last fetch (raw response / fallback flag / counts), shown in a collapsible debug panel. */
-  debug: QuickfireTopicsDebug | null;
   busy: boolean;
   onPick: (topic: string) => void;
   onRefresh: () => void;
@@ -34,10 +30,8 @@ export function NewChatStartScreen({
       description={t("newChat.startDescription")}
       recommendedLabel={t("newChat.recommendedTopics")}
       refreshLabel={t("newChat.refresh")}
-      debugTitle={t("newChat.debugTitle")}
       topics={topics}
       refreshing={refreshing}
-      debug={debug}
       busy={busy}
       onPick={onPick}
       onRefresh={onRefresh}

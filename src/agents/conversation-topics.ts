@@ -85,8 +85,9 @@ function fallbackTopics(nativeLanguage: string): string[] {
 export async function generateConversationTopics(
   provider: ModelProvider,
   ctx: ConversationTopicsContext,
-  // Diagnostics sink for the debug panel: the raw model response and whether we fell back to the hardcoded list.
-  onDebug?: (info: { raw: string; usedFallback: boolean }) => void,
+  // Reports whether the result is the hardcoded fallback (rather than a real model result), so callers can choose not
+  // to cache it.
+  onResult?: (info: { usedFallback: boolean }) => void,
 ): Promise<string[]> {
   const rng = ctx.rng ?? Math.random;
   const lensBlock = shuffle(CONVERSATION_LENSES, rng)
@@ -154,6 +155,6 @@ Return a JSON object of the form {"topics": ["…", "…"]} with ${OVERGEN_COUNT
   // Sample down: shuffle the (over-generated) pool and take TARGET_COUNT, so each refresh shows a different slice.
   const finalTopics = shuffle(pool, rng).slice(0, TARGET_COUNT);
 
-  onDebug?.({ raw, usedFallback });
+  onResult?.({ usedFallback });
   return finalTopics;
 }

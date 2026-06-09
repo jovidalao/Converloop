@@ -232,7 +232,6 @@ export const zh: Messages = {
     recommendedTopics: "推荐话题",
     scenarioPlaceholder: "描述一个场景…… 或从上方选一个",
     refresh: "重新生成",
-    debugTitle: "调试信息",
   },
   newChat: {
     startTitle: "开始新对话",
@@ -240,7 +239,6 @@ export const zh: Messages = {
       "挑一个话题,我来起头,你接着聊。也可以直接在下方输入第一句话。",
     recommendedTopics: "推荐话题",
     refresh: "重新生成",
-    debugTitle: "调试信息",
   },
   commandPalette: {
     ariaLabel: "快速跳转",

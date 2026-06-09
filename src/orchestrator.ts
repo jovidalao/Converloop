@@ -23,12 +23,7 @@ import {
 } from "./agents/selection-learning-item";
 import { planLearningProject } from "./agents/task-agent";
 import { translate } from "./agents/translate";
-import {
-  type AppConfig,
-  activeProvider,
-  getProvider,
-  loadConfig,
-} from "./config";
+import { type AppConfig, getProvider, loadConfig } from "./config";
 import { applyDataEditInstruction, type DataEditResult } from "./data-edit";
 import { runTrackedAgentJob } from "./db/agent-jobs";
 import { getAppState, setAppState } from "./db/app-state";
@@ -1137,82 +1132,48 @@ export async function generateInputHintsForConversation(
   }
 }
 
-// Cache of the most recent quickfire topic recommendations (a single global list, since they're derived from the
-// learner's records rather than any one conversation). Shown immediately on the next start page while fresh ones
-// regenerate in the background, so the chips don't flash empty.
+// Cached topic recommendations (one global list per start page, derived from the learner's records rather than any one
+// conversation). The start page reuses this list verbatim on every open — no model call, no record reads — so
+// reopening Rapid Q&A / new chat is instant and stable. The first generated set sticks until the learner taps
+// Regenerate, which forces a fresh set. The cache holds just the topic strings; nothing else.
 const QUICKFIRE_TOPICS_CACHE_KEY = "quickfireTopics";
+const CONVERSATION_TOPICS_CACHE_KEY = "conversationTopics";
 
-export async function loadCachedQuickfireTopics(): Promise<string[]> {
-  const raw = await getAppState(QUICKFIRE_TOPICS_CACHE_KEY);
+// Read the cached chip list. Accepts both the current bare-array shape and the legacy { topics, signature } wrapper so
+// existing caches survive the upgrade without a forced regenerate.
+async function loadCachedTopics(key: string): Promise<string[]> {
+  const raw = await getAppState(key);
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw) as unknown;
-    return Array.isArray(parsed)
-      ? parsed.filter((s): s is string => typeof s === "string")
-      : [];
+    const arr = Array.isArray(parsed)
+      ? parsed
+      : (parsed as { topics?: unknown } | null)?.topics;
+    if (Array.isArray(arr) && arr.every((s) => typeof s === "string"))
+      return arr as string[];
   } catch {
-    return [];
+    // Corrupt cache entry — treat as a miss.
   }
+  return [];
 }
 
-// Diagnostics surfaced on the start-page debug panel so a silently-empty/repeating result can be inspected: the raw
-// model response, whether it fell back to the hardcoded list, the avoid list sent on a regenerate, and timing.
-export interface QuickfireTopicsDebug {
-  at: number;
-  providerConfigured: boolean;
-  model: string;
-  weakCount: number;
-  recentCount: number;
-  profileChars: number;
-  avoidCount: number;
-  parsedCount: number;
-  usedFallback: boolean;
-  rawResponse?: string;
-  error?: string;
-  elapsedMs: number;
+export async function loadCachedQuickfireTopics(): Promise<string[]> {
+  return loadCachedTopics(QUICKFIRE_TOPICS_CACHE_KEY);
 }
 
-export interface QuickfireTopicsResult {
-  topics: string[];
-  debug: QuickfireTopicsDebug;
-}
-
-// Recommend umbrella scenarios for the rapid-fire Q&A start page, drawn from the learner's records: weak mastery
-// items, profile, and recent conversation topics (with everyday corner cases when records are thin). Caches the
-// result for instant reuse next time. Never throws — returns an empty list plus a debug payload (raw response /
-// error / counts) so the start page can degrade to the cached set (or type-your-own) and still be inspectable.
-// opts.avoid: scenarios just shown to the learner (a regenerate) — excluded so the new set is actually different.
+// Generate umbrella scenarios for the rapid-fire Q&A start page from the learner's records: weak mastery items,
+// profile, and recent conversation topics (with everyday corner cases when records are thin). Always generates — the
+// start page only calls this on a cold cache or an explicit Regenerate (opts.avoid) — then caches the result so the
+// next open reuses it without a model call. Never throws — returns an empty list on failure so the start page degrades
+// to the cached set (or type-your-own).
 export async function recommendQuickfireTopics(opts?: {
   avoid?: string[];
-}): Promise<QuickfireTopicsResult> {
-  const started = Date.now();
+}): Promise<string[]> {
   const config = loadConfig();
-  const model = activeProvider(config).model;
   const avoid = opts?.avoid ?? [];
   const provider = await getProvider();
-  if (!provider) {
-    return {
-      topics: [],
-      debug: {
-        at: started,
-        providerConfigured: false,
-        model,
-        weakCount: 0,
-        recentCount: 0,
-        profileChars: 0,
-        avoidCount: avoid.length,
-        parsedCount: 0,
-        usedFallback: false,
-        elapsedMs: Date.now() - started,
-      },
-    };
-  }
+  if (!provider) return [];
 
-  let rawResponse: string | undefined;
-  let usedFallback = false;
-  let weakCount = 0;
-  let recentCount = 0;
-  let profileChars = 0;
   try {
     const [weakList, profileMd, convs] = await Promise.all([
       getWeakList(),
@@ -1226,10 +1187,9 @@ export async function recommendQuickfireTopics(opts?: {
       .slice(0, 8)
       .map((c) => c.title);
     const profileSlice = profileSliceForConversation(profileMd);
-    weakCount = weakList.length;
-    recentCount = recentTopics.length;
-    profileChars = profileSlice.length;
+    const weakItems = weakList.map((w) => w.label);
 
+    let usedFallback = false;
     const topics = await generateQuickfireTopics(
       provider,
       {
@@ -1237,109 +1197,42 @@ export async function recommendQuickfireTopics(opts?: {
         nativeLanguage: config.nativeLanguage,
         level: config.level,
         profileSlice,
-        weakItems: weakList.map((w) => w.label),
+        weakItems,
         recentTopics,
         avoid,
       },
       (info) => {
-        rawResponse = info.raw;
         usedFallback = info.usedFallback;
       },
     );
-    if (topics.length > 0) {
+    // Cache only a genuine model result — never the hardcoded fallback, so a transient failure retries next time
+    // rather than pinning the fallback list.
+    if (topics.length > 0 && !usedFallback) {
       await setAppState(QUICKFIRE_TOPICS_CACHE_KEY, JSON.stringify(topics));
     }
-    return {
-      topics,
-      debug: {
-        at: started,
-        providerConfigured: true,
-        model,
-        weakCount,
-        recentCount,
-        profileChars,
-        avoidCount: avoid.length,
-        parsedCount: topics.length,
-        usedFallback,
-        rawResponse: rawResponse?.slice(0, 4000),
-        elapsedMs: Date.now() - started,
-      },
-    };
-  } catch (e) {
-    return {
-      topics: [],
-      debug: {
-        at: started,
-        providerConfigured: true,
-        model,
-        weakCount,
-        recentCount,
-        profileChars,
-        avoidCount: avoid.length,
-        parsedCount: 0,
-        usedFallback,
-        rawResponse: rawResponse?.slice(0, 4000),
-        error: e instanceof Error ? `${e.name}: ${e.message}` : String(e),
-        elapsedMs: Date.now() - started,
-      },
-    };
-  }
-}
-
-// Cache of the most recent new-chat topic recommendations (a single global list, derived from the learner's profile
-// and recent topics rather than any one conversation). Shown immediately on the next start page while fresh ones
-// regenerate in the background, so the chips don't flash empty.
-const CONVERSATION_TOPICS_CACHE_KEY = "conversationTopics";
-
-export async function loadCachedConversationTopics(): Promise<string[]> {
-  const raw = await getAppState(CONVERSATION_TOPICS_CACHE_KEY);
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    return Array.isArray(parsed)
-      ? parsed.filter((s): s is string => typeof s === "string")
-      : [];
+    return topics;
   } catch {
     return [];
   }
 }
 
-// Recommend conversation topics for the new-chat start page, drawn from the learner's profile and recent conversation
-// topics (with broadly relatable everyday topics when records are thin). Caches the result for instant reuse next
-// time. Never throws — returns an empty list plus a debug payload (raw response / error / counts) so the start page
-// can degrade to the cached set (or type-your-own) and still be inspectable. Reuses QuickfireTopicsDebug as the
-// diagnostic shape (weakCount is always 0 here — topics aren't biased toward weak items).
-// opts.avoid: topics just shown to the learner (a regenerate) — excluded so the new set is actually different.
+export async function loadCachedConversationTopics(): Promise<string[]> {
+  return loadCachedTopics(CONVERSATION_TOPICS_CACHE_KEY);
+}
+
+// Generate conversation topics for the new-chat start page from the learner's profile and recent conversation topics
+// (with broadly relatable everyday topics when records are thin). Mirrors recommendQuickfireTopics: always generates —
+// the start page only calls this on a cold cache or an explicit Regenerate (opts.avoid) — then caches the result so
+// the next open reuses it without a model call. Never throws — returns an empty list on failure so the start page
+// degrades to the cached set (or type-your-own).
 export async function recommendConversationTopics(opts?: {
   avoid?: string[];
-}): Promise<QuickfireTopicsResult> {
-  const started = Date.now();
+}): Promise<string[]> {
   const config = loadConfig();
-  const model = activeProvider(config).model;
   const avoid = opts?.avoid ?? [];
   const provider = await getProvider();
-  if (!provider) {
-    return {
-      topics: [],
-      debug: {
-        at: started,
-        providerConfigured: false,
-        model,
-        weakCount: 0,
-        recentCount: 0,
-        profileChars: 0,
-        avoidCount: avoid.length,
-        parsedCount: 0,
-        usedFallback: false,
-        elapsedMs: Date.now() - started,
-      },
-    };
-  }
+  if (!provider) return [];
 
-  let rawResponse: string | undefined;
-  let usedFallback = false;
-  let recentCount = 0;
-  let profileChars = 0;
   try {
     const [profileMd, convs] = await Promise.all([
       readProfile(config),
@@ -1352,9 +1245,8 @@ export async function recommendConversationTopics(opts?: {
       .slice(0, 8)
       .map((c) => c.title);
     const profileSlice = profileSliceForConversation(profileMd);
-    recentCount = recentTopics.length;
-    profileChars = profileSlice.length;
 
+    let usedFallback = false;
     const topics = await generateConversationTopics(
       provider,
       {
@@ -1366,46 +1258,14 @@ export async function recommendConversationTopics(opts?: {
         avoid,
       },
       (info) => {
-        rawResponse = info.raw;
         usedFallback = info.usedFallback;
       },
     );
-    if (topics.length > 0) {
+    if (topics.length > 0 && !usedFallback) {
       await setAppState(CONVERSATION_TOPICS_CACHE_KEY, JSON.stringify(topics));
     }
-    return {
-      topics,
-      debug: {
-        at: started,
-        providerConfigured: true,
-        model,
-        weakCount: 0,
-        recentCount,
-        profileChars,
-        avoidCount: avoid.length,
-        parsedCount: topics.length,
-        usedFallback,
-        rawResponse: rawResponse?.slice(0, 4000),
-        elapsedMs: Date.now() - started,
-      },
-    };
-  } catch (e) {
-    return {
-      topics: [],
-      debug: {
-        at: started,
-        providerConfigured: true,
-        model,
-        weakCount: 0,
-        recentCount,
-        profileChars,
-        avoidCount: avoid.length,
-        parsedCount: 0,
-        usedFallback,
-        rawResponse: rawResponse?.slice(0, 4000),
-        error: e instanceof Error ? `${e.name}: ${e.message}` : String(e),
-        elapsedMs: Date.now() - started,
-      },
-    };
+    return topics;
+  } catch {
+    return [];
   }
 }

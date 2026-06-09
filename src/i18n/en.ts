@@ -237,7 +237,6 @@ export const en = {
     recommendedTopics: "Recommended topics",
     scenarioPlaceholder: "Describe a scenario… or pick one above",
     refresh: "Regenerate",
-    debugTitle: "Debug info",
   },
   newChat: {
     startTitle: "Start a new conversation",
@@ -245,7 +244,6 @@ export const en = {
       "Pick a topic and I'll open the conversation — you take it from there. Or just type your first message below.",
     recommendedTopics: "Recommended topics",
     refresh: "Regenerate",
-    debugTitle: "Debug info",
   },
   commandPalette: {
     ariaLabel: "Quick jump",
