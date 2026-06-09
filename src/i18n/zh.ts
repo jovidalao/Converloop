@@ -43,7 +43,6 @@ export const zh: Messages = {
     speak: "朗读",
     add: "加入",
     analyzing: "解析中…",
-    speaking: "正在朗读选中文本",
     selectTextHint: "请选择包含文字或数字的内容",
     added: "已加入学习数据:{label}",
     previewTitle: "学习条目预览",

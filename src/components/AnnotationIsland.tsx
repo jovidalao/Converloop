@@ -200,7 +200,6 @@ export function AnnotationIsland({
       stopSpeech();
       const audio = await speakText(pick.selection);
       await playSpeech(audio, pick.selection);
-      setStatus({ tone: "success", text: t("annotationIsland.speaking") });
     } catch (e) {
       setStatus({ tone: "error", text: errText(e) });
     } finally {

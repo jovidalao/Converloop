@@ -42,7 +42,6 @@ export const en = {
     speak: "Read aloud",
     add: "Add",
     analyzing: "Analyzing…",
-    speaking: "Reading the selected text",
     selectTextHint: "Please select content that contains text or numbers",
     added: "Added to learning data: {label}",
     previewTitle: "Preview learning item",
