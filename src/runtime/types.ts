@@ -121,9 +121,15 @@ export interface PracticeContext extends BaseContext {
   proficiency: ProficiencySnapshot;
   /** Session-level adjustments (difficulty/role/next-day from branches); empty object for normal conversations. */
   agentModifiers: AgentModifiers;
-  /** Dictation drill only: the exact sentence the learner just heard (the prior AI turn's spoken sentence). When set,
-   *  the tutor grades the transcription against this standard answer instead of as free-form conversation. */
+  /** Dictation/shadowing drill only: the exact target sentence of the previous AI turn. When set, the tutor grades
+   *  the transcription against this standard answer instead of as free-form conversation. */
   dictationStandardAnswer?: string;
+  /** Which drill the standard answer belongs to: dictation (typed from ear) or shadowing (read aloud via STT). */
+  standardAnswerMode?: "dictation" | "shadowing";
+  /** Dictation only: tracked listening-weak words to weave into upcoming sentences (loaded per turn by the orchestrator). */
+  dictationFocusWords?: string[];
+  /** Dictation/shadowing: replays of the previous sentence (incl. slow replays) — live difficulty signal for the next sentence. */
+  sayDrillReplayCount?: number;
 }
 
 export interface LearningContext extends BaseContext {

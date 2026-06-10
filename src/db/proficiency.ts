@@ -7,7 +7,7 @@ import {
 import { db } from "./client";
 import type { MasteryStatus } from "./mastery-logic";
 import { masteryItem } from "./schema";
-import { getRecentTurns, parseTurnFeedback } from "./turns";
+import { getRecentProductionTurns, parseTurnFeedback } from "./turns";
 
 function wordCount(s: string): number {
   const t = s.trim();
@@ -24,10 +24,12 @@ async function statusCount(status: MasteryStatus): Promise<number> {
 
 // Aggregate evidence metrics from recent turns (global — proficiency is a global characteristic) + mastery table.
 // Gap turns (native-language fallback) are excluded from output length/accuracy metrics; they only count toward gapRate.
+// Dictation/shadowing turns are excluded entirely (see getRecentProductionTurns): one 10-sentence drill would
+// otherwise fill the window and turn listening slips into "production errors", silently easing every conversation.
 export async function getProficiencyInput(
   limit = 20,
 ): Promise<ProficiencyMetrics> {
-  const turns = await getRecentTurns(limit);
+  const turns = await getRecentProductionTurns(limit);
   let analyzed = 0;
   let nonGapTurns = 0;
   let words = 0;

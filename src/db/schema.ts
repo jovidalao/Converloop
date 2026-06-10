@@ -183,6 +183,12 @@ export const learningProject = sqliteTable("learning_project", {
   notesMd: text("notes_md").notNull().default(""),
   sourcePrompt: text("source_prompt"),
   taskPlanJson: text("task_plan_json"),
+  // Lessons generated for this project (learning_agent ids) and the subset the user marked done (migration v37/v38).
+  // Project progress ("2/3 lessons", next step) is derived from these two lists.
+  lessonAgentIdsJson: text("lesson_agent_ids_json").notNull().default("[]"),
+  completedLessonIdsJson: text("completed_lesson_ids_json")
+    .notNull()
+    .default("[]"),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
 });

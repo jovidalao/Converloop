@@ -2,7 +2,9 @@ import {
   ArrowUpIcon,
   ChevronDownIcon,
   RefreshCwIcon,
+  RotateCcwIcon,
   SquareIcon,
+  XIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -28,6 +30,7 @@ import {
   type NewConversationContext,
   parseAgentModifiers,
   parseDictationReply,
+  type ReviewDrillItem,
   streamingDictationFeedback,
   touchConversation,
   truncateConversationFrom,
@@ -59,6 +62,8 @@ import {
   startDictationSession,
   startLearningSession,
   startQuickfireSession,
+  startReviewDrillSession,
+  startShadowingSession,
   startTopicConversation,
 } from "../orchestrator";
 import { beginAction } from "../runtime";
@@ -85,11 +90,14 @@ import {
 import { useConfirm } from "./confirm";
 import { DictationReply } from "./DictationReply";
 import { DictationStartScreen } from "./DictationStartScreen";
+import { LessonSessionReview } from "./LessonSessionReview";
 import { LessonStartScreen } from "./LessonStartScreen";
 import { Markdown } from "./Markdown";
 import { MicButton } from "./MicButton";
 import { NewChatStartScreen } from "./NewChatStartScreen";
 import { QuickfireStartScreen } from "./QuickfireStartScreen";
+import { ReviewDrillStartScreen } from "./ReviewDrillStartScreen";
+import { ShadowingStartScreen } from "./ShadowingStartScreen";
 import { SlashMenu } from "./SlashMenu";
 import { ThinkingIndicator } from "./TurnActivity";
 import { Button } from "./ui/button";
@@ -103,6 +111,10 @@ interface ChatViewProps {
   isQuickfireDraft?: boolean;
   /** This draft is a dictation start page (only meaningful when isDraft): show the start screen and treat the first commit as the theme. */
   isDictationDraft?: boolean;
+  /** This draft is a shadowing (read-aloud) start page: show the start screen and treat the first commit as the theme. */
+  isShadowingDraft?: boolean;
+  /** This draft is a weak-spot drill start page: code shows the due items; Start snapshots them into the conversation. */
+  isReviewDrillDraft?: boolean;
   /** This draft is a lesson start page. The conversation row is created only when Start is pressed. */
   isLearningAgentDraft?: boolean;
   /** Metadata for the selected lesson draft, shown before the row exists in SQLite. */
@@ -119,6 +131,13 @@ interface ChatViewProps {
   onCreateQuickfireDraft?: (id: string, scenario: string) => Promise<void>;
   /** Materialize a dictation draft into a real conversation with the chosen theme (called before the AI kickoff). */
   onCreateDictationDraft?: (id: string, theme: string) => Promise<void>;
+  /** Materialize a shadowing draft into a real conversation with the chosen theme (called before the AI kickoff). */
+  onCreateShadowingDraft?: (id: string, theme: string) => Promise<void>;
+  /** Materialize a weak-spot drill draft with the code-selected due items (called before the AI kickoff). */
+  onCreateReviewDrillDraft?: (
+    id: string,
+    items: ReviewDrillItem[],
+  ) => Promise<void>;
   /** Materialize a new-chat draft into a real conversation seeded with the chosen topic (called before the AI opens the chat). */
   onCreateTopicDraft?: (id: string, topic: string) => Promise<void>;
   /** Materialize a lesson draft into a real learning-agent conversation before the AI kickoff. */
@@ -148,6 +167,8 @@ export function ChatView({
   isDraft = false,
   isQuickfireDraft = false,
   isDictationDraft = false,
+  isShadowingDraft = false,
+  isReviewDrillDraft = false,
   isLearningAgentDraft = false,
   learningAgentDraft = null,
   mode = "practice",
@@ -155,6 +176,8 @@ export function ChatView({
   onCreateDraftConversation,
   onCreateQuickfireDraft,
   onCreateDictationDraft,
+  onCreateShadowingDraft,
+  onCreateReviewDrillDraft,
   onCreateTopicDraft,
   onCreateLearningAgentDraft,
   onTurnsChange,
@@ -194,6 +217,13 @@ export function ChatView({
   );
   // Theme of a dictation conversation (null for non-dictation); drives the mode badge + the masked sentence rendering.
   const [dictationTheme, setDictationTheme] = useState<string | null>(null);
+  // Theme of a shadowing conversation (null for non-shadowing); drives the mode badge + the read-aloud rendering.
+  const [shadowingTheme, setShadowingTheme] = useState<string | null>(null);
+  // Weak-spot drill conversation marker (null for others); drives the mode badge and drill-flavored actions.
+  const [reviewDrillActive, setReviewDrillActive] = useState(false);
+  // Redo invitation after the learner taps "Say it again" on a correction: a banner above the composer asking them
+  // to re-produce the corrected meaning from memory; cleared on send or dismiss.
+  const [redoActive, setRedoActive] = useState(false);
   // After a transcription is graded, the next sentence is generated + its audio prefetched in the background, but it is
   // NOT spoken and the listen card is replaced by a "next question" gate. The learner reads their correction, then taps
   // the gate to start the next item (plays the audio, re-enables input). True only between submit and that tap.
@@ -220,6 +250,12 @@ export function ChatView({
     useState(false);
   const [dictationReloadTick, setDictationReloadTick] = useState(0);
   const dictationAvoidRef = useRef<string[]>([]);
+  // Shadowing start page: recommended themes — same shape and recommender as the dictation topics above.
+  const [shadowingTopics, setShadowingTopics] = useState<string[] | null>(null);
+  const [shadowingTopicsRefreshing, setShadowingTopicsRefreshing] =
+    useState(false);
+  const [shadowingReloadTick, setShadowingReloadTick] = useState(0);
+  const shadowingAvoidRef = useRef<string[]>([]);
   // New-chat start page: recommended conversation topics (null = still loading, [] = none → type-your-own), mirroring
   // the Rapid Q&A topic state. Picking a chip lets the AI open the chat on that topic.
   const [newChatTopics, setNewChatTopics] = useState<string[] | null>(null);
@@ -248,7 +284,12 @@ export function ChatView({
   const derivationStartedRef = useRef(false);
   const quickfireStartedRef = useRef(false);
   const dictationStartedRef = useRef(false);
+  const shadowingStartedRef = useRef(false);
+  const reviewDrillStartedRef = useRef(false);
   const topicStartedRef = useRef(false);
+  // Replays of the sentence currently awaiting an answer (dictation/shadowing, slow replays included); sent with the
+  // next answer as a live difficulty signal, then reset for the next sentence.
+  const sayDrillReplayCountRef = useRef(0);
   const liveTurnIdsRef = useRef<Set<string>>(new Set()); // turns sent in this session; auto-bilingual only applies to these
   const hintTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const config = useConfig();
@@ -345,21 +386,35 @@ export function ChatView({
   // Dictation start page: an uncommitted dictation draft (no conversation row yet). Drives the theme start screen and
   // routes the first commit (chip / typed-send) through startDictationDraft instead of a graded turn.
   const dictationDraftActive = isDraft && isDictationDraft;
+  // Shadowing start page: an uncommitted shadowing draft, mirroring the dictation draft.
+  const shadowingDraftActive = isDraft && isShadowingDraft;
+  // Weak-spot drill start page: an uncommitted review-drill draft. The composer is a no-op gate — the drill only
+  // starts via the Start button on the start screen (code picks the items; there is nothing to type).
+  const reviewDrillDraftActive = isDraft && isReviewDrillDraft;
   // A dictation conversation (draft or materialized): drives the masked-sentence rendering + the mode badge.
   const isDictation = dictationDraftActive || dictationTheme !== null;
-  // Practice sub-mode for the turn renderers: dictation and rapid-fire each trim actions that don't apply.
-  const practiceVariant: "quickfire" | "dictation" | undefined = isDictation
+  // A shadowing conversation: same [[SAY]] sentence mechanics as dictation, but the sentence is shown, not hidden.
+  const isShadowing = shadowingDraftActive || shadowingTheme !== null;
+  // Either sentence drill: shares the [[SAY]] parsing, the gated "next question" flow, and replay counting.
+  const isSayDrill = isDictation || isShadowing;
+  const isReviewDrill = reviewDrillDraftActive || reviewDrillActive;
+  // Practice sub-mode for the turn renderers: each drill trims actions that don't apply. Shadowing reuses the
+  // dictation variant (fixed target sentence → no "more natural" / reply suggestion); the weak-spot drill reuses
+  // quickfire (model-answer turns → no next-sentence suggestion, no branch).
+  const practiceVariant: "quickfire" | "dictation" | undefined = isSayDrill
     ? "dictation"
-    : quickfireScenario !== null
+    : quickfireScenario !== null || isReviewDrill
       ? "quickfire"
       : undefined;
-  // New-chat start page: a plain uncommitted practice draft (not Rapid Q&A / dictation / lesson). Drives the topic start
+  // New-chat start page: a plain uncommitted practice draft (not Rapid Q&A / drills / lesson). Drives the topic start
   // screen; picking a chip materializes the conversation and the AI opens it on that topic. The composer still sends a
   // normal first turn (type-your-own), so this only changes the empty-state, not the send path.
   const newChatDraftActive =
     isDraft &&
     !isQuickfireDraft &&
     !isDictationDraft &&
+    !isShadowingDraft &&
+    !isReviewDrillDraft &&
     !isLearningAgentDraft &&
     !learningMode;
   // Lesson start page: an uncommitted lesson draft (no conversation row yet). Start materializes it, then runs the
@@ -373,7 +428,8 @@ export function ChatView({
   const hintsActive =
     !compact &&
     !learningMode &&
-    !isDictation &&
+    !isSayDrill &&
+    !isReviewDrill &&
     !!inputHints &&
     inputHints.length > 0 &&
     input.length === 0;
@@ -420,6 +476,8 @@ export function ChatView({
     !compact &&
     !quickfireDraftActive &&
     !dictationDraftActive &&
+    !shadowingDraftActive &&
+    !reviewDrillDraftActive &&
     slashCommands.length > 0;
 
   // When leaving the command context (no token), clear the "Esc-closed" flag so the next / re-opens the menu.
@@ -496,7 +554,11 @@ export function ChatView({
     setDerivedBanner(null);
     setQuickfireScenario(null);
     setDictationTheme(null);
+    setShadowingTheme(null);
+    setReviewDrillActive(false);
     setDictationAwaitingEnter(false);
+    setRedoActive(false);
+    sayDrillReplayCountRef.current = 0;
     setLessonInfo(null);
     setInputHints(null);
     setLastPromptTokens(null); // reset the context meter; repopulated on the next send in this conversation
@@ -535,6 +597,8 @@ export function ChatView({
           });
         if (mods.quickfire) setQuickfireScenario(mods.quickfire.scenario);
         if (mods.dictation) setDictationTheme(mods.dictation.theme);
+        if (mods.shadowing) setShadowingTheme(mods.shadowing.theme);
+        if (mods.reviewDrill) setReviewDrillActive(true);
         if (
           loaded.length === 0 &&
           !derivationStartedRef.current &&
@@ -559,6 +623,24 @@ export function ChatView({
           mods.dictation
         ) {
           void startDictation();
+          return;
+        }
+        // Shadowing: the AI opens by presenting the first sentence to read aloud (spoken + shown).
+        if (
+          loaded.length === 0 &&
+          !shadowingStartedRef.current &&
+          mods.shadowing
+        ) {
+          void startShadowing();
+          return;
+        }
+        // Weak-spot drill: the AI opens with the first retrieval micro-task.
+        if (
+          loaded.length === 0 &&
+          !reviewDrillStartedRef.current &&
+          mods.reviewDrill
+        ) {
+          void startReviewDrill();
           return;
         }
         // Restore input hints for the reopened conversation. The watermark is the last
@@ -701,6 +783,41 @@ export function ChatView({
       cancelled = true;
     };
   }, [dictationDraftActive, dictationReloadTick]);
+
+  // Shadowing start page: identical shape to the dictation effect above (themes share the conversation-topic
+  // recommender). Clears when the draft commits (shadowingDraftActive flips false).
+  useEffect(() => {
+    if (!shadowingDraftActive) {
+      setShadowingTopics(null);
+      setShadowingTopicsRefreshing(false);
+      return;
+    }
+    let cancelled = false;
+    const regenerate = shadowingReloadTick > 0;
+    setShadowingTopicsRefreshing(true);
+    if (regenerate) setShadowingTopics(null);
+    void (async () => {
+      if (!regenerate) {
+        const cached = await loadCachedConversationTopics();
+        if (cancelled) return;
+        if (cached.length > 0) {
+          setShadowingTopics(cached);
+          setShadowingTopicsRefreshing(false);
+          return;
+        }
+      }
+      const result = await recommendConversationTopics({
+        avoid: regenerate ? shadowingAvoidRef.current : [],
+      });
+      if (cancelled) return;
+      if (result.length > 0) setShadowingTopics(result);
+      else setShadowingTopics((cur) => cur ?? []);
+      setShadowingTopicsRefreshing(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [shadowingDraftActive, shadowingReloadTick]);
 
   // All turns are reported to the coach panel. Turns are patched (new object) when analysis arrives, so re-reporting is automatic.
   useEffect(() => {
@@ -1071,11 +1188,185 @@ export function ChatView({
     await startDictation();
   }
 
+  // Shadowing kickoff: the AI presents the first sentence to read aloud (spoken + shown). Mirrors startDictation —
+  // the [[SAY]] contract is shared; only the rendering differs (the sentence is visible).
+  async function startShadowing(replacingId?: string) {
+    if (learningMode || replyBusy || shadowingStartedRef.current) return;
+    stopSpeech();
+    shadowingStartedRef.current = true;
+    const turnGen = ++turnGenRef.current;
+    const turnId = crypto.randomUUID();
+    liveTurnIdsRef.current.add(turnId);
+    stickToBottomRef.current = true;
+    setError(null);
+    setRetry(null);
+    replyCommittedRef.current = false;
+    setTurns((prev) => [
+      ...(replacingId ? prev.filter((t) => t.id !== replacingId) : prev),
+      {
+        id: turnId,
+        userText: "",
+        analysis: null,
+        analysisPending: false,
+      },
+    ]);
+    setReplyBusy(true);
+    setStreaming("");
+    let acc = "";
+    // Shadowing always speaks the model reading (that's the reference the learner imitates).
+    const speaker = createReplySpeaker();
+    try {
+      const result = await startShadowingSession(
+        conversationId,
+        {
+          onReplyDelta: (d) => {
+            if (turnGenRef.current !== turnGen) return;
+            acc += d;
+            setStreaming(acc);
+          },
+          onReplyComplete: (reply) => {
+            if (turnGenRef.current !== turnGen) return;
+            replyCommittedRef.current = true;
+            commitPartnerReply(turnId, reply);
+            speaker.finish(parseDictationReply(reply).sentence);
+          },
+          onContext: (tokens) => {
+            if (turnGenRef.current === turnGen) setLastPromptTokens(tokens);
+          },
+          onAnalysis: () => {
+            patchTurn(turnId, { analysisPending: false });
+          },
+        },
+        turnId,
+      );
+      if (turnGenRef.current === turnGen && !replyCommittedRef.current) {
+        commitPartnerReply(turnId, result.reply);
+        speaker.finish(parseDictationReply(result.reply).sentence);
+      }
+      await touchConversation(conversationId);
+      onActivity?.();
+    } catch (e) {
+      stopSpeech();
+      speaker.abort();
+      patchTurn(turnId, {
+        analysisPending: false,
+        analysisError: t("chat.shadowingStartFailed"),
+      });
+      showUnknownError(e);
+      shadowingStartedRef.current = false;
+      setRetry({ run: () => void startShadowing(turnId) });
+    } finally {
+      if (turnGenRef.current === turnGen) {
+        setStreaming("");
+        setReplyBusy(false);
+      } else {
+        speaker.abort();
+      }
+    }
+  }
+
+  // Commit a theme from the shadowing start page (chip or typed-send).
+  async function startShadowingDraft(theme: string) {
+    const s = theme.trim();
+    if (!s || replyBusy || shadowingStartedRef.current) return;
+    setInput("");
+    await onCreateShadowingDraft?.(conversationId, s);
+    setShadowingTheme(s);
+    await startShadowing();
+  }
+
+  // Weak-spot drill kickoff: the AI presents the first retrieval micro-task. Like the rapid-fire kickoff — the item
+  // list already lives in the conversation's modifiers; learner answers go through the normal graded send().
+  async function startReviewDrill(replacingId?: string) {
+    if (learningMode || replyBusy || reviewDrillStartedRef.current) return;
+    stopSpeech();
+    reviewDrillStartedRef.current = true;
+    const turnGen = ++turnGenRef.current;
+    const turnId = crypto.randomUUID();
+    liveTurnIdsRef.current.add(turnId);
+    stickToBottomRef.current = true;
+    setError(null);
+    setRetry(null);
+    replyCommittedRef.current = false;
+    setTurns((prev) => [
+      ...(replacingId ? prev.filter((t) => t.id !== replacingId) : prev),
+      {
+        id: turnId,
+        userText: "",
+        analysis: null,
+        analysisPending: false,
+      },
+    ]);
+    setReplyBusy(true);
+    setStreaming("");
+    let acc = "";
+    const speaker = loadTtsConfig().autoSpeak ? createReplySpeaker() : null;
+    try {
+      const result = await startReviewDrillSession(
+        conversationId,
+        {
+          onReplyDelta: (d) => {
+            if (turnGenRef.current !== turnGen) return;
+            acc += d;
+            setStreaming(acc);
+          },
+          onReplyComplete: (reply) => {
+            if (turnGenRef.current !== turnGen) return;
+            replyCommittedRef.current = true;
+            commitPartnerReply(turnId, reply);
+            speaker?.finish(reply);
+          },
+          onContext: (tokens) => {
+            if (turnGenRef.current === turnGen) setLastPromptTokens(tokens);
+          },
+          onAnalysis: () => {
+            patchTurn(turnId, { analysisPending: false });
+          },
+        },
+        turnId,
+      );
+      if (turnGenRef.current === turnGen && !replyCommittedRef.current) {
+        commitPartnerReply(turnId, result.reply);
+        speaker?.finish(result.reply);
+      }
+      await touchConversation(conversationId);
+      onActivity?.();
+    } catch (e) {
+      stopSpeech();
+      speaker?.abort();
+      patchTurn(turnId, {
+        analysisPending: false,
+        analysisError: t("chat.reviewDrillStartFailed"),
+      });
+      showUnknownError(e);
+      reviewDrillStartedRef.current = false;
+      setRetry({ run: () => void startReviewDrill(turnId) });
+    } finally {
+      if (turnGenRef.current === turnGen) {
+        setStreaming("");
+        setReplyBusy(false);
+      } else {
+        speaker?.abort();
+      }
+    }
+  }
+
+  // Start button on the weak-spot drill start page: snapshot the code-selected items into a real conversation,
+  // then kick off the first micro-task.
+  async function startReviewDrillDraft(items: ReviewDrillItem[]) {
+    if (items.length === 0 || replyBusy || reviewDrillStartedRef.current)
+      return;
+    await onCreateReviewDrillDraft?.(conversationId, items);
+    setReviewDrillActive(true);
+    await startReviewDrill();
+  }
+
   // "Next question" gate tap: the next sentence + its audio were prepared in the background after the last
   // transcription. Reveal the listen card, play the (cached) sentence once, and re-enable transcription.
   function enterNextDictation() {
     if (!dictationAwaitingEnter) return;
     setDictationAwaitingEnter(false);
+    sayDrillReplayCountRef.current = 0; // fresh sentence → fresh replay count
     const last = turns[turns.length - 1];
     const sentence = last?.partnerText
       ? parseDictationReply(last.partnerText).sentence
@@ -1227,6 +1518,11 @@ export function ChatView({
     ]);
     setReplyBusy(true);
     setStreaming("");
+    setRedoActive(false); // the redo invitation is consumed by this send
+    // Dictation/shadowing: hand the replay count of the answered sentence to the agent (live difficulty signal),
+    // then reset for the next sentence.
+    const replayCount = isSayDrill ? sayDrillReplayCountRef.current : undefined;
+    sayDrillReplayCountRef.current = 0;
     // Abortable: "stop generating" resolves the reply with whatever streamed so far.
     const controller = new AbortController();
     abortControllerRef.current = controller;
@@ -1236,13 +1532,13 @@ export function ChatView({
     // Not created when "auto-speak" is off in settings (the speaker icon can still be used manually).
     // Dictation never auto-plays the next sentence here — it is gated behind the "next question" tap (see speakReply).
     const speaker =
-      !learningMode && !isDictation && loadTtsConfig().autoSpeak
+      !learningMode && !isSayDrill && loadTtsConfig().autoSpeak
         ? createReplySpeaker()
         : null;
     const speakReply = (reply: string) => {
-      // Dictation: pre-synthesize the next sentence (warms the TTS cache, no playback) so tapping "next question"
-      // plays it instantly; the tap is what triggers the first playback. Never speak the feedback prose.
-      if (isDictation) {
+      // Dictation/shadowing: pre-synthesize the next sentence (warms the TTS cache, no playback) so tapping "next
+      // question" plays it instantly; the tap is what triggers the first playback. Never speak the feedback prose.
+      if (isSayDrill) {
         void speakText(parseDictationReply(reply).sentence).catch(() => {});
         return;
       }
@@ -1276,15 +1572,15 @@ export function ChatView({
           },
         },
         turnId,
-        { offRecord, displayText, signal: controller.signal },
+        { offRecord, displayText, signal: controller.signal, replayCount },
       );
       if (turnGenRef.current === turnGen && !replyCommittedRef.current) {
         commitPartnerReply(turnId, result.reply);
         speakReply(result.reply);
       }
-      // Dictation: the next sentence is now ready (and its audio prefetched). Gate it behind the "next question" tap so
-      // the learner reads the correction first; the tap plays the audio and re-enables transcription.
-      if (turnGenRef.current === turnGen && isDictation) {
+      // Dictation/shadowing: the next sentence is now ready (and its audio prefetched). Gate it behind the "next
+      // question" tap so the learner reads the correction first; the tap plays the audio and re-enables input.
+      if (turnGenRef.current === turnGen && isSayDrill) {
         setDictationAwaitingEnter(true);
       }
       if (draftAtSend) await onCreateDraftConversation?.(conversationId);
@@ -1306,7 +1602,8 @@ export function ChatView({
       if (
         !offRecord &&
         !learningMode &&
-        !isDictation &&
+        !isSayDrill &&
+        !isReviewDrill &&
         loadConfig().inputHintsAuto
       ) {
         const capturedGen = turnGen;
@@ -1481,6 +1778,13 @@ export function ChatView({
       void startDictationDraft(input);
       return;
     }
+    // Shadowing start page: same — the first commit is the theme.
+    if (shadowingDraftActive) {
+      void startShadowingDraft(input);
+      return;
+    }
+    // Weak-spot drill start page: the composer is a gate — the drill starts only via the Start button.
+    if (reviewDrillDraftActive) return;
     const parsed = parseSlashInput(input);
     if (!parsed) {
       void send();
@@ -1538,17 +1842,17 @@ export function ChatView({
   let lastReplyTurnId: string | undefined;
   for (const turn of turns) if (turn.partnerText) lastReplyTurnId = turn.id;
 
-  // Dictation masking: the sentence still awaiting transcription is the one in the LAST turn's reply (no turn follows
-  // it). All earlier sentences have been answered and are revealed. While a new reply is still streaming, the last turn
-  // is the optimistic user-transcription turn (no partnerText), so nothing is masked and the previous sentence reveals.
+  // Dictation/shadowing masking: the sentence still awaiting an answer is the one in the LAST turn's reply (no turn
+  // follows it). All earlier sentences have been answered and are revealed. While a new reply is still streaming, the
+  // last turn is the optimistic user turn (no partnerText), so nothing is masked and the previous sentence reveals.
   const dictationMaskedTurnId =
-    isDictation && turns.length > 0 && turns[turns.length - 1].partnerText
+    isSayDrill && turns.length > 0 && turns[turns.length - 1].partnerText
       ? turns[turns.length - 1].id
       : undefined;
 
-  // While a dictation reply streams, show only the feedback portion — the sentence stays hidden until it is committed
-  // (then it renders as a masked "listen" card). For non-dictation the full streamed text shows as usual.
-  const streamingVisible = isDictation
+  // While a drill reply streams, show only the feedback portion — the sentence stays hidden until it is committed
+  // (then it renders as the listen / read-aloud card). For other conversations the full streamed text shows as usual.
+  const streamingVisible = isSayDrill
     ? streamingDictationFeedback(streaming)
     : streaming;
 
@@ -1563,7 +1867,11 @@ export function ChatView({
         ? { label: t("chat.quickfireBadge"), tone: "info" }
         : isDictation
           ? { label: t("chat.dictationBadge"), tone: "info" }
-          : { label: t("chat.practiceBadge"), tone: "muted" },
+          : isShadowing
+            ? { label: t("chat.shadowingBadge"), tone: "info" }
+            : isReviewDrill
+              ? { label: t("chat.reviewDrillBadge"), tone: "info" }
+              : { label: t("chat.practiceBadge"), tone: "muted" },
   ];
   if (derivedBanner) {
     optionBadges.push({
@@ -1650,6 +1958,22 @@ export function ChatView({
                   setDictationReloadTick((n) => n + 1);
                 }}
               />
+            ) : shadowingDraftActive ? (
+              <ShadowingStartScreen
+                topics={shadowingTopics}
+                refreshing={shadowingTopicsRefreshing}
+                busy={replyBusy}
+                onPick={(theme) => void startShadowingDraft(theme)}
+                onRefresh={() => {
+                  shadowingAvoidRef.current = shadowingTopics ?? [];
+                  setShadowingReloadTick((n) => n + 1);
+                }}
+              />
+            ) : reviewDrillDraftActive ? (
+              <ReviewDrillStartScreen
+                busy={replyBusy}
+                onStart={(items) => void startReviewDrillDraft(items)}
+              />
             ) : learningMode ? (
               lessonInfo ? (
                 <LessonStartScreen
@@ -1695,21 +2019,36 @@ export function ChatView({
                   onLayoutChange={requestLayoutScroll}
                   editDisabled={analyzing || replyBusy}
                   onEditFrom={() => void editFromHere(turn.id)}
+                  onRedo={
+                    !learningMode && !isSayDrill
+                      ? () => {
+                          setRedoActive(true);
+                          setInput("");
+                          requestAnimationFrame(() =>
+                            inputRef.current?.focus(),
+                          );
+                        }
+                      : undefined
+                  }
                   onTurnAction={(actionId) =>
                     void runConversationAction(actionId, turn.id)
                   }
                 />
               )}
               {turn.partnerText &&
-                (isDictation ? (
+                (isSayDrill ? (
                   <DictationReply
                     text={turn.partnerText}
                     masked={turn.id === dictationMaskedTurnId}
+                    variant={isShadowing ? "shadowing" : "dictation"}
                     awaitingEnter={
                       turn.id === dictationMaskedTurnId &&
                       dictationAwaitingEnter
                     }
                     onEnter={enterNextDictation}
+                    onReplay={() => {
+                      sayDrillReplayCountRef.current += 1;
+                    }}
                   />
                 ) : (
                   <PartnerReply
@@ -1717,7 +2056,9 @@ export function ChatView({
                     turnId={turn.id}
                     text={turn.partnerText}
                     variant={
-                      quickfireScenario !== null ? "quickfire" : undefined
+                      quickfireScenario !== null || isReviewDrill
+                        ? "quickfire"
+                        : undefined
                     }
                     offRecord={turn.excludeFromContext}
                     autoOpen={
@@ -1806,6 +2147,26 @@ export function ChatView({
           )}
         </div>
       )}
+      {learningMode && !compact && (
+        <LessonSessionReview
+          conversationId={conversationId}
+          visible={turns.filter((tn) => tn.userText.trim()).length >= 3}
+        />
+      )}
+      {redoActive && !replyBusy && (
+        <div className="mx-4 mb-1 flex items-center gap-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-ui-caption text-foreground">
+          <RotateCcwIcon size={14} className="shrink-0 text-primary" />
+          <span className="min-w-0 flex-1">{t("chat.redoPrompt")}</span>
+          <button
+            type="button"
+            className="shrink-0 rounded p-0.5 text-ui-muted hover:text-foreground"
+            onClick={() => setRedoActive(false)}
+            aria-label={t("common.close")}
+          >
+            <XIcon size={13} />
+          </button>
+        </div>
+      )}
       {compact && compactFeedbackCount > 0 && (
         <div className="mx-3 mb-1 flex items-center gap-2 rounded-md border bg-card px-3 py-2 text-ui-caption text-ui-muted">
           <span className="min-w-0 flex-1">
@@ -1851,7 +2212,7 @@ export function ChatView({
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => {
                     if (
-                      isDictation &&
+                      isSayDrill &&
                       dictationAwaitingEnter &&
                       e.key === "Enter" &&
                       !e.shiftKey &&
@@ -1931,15 +2292,27 @@ export function ChatView({
                           ? t("quickfire.scenarioPlaceholder")
                           : dictationDraftActive
                             ? t("dictation.themePlaceholder")
-                            : isDictation
-                              ? dictationAwaitingEnter
-                                ? t("dictation.awaitingEnterPlaceholder")
-                                : t("dictation.transcriptionPlaceholder")
-                              : !compact && inputHints && inputHints.length > 0
-                                ? "" // hint shown via the animated overlay below
-                                : t("chat.inputPlaceholderPractice")
+                            : shadowingDraftActive
+                              ? t("shadowing.themePlaceholder")
+                              : reviewDrillDraftActive
+                                ? t("reviewDrill.startHint")
+                                : isDictation
+                                  ? dictationAwaitingEnter
+                                    ? t("dictation.awaitingEnterPlaceholder")
+                                    : t("dictation.transcriptionPlaceholder")
+                                  : isShadowing
+                                    ? dictationAwaitingEnter
+                                      ? t("dictation.awaitingEnterPlaceholder")
+                                      : t("shadowing.attemptPlaceholder")
+                                    : redoActive
+                                      ? t("chat.redoPlaceholder")
+                                      : !compact &&
+                                          inputHints &&
+                                          inputHints.length > 0
+                                        ? "" // hint shown via the animated overlay below
+                                        : t("chat.inputPlaceholderPractice")
                   }
-                  disabled={lessonGateActive}
+                  disabled={lessonGateActive || reviewDrillDraftActive}
                   className="max-h-[6.5rem] min-h-14 w-full min-w-0 resize-none border-none bg-transparent px-4 pt-3 pb-2 text-ui-chat outline-none placeholder:text-muted-foreground"
                 />
                 {hintsActive && (
@@ -2053,7 +2426,8 @@ export function ChatView({
                   disabled={
                     replyBusy ||
                     lessonGateActive ||
-                    (isDictation && dictationAwaitingEnter)
+                    reviewDrillDraftActive ||
+                    (isSayDrill && dictationAwaitingEnter)
                   }
                   onPartial={(live) => {
                     setInput((cur) => {
@@ -2098,8 +2472,9 @@ export function ChatView({
                     disabled={
                       replyBusy ||
                       lessonGateActive ||
+                      reviewDrillDraftActive ||
                       !input.trim() ||
-                      (isDictation && dictationAwaitingEnter)
+                      (isSayDrill && dictationAwaitingEnter)
                     }
                     title={t("chat.send")}
                     aria-label={t("chat.send")}

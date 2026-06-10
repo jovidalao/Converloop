@@ -40,6 +40,7 @@ import { OnboardingWizard } from "./components/OnboardingWizard";
 import { ProfileView } from "./components/ProfileView";
 import { SettingsView } from "./components/SettingsView";
 import { type MainView, Sidebar } from "./components/Sidebar";
+import { TodayView } from "./components/TodayView";
 import { Button } from "./components/ui/button";
 import {
   Tooltip,
@@ -55,9 +56,12 @@ import {
   createConversation,
   createDictationConversation,
   createQuickfireConversation,
+  createReviewDrillConversation,
+  createShadowingConversation,
   deleteConversation,
   ensureActiveConversation,
   listConversations,
+  type ReviewDrillItem,
   renameConversation,
   setActiveConversationId,
   setConversationPinned,
@@ -99,7 +103,13 @@ type AppLocation = {
   activeId: string;
 };
 
-type DraftKind = "chat" | "quickfire" | "dictation" | "learning_agent";
+type DraftKind =
+  | "chat"
+  | "quickfire"
+  | "dictation"
+  | "shadowing"
+  | "review_drill"
+  | "learning_agent";
 
 // app_state flag: set after the first-run wizard finishes (or is skipped, or
 // the app starts with existing data). Travels with backups like other markers.
@@ -378,6 +388,24 @@ function App() {
     navigateTo({ view: "chat", activeId: id });
   }, [navigateTo]);
 
+  // Shadowing (read-aloud): same start-page flow as dictation.
+  const openShadowingDraft = useCallback(() => {
+    const id = crypto.randomUUID();
+    setDraftId(id);
+    setDraftKind("shadowing");
+    setDraftLearningAgentId(null);
+    navigateTo({ view: "chat", activeId: id });
+  }, [navigateTo]);
+
+  // Weak-spot drill: a start page that shows the code-selected due items; Start snapshots them into a conversation.
+  const openReviewDrillDraft = useCallback(() => {
+    const id = crypto.randomUUID();
+    setDraftId(id);
+    setDraftKind("review_drill");
+    setDraftLearningAgentId(null);
+    navigateTo({ view: "chat", activeId: id });
+  }, [navigateTo]);
+
   // Lesson drafts mirror Rapid Q&A: selecting a lesson opens a frontend-only start page. The conversation row is
   // created only after the learner presses Start.
   const openLearningAgentDraft = useCallback(
@@ -566,6 +594,30 @@ function App() {
     await refresh();
   }
 
+  // Materialize a shadowing draft into a real shadowing conversation seeded with the chosen theme.
+  async function materializeShadowingDraft(id: string, theme: string) {
+    await createShadowingConversation(theme, id);
+    setActiveConversationId(id);
+    setDraftId((current) => (current === id ? crypto.randomUUID() : current));
+    setDraftKind("chat");
+    await refresh();
+  }
+
+  // Materialize a weak-spot drill draft with the code-selected due items (titled from the item labels).
+  async function materializeReviewDrillDraft(
+    id: string,
+    items: ReviewDrillItem[],
+  ) {
+    const title = `${t("app.reviewDrill")} · ${items
+      .map((item) => item.label)
+      .join(" / ")}`;
+    await createReviewDrillConversation(items, title, id);
+    setActiveConversationId(id);
+    setDraftId((current) => (current === id ? crypto.randomUUID() : current));
+    setDraftKind("chat");
+    await refresh();
+  }
+
   // Materialize a new-chat draft seeded with a chosen topic into a real practice conversation (titled from the topic).
   // Called by ChatView before the AI kickoff, so the conversation row exists when the AI opens the chat on that topic.
   async function materializeTopicDraft(id: string, topic: string) {
@@ -720,6 +772,7 @@ function App() {
   const coachVisible = coachEligible && coachOpen && !smallWindow;
   const settingsMode = isSettingsView(view);
   const TOPBAR_TITLES: Partial<Record<MainView, string>> = {
+    today: t("viewTitles.today"),
     profile: t("viewTitles.profile"),
     mastery: t("viewTitles.mastery"),
     records: t("viewTitles.records"),
@@ -742,19 +795,34 @@ function App() {
           ? (activeDraftLearningAgent?.name ?? t("app.customLearningFallback"))
           : draftKind === "dictation"
             ? t("app.dictation")
-            : t("app.newChat")
+            : draftKind === "shadowing"
+              ? t("app.shadowing")
+              : draftKind === "review_drill"
+                ? t("app.reviewDrill")
+                : t("app.newChat")
         : (activeConversation?.title ?? "")
       : (TOPBAR_TITLES[view] ?? "");
 
   const secondaryView =
-    view === "profile" ? (
+    view === "today" ? (
+      <TodayView
+        onStartReviewDrill={openReviewDrillDraft}
+        onStartDictation={openDictationDraft}
+        onStartShadowing={openShadowingDraft}
+        onStartQuickfire={openQuickfireDraft}
+        onStartLesson={openLearningAgentDraft}
+      />
+    ) : view === "profile" ? (
       <ProfileView />
     ) : view === "mastery" ? (
       <MasteryView />
     ) : view === "records" ? (
       <LearningRecordsView />
     ) : view === "learning" ? (
-      <LearningAgentsView onRefresh={refreshLearningAgents} />
+      <LearningAgentsView
+        onRefresh={refreshLearningAgents}
+        onStartLesson={openLearningAgentDraft}
+      />
     ) : view === "learning-gallery" ? (
       <CustomLearningView
         onStartLesson={openLearningAgentDraft}
@@ -1020,6 +1088,10 @@ function App() {
           newChatActive={draftActive && draftKind === "chat"}
           quickfireActive={draftActive && draftKind === "quickfire"}
           dictationActive={draftActive && draftKind === "dictation"}
+          shadowingActive={draftActive && draftKind === "shadowing"}
+          reviewDrillActive={draftActive && draftKind === "review_drill"}
+          onStartShadowing={openShadowingDraft}
+          onStartReviewDrill={openReviewDrillDraft}
           view={view}
           onSelect={selectConversation}
           onNewChat={openDraftConversation}
@@ -1054,12 +1126,16 @@ function App() {
             isDraft={chatIsDraft}
             isQuickfireDraft={chatIsDraft && draftKind === "quickfire"}
             isDictationDraft={chatIsDraft && draftKind === "dictation"}
+            isShadowingDraft={chatIsDraft && draftKind === "shadowing"}
+            isReviewDrillDraft={chatIsDraft && draftKind === "review_drill"}
             isLearningAgentDraft={chatIsDraft && draftKind === "learning_agent"}
             learningAgentDraft={activeDraftLearningAgent}
             mode={currentChatKind}
             onCreateDraftConversation={materializeDraftConversation}
             onCreateQuickfireDraft={materializeQuickfireDraft}
             onCreateDictationDraft={materializeDictationDraft}
+            onCreateShadowingDraft={materializeShadowingDraft}
+            onCreateReviewDrillDraft={materializeReviewDrillDraft}
             onCreateTopicDraft={materializeTopicDraft}
             onCreateLearningAgentDraft={materializeLearningAgentDraft}
             onActivity={() => void refresh()}

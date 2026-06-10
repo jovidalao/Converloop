@@ -69,7 +69,11 @@ export function stopSpeech(): void {
 }
 
 // Play the full audio buffer, resolving when playback ends (or is interrupted by stop).
-function playBuffer(audioBytes: ArrayBuffer, token: number): Promise<void> {
+function playBuffer(
+  audioBytes: ArrayBuffer,
+  token: number,
+  rate = 1,
+): Promise<void> {
   return new Promise((resolve, reject) => {
     if (token !== playToken) {
       resolve();
@@ -79,6 +83,9 @@ function playBuffer(audioBytes: ArrayBuffer, token: number): Promise<void> {
     const blob = new Blob([audioBytes], { type: sniffAudioMime(audioBytes) });
     currentObjectUrl = URL.createObjectURL(blob);
     currentAudio = new Audio(currentObjectUrl);
+    // Slow replay (dictation): browsers pitch-correct by default (preservesPitch), so a reduced rate
+    // sounds like slower speech, not a deeper voice.
+    currentAudio.playbackRate = rate;
     currentSettle = resolve;
     currentPhase = "playing";
     emit();
@@ -99,10 +106,12 @@ function playBuffer(audioBytes: ArrayBuffer, token: number): Promise<void> {
   });
 }
 
-/** Play the full audio at once (shared by the speak button manual playback and auto-speak). */
+/** Play the full audio at once (shared by the speak button manual playback and auto-speak).
+ *  opts.rate < 1 plays slowed down with pitch preserved (dictation slow replay). */
 export async function playSpeech(
   audioBytes: ArrayBuffer,
   key?: string,
+  opts: { rate?: number } = {},
 ): Promise<void> {
   stopSpeech();
   playToken += 1;
@@ -110,7 +119,7 @@ export async function playSpeech(
   currentPhase = currentKey ? "loading" : null;
   const token = playToken;
   try {
-    await playBuffer(audioBytes, token);
+    await playBuffer(audioBytes, token, opts.rate ?? 1);
   } finally {
     if (token === playToken) {
       cleanup();

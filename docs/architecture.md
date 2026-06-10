@@ -379,6 +379,13 @@ v1 核心链路已完成并可用:
 - ✅ 复习可见性:Coach 面板「今日到期复习」(与喂给对话 agent 的 `getReviewDueList` 同源);学习数据页每条目可展开 `mastery_event` 证据时间线
 - ✅ 数据卫生:`turn(conversation_id, created_at)` 索引;删除/截断会话级联清理 turn 级产物;`agent_job` 30 天保留窗口;Coach 面板由轮询改为事件驱动(`lib/app-events.ts`)
 - ✅ 侧栏置顶 + 日期分组(置顶 / 今天 / 本周 / 更早);错误信息全量走 i18n(orchestrator/maintainer/STT/TTS)
+- ✅ 听写自适应:听错词记成隔离的 `listening:<word>` 维度(生产向查询全部排除该前缀;正确转写由代码反推 correct 信号,migration v39 清理旧 `dictation:*` 聚合项);到期听力词编入后续句子;慢速重听(0.7×)+ 重听计数作为下一句难度信号;难度校准窗口排除听写/跟读轮(`getRecentProductionTurns`)
+- ✅ 弱项闪练(主动检索训练):代码用 `getReviewDueList` 选 5 个到期项快照进会话修饰符,agent 每轮定向出一个「必须用到该项」的微任务;到期项前置进导师弱项表,correct/error 信号干净落在目标 key 上
+- ✅ 跟读(影子练习):听写的镜像 —— 同一 `[[SAY]]` 契约,句子可见,TTS 念示范、学习者跟读、STT 转写按标准答案 diff(发音粗信号,不写 mastery)
+- ✅ 情景演练(原快问快答改名):复习项定向出题(场景使理想答案自然要求 DUE-FOR-REVIEW 项)+ 明显没完成任务时同题重试一次
+- ✅ 普通对话复习 elicitation(交替「自己示范」与「设计让用户必须产出的问题」)+ 批改面板「重说一遍」(把改对的意思凭记忆再产出一次,走正常批改)
+- ✅ 专项课课程回顾:会话级回写 observer 一次扫全课 transcript,批量提出 correct 证据(≤8 条),用户一键确认后 `recordSignals(source="review")` 入账
+- ✅ 学习项目进度:`learning_project` 关联生成课程(migration v37/v38),逐课完成标记 + 进度 + 下一课;今日训练页(侧栏「今日训练」)用已有数据拼每日清单(到期复习 → 闪练、听漏词 → 听写、进行中项目 → 下一课,完成态由当日会话类型推导)
 
 ## 踩坑记录
 

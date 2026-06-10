@@ -8,6 +8,7 @@ import {
   LanguagesIcon,
   PencilIcon,
   RefreshCwIcon,
+  RotateCcwIcon,
   SparklesIcon,
 } from "lucide-react";
 import { memo, type ReactNode, useEffect, useRef, useState } from "react";
@@ -499,6 +500,7 @@ function UserMessageActions({
   turn,
   suggestion,
   onEditFrom,
+  onRedo,
   onTurnAction,
   editDisabled = false,
   showReplySuggestion = true,
@@ -507,6 +509,9 @@ function UserMessageActions({
   turn: ChatTurn;
   suggestion: ReplySuggestionControl;
   onEditFrom: () => void;
+  /** "Say it again": invite the learner to re-produce the corrected meaning from memory as a fresh graded turn —
+   *  the absorption step after a correction. Shown only when this turn actually got feedback. */
+  onRedo?: () => void;
   // Registry-driven turn-level actions (e.g. "branch from here"); adding new actions requires no changes here.
   onTurnAction: (actionId: string) => void;
   // "Edit from here" is disabled while any turn is being graded — truncation would discard in-flight analysis.
@@ -516,6 +521,7 @@ function UserMessageActions({
   showReplySuggestion?: boolean;
   showBranch?: boolean;
 }) {
+  const { t } = useTranslation();
   const analysis = turn.analysis;
   const corrected = analysis?.corrected?.trim() || turn.userText;
   const speakTarget = idiomaticText(analysis) ?? corrected;
@@ -524,6 +530,17 @@ function UserMessageActions({
     <>
       <CopyButton text={corrected} />
       {canSpeak && <SpeakButton text={speakTarget} />}
+      {onRedo && hasLearningFeedback(turn) && (
+        <Button
+          type="button"
+          variant="action"
+          size="action"
+          title={t("chat.redo")}
+          onClick={onRedo}
+        >
+          <RotateCcwIcon size={16} />
+        </Button>
+      )}
       {showReplySuggestion && <ReplySuggestionButton suggestion={suggestion} />}
       <EditFromHereButton onClick={onEditFrom} disabled={editDisabled} />
       {showBranch &&
@@ -556,6 +573,8 @@ type UserTurnProps = {
   // (you transcribe a known sentence); quickfire hides only branch. undefined = ordinary practice (all actions).
   variant?: "quickfire" | "dictation";
   onEditFrom: () => void;
+  /** "Say it again" — see UserMessageActions. Undefined hides the action (lessons, sentence drills). */
+  onRedo?: () => void;
   onTurnAction: (actionId: string) => void;
   onLayoutChange?: () => void;
   editDisabled?: boolean;
@@ -568,6 +587,7 @@ export const UserTurn = memo(function UserTurn({
   learningMode,
   variant,
   onEditFrom,
+  onRedo,
   onTurnAction,
   onLayoutChange,
   editDisabled = false,
@@ -703,6 +723,7 @@ export const UserTurn = memo(function UserTurn({
             turn={turn}
             suggestion={replySuggestion}
             onEditFrom={onEditFrom}
+            onRedo={variant === "dictation" ? undefined : onRedo}
             onTurnAction={onTurnAction}
             editDisabled={editDisabled}
             showReplySuggestion={variant !== "dictation"}

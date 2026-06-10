@@ -6,6 +6,7 @@ import { explain } from "./agents/explain";
 import { generateInputHints } from "./agents/input-hints";
 import { generateLearningAgentDraft } from "./agents/learning-agent-builder";
 import {
+  analyzeLessonSessionWriteback,
   analyzeLessonWriteback,
   toLessonWritebackCandidate,
 } from "./agents/lesson-writeback";
@@ -45,18 +46,24 @@ import {
   parseAgentModifiers,
   parseDictationReply,
   QUICKFIRE_OPENING_INSTRUCTION,
+  REVIEW_DRILL_OPENING_INSTRUCTION,
   renameConversation,
+  SHADOWING_OPENING_INSTRUCTION,
 } from "./db/conversations";
 import {
   createLearningAgent,
   getLearningAgent,
   type LearningAgentMeta,
 } from "./db/learning-agents";
-import { createLearningProject } from "./db/learning-projects";
+import {
+  createLearningProject,
+  setLearningProjectLessons,
+} from "./db/learning-projects";
 import {
   createManualMasteryItem,
   getAllMastery,
   getComfortableList,
+  getListeningFocusWords,
   getMasteryKeyHints,
   getReviewDueList,
   getWeakList,
@@ -82,13 +89,13 @@ import { runAbortableStream } from "./lib/abortable-stream";
 import { emitAppEvent } from "./lib/app-events";
 import { rankMasteryItemsForInput } from "./lib/mastery-relevance";
 import { estimateTokens } from "./lib/tokens";
+import { maybeRunMaintainer } from "./profile/maintainer-runner";
 import {
   appendClassifiedPreferences,
   correctionPreferenceFlags,
   formatExperiencePreferences,
   preferencesFromProfile,
 } from "./profile/preferences";
-import { maybeRunMaintainer } from "./profile/maintainer-runner";
 import { profileSliceForConversation, readProfile } from "./profile/profile";
 import { maybeCompressConversation } from "./profile/summary-runner";
 import {
@@ -334,6 +341,8 @@ export async function createLearningProjectFromGoal(
       for (const lesson of plan.suggestedLessons) {
         createdLearningAgentIds.push(await createLearningAgent(lesson));
       }
+      // Link the generated lessons to the project so progress (done marks, next step) can be tracked.
+      await setLearningProjectLessons(projectId, createdLearningAgentIds);
       return {
         projectId,
         createdLearningAgentIds,
@@ -512,6 +521,97 @@ export async function confirmLearningTurnMastery(
   return applyLearningTurnMasteryPreview(conversationId, turnId, preview);
 }
 
+// Character budget for the session-review transcript: enough for a long lesson, bounded so one marathon session
+// doesn't blow the context. Truncated from the most recent turns down.
+const LESSON_SESSION_TRANSCRIPT_CHARS = 24000;
+
+// Whole-session mastery review for a focused lesson: one bounded observer pass over the full transcript proposing
+// batch "correct" evidence for the non-known items the lesson touched. The learner confirms before anything is
+// written (same LessonMasteryPreview shape as the per-turn button); recordSignals does the bookkeeping.
+export async function previewLessonSessionMastery(
+  conversationId: string,
+): Promise<LessonMasteryPreview> {
+  const provider = await getProvider();
+  if (!provider) throw new MissingApiKeyError();
+
+  const conversation = await getConversation(conversationId);
+  if (conversation?.kind !== "learning_agent") {
+    throw new Error(staticT("errors.lessonOnly"));
+  }
+  const agentId = conversation.learningAgentId;
+  if (!agentId) throw new Error(staticT("errors.lessonNoAgent"));
+  const agent = await getLearningAgent(agentId);
+  if (!agent) throw new Error(staticT("errors.agentNotFound"));
+
+  const config = loadConfig();
+  const [allItems, lessonTurns] = await Promise.all([
+    getAllMastery(),
+    getTurnsAfterId(conversationId, null),
+  ]);
+  const learnerTurns = lessonTurns.filter((t) => t.userInput.trim());
+  if (learnerTurns.length === 0) {
+    return { summary: staticT("errors.lessonNotLearnerOutput"), signals: [] };
+  }
+  const learnerText = learnerTurns.map((t) => t.userInput).join("\n");
+  const teacherText = lessonTurns.map((t) => t.reply).join("\n");
+  const candidates = rankMasteryItemsForInput(
+    allItems.filter((item) => item.status !== "known"),
+    learnerText,
+    teacherText,
+  )
+    .slice(0, 40)
+    .map(toLessonWritebackCandidate);
+  if (candidates.length === 0) {
+    return { summary: staticT("errors.lessonNoWriteback"), signals: [] };
+  }
+  const transcript = formatTurns(
+    tailTurnsByChars(lessonTurns, LESSON_SESSION_TRANSCRIPT_CHARS),
+  );
+  const result = await analyzeLessonSessionWriteback(provider, {
+    nativeLanguage: config.nativeLanguage,
+    targetLanguage: config.targetLanguage,
+    level: config.level,
+    lessonName: agent.name,
+    candidates,
+    transcript,
+  });
+  const byKey = new Map(
+    candidates.map((item) => [normalizeKey(item.key), item]),
+  );
+  const signals = result.signals.flatMap((signal) => {
+    const item = byKey.get(normalizeKey(signal.key));
+    if (!item) return [];
+    return [
+      {
+        key: item.key,
+        label: item.label,
+        type: item.type,
+        example: signal.evidence?.trim() || item.example || item.label,
+      },
+    ];
+  });
+  return { summary: result.summary, signals };
+}
+
+export async function applyLessonSessionMasteryPreview(
+  conversationId: string,
+  preview: LessonMasteryPreview,
+): Promise<{ summary: string; applied: number }> {
+  const conversation = await getConversation(conversationId);
+  if (conversation?.kind !== "learning_agent") {
+    throw new Error(staticT("errors.lessonOnly"));
+  }
+  const agentId = conversation.learningAgentId;
+  if (!agentId) throw new Error(staticT("errors.lessonNoAgent"));
+  const agent = await getLearningAgent(agentId);
+  if (!agent) throw new Error(staticT("errors.agentNotFound"));
+  const signals = lessonPreviewToSignals(preview, agent);
+  if (signals.length > 0) {
+    await recordSignals(signals, undefined, "review");
+  }
+  return { summary: preview.summary, applied: signals.length };
+}
+
 export async function applyProfilePreferenceInstruction(
   instruction: string,
   currentProfileMd: string,
@@ -579,6 +679,8 @@ export async function runTurn(
     offRecord?: boolean;
     displayText?: string;
     signal?: AbortSignal;
+    /** Dictation/shadowing: replays of the previous sentence before this answer (slow replays included). */
+    replayCount?: number;
   } = {},
 ): Promise<TurnResult> {
   // Off-record turn (/btw "by the way"): standalone helper answer, no correction, not counted in future context, no compression.
@@ -656,13 +758,45 @@ export async function runTurn(
   const agentModifiers = parseAgentModifiers(
     conversation?.agentModifiersJson ?? null,
   );
-  // Dictation: the sentence being transcribed is the one the prior AI turn spoke (the last verbatim reply). Hand it to
-  // the tutor as the standard answer so grading is a comparison, not free-form correction. Undefined for non-dictation
-  // (or a missing prior turn), in which case the tutor grades as usual.
-  const dictationStandardAnswer = agentModifiers.dictation
+  // Dictation/shadowing: the target sentence is the one the prior AI turn presented (the last verbatim reply). Hand
+  // it to the tutor as the standard answer so grading is a comparison, not free-form correction. Undefined for other
+  // conversations (or a missing prior turn), in which case the tutor grades as usual.
+  const isSayDrill = Boolean(
+    agentModifiers.dictation || agentModifiers.shadowing,
+  );
+  const dictationStandardAnswer = isSayDrill
     ? parseDictationReply(verbatimTurns[verbatimTurns.length - 1]?.reply ?? "")
         .sentence || undefined
     : undefined;
+  const standardAnswerMode: "dictation" | "shadowing" | undefined =
+    agentModifiers.shadowing
+      ? "shadowing"
+      : agentModifiers.dictation
+        ? "dictation"
+        : undefined;
+  // Dictation: load the listening-weak words so the reply agent can weave them into upcoming sentences.
+  const dictationFocusWords = agentModifiers.dictation
+    ? await getListeningFocusWords()
+    : undefined;
+  // Weak-spot drill: the snapshotted target items go to the FRONT of the tutor's weak list, so it reuses exactly
+  // these keys and its "correct" signals land on them (dropUntrackedCorrects keeps corrects only for listed keys).
+  const drillItems = agentModifiers.reviewDrill?.items ?? [];
+  const weakListWithDrill =
+    drillItems.length > 0
+      ? [
+          ...drillItems.map((item) => ({
+            key: item.key,
+            label: item.label,
+            type: item.type,
+            status: "struggling",
+            example: item.example,
+            notes: item.notes,
+          })),
+          ...weakList.filter(
+            (w) => !drillItems.some((item) => item.key === w.key),
+          ),
+        ]
+      : weakList;
 
   // Reuse the turnId generated during optimistic rendering on the frontend (if provided): gives the UI bubble and the persisted DB row the same id,
   // so "start from here" (truncate by id) and "regenerate" (locate by id) can target this turn even before a refresh.
@@ -693,13 +827,16 @@ export async function runTurn(
     summary: summaryData.summary ?? "",
     historyTurns,
     tutorHistory,
-    weakList,
+    weakList: weakListWithDrill,
     keyHints,
     comfortableItems,
     reviewItems,
     proficiency,
     agentModifiers,
     dictationStandardAnswer,
+    standardAnswerMode,
+    dictationFocusWords,
+    sayDrillReplayCount: opts.replayCount,
     callbacks: cb,
     turnPersisted,
   };
@@ -816,6 +953,13 @@ async function openConversationWithInstruction(
   );
   const id = turnId ?? crypto.randomUUID();
   const turnPersisted = Promise.resolve(id);
+  const openingModifiers = parseAgentModifiers(
+    conv?.agentModifiersJson ?? null,
+  );
+  // Dictation kickoff also gets the listening review words, so even the first sentence can re-expose one.
+  const dictationFocusWords = openingModifiers.dictation
+    ? await getListeningFocusWords()
+    : undefined;
 
   const ctx: PracticeContext = {
     kind: "practice",
@@ -840,7 +984,8 @@ async function openConversationWithInstruction(
     comfortableItems,
     reviewItems,
     proficiency,
-    agentModifiers: parseAgentModifiers(conv?.agentModifiersJson ?? null),
+    agentModifiers: openingModifiers,
+    dictationFocusWords,
     callbacks: cb,
     turnPersisted,
   };
@@ -912,6 +1057,37 @@ export async function startDictationSession(
   return openConversationWithInstruction(
     conversationId,
     DICTATION_OPENING_INSTRUCTION,
+    cb,
+    turnId,
+  );
+}
+
+// Kick off a shadowing (read-aloud) drill: same shape as dictation — the AI presents the first sentence via the
+// [[SAY]] contract; the UI shows it, speaks a model reading, and the learner reads it aloud (graded via STT).
+export async function startShadowingSession(
+  conversationId: string,
+  cb: TurnCallbacks,
+  turnId?: string,
+): Promise<TurnResult> {
+  return openConversationWithInstruction(
+    conversationId,
+    SHADOWING_OPENING_INSTRUCTION,
+    cb,
+    turnId,
+  );
+}
+
+// Kick off a weak-spot retrieval drill: the AI presents the first micro-task targeting the first snapshotted item.
+// The item list lives in agent_modifiers_json and reaches the reply agent via SESSION ADJUSTMENTS; learner answers
+// go through the normal graded runTurn with the drill items prepended to the tutor weak list.
+export async function startReviewDrillSession(
+  conversationId: string,
+  cb: TurnCallbacks,
+  turnId?: string,
+): Promise<TurnResult> {
+  return openConversationWithInstruction(
+    conversationId,
+    REVIEW_DRILL_OPENING_INSTRUCTION,
     cb,
     turnId,
   );

@@ -3,6 +3,7 @@ import {
   BlocksIcon,
   BookOpenCheckIcon,
   BotIcon,
+  CalendarCheckIcon,
   ChevronRightIcon,
   HeadphonesIcon,
   ListChecksIcon,
@@ -18,6 +19,7 @@ import {
   SparklesIcon,
   SquarePenIcon,
   SquareSlashIcon,
+  TargetIcon,
   Trash2Icon,
   TrophyIcon,
   UserRoundIcon,
@@ -40,6 +42,7 @@ import { EntityRow, EntityRowAction } from "./EntityRow";
 
 export type MainView =
   | "chat"
+  | "today"
   | "profile"
   | "mastery"
   | "records"
@@ -86,6 +89,10 @@ function conversationTypeIcon(c: ConversationMeta): ReactNode {
       return <ZapIcon className="size-3.5 shrink-0" />;
     case "dictation":
       return <HeadphonesIcon className="size-3.5 shrink-0" />;
+    case "shadowing":
+      return <MicIcon className="size-3.5 shrink-0" />;
+    case "review_drill":
+      return <TargetIcon className="size-3.5 shrink-0" />;
     default:
       return <MessageSquareIcon className="size-3.5 shrink-0" />;
   }
@@ -130,11 +137,17 @@ interface SidebarProps {
   quickfireActive: boolean;
   /** The current draft is a dictation start page (highlights the dictation entry). */
   dictationActive: boolean;
+  /** The current draft is a shadowing start page (highlights the shadowing entry). */
+  shadowingActive: boolean;
+  /** The current draft is a weak-spot drill start page (highlights the drill entry). */
+  reviewDrillActive: boolean;
   view: MainView;
   onSelect: (id: string) => void;
   onNewChat: () => void;
   onStartQuickfire: () => void;
   onStartDictation: () => void;
+  onStartShadowing: () => void;
+  onStartReviewDrill: () => void;
   onDeriveConversation: (conversationId: string, actionId: string) => void;
   onRename: (id: string, title: string) => void;
   onDelete: (id: string) => void;
@@ -156,11 +169,15 @@ export function Sidebar({
   newChatActive,
   quickfireActive,
   dictationActive,
+  shadowingActive,
+  reviewDrillActive,
   view,
   onSelect,
   onNewChat,
   onStartQuickfire,
   onStartDictation,
+  onStartShadowing,
+  onStartReviewDrill,
   onDeriveConversation,
   onRename,
   onDelete,
@@ -330,6 +347,18 @@ export function Sidebar({
               <button
                 type="button"
                 className="codex-sidebar-action"
+                data-active={view === "today"}
+                onClick={() => onOpenView("today")}
+                title={t("sidebar.todayTooltip")}
+              >
+                <span className="codex-sidebar-leading-icon">
+                  <CalendarCheckIcon className="size-4" />
+                </span>
+                <span>{t("sidebar.today")}</span>
+              </button>
+              <button
+                type="button"
+                className="codex-sidebar-action"
                 data-active={quickfireActive}
                 onClick={onStartQuickfire}
                 title={t("sidebar.quickfireTooltip")}
@@ -350,6 +379,30 @@ export function Sidebar({
                   <HeadphonesIcon className="size-4" />
                 </span>
                 <span>{t("sidebar.dictation")}</span>
+              </button>
+              <button
+                type="button"
+                className="codex-sidebar-action"
+                data-active={shadowingActive}
+                onClick={onStartShadowing}
+                title={t("sidebar.shadowingTooltip")}
+              >
+                <span className="codex-sidebar-leading-icon">
+                  <MicIcon className="size-4" />
+                </span>
+                <span>{t("sidebar.shadowing")}</span>
+              </button>
+              <button
+                type="button"
+                className="codex-sidebar-action"
+                data-active={reviewDrillActive}
+                onClick={onStartReviewDrill}
+                title={t("sidebar.reviewDrillTooltip")}
+              >
+                <span className="codex-sidebar-leading-icon">
+                  <TargetIcon className="size-4" />
+                </span>
+                <span>{t("sidebar.reviewDrill")}</span>
               </button>
               <button
                 type="button"

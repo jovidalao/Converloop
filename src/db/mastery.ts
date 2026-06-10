@@ -1,4 +1,4 @@
-import { asc, desc, eq, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, like, ne, notLike, sql } from "drizzle-orm";
 import type { TutorAnalysis } from "../agents/schema";
 import type { WeakItem } from "../agents/tutor";
 import { db } from "./client";
@@ -26,6 +26,24 @@ function payloadJson(payload: unknown): string | null {
 }
 
 type MasteryEventSource = "tutor" | "review" | "manual";
+
+// Listening-dimension keys ("listening:<word>", written by dictation grading) live in an isolated dimension:
+// they are real memory, but they are LISTENING evidence, not production evidence. Every production-facing query
+// (weak list, review candidates, scaffolds, key hints, maintainer input) excludes them — only dictation sessions
+// read them back (getListeningFocus). The legacy "dictation:*" aggregate is excluded for the same reason.
+const LISTENING_KEY_PREFIX = "listening:";
+
+function excludeListeningKeys() {
+  return and(
+    notLike(masteryItem.key, `${LISTENING_KEY_PREFIX}%`),
+    notLike(masteryItem.key, "dictation:%"),
+    notLike(masteryItem.key, "shadowing:%"),
+  );
+}
+
+export function isListeningKey(key: string): boolean {
+  return normalizeKey(key).startsWith(LISTENING_KEY_PREFIX);
+}
 
 async function insertMasteryEvent(
   sig: Signal,
@@ -147,6 +165,92 @@ export function recordSignals(
   return next;
 }
 
+// Word tokens of a sentence, lowercased with punctuation stripped — the comparison unit for listening bookkeeping.
+function sentenceWords(sentence: string): Set<string> {
+  return new Set(
+    sentence
+      .toLowerCase()
+      .split(/[^\p{L}\p{N}'’-]+/u)
+      .map((w) => w.replace(/^['’-]+|['’-]+$/g, ""))
+      .filter(Boolean),
+  );
+}
+
+// Dictation bookkeeping (listening dimension only). The grader emits one "listening:<word>" issue per missed or
+// misheard word — those become error signals. Correct evidence is derived in CODE, not by the LLM: every tracked
+// listening word that appears in the spoken sentence and was NOT missed this turn was, by definition, heard
+// correctly — emit a correct signal so listening items can actually recover (the old aggregate key only ever
+// accumulated errors and sat at a permanent 100% error rate).
+export async function recordDictationAnalysis(
+  analysis: TutorAnalysis,
+  standardAnswer: string,
+  turnId?: string,
+): Promise<void> {
+  const errorSignals = deriveSignals(analysis).filter(
+    (sig) => sig.kind === "error" && isListeningKey(sig.key),
+  );
+  const missedKeys = new Set(errorSignals.map((sig) => normalizeKey(sig.key)));
+
+  const tracked = await db
+    .select({ key: masteryItem.key, label: masteryItem.label })
+    .from(masteryItem)
+    .where(like(masteryItem.key, `${LISTENING_KEY_PREFIX}%`));
+  const heardWords = sentenceWords(standardAnswer);
+  const correctSignals: Signal[] = tracked
+    .filter(
+      (item) =>
+        !missedKeys.has(item.key) &&
+        heardWords.has(item.key.slice(LISTENING_KEY_PREFIX.length)),
+    )
+    .map((item) => ({
+      key: item.key,
+      label: item.label,
+      type: "vocab" as const,
+      kind: "correct" as const,
+      example: standardAnswer,
+    }));
+
+  const signals = [...errorSignals, ...correctSignals];
+  if (signals.length === 0) return;
+  await recordSignals(signals, turnId, "tutor");
+}
+
+// Listening words worth re-exposing in the next dictation sentences: tracked listening items that are not yet
+// reliably heard, most-missed and most-recent first. Returns the bare words (the label is the word verbatim).
+export async function getListeningFocusWords(limit = 6): Promise<string[]> {
+  const rows = await db
+    .select({ key: masteryItem.key, label: masteryItem.label })
+    .from(masteryItem)
+    .where(
+      and(
+        like(masteryItem.key, `${LISTENING_KEY_PREFIX}%`),
+        ne(masteryItem.status, "known"),
+      ),
+    )
+    .orderBy(
+      sql`(${masteryItem.errorCount} * 1.0 / (${masteryItem.seenCount} + 2)) DESC`,
+      desc(masteryItem.lastSeenAt),
+    )
+    .limit(limit);
+  return rows.map(
+    (row) => row.label.trim() || row.key.slice(LISTENING_KEY_PREFIX.length),
+  );
+}
+
+// Count of listening words still shaky — drives the daily-training dictation suggestion.
+export async function countListeningFocusWords(): Promise<number> {
+  const rows = await db
+    .select({ n: sql<number>`count(*)` })
+    .from(masteryItem)
+    .where(
+      and(
+        like(masteryItem.key, `${LISTENING_KEY_PREFIX}%`),
+        ne(masteryItem.status, "known"),
+      ),
+    );
+  return rows[0]?.n ?? 0;
+}
+
 // Weak-items table for the tutor agent: prioritize struggling, high error rate, recently seen. See architecture.md#select-top-n.
 export async function getWeakList(limit = 15): Promise<WeakItem[]> {
   const rows = await db
@@ -159,7 +263,7 @@ export async function getWeakList(limit = 15): Promise<WeakItem[]> {
       notes: masteryItem.notes,
     })
     .from(masteryItem)
-    .where(ne(masteryItem.status, "known"))
+    .where(and(ne(masteryItem.status, "known"), excludeListeningKeys()))
     .orderBy(
       // +2 denominator shrinkage: pushes sparse items down so that "1/1 error = 100%" noise
       // doesn't outrank a genuinely recurring problem like 6/9 (6/11≈0.55 > 1/3≈0.33).
@@ -188,6 +292,7 @@ export async function getMasteryKeyHints(
       status: masteryItem.status,
     })
     .from(masteryItem)
+    .where(excludeListeningKeys())
     .orderBy(desc(masteryItem.lastSeenAt))
     .limit(limit);
 }
@@ -440,7 +545,7 @@ export async function getReviewDueList(limit = 5): Promise<ReviewItem[]> {
       notes: masteryItem.notes,
     })
     .from(masteryItem)
-    .where(ne(masteryItem.status, "known"))
+    .where(and(ne(masteryItem.status, "known"), excludeListeningKeys()))
     .orderBy(asc(masteryItem.lastSeenAt));
 
   return rows
@@ -493,7 +598,7 @@ export async function getComfortableList(
       notes: masteryItem.notes,
     })
     .from(masteryItem)
-    .where(eq(masteryItem.status, "known"))
+    .where(and(eq(masteryItem.status, "known"), excludeListeningKeys()))
     .orderBy(desc(masteryItem.seenCount), desc(masteryItem.lastSeenAt))
     .limit(limit);
 }
@@ -528,7 +633,7 @@ export async function getMaintainerData(): Promise<MaintainerData> {
       notes: masteryItem.notes,
     })
     .from(masteryItem)
-    .where(ne(masteryItem.status, "known"))
+    .where(and(ne(masteryItem.status, "known"), excludeListeningKeys()))
     .orderBy(
       // +2 denominator shrinkage: pushes sparse items down so that "1/1 error = 100%" noise
       // doesn't outrank a genuinely recurring problem like 6/9 (6/11≈0.55 > 1/3≈0.33).

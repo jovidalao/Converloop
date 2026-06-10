@@ -1,4 +1,5 @@
 import {
+  CheckCircle2Icon,
   ChevronDownIcon,
   DownloadIcon,
   ListChecksIcon,
@@ -22,6 +23,9 @@ import {
 import {
   type LearningProject,
   listLearningProjects,
+  projectCompletedLessonIds,
+  projectLessonIds,
+  setLearningProjectLessonDone,
   updateLearningProject,
 } from "../db/learning-projects";
 import {
@@ -36,6 +40,8 @@ import { Textarea } from "./ui/textarea";
 
 interface LearningAgentsViewProps {
   onRefresh: () => Promise<void>;
+  /** Start one of the project's generated lessons (opens its lesson session). */
+  onStartLesson?: (agentId: string) => void;
 }
 
 function scopeName(scope: LearningDataScope): string {
@@ -72,7 +78,10 @@ function parseProjectPlan(project: LearningProject): {
   }
 }
 
-export function LearningAgentsView({ onRefresh }: LearningAgentsViewProps) {
+export function LearningAgentsView({
+  onRefresh,
+  onStartLesson,
+}: LearningAgentsViewProps) {
   const { t } = useTranslation();
   const confirm = useConfirm();
   const [lessonRequest, setLessonRequest] = useState("");
@@ -222,6 +231,20 @@ export function LearningAgentsView({ onRefresh }: LearningAgentsViewProps) {
     }
   }
 
+  async function toggleLessonDone(
+    project: LearningProject,
+    lessonId: string,
+    done: boolean,
+  ) {
+    setError(null);
+    try {
+      await setLearningProjectLessonDone(project.id, lessonId, done);
+      await refreshLocalItems();
+    } catch (e) {
+      reportError(e);
+    }
+  }
+
   const packageReview = useMemo(() => {
     if (!packageText.trim()) return null;
     try {
@@ -289,6 +312,14 @@ export function LearningAgentsView({ onRefresh }: LearningAgentsViewProps) {
             {projects.map((project) => {
               const open = expandedProjectId === project.id;
               const details = parseProjectPlan(project);
+              const lessonIds = projectLessonIds(project);
+              const completedIds = new Set(projectCompletedLessonIds(project));
+              const projectLessons = lessonIds
+                .map((id) => lessons.find((lesson) => lesson.id === id))
+                .filter((lesson): lesson is LearningAgentMeta => !!lesson);
+              const doneCount = projectLessons.filter((lesson) =>
+                completedIds.has(lesson.id),
+              ).length;
               return (
                 <div
                   key={project.id}
@@ -313,6 +344,14 @@ export function LearningAgentsView({ onRefresh }: LearningAgentsViewProps) {
                         <span className="rounded border px-1.5 py-0.5 text-ui-caption text-ui-muted">
                           {project.status}
                         </span>
+                        {projectLessons.length > 0 && (
+                          <span className="text-ui-caption tabular-nums text-ui-muted">
+                            {t("learningAgents.lessonProgress", {
+                              done: doneCount,
+                              total: projectLessons.length,
+                            })}
+                          </span>
+                        )}
                       </span>
                       <span className="mt-1 block text-ui-muted">
                         {project.goal}
@@ -333,12 +372,80 @@ export function LearningAgentsView({ onRefresh }: LearningAgentsViewProps) {
                           </ul>
                         </div>
                       )}
-                      {details.lessonNames.length > 0 && (
-                        <div className="mb-3 text-ui-caption text-ui-muted">
-                          {t("learningAgents.generatedLessons", {
-                            lessons: details.lessonNames.join(", "),
+                      {projectLessons.length > 0 ? (
+                        <div className="mb-3 flex flex-col gap-1.5">
+                          <div className="text-ui-caption font-medium text-ui-muted">
+                            {t("learningAgents.projectLessons")}
+                          </div>
+                          {projectLessons.map((lesson) => {
+                            const done = completedIds.has(lesson.id);
+                            return (
+                              <div
+                                key={lesson.id}
+                                className="flex items-center gap-2 rounded-md border bg-background px-2.5 py-2"
+                              >
+                                <button
+                                  type="button"
+                                  className={
+                                    done
+                                      ? "shrink-0 text-success"
+                                      : "shrink-0 text-ui-muted hover:text-foreground"
+                                  }
+                                  title={
+                                    done
+                                      ? t("learningAgents.markLessonUndone")
+                                      : t("learningAgents.markLessonDone")
+                                  }
+                                  aria-label={
+                                    done
+                                      ? t("learningAgents.markLessonUndone")
+                                      : t("learningAgents.markLessonDone")
+                                  }
+                                  onClick={() =>
+                                    void toggleLessonDone(
+                                      project,
+                                      lesson.id,
+                                      !done,
+                                    )
+                                  }
+                                >
+                                  <CheckCircle2Icon
+                                    size={17}
+                                    className={done ? "" : "opacity-40"}
+                                  />
+                                </button>
+                                <span
+                                  className={`min-w-0 flex-1 truncate text-ui-body ${
+                                    done
+                                      ? "text-ui-muted line-through"
+                                      : "text-foreground"
+                                  }`}
+                                >
+                                  {lesson.name}
+                                </span>
+                                {onStartLesson && (
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 shrink-0"
+                                    onClick={() => onStartLesson(lesson.id)}
+                                  >
+                                    {t("learningAgents.startLesson")}
+                                  </Button>
+                                )}
+                              </div>
+                            );
                           })}
                         </div>
+                      ) : (
+                        details.lessonNames.length > 0 && (
+                          <div className="mb-3 text-ui-caption text-ui-muted">
+                            {t("learningAgents.generatedLessons", {
+                              lessons: details.lessonNames.join(", "),
+                            })}
+                          </div>
+                        )
                       )}
                       <div className="rounded-md bg-background px-3 py-2 text-ui-body leading-relaxed">
                         <Markdown>{project.planMd}</Markdown>

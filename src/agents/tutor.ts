@@ -43,9 +43,12 @@ export interface TutorContext {
   history: string; // last few conversation turns, plain text
   userInput: string;
   customInstructions?: string; // additional instructions appended by the user in the agent library
-  /** Dictation drill: the exact sentence that was spoken. When set, grading is a comparison to this standard answer
+  /** Dictation/shadowing drill: the exact target sentence. When set, grading is a comparison to this standard answer
    *  (missed/misheard words, spelling) rather than free-form conversation correction. */
   standardAnswer?: string;
+  /** Which drill produced the standard answer: dictation (learner typed what they heard) or shadowing (learner read
+   *  the sentence aloud; the transcription comes from speech recognition). Defaults to dictation. */
+  standardAnswerMode?: "dictation" | "shadowing";
 }
 
 export interface AnalyzeResult {
@@ -98,6 +101,9 @@ function formatKeyHints(items: MasteryKeyHint[] | undefined): string {
 // Dictation grading: the learner listened to one sentence and typed what they heard. We KNOW the correct sentence
 // (the standard answer), so correction is a direct comparison — what they missed or misheard — not a free-form
 // conversational correction. Output is the same TutorAnalysis shape so the UI renders identically.
+// Each missed/misheard word gets its own "listening:<word>" mastery key: an isolated listening dimension that never
+// mixes with production keys (code excludes the prefix from production queries) but lets the next dictation session
+// weave the words back in for re-exposure.
 function dictationRulesPrompt(ctx: TutorContext): string {
   return `You are a precise dictation grader for a ${ctx.nativeLanguage} speaker
 learning ${ctx.targetLanguage} at ${ctx.level} level. The learner just LISTENED to ONE
@@ -115,12 +121,46 @@ RULES
   - category = the closest of spelling | word_choice | grammar | punctuation,
   - severity by how much it changes the meaning,
   - explanation IN ${ctx.nativeLanguage}: what they misheard or missed, plus a quick listening tip.
-  - Set mastery_key="dictation:transcription", mastery_label (in ${ctx.nativeLanguage}, e.g. "听写：听漏/听错"),
-    mastery_type="error_pattern" for every issue (these are not tracked as production weaknesses).
+  - mastery_key = "listening:" + the single most content-bearing ${ctx.targetLanguage} word they missed or
+    misheard at that spot, lowercased (e.g. "listening:receipt"). mastery_label = that word verbatim;
+    mastery_type="vocab". These keys live in an isolated listening dimension — never reuse production
+    keys from any weak list for them.
 - Apply the learner experience preferences below: if they opt out of capitalization or punctuation, do NOT
   flag differences that are ONLY capitalization/punctuation.
 - If the transcription matches the standard answer (ignoring any opted-out capitalization/punctuation):
   is_correct=true, issues=[].
+- ALWAYS set mastery_updates=[] and expression_gap=null.
+
+OUTPUT CONTRACT
+- Return exactly ONE JSON object. No markdown fences, no prose, no reasoning.
+- Always include: is_correct, corrected, natural, issues, mastery_updates, expression_gap.
+- Use [] for empty arrays and expression_gap:null. Do not include keys outside the schema.`;
+}
+
+// Shadowing grading: the learner READ the standard sentence aloud; the transcription comes from speech recognition.
+// Differences usually mean the recognizer didn't pick a word up — a coarse pronunciation signal, not a production
+// weakness. Nothing is recorded in mastery for these turns (STT noise), so the key is a fixed unrecorded aggregate.
+function shadowingRulesPrompt(ctx: TutorContext): string {
+  return `You are a pronunciation-shadowing grader for a ${ctx.nativeLanguage} speaker
+learning ${ctx.targetLanguage} at ${ctx.level} level. The learner READ ONE ${ctx.targetLanguage}
+sentence ALOUD; what you see is a SPEECH-RECOGNITION transcription of their reading. You are given the
+EXACT sentence they were reading — the standard answer. Grade ONLY by comparing the transcription to
+that standard answer. There is exactly one correct target; do not suggest alternatives.
+
+RULES
+- "corrected" = the standard answer, verbatim. "natural" = the same standard answer (no alternatives).
+- For each place the transcription differs from the standard answer, emit ONE issue:
+  - span_original = what the recognizer heard at that spot (or surrounding words where something is missing),
+  - span_corrected = the standard answer's wording there,
+  - category = the closest of spelling | word_choice | grammar | punctuation,
+  - severity by how much it changes the meaning,
+  - explanation IN ${ctx.nativeLanguage}: the recognizer likely missed this word — name the probable
+    pronunciation issue (stress, vowel quality, ending consonant, linking) and give ONE concrete
+    articulation tip. Speech recognition is imperfect: frame it as "worth another attempt", not certain failure.
+  - Set mastery_key="shadowing:attempt", mastery_label (in ${ctx.nativeLanguage}, e.g. "跟读：未被识别"),
+    mastery_type="error_pattern" for every issue (these are not tracked as weaknesses).
+- Ignore pure capitalization/punctuation differences entirely — STT does not transcribe them reliably.
+- If the transcription matches the standard answer (ignoring capitalization/punctuation): is_correct=true, issues=[].
 - ALWAYS set mastery_updates=[] and expression_gap=null.
 
 OUTPUT CONTRACT
@@ -243,7 +283,13 @@ function systemMessages(ctx: TutorContext, includeGap: boolean): ChatMessage[] {
 ${ctx.experiencePreferences || "(none)"}`;
   if (ctx.standardAnswer) {
     return [
-      { role: "system", content: dictationRulesPrompt(ctx) },
+      {
+        role: "system",
+        content:
+          ctx.standardAnswerMode === "shadowing"
+            ? shadowingRulesPrompt(ctx)
+            : dictationRulesPrompt(ctx),
+      },
       {
         role: "system",
         content: appendUserInstructions(

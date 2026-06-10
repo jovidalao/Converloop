@@ -18,7 +18,7 @@ import {
   type NewConversationContext,
 } from "../db/conversations";
 import { createLearningAgent } from "../db/learning-agents";
-import { recordAnalysis } from "../db/mastery";
+import { recordAnalysis, recordDictationAnalysis } from "../db/mastery";
 import { formatTurns, getTurnsAfterId, updateTurnAnalysis } from "../db/turns";
 import { logError } from "../lib/log";
 import { maybeRunMaintainer } from "../profile/maintainer-runner";
@@ -128,6 +128,11 @@ const conversationReply: ReplyProducer = {
   },
   run: (ctx, onDelta) => {
     const c = ctx as PracticeContext;
+    // Dictation/shadowing live extras: listening review words + how often the learner replayed the last sentence.
+    const replayNote =
+      c.sayDrillReplayCount && c.sayDrillReplayCount > 0
+        ? `PACING — the learner needed ${c.sayDrillReplayCount} replay(s) of the previous sentence (slow replays included): make the NEXT sentence a touch easier or shorter. If they answer without replays, you can stretch again.`
+        : undefined;
     return converse(
       ctx.provider,
       {
@@ -137,7 +142,10 @@ const conversationReply: ReplyProducer = {
         comfortableItems: c.comfortableItems,
         reviewItems: c.reviewItems,
         calibrationHint: c.proficiency.calibrationHint,
-        sessionAdjustments: formatModifierInstructions(c.agentModifiers),
+        sessionAdjustments: formatModifierInstructions(c.agentModifiers, {
+          dictationFocusWords: c.dictationFocusWords,
+          replayNote,
+        }),
         summary: ctx.summary,
         historyTurns: ctx.historyTurns,
         userInput: ctx.userInput,
@@ -219,6 +227,7 @@ const tutorObserver: Observer = {
         history: ctx.tutorHistory,
         userInput: ctx.userInput,
         standardAnswer: ctx.dictationStandardAnswer,
+        standardAnswerMode: ctx.standardAnswerMode,
         customInstructions:
           getBuiltinAgentOverride("builtin:tutor")?.instructions,
       },
@@ -235,10 +244,17 @@ const tutorObserver: Observer = {
     if (analysis) {
       ctx.callbacks.onAnalysis(analysis);
       try {
-        // Dictation slips are listening/spelling, not production weaknesses — show + persist the correction for the
-        // turn, but do NOT feed them into the mastery table (that would pollute the weak list with mishearings).
+        // Drill turns never write production mastery (that would pollute the weak list with mishearings).
+        // Dictation still records into the isolated listening dimension ("listening:<word>" keys + code-derived
+        // corrects); shadowing records nothing (STT noise is too coarse to count).
         if (!ctx.dictationStandardAnswer) {
           await recordAnalysis(analysis, turnId);
+        } else if (ctx.standardAnswerMode !== "shadowing") {
+          await recordDictationAnalysis(
+            analysis,
+            ctx.dictationStandardAnswer,
+            turnId,
+          );
         }
         await updateTurnAnalysis(turnId, analysis);
         if (!ctx.dictationStandardAnswer) void maybeRunMaintainer();

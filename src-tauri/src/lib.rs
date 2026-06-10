@@ -153,6 +153,19 @@ const CREATE_TURN_CONVERSATION_INDEX: &str =
 const ADD_CONVERSATION_PINNED: &str =
     "ALTER TABLE conversation ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;";
 
+// 学习项目 ↔ 专项课关联:lesson_agent_ids_json 记录该项目生成的课程 id 列表,
+// completed_lesson_ids_json 记录用户标记完成的课程 id —— 项目进度由两者推导。
+const ADD_LEARNING_PROJECT_LESSON_IDS: &str =
+    "ALTER TABLE learning_project ADD COLUMN lesson_agent_ids_json TEXT NOT NULL DEFAULT '[]';";
+const ADD_LEARNING_PROJECT_COMPLETED_LESSON_IDS: &str =
+    "ALTER TABLE learning_project ADD COLUMN completed_lesson_ids_json TEXT NOT NULL DEFAULT '[]';";
+
+// 清理旧听写聚合项:历史版本把所有听写错误记到唯一的 dictation:transcription 上,
+// 它只积累 error、永不积累 correct(错误率恒 100%),会永久霸占弱项表第一位。
+// mastery_event 证据保留;听写记忆改用隔离的 listening:<word> 维度。
+const DELETE_LEGACY_DICTATION_MASTERY: &str =
+    "DELETE FROM mastery_item WHERE key LIKE 'dictation:%';";
+
 const CREATE_AGENT_JOB: &str = "\
 CREATE TABLE IF NOT EXISTS agent_job (
     id          TEXT PRIMARY KEY NOT NULL,
@@ -542,6 +555,24 @@ pub fn run() {
             version: 36,
             description: "add_conversation_pinned",
             sql: ADD_CONVERSATION_PINNED,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 37,
+            description: "add_learning_project_lesson_ids",
+            sql: ADD_LEARNING_PROJECT_LESSON_IDS,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 38,
+            description: "add_learning_project_completed_lesson_ids",
+            sql: ADD_LEARNING_PROJECT_COMPLETED_LESSON_IDS,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 39,
+            description: "delete_legacy_dictation_mastery",
+            sql: DELETE_LEGACY_DICTATION_MASTERY,
             kind: MigrationKind::Up,
         },
     ];

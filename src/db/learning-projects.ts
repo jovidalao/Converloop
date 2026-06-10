@@ -82,6 +82,67 @@ export async function updateLearningProject(
     .where(eq(learningProject.id, id));
 }
 
+function parseIdList(json: string | null | undefined): string[] {
+  if (!json) return [];
+  try {
+    const raw = JSON.parse(json) as unknown;
+    if (Array.isArray(raw) && raw.every((v) => typeof v === "string")) {
+      return raw as string[];
+    }
+  } catch {
+    // Corrupt JSON → empty list.
+  }
+  return [];
+}
+
+export function projectLessonIds(project: LearningProject): string[] {
+  return parseIdList(project.lessonAgentIdsJson);
+}
+
+export function projectCompletedLessonIds(project: LearningProject): string[] {
+  return parseIdList(project.completedLessonIdsJson);
+}
+
+// Link the lessons generated for a project (called right after the task agent creates them).
+export async function setLearningProjectLessons(
+  id: string,
+  lessonAgentIds: string[],
+): Promise<void> {
+  await db
+    .update(learningProject)
+    .set({
+      lessonAgentIdsJson: JSON.stringify(lessonAgentIds),
+      updatedAt: Date.now(),
+    })
+    .where(eq(learningProject.id, id));
+}
+
+// Toggle one lesson's done mark. Progress is derived from the completed list vs the lesson list.
+export async function setLearningProjectLessonDone(
+  id: string,
+  lessonAgentId: string,
+  done: boolean,
+): Promise<void> {
+  const project = await getLearningProject(id);
+  if (!project) return;
+  const completed = new Set(projectCompletedLessonIds(project));
+  if (done) completed.add(lessonAgentId);
+  else completed.delete(lessonAgentId);
+  await db
+    .update(learningProject)
+    .set({
+      completedLessonIdsJson: JSON.stringify([...completed]),
+      updatedAt: Date.now(),
+    })
+    .where(eq(learningProject.id, id));
+}
+
+// The first generated lesson not yet marked done — the project's "next step" (null when all done or none linked).
+export function projectNextLessonId(project: LearningProject): string | null {
+  const completed = new Set(projectCompletedLessonIds(project));
+  return projectLessonIds(project).find((id) => !completed.has(id)) ?? null;
+}
+
 export async function appendLearningProjectNotes(
   id: string,
   notes: string,
