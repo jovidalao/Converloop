@@ -7,6 +7,7 @@ import {
   HeadphonesIcon,
   ListChecksIcon,
   MessageSquareIcon,
+  MicIcon,
   PencilIcon,
   PencilRulerIcon,
   ScrollTextIcon,
@@ -47,6 +48,7 @@ export type MainView =
   | "settings-logs"
   | "settings-general"
   | "settings-llm"
+  | "settings-stt"
   | "settings-tts"
   | "settings-commands"
   | "settings-customize";
@@ -454,6 +456,11 @@ export function Sidebar({
                 "settings-llm",
                 <BotIcon className="size-4" />,
                 t("sidebar.llmProviders"),
+              )}
+              {renderSettingsItem(
+                "settings-stt",
+                <MicIcon className="size-4" />,
+                t("sidebar.sttProviders"),
               )}
               {renderSettingsItem(
                 "settings-tts",

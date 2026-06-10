@@ -3,6 +3,7 @@ mod llm;
 mod oauth;
 mod profile;
 mod secrets;
+mod stt;
 
 use tauri_plugin_sql::{Migration, MigrationKind};
 
@@ -553,6 +554,8 @@ pub fn run() {
             profile::write_profile,
             profile::snapshot_profile,
             profile::restore_profile,
+            stt::stt_transcribe,
+            stt::stt_transcribe_soniox,
             reapply_traffic_lights,
         ])
         .run(tauri::generate_context!())

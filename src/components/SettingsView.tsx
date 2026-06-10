@@ -12,7 +12,9 @@ import openRouterLogo from "@lobehub/icons-static-svg/icons/openrouter.svg?raw";
 import qwenLogo from "@lobehub/icons-static-svg/icons/qwen-color.svg?raw";
 import type { LucideIcon } from "lucide-react";
 import {
+  AudioLinesIcon,
   ChevronDownIcon,
+  MicIcon,
   MonitorIcon,
   MoonIcon,
   PlusIcon,
@@ -78,6 +80,13 @@ import {
   setPromptMacroOverride,
   upsertCustomPromptMacro,
 } from "../runtime/prompt-macro-store";
+import {
+  loadSttConfig,
+  type SttConfig,
+  type SttProvider,
+  saveSttConfig,
+  sttKeyAccount,
+} from "../stt/config";
 import {
   EDGE_VOICES,
   loadTtsConfig,
@@ -159,6 +168,240 @@ function SettingRow({
   );
 }
 
+// Voice input (speech-to-text): Soniox async STT first, plus an
+// OpenAI-compatible /audio/transcriptions fallback. Each provider has its own
+// key account so switching does not lose credentials.
+function SttSettings() {
+  const { t } = useTranslation();
+  const [cfg, setCfg] = useState<SttConfig>(() => loadSttConfig());
+  const [expandedStt, setExpandedStt] = useState<SttProvider | null>(
+    () => loadSttConfig().sttProvider,
+  );
+  const [keyInputs, setKeyInputs] = useState<
+    Partial<Record<SttProvider, string>>
+  >({});
+  const [keyStatus, setKeyStatus] = useState<
+    Partial<Record<SttProvider, boolean>>
+  >({});
+  const [status, setStatus] = useState<{
+    provider: SttProvider;
+    text: string;
+  } | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    void Promise.all(
+      (["soniox", "openai"] satisfies SttProvider[]).map(
+        async (provider) =>
+          [provider, !!(await getSecret(sttKeyAccount(provider)))] as const,
+      ),
+    ).then((items) => {
+      if (alive) setKeyStatus(Object.fromEntries(items));
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  function update<K extends keyof SttConfig>(key: K, value: SttConfig[K]) {
+    const next = { ...cfg, [key]: value };
+    setCfg(next);
+    saveSttConfig(next);
+  }
+
+  async function saveKey(provider: SttProvider) {
+    const value = (keyInputs[provider] ?? "").trim();
+    if (!value) return;
+    await setSecret(sttKeyAccount(provider), value);
+    setKeyInputs((prev) => ({ ...prev, [provider]: "" }));
+    setKeyStatus((prev) => ({ ...prev, [provider]: true }));
+    setStatus({ provider, text: t("settings.stt.keySaved") });
+  }
+
+  async function clearKey(provider: SttProvider) {
+    await deleteSecret(sttKeyAccount(provider));
+    setKeyStatus((prev) => ({ ...prev, [provider]: false }));
+    setStatus({ provider, text: t("settings.stt.keyCleared") });
+  }
+
+  const sonioxHasKey = !!keyStatus.soniox;
+  const openAiHasKey = !!keyStatus.openai;
+
+  return (
+    <section className="space-y-6">
+      <div className="space-y-2 border-b border-border/70 pb-5">
+        <h2 className="mt-0 text-ui-title font-semibold tracking-tight">
+          {t("settings.stt.title")}
+        </h2>
+        <p className="max-w-2xl text-ui-body leading-relaxed text-ui-muted">
+          {t("settings.stt.description")}
+        </p>
+      </div>
+
+      <div className="flex flex-col">
+        <ProviderCard
+          icon={<AudioLinesIcon className="size-5 shrink-0 text-brand" />}
+          title={t("settings.stt.sonioxTitle")}
+          statusText={
+            sonioxHasKey
+              ? t("settings.llm.statusKeySaved")
+              : t("settings.llm.statusKeyUnset")
+          }
+          configured={sonioxHasKey}
+          active={cfg.sttProvider === "soniox"}
+          expanded={expandedStt === "soniox"}
+          onToggle={() =>
+            setExpandedStt((prev) => (prev === "soniox" ? null : "soniox"))
+          }
+          onActivate={() => update("sttProvider", "soniox")}
+        >
+          <p className="text-ui-body leading-relaxed text-ui-muted">
+            {t("settings.stt.sonioxDescription")}
+          </p>
+          <Field
+            label={t("settings.stt.sonioxApiKeyLabel", {
+              state: sonioxHasKey
+                ? t("settings.llm.apiKeyStateSaved")
+                : t("settings.llm.apiKeyStateUnset"),
+            })}
+          >
+            <div className="flex flex-wrap items-end gap-2">
+              <Input
+                type="password"
+                className="flex-1"
+                value={keyInputs.soniox ?? ""}
+                onChange={(e) =>
+                  setKeyInputs((prev) => ({
+                    ...prev,
+                    soniox: e.target.value,
+                  }))
+                }
+                placeholder={sonioxHasKey ? "••••••••" : "soniox-…"}
+              />
+              <Button
+                onClick={() => void saveKey("soniox")}
+                disabled={!(keyInputs.soniox ?? "").trim()}
+              >
+                {t("settings.llm.saveKey")}
+              </Button>
+              {sonioxHasKey && (
+                <Button
+                  variant="secondary"
+                  onClick={() => void clearKey("soniox")}
+                >
+                  {t("settings.llm.clear")}
+                </Button>
+              )}
+            </div>
+            <p className="mt-1.5 text-ui-caption leading-snug text-ui-muted">
+              {t("settings.llm.keyStorageNote")}
+            </p>
+          </Field>
+
+          <Field label={t("settings.stt.sonioxModel")}>
+            <Input
+              value={cfg.sonioxModel}
+              onChange={(e) => update("sonioxModel", e.target.value)}
+              placeholder="stt-async-v4"
+            />
+            <p className="mt-1.5 text-ui-caption leading-snug text-ui-muted">
+              {t("settings.stt.sonioxModelHint")}
+            </p>
+          </Field>
+
+          {status?.provider === "soniox" && (
+            <p className="m-0 break-words text-ui-body text-primary">
+              {status.text}
+            </p>
+          )}
+        </ProviderCard>
+
+        <ProviderCard
+          icon={<MicIcon className="size-5 shrink-0 text-info" />}
+          title={t("settings.stt.openaiTitle")}
+          statusText={
+            openAiHasKey
+              ? t("settings.llm.statusKeySaved")
+              : t("settings.llm.statusKeyUnset")
+          }
+          configured={openAiHasKey}
+          active={cfg.sttProvider === "openai"}
+          expanded={expandedStt === "openai"}
+          onToggle={() =>
+            setExpandedStt((prev) => (prev === "openai" ? null : "openai"))
+          }
+          onActivate={() => update("sttProvider", "openai")}
+        >
+          <p className="text-ui-body leading-relaxed text-ui-muted">
+            {t("settings.stt.openaiDescription")}
+          </p>
+          <div className="grid gap-4 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+            <Field label={t("settings.stt.baseUrl")}>
+              <Input
+                value={cfg.baseUrl}
+                onChange={(e) => update("baseUrl", e.target.value)}
+                placeholder="https://api.openai.com/v1"
+              />
+            </Field>
+            <Field label={t("settings.stt.model")}>
+              <Input
+                value={cfg.model}
+                onChange={(e) => update("model", e.target.value)}
+                placeholder="whisper-1"
+              />
+            </Field>
+          </div>
+          <Field
+            label={t("settings.stt.openaiApiKeyLabel", {
+              state: openAiHasKey
+                ? t("settings.llm.apiKeyStateSaved")
+                : t("settings.llm.apiKeyStateUnset"),
+            })}
+          >
+            <div className="flex flex-wrap items-end gap-2">
+              <Input
+                type="password"
+                className="flex-1"
+                value={keyInputs.openai ?? ""}
+                onChange={(e) =>
+                  setKeyInputs((prev) => ({
+                    ...prev,
+                    openai: e.target.value,
+                  }))
+                }
+                placeholder={openAiHasKey ? "••••••••" : "sk-…"}
+              />
+              <Button
+                onClick={() => void saveKey("openai")}
+                disabled={!(keyInputs.openai ?? "").trim()}
+              >
+                {t("settings.llm.saveKey")}
+              </Button>
+              {openAiHasKey && (
+                <Button
+                  variant="secondary"
+                  onClick={() => void clearKey("openai")}
+                >
+                  {t("settings.llm.clear")}
+                </Button>
+              )}
+            </div>
+            <p className="mt-1.5 text-ui-caption leading-snug text-ui-muted">
+              {t("settings.llm.keyStorageNote")}
+            </p>
+          </Field>
+
+          {status?.provider === "openai" && (
+            <p className="m-0 break-words text-ui-body text-primary">
+              {status.text}
+            </p>
+          )}
+        </ProviderCard>
+      </div>
+    </section>
+  );
+}
+
 const THEMES: { value: Theme; labelKey: MessageKey; icon: LucideIcon }[] = [
   { value: "light", labelKey: "settings.themes.light", icon: SunIcon },
   { value: "dark", labelKey: "settings.themes.dark", icon: MoonIcon },
@@ -218,6 +461,7 @@ const CUSTOM_MODEL_VALUE = "__custom_model__";
 export type SettingsSection =
   | "general"
   | "llm"
+  | "stt"
   | "tts"
   | "commands"
   | "customize";
@@ -1443,6 +1687,8 @@ export function SettingsView({ section }: { section: SettingsSection }) {
             </div>
           </section>
         )}
+
+        {section === "stt" && <SttSettings />}
 
         {section === "tts" && (
           <section className="space-y-6">

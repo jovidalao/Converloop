@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Tauri 在 macOS 打包时合并此文件。麦克风用途说明是 WKWebView getUserMedia
+     (语音输入/STT)的前置条件:缺少它系统会直接拒绝并杀掉进程。 -->
+<plist version="1.0">
+<dict>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Voice input: record your speech to transcribe it into the chat box. Audio is sent only to the speech-to-text provider you configured.</string>
+</dict>
+</plist>

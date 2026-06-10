@@ -18,6 +18,17 @@ export const en = {
     title: "Something went wrong",
     reload: "Reload",
   },
+  // User-facing errors thrown outside React (orchestrator / background runners).
+  errors: {
+    sttNoKey:
+      "No speech-to-text key configured. Add one in Settings → Voice input.",
+  },
+  stt: {
+    startRecording: "Voice input (record, then click again to transcribe)",
+    stopRecording: "Stop recording and transcribe (Esc to cancel)",
+    micDenied:
+      "Microphone unavailable — check the system microphone permission for lang-agent.",
+  },
   speak: {
     play: "Read aloud",
     stop: "Stop reading",
@@ -237,6 +248,7 @@ export const en = {
     general: "General",
     customization: "Customization",
     llmProviders: "LLM providers",
+    sttProviders: "Voice input",
     ttsProviders: "TTS providers",
     slashCommands: "Slash commands",
     designNotes: "Design notes",
@@ -342,6 +354,7 @@ export const en = {
     general: "General settings",
     customize: "Customization",
     llm: "LLM providers",
+    stt: "Voice input",
     tts: "TTS providers",
     commands: "Slash commands",
   },
@@ -448,6 +461,8 @@ export const en = {
       apiKeyLabel: "API key {state}",
       apiKeyStateSaved: "(saved · leave blank to keep)",
       apiKeyStateUnset: "(not set)",
+      keyStorageNote:
+        "Stored in a device-bound encrypted file (no master password — protects against casual reads, not someone with full disk access). Never sent anywhere except the provider.",
       saveKey: "Save key",
       clear: "Clear",
       testing: "Testing…",
@@ -493,6 +508,26 @@ export const en = {
       minimax: "Base URL (MiniMax)",
       "claude-oauth": "Base URL (Anthropic official)",
       "codex-oauth": "Base URL (ChatGPT Codex backend)",
+    },
+    stt: {
+      title: "Voice input (speech-to-text)",
+      description:
+        "Powers the microphone button in the chat composer. Recordings are transcribed by the selected STT provider and dropped into the input box for review before sending.",
+      sonioxTitle: "Soniox (multilingual · recommended)",
+      sonioxDescription:
+        "Uses Soniox async transcription. Language hints come from your native and target languages, while mixed-language input can still be detected automatically.",
+      sonioxApiKeyLabel: "Soniox API key {state}",
+      sonioxModel: "Soniox model",
+      sonioxModelHint:
+        "Use stt-async-v4 by default; change this only when Soniox publishes a newer async model or alias.",
+      openaiTitle: "OpenAI-compatible",
+      openaiDescription:
+        "Use OpenAI Whisper, Groq Whisper, or a local server that implements /audio/transcriptions.",
+      openaiApiKeyLabel: "OpenAI-compatible STT key {state}",
+      baseUrl: "Base URL (OpenAI-compatible)",
+      model: "Model",
+      keySaved: "STT API key encrypted and saved locally.",
+      keyCleared: "STT API key cleared from local storage.",
     },
     tts: {
       title: "TTS providers",

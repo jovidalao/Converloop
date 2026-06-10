@@ -86,6 +86,7 @@ import { DictationReply } from "./DictationReply";
 import { DictationStartScreen } from "./DictationStartScreen";
 import { LessonStartScreen } from "./LessonStartScreen";
 import { Markdown } from "./Markdown";
+import { MicButton } from "./MicButton";
 import { NewChatStartScreen } from "./NewChatStartScreen";
 import { QuickfireStartScreen } from "./QuickfireStartScreen";
 import { SlashMenu } from "./SlashMenu";
@@ -1879,6 +1880,20 @@ export function ChatView({
                       </span>
                     ))}
                 </div>
+                <MicButton
+                  disabled={
+                    replyBusy ||
+                    lessonGateActive ||
+                    (isDictation && dictationAwaitingEnter)
+                  }
+                  onTranscript={(text) => {
+                    setInput((cur) =>
+                      cur.trim() ? `${cur.trimEnd()} ${text}` : text,
+                    );
+                    requestAnimationFrame(() => inputRef.current?.focus());
+                  }}
+                  onError={setError}
+                />
                 <Select
                   value={selectedModelValue}
                   onValueChange={selectModelProvider}

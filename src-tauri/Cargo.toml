@@ -33,7 +33,10 @@ rand = "0.8"
 base64 = "0.22"
 machine-uid = "0.5"
 # LLM HTTP:走 Rust 发请求,绕过 webview CORS;reqwest 的 bytes_stream 做真流式。
-reqwest = { version = "0.12", features = ["json", "stream"] }
+# multipart 给语音转写(stt.rs)上传音频用。
+reqwest = { version = "0.12", features = ["json", "stream", "multipart"] }
+# Soniox 异步转写要轮询等待;tokio 本就在依赖树里(tauri/tokio-tungstenite),这里只是显式声明 time。
+tokio = { version = "1", features = ["time"] }
 futures-util = "0.3"
 # 免费 Edge TTS 走 WebSocket(webview 无法改写 Origin 头,必须在 Rust 连);
 # native-tls 复用 reqwest 已引入的同一 TLS 栈,macOS 上即系统 Security 框架,无新系统依赖。

@@ -109,6 +109,7 @@ const SETTINGS_VIEWS: ReadonlySet<MainView> = new Set<MainView>([
   "settings-general",
   "settings-customize",
   "settings-llm",
+  "settings-stt",
   "settings-tts",
   "settings-commands",
   "design",
@@ -679,6 +680,7 @@ function App() {
     "settings-general": t("viewTitles.general"),
     "settings-customize": t("viewTitles.customize"),
     "settings-llm": t("viewTitles.llm"),
+    "settings-stt": t("viewTitles.stt"),
     "settings-tts": t("viewTitles.tts"),
     "settings-commands": t("viewTitles.commands"),
   };
@@ -720,6 +722,8 @@ function App() {
       <SettingsView section="customize" />
     ) : view === "settings-llm" ? (
       <SettingsView section="llm" />
+    ) : view === "settings-stt" ? (
+      <SettingsView section="stt" />
     ) : view === "settings-tts" ? (
       <SettingsView section="tts" />
     ) : view === "settings-commands" ? (

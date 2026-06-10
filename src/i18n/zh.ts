@@ -19,6 +19,14 @@ export const zh: Messages = {
     title: "出了点问题",
     reload: "重新加载",
   },
+  errors: {
+    sttNoKey: "尚未配置语音转写 key。请到设置 → 语音输入填写。",
+  },
+  stt: {
+    startRecording: "语音输入(开始录音,再点一次转写)",
+    stopRecording: "停止录音并转写(Esc 取消)",
+    micDenied: "麦克风不可用——请检查系统设置里 lang-agent 的麦克风权限。",
+  },
   speak: {
     play: "朗读",
     stop: "停止朗读",
@@ -230,6 +238,7 @@ export const zh: Messages = {
     general: "通用设置",
     customization: "自定义",
     llmProviders: "LLM 提供商",
+    sttProviders: "语音输入",
     ttsProviders: "TTS 提供商",
     slashCommands: "斜杠命令",
     designNotes: "设计说明",
@@ -335,6 +344,7 @@ export const zh: Messages = {
     general: "通用设置",
     customize: "自定义",
     llm: "LLM 提供商",
+    stt: "语音输入",
     tts: "TTS 提供商",
     commands: "斜杠命令",
   },
@@ -438,6 +448,8 @@ export const zh: Messages = {
       apiKeyLabel: "API key {state}",
       apiKeyStateSaved: "(已保存 · 留空不改)",
       apiKeyStateUnset: "(未设置)",
+      keyStorageNote:
+        "保存在设备绑定的本地加密文件中(无主密码——能挡随手翻看,挡不住能读整块磁盘的人)。除了发给所选 provider,不会发往任何其他地方。",
       saveKey: "保存 key",
       clear: "清除",
       testing: "测试中…",
@@ -482,6 +494,26 @@ export const zh: Messages = {
       minimax: "Base URL (MiniMax)",
       "claude-oauth": "Base URL (Anthropic 官方)",
       "codex-oauth": "Base URL (ChatGPT Codex 后端)",
+    },
+    stt: {
+      title: "语音输入(STT)",
+      description:
+        "驱动聊天输入框的麦克风按钮:录音会经当前选择的 STT 提供商转写,放入输入框,确认后再发送。",
+      sonioxTitle: "Soniox(多语言 · 推荐)",
+      sonioxDescription:
+        "使用 Soniox 异步转写。语言提示来自你的母语和目标语言,同时仍允许自动识别混合语言输入。",
+      sonioxApiKeyLabel: "Soniox API key {state}",
+      sonioxModel: "Soniox 模型",
+      sonioxModelHint:
+        "默认使用 stt-async-v4;只有当 Soniox 发布新的异步模型或 alias 时才需要改。",
+      openaiTitle: "OpenAI 兼容",
+      openaiDescription:
+        "使用 OpenAI Whisper、Groq Whisper,或实现 /audio/transcriptions 的本地服务。",
+      openaiApiKeyLabel: "OpenAI 兼容 STT key {state}",
+      baseUrl: "Base URL(OpenAI 兼容)",
+      model: "模型",
+      keySaved: "STT API key 已加密保存到本地。",
+      keyCleared: "STT API key 已从本地清除。",
     },
     tts: {
       title: "TTS 提供商",

@@ -308,6 +308,10 @@ provider 解析全在 TS;**LLM HTTP 走 Rust**(`src-tauri/src/llm.rs` 的 `llm_r
 
 不在热路径。用户点对话回复上的「讲解」按钮时触发(`orchestrator.explainReply` → `agents/explain.ts` → `components/ReplyExplanation.tsx`)。它和对话 agent **同源读 MD 档案切片**,据此判断"这个学习者大概哪里看不懂",只讲该讲的,用**母语**流式输出,不讲显而易见的。**侧重语法结构 / 习语 / 地道用法等逐词读不出来的部分,不逐词解释单词**(单词让学习者自己查,除非在此处含义不显)。按需讲解 / 双语阅读 / 划词解析作为 `transformer` 登记进能力库;调用时经 `runTransformer` 记录 `agent_job` 运行日志,但不持久化生成的正文。
 
+## 语音输入(STT)
+
+`src/stt/*` + `components/MicButton.tsx`(输入区麦克风按钮:点击录音 → 再点停止并转写 → 进输入框由用户确认后发送,Esc 取消)。采集用 webview MediaRecorder(WebKit 出 mp4/aac,Chromium 出 webm/opus);上传走 Rust `stt.rs` 绕 webview CORS。STT 在设置 → 语音输入单独配置(`lang-agent.stt`),默认 **Soniox**(`stt_transcribe_soniox`:上传 `/v1/files` → 创建 `/v1/transcriptions` → 轮询完成 → 取 `/transcript`,默认 `stt-async-v4`,语言提示来自母语+目标语,但仍启用自动语言识别)。兼容路径是 OpenAI 风格 `/audio/transcriptions`(`stt_transcribe`,OpenAI/Groq/本地 Whisper 等),不固定 language 参数——母语/混说是核心链路。两类 key 分别存加密账户 `soniox_stt_api_key` / `stt_api_key`,STT 供应商可与对话 provider 不同。macOS 需要 `src-tauri/Info.plist` 的 `NSMicrophoneUsageDescription`(打包时由 Tauri 合并;真机首次使用会弹系统麦克风授权)。
+
 ## 朗读(TTS)
 
 `src/tts/*` + `components/SpeakButton.tsx`。**可切换引擎**(`tts/config.ts` 的 `ttsProvider`),`tts/speak.ts` 按引擎把「如何合成」收敛成一个 thunk,缓存(`tts/cache.ts`,按文本 + 配置哈希)/ 单飞去重 / Web Audio 播放(`tts/playback.ts`)两引擎共用:
@@ -344,12 +348,13 @@ v1 核心链路已完成并可用:
 - ✅ 定制化学习 Agent / 专项课:内置今日复盘、语法专项复习、表达缺口训练;支持自然语言创建和 prompt 微调;专项课会话独立于普通批改热路径;课堂回答可由用户确认后回写 `correct` 复习信号
 - ✅ Task Agent / 学习项目:把开放式学习需求规划成 `learning_project`,并生成有界专项课草案;`agent_job` 记录作业状态
 - ✅ 学习数据页自然语言修改:LLM 只生成有限操作,代码执行 create/update/delete/merge/状态修改,不让 LLM 直接碰计数
-- ✅ 最小 UI:聊天 / 批改面板 / 档案查看编辑(含 AI 自定义偏好) / 学习数据管理 / 设置(provider + key + TTS)
+- ✅ 最小 UI:聊天 / 批改面板 / 档案查看编辑(含 AI 自定义偏好) / 学习数据管理 / 设置(provider + key + STT/TTS)
 - ✅ 教练面板:右栏常驻 Coach Panel,展示本轮反馈 + 本轮「系统记下了什么」(`deriveSignals` 同源);三栏工作台布局(侧栏 / 对话 / 教练),窄屏降级为抽屉。后续界面打磨见 [ui-guide.md](./ui-guide.md)
 - ✅ 会话动作 + 分支:`conversation.action` action Agent(从此处分支 / 重新开始 / 升降难度 / 调换角色 / 第二天继续)非破坏式派生分支(`conversation` 加 parent/branch_kind/agent_modifiers 列,migration v23–v26),修饰符经 `SESSION ADJUSTMENTS` 注入对话回复;动作条与按钮由注册表驱动。
 - ✅ Agent 能力库:能力库页(侧栏 → 能力库)按 kind 展示注册表里的内置 Agent(做什么/时机/读写)、启用/禁用(`runtime/enablement.ts`,localStorage)、运行日志(`agent_job`)。按需讲解 / 双语阅读 / 划词解析也作为不可关闭的 `transformer` 能力展示并记录运行日志。能力库真相源是内存注册表,未把代码 Agent 同步进 DB。
 - ✅ 自定义 Agent(Agent-first Phase 5):能力库提供 6 问式 prompt Agent 创建(observer/action)。observer 每轮产出 `turn_annotation` 并可提出 `memory_proposal`;Coach Panel 展示自定义观察和待确认记忆,确认后由代码执行有限数据操作。action 通过 LLM 生成分支指令并创建非破坏式分支;内置「变成专项课」动作可从当前会话生成专项课并跳转。
 - ✅ 分享包 / 开发者 package(Agent-first Phase 6+):能力库与专项课页支持导入/导出商店兼容的 `lang-agent.package` JSON,一个包可包含 skill(observer/action)、lesson 和 course 草案;导入前展示读取/写入权限预览并校验白名单。旧的 runtime-only `lang-agent.agent-package` 仍保留兼容导入。
+- ✅ 语音输入(STT):输入区麦克风按钮,BYOK Soniox / OpenAI 兼容转写端点;转写文本进输入框确认后发送
 
 ## 踩坑记录
 
