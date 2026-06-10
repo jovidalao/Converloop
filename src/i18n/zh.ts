@@ -444,6 +444,7 @@ export const zh: Messages = {
       level: "水平",
       autoBilingual: "AI 回复自动开启双语阅读(逐句对照)",
       actionLabels: "对话功能按钮显示文字说明",
+      inputHintsAuto: "每轮自动生成回复提示(每轮多一次模型调用)",
       glass: "开启 macOS 玻璃效果",
     },
     backup: {

@@ -67,8 +67,9 @@ const MasteryUpdate = z.object({
   label: z.string(),
   type: MasteryType,
   signal: z.enum([
-    "correct",      // 用户这轮正确用出某个点(尤其之前薄弱的):产出证据
-    "introduced",   // 批改/建议里新引入的点:曝光证据,不推动 known
+    "correct",      // 用户这轮正确用出"已跟踪"的点(弱项表 / key hints 中已有的键):产出证据。
+                    // 不为顺手说对的内容造新键;代码侧 dropUntrackedCorrects 兜底过滤
+    "introduced",   // 批改/建议里新引入的点:曝光证据,不推动 known;可以创建新键
   ]),
   evidence: z.string().optional(), // 用户真实句子,最有价值
 });
@@ -131,8 +132,9 @@ BOOKKEEPING (mastery_updates)
 - Do NOT list the user's errors here — those come from issues.
 - Look ONLY at the latest user message, not previous turns or the partner's
   reply.
-- Add a "correct" signal when the user correctly used something from their weak
-  list in the latest message, or anything notable they got right.
+- Add a "correct" signal when the user correctly used something ALREADY TRACKED
+  — reuse the exact key from the weak list or the recent mastery key hints. Do
+  NOT invent new keys for things they simply got right.
 - Add an "introduced" signal for any new word/structure you introduced.
 
 Return ONLY the structured object defined by the schema.

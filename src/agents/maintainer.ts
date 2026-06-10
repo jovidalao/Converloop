@@ -113,6 +113,9 @@ Recently introduced:
 ${introRows}
 
 === RECENT TRANSCRIPT (source of truth for interests/tone) ===
+(The transcript may span several separate conversations; "--- Conversation: … ---"
+lines mark where one ends and another begins. Do not read across a separator as
+one continuous topic.)
 ${input.transcript || "(none)"}
 
 Produce the updated profile now.`;

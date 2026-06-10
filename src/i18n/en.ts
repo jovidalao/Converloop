@@ -462,6 +462,8 @@ export const en = {
       autoBilingual:
         "Auto-open bilingual reading for AI replies (sentence by sentence)",
       actionLabels: "Show text labels on chat action buttons",
+      inputHintsAuto:
+        "Auto-generate reply hints after each turn (one extra model call)",
       glass: "Enable macOS glass effect",
     },
     backup: {

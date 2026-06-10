@@ -15,6 +15,7 @@ import {
   activeProvider,
   findModelOption,
   getContextLimit,
+  loadConfig,
   PROVIDER_PRESETS,
   providerModelLabel,
   providerModels,
@@ -487,7 +488,7 @@ export function ChatView({
           const cached = await loadCachedInputHints(conversationId, lastTurnId);
           if (cancelled || turnGenRef.current !== capturedGen) return;
           if (cached.length > 0) setInputHints(cached);
-          else
+          else if (loadConfig().inputHintsAuto)
             void generateInputHintsForConversation(conversationId).then(
               (hints) => {
                 if (
@@ -1243,8 +1244,14 @@ export function ChatView({
         );
       } else onActivity?.();
       // Fire hint generation in the background after the reply is committed; silently ignore errors. Dictation has no
-      // reply-coaching hints (the learner transcribes, not composes), so skip it there.
-      if (!offRecord && !learningMode && !isDictation) {
+      // reply-coaching hints (the learner transcribes, not composes), so skip it there. When auto-hints are off in
+      // settings, hints come only from the coach panel's manual regenerate.
+      if (
+        !offRecord &&
+        !learningMode &&
+        !isDictation &&
+        loadConfig().inputHintsAuto
+      ) {
         const capturedGen = turnGen;
         void generateInputHintsForConversation(conversationId).then((hints) => {
           if (turnGenRef.current === capturedGen && hints.length > 0)

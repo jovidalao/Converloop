@@ -1901,6 +1901,11 @@ export function SettingsView({ section }: { section: SettingsSection }) {
                 checked={cfg.actionLabels}
                 onChange={(v) => update("actionLabels", v)}
               />
+              <ToggleField
+                label={t("settings.general.inputHintsAuto")}
+                checked={cfg.inputHintsAuto}
+                onChange={(v) => update("inputHintsAuto", v)}
+              />
             </div>
 
             <BackupSection />

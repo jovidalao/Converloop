@@ -71,6 +71,9 @@ const AppConfigSchema = z.object({
   autoBilingual: z.boolean(),
   /** Show text labels next to chat action buttons (reply suggestion / bilingual). Off = icon only. */
   actionLabels: z.boolean(),
+  /** Auto-generate reply coaching hints after each turn (one extra model call per turn).
+   *  Off = hints are only generated on demand via the coach panel's regenerate button. */
+  inputHintsAuto: z.boolean(),
 });
 
 export type AppConfig = z.infer<typeof AppConfigSchema>;
@@ -467,6 +470,7 @@ const DEFAULT_CONFIG: AppConfig = {
   level: "B1",
   autoBilingual: false,
   actionLabels: false,
+  inputHintsAuto: true,
 };
 
 function freshDefault(): AppConfig {

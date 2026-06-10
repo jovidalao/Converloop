@@ -1,3 +1,4 @@
+import { normalizeKey } from "../db/mastery-logic";
 import { recordTutorOutcome } from "../lib/tutor-stats";
 import type {
   ChatMessage,
@@ -212,7 +213,10 @@ BOOKKEEPING (mastery_updates)
 - Do NOT list the user's errors here (they come from issues) and do NOT list
   expression_gap key_items here (handled separately). Look ONLY at the latest
   user message, not previous turns or the partner's reply. Only:
-  - "correct": user correctly used something from their weak list / notable.
+  - "correct": the user correctly used something ALREADY TRACKED — reuse the
+    exact key from the weak list or the recent mastery key hints below. Do NOT
+    invent new keys for things they simply got right; untracked correct usage
+    is not an observation.
     This INCLUDES "gap:" items: if the user now produces, in ${ctx.targetLanguage}
     and unaided, an expression matching a "gap:" key in the weak list, emit a
     "correct" update with that exact key and type "expression_gap". That is the
@@ -495,11 +499,31 @@ function neutralizeUnsafeMasteryUpdates(
     : analysis;
 }
 
+// "correct" is evidence for items the system already tracks. The model occasionally invents
+// new keys to praise something the user simply got right; those would seed noise items that
+// drift to "known" without ever being a real weakness. Code-side backstop for the prompt rule:
+// keep only correct updates whose key appears in the weak list / key hints shown to the model.
+// "introduced" may still create new keys — surfacing new material is its purpose.
+function dropUntrackedCorrects(
+  analysis: TutorAnalysis,
+  ctx: TutorContext,
+): TutorAnalysis {
+  const tracked = new Set([
+    ...ctx.weakList.map((w) => normalizeKey(w.key)),
+    ...(ctx.keyHints ?? []).map((h) => normalizeKey(h.key)),
+  ]);
+  const updates = analysis.mastery_updates.filter(
+    (u) => u.signal !== "correct" || tracked.has(normalizeKey(u.key)),
+  );
+  if (updates.length === analysis.mastery_updates.length) return analysis;
+  return { ...analysis, mastery_updates: updates };
+}
+
 function finalizeTutorAnalysis(
   analysis: TutorAnalysis,
   ctx: TutorContext,
 ): TutorAnalysis {
-  return sanitizeExpressionGap(analysis, ctx);
+  return dropUntrackedCorrects(sanitizeExpressionGap(analysis, ctx), ctx);
 }
 
 function parseTutorRaw(raw: string, ctx: TutorContext): TutorParseResult {

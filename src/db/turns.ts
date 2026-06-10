@@ -1,9 +1,9 @@
-import { and, count, desc, eq, gt, gte, sql } from "drizzle-orm";
+import { and, count, desc, eq, gt, gte, inArray, sql } from "drizzle-orm";
 import type { HistoryTurn } from "../agents/history-messages";
 import type { TutorAnalysis } from "../agents/schema";
 import { db } from "./client";
 import { normalizeKey } from "./mastery-logic";
-import { type Turn, turn } from "./schema";
+import { conversation, type Turn, turn } from "./schema";
 
 export async function persistTurn(
   conversationId: string,
@@ -254,8 +254,10 @@ export async function getTurnsAfterId(
 }
 
 // Incremental transcript for the maintainer agent: only fetch turns created after the last maintenance run (createdAt > sinceMs),
-// to avoid re-digesting old content (repeated rewrites of "About me" cause slow drift). Not scoped per conversation (profile is global).
-// Then truncate from the most recent turn down to the character budget, a rough proxy for the token budget, to prevent long turns from blowing up the context.
+// to avoid re-digesting old content (repeated rewrites of "About me" cause slow drift). Not scoped per conversation (profile is global),
+// so turns from different conversations interleave — each switch is marked with a "--- Conversation: {title} ---" separator so the
+// maintainer doesn't misread two unrelated chats as one topic thread when extracting interests/tone.
+// Truncated from the most recent turn down to the character budget, a rough proxy for the token budget, to prevent long turns from blowing up the context.
 export async function formatHistorySince(
   sinceMs: number,
   charBudget: number,
@@ -267,15 +269,44 @@ export async function formatHistorySince(
     .where(and(gt(turn.createdAt, sinceMs), eq(turn.excludeFromContext, 0)))
     .orderBy(desc(turn.createdAt))
     .limit(maxTurns);
-  const lines: string[] = [];
+  const picked: Turn[] = [];
   let used = 0;
   for (const t of rows) {
     const line = `User: ${t.userInput}\nPartner: ${t.reply}`;
-    if (used + line.length > charBudget && lines.length > 0) break;
-    lines.push(line);
+    if (used + line.length > charBudget && picked.length > 0) break;
+    picked.push(t);
     used += line.length;
   }
-  return lines.reverse().join("\n\n"); // chronological order — more natural to feed into prompts
+  picked.reverse(); // chronological order — more natural to feed into prompts
+
+  const convIds = [
+    ...new Set(
+      picked
+        .map((t) => t.conversationId)
+        .filter((id): id is string => id != null),
+    ),
+  ];
+  const titleRows = convIds.length
+    ? await db
+        .select({ id: conversation.id, title: conversation.title })
+        .from(conversation)
+        .where(inArray(conversation.id, convIds))
+    : [];
+  const titleById = new Map(titleRows.map((r) => [r.id, r.title]));
+
+  const parts: string[] = [];
+  let lastConvId: string | null | undefined;
+  for (const t of picked) {
+    if (t.conversationId !== lastConvId) {
+      lastConvId = t.conversationId;
+      const title = t.conversationId
+        ? (titleById.get(t.conversationId)?.trim() ?? "(deleted)")
+        : "(unknown)";
+      parts.push(`--- Conversation: ${title} ---`);
+    }
+    parts.push(`User: ${t.userInput}\nPartner: ${t.reply}`);
+  }
+  return parts.join("\n\n");
 }
 
 // Comprehension signal: incremented by 1 when the user taps "explain" / "bilingual reading" on a reply

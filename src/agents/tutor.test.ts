@@ -64,6 +64,56 @@ const validAnalysis = JSON.stringify({
 });
 
 describe("analyze", () => {
+  it("keeps correct signals for tracked keys and drops invented ones", async () => {
+    const withCorrects = JSON.stringify({
+      is_correct: true,
+      corrected: "I went home yesterday.",
+      natural: "I went home yesterday.",
+      issues: [],
+      mastery_updates: [
+        {
+          key: "grammar:past_tense",
+          label: "Simple past tense",
+          type: "grammar",
+          signal: "correct",
+        },
+        {
+          key: "vocab:fancy_word",
+          label: "Fancy word",
+          type: "vocab",
+          signal: "correct",
+        },
+        {
+          key: "vocab:new_phrase",
+          label: "New phrase",
+          type: "vocab",
+          signal: "introduced",
+        },
+      ],
+      expression_gap: null,
+    });
+    const provider = stubProvider(() => withCorrects);
+
+    const result = await analyze(provider, {
+      ...ctx,
+      weakList: [
+        {
+          key: "grammar:past_tense",
+          label: "Simple past tense",
+          type: "grammar",
+          status: "learning",
+        },
+      ],
+    });
+
+    const updates = result.analysis?.mastery_updates ?? [];
+    // Tracked correct kept; untracked correct dropped; introduced may create new keys.
+    expect(updates.map((u) => `${u.signal}:${u.key}`)).toEqual([
+      "correct:grammar:past_tense",
+      "introduced:vocab:new_phrase",
+    ]);
+  });
+
   it("on structured validation failure, tries JSON repair first and still returns analysis on success", async () => {
     const calls: GenerateOptions[] = [];
     const provider = stubProvider((opts, call) => {

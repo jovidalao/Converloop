@@ -88,6 +88,7 @@ import {
   formatExperiencePreferences,
   preferencesFromProfile,
 } from "./profile/preferences";
+import { maybeRunMaintainer } from "./profile/maintainer-runner";
 import { profileSliceForConversation, readProfile } from "./profile/profile";
 import { maybeCompressConversation } from "./profile/summary-runner";
 import {
@@ -1006,6 +1007,10 @@ async function runLearningTurn(
   });
   resolvePersisted(id);
   cb.onReplyComplete?.(reply);
+  // Lesson chat also feeds the profile: personal facts and interests said in class should reach
+  // the maintainer just like practice turns (its transcript already includes lesson turns).
+  // Kickoff turns carry no learner speech; off-record turns are excluded from context.
+  if (!offRecord && userInput.trim()) void maybeRunMaintainer();
   // Auto-compression: when approaching the context limit, fold the oldest verbatim turns into the rolling summary in the background. Does not block the next turn's input.
   // Lesson non-history dynamic block = dataContext + agent prompt, which is typically much larger than a normal conversation, so the reserve is raised accordingly.
   // Off-record turns do not enter context; skip compression.

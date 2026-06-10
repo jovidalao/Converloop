@@ -24,7 +24,7 @@
 
 | 触发 | 说明 |
 |---|---|
-| 每 N 轮 | 默认 `N = 10`。计数器到了就排一次后台任务。 |
+| 每 N 轮 | 默认 `N = 10`。计数器到了就排一次后台任务。普通对话回合(导师记账后)和**专项课回合**(课堂里聊到的个人事实/兴趣也要进档案)都标记 dirty。 |
 | 会话结束 / 空闲 | 切换会话、页面隐藏 / 关闭前 best-effort 刷新;有新学习数据后空闲 ~10 分钟自动刷新。 |
 | 显著变化 | SQLite 出现"新 struggling 项"或"某项升到 known"时,标记 dirty,下次触发时一并刷新。 |
 | 手动 | 用户在档案页点"刷新档案"。 |
@@ -41,7 +41,8 @@
    - 薄弱 top 15:label / mastery_key / type / error_count / seen_count / status / last_seen / example / notes
    - 最近升到 known 的项(可移入"已掌握")
    - 最近 introduced 的项(含 expression_gap 的 key_items,放"最近学到")
-3. 近期对话片段:上次维护之后的 transcript(截断到约 1500 token)
+3. 近期对话片段:上次维护之后的 transcript(截断到约 1500 token)。跨会话拼接,
+   会话切换处插入 "--- Conversation: {标题} ---" 分隔行,防止把两个无关话题读成一段对话
 4. config:native / target / level
 ```
 
@@ -112,6 +113,9 @@ Recently introduced:
 {rows}
 
 === RECENT TRANSCRIPT (source of truth for interests/tone) ===
+(The transcript may span several separate conversations; "--- Conversation: … ---"
+lines mark where one ends and another begins. Do not read across a separator as
+one continuous topic.)
 {transcript}
 
 Produce the updated profile now.
