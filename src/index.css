@@ -490,7 +490,8 @@
     color: var(--foreground);
   }
   *:focus-visible {
-    outline: none;
+    outline: 1px solid var(--ring);
+    outline-offset: 2px;
     --tw-ring-offset-width: var(--ring-offset);
     --tw-ring-width: var(--ring-width);
     --tw-ring-color: var(--ring);
@@ -715,7 +716,7 @@
   border-radius: 0;
   box-shadow: none;
 }
-.codex-shell[data-compact="true"] [data-slot="button"] > span:not([class]) {
+.codex-shell[data-compact="true"] [data-compact-label] {
   display: none;
 }
 .codex-shell[data-sidebar-resizing="true"],
@@ -794,6 +795,10 @@
 }
 .codex-chrome-button:hover {
   background: var(--codex-chrome-hover-bg);
+  color: var(--codex-chrome-hover-fg);
+}
+.codex-chrome-button[data-active="true"] {
+  background: var(--codex-sidebar-active);
   color: var(--codex-chrome-hover-fg);
 }
 .codex-chrome-button:disabled {
@@ -1004,16 +1009,6 @@
 .codex-collapsible[data-collapsed] .codex-collapsible-inner {
   opacity: 0;
 }
-@media (prefers-reduced-motion: reduce) {
-  .codex-collapsible,
-  .codex-collapsible-inner,
-  .codex-sidebar-track {
-    transition: none;
-  }
-  .codex-secondary-view {
-    animation: none;
-  }
-}
 .codex-section-heading {
   height: 34px;
   padding: 0 10px;
@@ -1053,7 +1048,8 @@
   flex: 0 0 auto;
   gap: 2px;
 }
-.codex-sidebar-row:hover .codex-row-actions {
+.codex-sidebar-row:hover .codex-row-actions,
+.codex-sidebar-row:focus-within .codex-row-actions {
   display: flex;
 }
 .codex-row-actions button {
@@ -1068,6 +1064,10 @@
 }
 .codex-row-actions button:hover {
   background: var(--codex-row-action-hover-bg);
+}
+
+[data-turn-jump-highlight="true"] {
+  animation: turn-jump-highlight 1.1s ease-out;
 }
 .codex-sidebar-edit {
   margin: 1px 0;
@@ -1202,6 +1202,15 @@
   animation: message-in 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+@keyframes turn-jump-highlight {
+  0% {
+    background: color-mix(in srgb, var(--primary) 16%, transparent);
+  }
+  100% {
+    background: transparent;
+  }
+}
+
 /* 输入框提示轮换:新提示从下方上移淡入(配合 key 重挂载,每次切换重放)。 */
 @keyframes hint-in {
   from {
@@ -1216,9 +1225,12 @@
 /* 聊天路由仍直切;设置/档案二级页只做轻微入场,配合侧栏 drill-down。 */
 
 @media (prefers-reduced-motion: reduce) {
-  .animate-message-in,
-  .animate-hint-in,
-  .codex-secondary-view {
-    animation: none;
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
   }
 }

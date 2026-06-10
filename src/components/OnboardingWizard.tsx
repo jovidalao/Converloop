@@ -279,7 +279,7 @@ export function OnboardingWizard({ onDone }: { onDone: () => void }) {
         <div className="flex items-center justify-between gap-2">
           <button
             type="button"
-            className="text-ui-caption text-ui-subtle transition-colors hover:text-foreground"
+            className="text-ui-caption text-ui-muted transition-colors hover:text-foreground"
             onClick={onDone}
           >
             {t("onboarding.skip")}

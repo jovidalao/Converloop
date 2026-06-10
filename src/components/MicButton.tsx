@@ -162,10 +162,7 @@ export function MicButton({
     }
   }
 
-  const micDisabled =
-    disabled ||
-    state === "transcribing" ||
-    (!providerSelected && state === "idle");
+  const micDisabled = disabled || state === "transcribing";
   const label =
     state === "recording"
       ? t("stt.stopRecording")

@@ -272,16 +272,11 @@ export function AnnotationIsland({
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
+    const currentContainer = container;
+    let selectionFrame = 0;
+    let pointerSelecting = false;
 
-    // Selection ends: only a mouseup outside the island recomputes the
-    // selection. A valid new selection → open in the actions view.
-    function onMouseUp(e: MouseEvent) {
-      if (rootRef.current?.contains(e.target as Node)) return;
-      const next = container ? readPick(container) : null;
-      if (!next) {
-        dismiss();
-        return;
-      }
+    function openPick(next: Pick) {
       setPick(next);
       setView("actions");
       setResult("");
@@ -292,9 +287,33 @@ export function AnnotationIsland({
       genRef.current++;
     }
 
+    // Selection ends: only a mouseup outside the island recomputes the
+    // selection. A valid new selection → open in the actions view.
+    function onMouseUp(e: MouseEvent) {
+      pointerSelecting = false;
+      if (rootRef.current?.contains(e.target as Node)) return;
+      const next = readPick(currentContainer);
+      if (!next) {
+        dismiss();
+        return;
+      }
+      openPick(next);
+    }
+
+    function onSelectionChange() {
+      if (pointerSelecting) return;
+      if (selectionFrame) window.cancelAnimationFrame(selectionFrame);
+      selectionFrame = window.requestAnimationFrame(() => {
+        selectionFrame = 0;
+        const next = readPick(currentContainer);
+        if (next) openPick(next);
+      });
+    }
+
     // A mousedown outside the island closes it immediately (including starting a
     // new selection). Clicks inside are handled by the buttons.
     function onMouseDown(e: MouseEvent) {
+      pointerSelecting = true;
       if (rootRef.current?.contains(e.target as Node)) return;
       dismiss();
     }
@@ -304,16 +323,19 @@ export function AnnotationIsland({
     }
 
     document.addEventListener("mouseup", onMouseUp);
+    document.addEventListener("selectionchange", onSelectionChange);
     document.addEventListener("mousedown", onMouseDown);
     document.addEventListener("keydown", onKeyDown);
-    container.addEventListener("scroll", dismiss);
+    currentContainer.addEventListener("scroll", dismiss);
     window.addEventListener("resize", dismiss);
     return () => {
       document.removeEventListener("mouseup", onMouseUp);
+      document.removeEventListener("selectionchange", onSelectionChange);
       document.removeEventListener("mousedown", onMouseDown);
       document.removeEventListener("keydown", onKeyDown);
-      container.removeEventListener("scroll", dismiss);
+      currentContainer.removeEventListener("scroll", dismiss);
       window.removeEventListener("resize", dismiss);
+      if (selectionFrame) window.cancelAnimationFrame(selectionFrame);
     };
   }, [containerRef, dismiss]);
 

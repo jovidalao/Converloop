@@ -323,7 +323,7 @@ export function Sidebar({
                   <SquarePenIcon className="size-4" />
                 </span>
                 <span>{t("sidebar.newChat")}</span>
-                <kbd className="ml-auto rounded border border-border/60 bg-muted px-1.5 py-0.5 font-sans text-ui-caption text-ui-muted opacity-0 transition-opacity group-hover:opacity-100">
+                <kbd className="ml-auto rounded border border-border/60 bg-muted px-1.5 py-0.5 font-sans text-ui-caption text-ui-muted opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
                   {actionShortcutLabel("new-chat")}
                 </kbd>
               </button>
@@ -379,6 +379,7 @@ export function Sidebar({
                           key={c.id}
                           className="codex-sidebar-edit"
                           value={draft}
+                          aria-label={t("common.rename")}
                           // biome-ignore lint/a11y/noAutofocus: user-triggered inline rename — focus the field as it opens
                           autoFocus
                           onChange={(e) => setDraft(e.target.value)}

@@ -422,9 +422,17 @@ function App() {
   // tagged with data-turn-id; both panels are mounted together when the coach is
   // visible, so a DOM lookup is enough (no ref plumbing through ChatView).
   const jumpToTurn = useCallback((turnId: string) => {
-    document
-      .querySelector<HTMLElement>(`[data-turn-id="${turnId}"]`)
-      ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    const el = document.querySelector<HTMLElement>(
+      `[data-turn-id="${turnId}"]`,
+    );
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    el.dataset.turnJumpHighlight = "true";
+    window.setTimeout(() => {
+      if (el.dataset.turnJumpHighlight === "true") {
+        delete el.dataset.turnJumpHighlight;
+      }
+    }, 1200);
   }, []);
 
   // ⌘, settings · ⌘B sidebar · ⌘N new chat · ⌘1/2/3 focus the three panes · ⌘/ shortcuts.
@@ -446,6 +454,16 @@ function App() {
       if (matchesActionShortcut(e, "new-chat")) {
         e.preventDefault();
         openDraftConversation();
+        return;
+      }
+      if (matchesActionShortcut(e, "navigate-back") && !inField) {
+        e.preventDefault();
+        goBack();
+        return;
+      }
+      if (matchesActionShortcut(e, "navigate-forward") && !inField) {
+        e.preventDefault();
+        goForward();
         return;
       }
       if (matchesActionShortcut(e, "shortcuts")) {
@@ -475,7 +493,15 @@ function App() {
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [activeId, navigateTo, toggleSidebar, openDraftConversation, focusPanel]);
+  }, [
+    activeId,
+    navigateTo,
+    toggleSidebar,
+    openDraftConversation,
+    focusPanel,
+    goBack,
+    goForward,
+  ]);
 
   const refresh = useCallback(
     () => listConversations().then(setConversations),
@@ -616,6 +642,7 @@ function App() {
 
   function startTopbarDrag(e: MouseEvent<HTMLElement>) {
     if (e.button !== 0) return;
+    if (e.detail > 1) return;
     const target = e.target;
     if (
       target instanceof HTMLElement &&
@@ -824,8 +851,15 @@ function App() {
                     <ChevronLeftIcon />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent side="bottom" align="start">
+                <TooltipContent
+                  side="bottom"
+                  align="start"
+                  className="flex items-center gap-2"
+                >
                   <span>{t("app.back")}</span>
+                  <kbd className="rounded border border-border/60 bg-muted px-1.5 py-0.5 font-sans text-ui-caption text-ui-muted">
+                    {actionShortcutLabel("navigate-back")}
+                  </kbd>
                 </TooltipContent>
               </Tooltip>
               <Tooltip>
@@ -842,8 +876,15 @@ function App() {
                     <ChevronRightIcon />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent side="bottom" align="start">
+                <TooltipContent
+                  side="bottom"
+                  align="start"
+                  className="flex items-center gap-2"
+                >
                   <span>{t("app.forward")}</span>
+                  <kbd className="rounded border border-border/60 bg-muted px-1.5 py-0.5 font-sans text-ui-caption text-ui-muted">
+                    {actionShortcutLabel("navigate-forward")}
+                  </kbd>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
@@ -1083,7 +1124,11 @@ function App() {
       )}
 
       {toast && (
-        <div className="-translate-x-1/2 fixed bottom-6 left-1/2 z-50 flex max-w-[min(90vw,30rem)] items-center gap-3 rounded-lg border border-destructive/30 bg-card px-4 py-3 text-ui-body text-foreground shadow-lg">
+        <div
+          className="-translate-x-1/2 fixed bottom-20 left-1/2 z-50 flex max-w-[min(90vw,30rem)] items-center gap-3 rounded-lg border border-destructive/30 bg-card px-4 py-3 text-ui-body text-foreground shadow-lg"
+          role="status"
+          aria-live="polite"
+        >
           <span className="min-w-0 flex-1">{toast}</span>
           <button
             type="button"

@@ -10,12 +10,14 @@ import {
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
 } from "react";
 import { type Locale, type TFunction, useTranslation } from "@/i18n";
 import { actionShortcutLabel } from "@/lib/app-actions";
+import { useModalFocus } from "@/lib/modal-focus";
 import { type ConversationMeta, conversationType } from "../db/conversations";
 import type { LearningAgentMeta } from "../db/learning-agents";
 import { formatRelativeTime } from "./Sidebar";
@@ -78,6 +80,16 @@ export function CommandPalette({
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const listId = useId();
+  const optionBaseId = useId();
+  useModalFocus({
+    open,
+    dialogRef,
+    initialFocusRef: inputRef,
+    onClose,
+  });
 
   // Reset the query and selection each time it opens.
   useEffect(() => {
@@ -175,29 +187,42 @@ export function CommandPalette({
       role="dialog"
       aria-modal="true"
       aria-label={t("commandPalette.ariaLabel")}
+      data-modal-overlay
       className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-[12vh]"
       onMouseDown={onClose}
     >
       {/* biome-ignore lint/a11y/noStaticElementInteractions: only stops propagation to the backdrop-close handler; not an interactive control */}
       <div
+        ref={dialogRef}
+        tabIndex={-1}
         className="flex max-h-[70vh] w-full max-w-xl flex-col overflow-hidden rounded-xl border bg-card shadow-lg"
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-2 border-b px-3">
           <SearchIcon className="size-4 shrink-0 text-ui-muted" />
           <input
-            // biome-ignore lint/a11y/noAutofocus: focus the input as soon as the command palette opens
-            autoFocus
+            ref={inputRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onKeyDown}
             placeholder={t("commandPalette.searchPlaceholder")}
             spellCheck={false}
+            role="combobox"
+            aria-expanded="true"
+            aria-controls={listId}
+            aria-activedescendant={
+              flat.length > 0 ? `${optionBaseId}-${selected}` : undefined
+            }
             className="h-12 flex-1 bg-transparent text-ui-body outline-none placeholder:text-muted-foreground"
           />
         </div>
 
-        <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto py-1">
+        <div
+          ref={listRef}
+          id={listId}
+          role="listbox"
+          className="min-h-0 flex-1 overflow-y-auto py-1"
+        >
           {flat.length === 0 && (
             <div className="px-3 py-6 text-center text-ui-body text-ui-muted">
               {t("commandPalette.noResults")}
@@ -218,6 +243,7 @@ export function CommandPalette({
                   // biome-ignore lint/a11y/useKeyWithClickEvents: keyboard navigation is handled entirely by the input (activedescendant pattern)
                   // biome-ignore lint/a11y/useFocusableInteractive: options aren't individually focused; focus stays in the input
                   <div
+                    id={`${optionBaseId}-${idx}`}
                     key={keyFor(item)}
                     role="option"
                     aria-selected={isSelected}

@@ -151,7 +151,7 @@ export function CustomLearningView({
                   </div>
                 )}
                 {!lesson.builtIn && (
-                  <div className="absolute top-2.5 right-2.5 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                  <div className="absolute top-2.5 right-2.5 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
                     <button
                       type="button"
                       className="rounded-md p-1.5 text-ui-muted hover:bg-accent hover:text-foreground"

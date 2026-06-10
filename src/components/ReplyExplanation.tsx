@@ -128,7 +128,9 @@ export function ReplyExplanation({
                 <BookOpenIcon className="size-4" />
               )}
             </span>
-            {actionLabels && <span>{t("replyExplanation.explain")}</span>}
+            {actionLabels && (
+              <span data-compact-label>{t("replyExplanation.explain")}</span>
+            )}
           </Button>
         )}
         {trailingActions}

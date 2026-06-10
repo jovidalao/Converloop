@@ -159,7 +159,7 @@ function SectionCard({
         {editable && (
           <PencilIcon
             size={13}
-            className="shrink-0 text-ui-muted opacity-0 transition-opacity group-hover:opacity-100"
+            className="shrink-0 text-ui-muted opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
           />
         )}
       </span>

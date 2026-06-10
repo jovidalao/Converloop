@@ -74,7 +74,7 @@ export function EntityRow({
         <span
           className={cn(
             "codex-row-meta",
-            actions != null && "group-hover:hidden",
+            actions != null && "group-hover:hidden group-focus-within:hidden",
           )}
         >
           {meta}

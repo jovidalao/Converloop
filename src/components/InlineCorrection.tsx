@@ -353,7 +353,9 @@ export function InlineCorrection({
             onClick={() => togglePanel(panelIds.gap)}
           >
             <LanguagesIcon />
-            {actionLabels && <span>{t("corrections.explain")}</span>}
+            {actionLabels && (
+              <span data-compact-label>{t("corrections.explain")}</span>
+            )}
           </Button>
         )}
         {correction && (
@@ -367,7 +369,11 @@ export function InlineCorrection({
             onClick={correction.onToggle}
           >
             <BookOpenIcon />
-            {actionLabels && <span>{t("corrections.languageCorrection")}</span>}
+            {actionLabels && (
+              <span data-compact-label>
+                {t("corrections.languageCorrection")}
+              </span>
+            )}
           </Button>
         )}
         {natural && (
@@ -381,7 +387,11 @@ export function InlineCorrection({
             onClick={natural.onToggle}
           >
             <SparklesIcon />
-            {actionLabels && <span>{t("corrections.naturalExpression")}</span>}
+            {actionLabels && (
+              <span data-compact-label>
+                {t("corrections.naturalExpression")}
+              </span>
+            )}
           </Button>
         )}
         {hasIssues && (
@@ -395,7 +405,9 @@ export function InlineCorrection({
             onClick={() => togglePanel(panelIds.grammar)}
           >
             <BookOpenIcon />
-            {actionLabels && <span>{t("corrections.grammarDetails")}</span>}
+            {actionLabels && (
+              <span data-compact-label>{t("corrections.grammarDetails")}</span>
+            )}
             <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-background px-1 text-ui-caption font-bold text-ui-muted">
               {analysis?.issues.length ?? 0}
             </span>

@@ -13,6 +13,7 @@ export const en = {
     retry: "Retry",
     loading: "Loading…",
     copy: "Copy",
+    details: "Details",
   },
   errorBoundary: {
     title: "Something went wrong",
@@ -40,6 +41,14 @@ export const en = {
       "No speech-to-text key configured. Add one in Settings → Voice input.",
     ttsNoKey:
       "Please configure the MiMo API key in Settings → Text-to-Speech first.",
+    requestAuth:
+      "Provider authentication failed. Check the API key or sign in again.",
+    requestQuota:
+      "The provider refused the request because of quota or rate limits.",
+    requestTimeout: "The provider request timed out. Try again in a moment.",
+    requestNetwork:
+      "Network request failed. Check your connection or provider base URL.",
+    requestFailed: "The provider request failed.",
   },
   speak: {
     play: "Read aloud",
@@ -334,7 +343,7 @@ export const en = {
     recommendedTopics: "Recommended themes",
     themePlaceholder: "Describe a theme… or pick one above",
     transcriptionPlaceholder: "Type what you hear…",
-    awaitingEnterPlaceholder: "Tap “Next question” to continue…",
+    awaitingEnterPlaceholder: "Press Enter or tap “Next question” to continue…",
     listenPrompt: "Listen and type what you hear",
     nextQuestion: "Next question",
     refresh: "Regenerate",
@@ -378,6 +387,8 @@ export const en = {
   actions: {
     "new-chat": "New chat",
     "command-palette": "Search conversations and lessons",
+    "navigate-back": "Go back",
+    "navigate-forward": "Go forward",
     "toggle-sidebar": "Show / hide sidebar",
     settings: "Open settings",
     "focus-sidebar": "Focus sidebar",
@@ -577,7 +588,7 @@ export const en = {
       description:
         "Powers the microphone button in the chat composer. Recordings are transcribed by the selected STT provider and dropped into the input box for review before sending.",
       noProviderSelected:
-        "No STT provider is selected, so the chat microphone button is disabled.",
+        "No STT provider is selected. The chat microphone button will explain how to set one up when clicked.",
       disableVoiceInput: "Disable voice input",
       sonioxTitle: "Soniox (multilingual · recommended)",
       sonioxDescription:

@@ -138,6 +138,11 @@ interface ChatViewProps {
 const INPUT_TEXTAREA_MIN_HEIGHT = 56;
 const INPUT_TEXTAREA_MAX_HEIGHT = 104;
 
+type DisplayError = {
+  summary: string;
+  detail?: string;
+};
+
 export function ChatView({
   conversationId,
   isDraft = false,
@@ -158,10 +163,10 @@ export function ChatView({
   externalDraft = null,
   onExitCompact,
 }: ChatViewProps) {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const [turns, setTurns] = useState<ChatTurn[]>([]);
   const [input, setInput] = useState("");
-  const [streaming, setStreaming] = useState("");
+  const [streaming, setStreamingState] = useState("");
   // Estimated prompt size (tokens) of the last turn actually sent to the model — the real context the model
   // received (system prompt + scaffolds + summary + history + input), reported by the reply agent via onContext.
   // null until the first send this session; the context meter then falls back to a bubble-only estimate.
@@ -222,7 +227,7 @@ export function ChatView({
   const [newChatReloadTick, setNewChatReloadTick] = useState(0);
   const newChatAvoidRef = useRef<string[]>([]);
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<DisplayError | null>(null);
   // Retry entry for the last failed operation (send / regenerate / lesson start all share the bottom error bar).
   const [retry, setRetry] = useState<{ run: () => void } | null>(null);
   const [inputHints, setInputHints] = useState<string[] | null>(null);
@@ -230,6 +235,8 @@ export function ChatView({
   const messagesRef = useRef<HTMLDivElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const streamingFrameRef = useRef<number | null>(null);
+  const streamingBufferRef = useRef("");
   // 流式语音输入:记录开始说话前输入框里的底稿,partial 在它后面实时拼接,
   // 取消/出错时(onTranscript(""))恢复底稿。
   const sttBaseRef = useRef<string | null>(null);
@@ -248,6 +255,82 @@ export function ChatView({
   const { nativeLanguage, autoBilingual } = config;
   const confirm = useConfirm();
   const learningMode = mode === "learning_agent";
+
+  const showError = useCallback((message: string) => {
+    setError({ summary: message });
+  }, []);
+
+  const showUnknownError = useCallback(
+    (e: unknown) => {
+      const raw = e instanceof Error ? e.message : String(e);
+      if (e instanceof MissingApiKeyError) {
+        setError({ summary: raw });
+        return;
+      }
+      const lower = raw.toLowerCase();
+      const detail = raw.trim() ? raw : undefined;
+      if (
+        /\b(401|403)\b/.test(lower) ||
+        lower.includes("unauthorized") ||
+        lower.includes("forbidden") ||
+        lower.includes("invalid api key")
+      ) {
+        setError({ summary: t("errors.requestAuth"), detail });
+        return;
+      }
+      if (
+        /\b(429)\b/.test(lower) ||
+        lower.includes("quota") ||
+        lower.includes("rate limit")
+      ) {
+        setError({ summary: t("errors.requestQuota"), detail });
+        return;
+      }
+      if (lower.includes("timeout") || lower.includes("timed out")) {
+        setError({ summary: t("errors.requestTimeout"), detail });
+        return;
+      }
+      if (
+        lower.includes("network") ||
+        lower.includes("fetch") ||
+        lower.includes("offline")
+      ) {
+        setError({ summary: t("errors.requestNetwork"), detail });
+        return;
+      }
+      if (raw.length > 180 || raw.includes("\n") || /^[{[]/.test(raw.trim())) {
+        setError({ summary: t("errors.requestFailed"), detail });
+        return;
+      }
+      setError({ summary: raw });
+    },
+    [t],
+  );
+
+  const setStreaming = useCallback((next: string) => {
+    streamingBufferRef.current = next;
+    if (next === "") {
+      if (streamingFrameRef.current !== null) {
+        window.cancelAnimationFrame(streamingFrameRef.current);
+        streamingFrameRef.current = null;
+      }
+      setStreamingState("");
+      return;
+    }
+    if (streamingFrameRef.current !== null) return;
+    streamingFrameRef.current = window.requestAnimationFrame(() => {
+      streamingFrameRef.current = null;
+      setStreamingState(streamingBufferRef.current);
+    });
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (streamingFrameRef.current !== null) {
+        window.cancelAnimationFrame(streamingFrameRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!externalDraft) return;
@@ -633,13 +716,17 @@ export function ChatView({
       return;
     }
     setShowJumpButton(false);
-    endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    endRef.current?.scrollIntoView({
+      behavior: streaming ? "auto" : "smooth",
+      block: "end",
+    });
   }, [turns, streaming, layoutTick]);
 
   function commitPartnerReply(turnId: string, reply: string) {
     patchTurn(turnId, { partnerText: reply });
     setStreaming("");
     setReplyBusy(false);
+    requestAnimationFrame(() => inputRef.current?.focus());
   }
 
   async function startLesson(replacingId?: string) {
@@ -703,13 +790,7 @@ export function ChatView({
         analysisPending: false,
         analysisError: t("chat.lessonStartFailed"),
       });
-      setError(
-        e instanceof MissingApiKeyError
-          ? e.message
-          : e instanceof Error
-            ? e.message
-            : String(e),
-      );
+      showUnknownError(e);
       // Release the kickoff guard so retry can restart; the failed turn is replaced on retry.
       kickoffStartedRef.current = false;
       setRetry({ run: () => void startLesson(turnId) });
@@ -795,13 +876,7 @@ export function ChatView({
         analysisPending: false,
         analysisError: t("chat.derivationFailed"),
       });
-      setError(
-        e instanceof MissingApiKeyError
-          ? e.message
-          : e instanceof Error
-            ? e.message
-            : String(e),
-      );
+      showUnknownError(e);
       derivationStartedRef.current = false;
       setRetry({ run: () => void startDerived(turnId) });
     } finally {
@@ -879,13 +954,7 @@ export function ChatView({
         analysisPending: false,
         analysisError: t("chat.quickfireStartFailed"),
       });
-      setError(
-        e instanceof MissingApiKeyError
-          ? e.message
-          : e instanceof Error
-            ? e.message
-            : String(e),
-      );
+      showUnknownError(e);
       // Release the kickoff guard so retry can restart; the failed turn is replaced on retry.
       quickfireStartedRef.current = false;
       setRetry({ run: () => void startQuickfire(turnId) });
@@ -977,13 +1046,7 @@ export function ChatView({
         analysisPending: false,
         analysisError: t("chat.dictationStartFailed"),
       });
-      setError(
-        e instanceof MissingApiKeyError
-          ? e.message
-          : e instanceof Error
-            ? e.message
-            : String(e),
-      );
+      showUnknownError(e);
       // Release the kickoff guard so retry can restart; the failed turn is replaced on retry.
       dictationStartedRef.current = false;
       setRetry({ run: () => void startDictation(turnId) });
@@ -1089,13 +1152,7 @@ export function ChatView({
         analysisPending: false,
         analysisError: t("chat.topicStartFailed"),
       });
-      setError(
-        e instanceof MissingApiKeyError
-          ? e.message
-          : e instanceof Error
-            ? e.message
-            : String(e),
-      );
+      showUnknownError(e);
       // Release the kickoff guard so retry can restart; the failed turn is replaced on retry.
       topicStartedRef.current = false;
       setRetry({ run: () => void startTopic(topic, turnId) });
@@ -1267,13 +1324,7 @@ export function ChatView({
           ? t("chat.sendFailed")
           : t("chat.sendFailedNoGrading"),
       });
-      setError(
-        e instanceof MissingApiKeyError
-          ? e.message
-          : e instanceof Error
-            ? e.message
-            : String(e),
-      );
+      showUnknownError(e);
       setRetry({
         run: () =>
           void send({
@@ -1365,13 +1416,7 @@ export function ChatView({
     } catch (e) {
       if (turnGenRef.current === turnGen)
         patchTurn(turnId, { partnerText: original });
-      setError(
-        e instanceof MissingApiKeyError
-          ? e.message
-          : e instanceof Error
-            ? e.message
-            : String(e),
-      );
+      showUnknownError(e);
       setRetry({ run: () => void regenerate(turnId) });
     } finally {
       if (turnGenRef.current === turnGen) {
@@ -1399,7 +1444,7 @@ export function ChatView({
       onActivity?.();
       if (result.navigateTo) onNavigateConversation?.(result.navigateTo);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      showUnknownError(e);
     } finally {
       setActionBusy(false);
     }
@@ -1553,10 +1598,11 @@ export function ChatView({
       ? modelSelectValue(config.providerType, currentModelOption.model)
       : CURRENT_MODEL_VALUE;
   const contextTitle = t("chat.contextUsage", {
-    used: usedTokens.toLocaleString(),
-    limit: contextLimit.toLocaleString(),
+    used: usedTokens.toLocaleString(locale),
+    limit: contextLimit.toLocaleString(locale),
     pct: usedPercent,
   });
+  const showContextWarning = !compact && usedPercent >= 70;
 
   function selectModelProvider(value: string) {
     if (value === CURRENT_MODEL_VALUE) return;
@@ -1647,7 +1693,7 @@ export function ChatView({
                   learningMode={learningMode}
                   variant={practiceVariant}
                   onLayoutChange={requestLayoutScroll}
-                  editDisabled={analyzing}
+                  editDisabled={analyzing || replyBusy}
                   onEditFrom={() => void editFromHere(turn.id)}
                   onTurnAction={(actionId) =>
                     void runConversationAction(actionId, turn.id)
@@ -1686,6 +1732,7 @@ export function ChatView({
                     onLayoutChange={requestLayoutScroll}
                     onRegenerate={
                       !learningMode &&
+                      !replyBusy &&
                       !turn.excludeFromContext &&
                       turn.id === lastReplyTurnId
                         ? () => void regenerate(turn.id)
@@ -1728,8 +1775,23 @@ export function ChatView({
         )}
       </div>
       {error && (
-        <div className="mx-4 flex items-center gap-3 rounded-md bg-destructive/15 px-3 py-2 text-ui-body text-destructive">
-          <span className="min-w-0 flex-1">{error}</span>
+        <div
+          className="mx-4 flex items-center gap-3 rounded-md bg-destructive/15 px-3 py-2 text-ui-body text-destructive"
+          role="alert"
+        >
+          <div className="min-w-0 flex-1">
+            {error.summary}
+            {error.detail && (
+              <details className="mt-1 text-ui-caption text-destructive/80">
+                <summary className="cursor-pointer">
+                  {t("common.details")}
+                </summary>
+                <pre className="mt-1 max-h-28 overflow-auto whitespace-pre-wrap rounded bg-background/60 p-2 font-mono text-ui-caption leading-snug">
+                  {error.detail}
+                </pre>
+              </details>
+            )}
+          </div>
           {retry && !replyBusy && (
             <Button
               type="button"
@@ -1788,6 +1850,32 @@ export function ChatView({
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => {
+                    if (
+                      isDictation &&
+                      dictationAwaitingEnter &&
+                      e.key === "Enter" &&
+                      !e.shiftKey &&
+                      !e.nativeEvent.isComposing
+                    ) {
+                      e.preventDefault();
+                      enterNextDictation();
+                      return;
+                    }
+                    if (
+                      hintsActive &&
+                      e.key === "Tab" &&
+                      !e.nativeEvent.isComposing
+                    ) {
+                      const hint = inputHints?.[hintIndex]?.trim();
+                      if (hint) {
+                        e.preventDefault();
+                        setInput(hint);
+                        setInputHints(null);
+                        setHintIndex(0);
+                        requestAnimationFrame(() => inputRef.current?.focus());
+                        return;
+                      }
+                    }
                     // Intercept navigation keys when the menu is open (not during IME composition); don't let them bubble to send.
                     if (slashOpen && !e.nativeEvent.isComposing) {
                       if (e.key === "ArrowDown") {
@@ -1826,7 +1914,8 @@ export function ChatView({
                     if (
                       e.key === "Enter" &&
                       !e.shiftKey &&
-                      !e.nativeEvent.isComposing
+                      !e.nativeEvent.isComposing &&
+                      !replyBusy
                     ) {
                       e.preventDefault();
                       submitInput();
@@ -1850,11 +1939,7 @@ export function ChatView({
                                 ? "" // hint shown via the animated overlay below
                                 : t("chat.inputPlaceholderPractice")
                   }
-                  disabled={
-                    replyBusy ||
-                    lessonGateActive ||
-                    (isDictation && dictationAwaitingEnter)
-                  }
+                  disabled={lessonGateActive}
                   className="max-h-[6.5rem] min-h-14 w-full min-w-0 resize-none border-none bg-transparent px-4 pt-3 pb-2 text-ui-chat outline-none placeholder:text-muted-foreground"
                 />
                 {hintsActive && (
@@ -1889,6 +1974,18 @@ export function ChatView({
                         {b.label}
                       </span>
                     ))}
+                  {showContextWarning && (
+                    <span
+                      className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-ui-caption font-semibold tabular-nums ${
+                        usedPercent >= 90
+                          ? "bg-destructive/10 text-destructive"
+                          : "bg-warning/10 text-warning"
+                      }`}
+                      title={contextTitle}
+                    >
+                      {usedPercent}%
+                    </span>
+                  )}
                 </div>
                 <Select
                   value={selectedModelValue}
@@ -1980,7 +2077,7 @@ export function ChatView({
                     });
                     requestAnimationFrame(() => inputRef.current?.focus());
                   }}
-                  onError={setError}
+                  onError={showError}
                 />
                 {replyBusy && stoppable ? (
                   <Button

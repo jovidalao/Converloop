@@ -9,7 +9,7 @@ import {
   XIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useTranslation } from "@/i18n";
+import { type Locale, useTranslation } from "@/i18n";
 import type { DataEditPreview } from "../data-edit";
 import {
   deleteMasteryItem,
@@ -49,8 +49,8 @@ function ratio(item: MasteryItem): string {
   return `${item.errorCount}/${item.seenCount}`;
 }
 
-function dateLabel(ms: number): string {
-  return new Date(ms).toLocaleDateString();
+function dateLabel(ms: number, locale: Locale): string {
+  return new Intl.DateTimeFormat(locale).format(new Date(ms));
 }
 
 function matches(item: MasteryItem, query: string): boolean {
@@ -100,7 +100,7 @@ const EVENT_KIND_TONE: Record<string, string> = {
 // its key, newest first. Read-only — this is the audit trail that explains the
 // current status/counters.
 function MasteryHistory({ itemKey }: { itemKey: string }) {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const [events, setEvents] = useState<MasteryEvent[] | null>(null);
 
   useEffect(() => {
@@ -147,7 +147,10 @@ function MasteryHistory({ itemKey }: { itemKey: string }) {
               </span>
             )}
             <span className="text-ui-muted">
-              {new Date(ev.createdAt).toLocaleString()}
+              {new Intl.DateTimeFormat(locale, {
+                dateStyle: "medium",
+                timeStyle: "short",
+              }).format(new Date(ev.createdAt))}
               {ev.source !== "tutor" &&
                 ` · ${t(`mastery.history.source.${ev.source as "review" | "manual"}`)}`}
             </span>
@@ -165,7 +168,7 @@ function MasteryRow({
   item: MasteryItem;
   onRefresh: () => void;
 }) {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const confirm = useConfirm();
   const [editing, setEditing] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -230,7 +233,9 @@ function MasteryRow({
       <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-ui-caption text-ui-muted">
         <span>{t("mastery.errorRatio", { ratio: ratio(item) })}</span>
         <span>
-          {t("mastery.lastSeen", { date: dateLabel(item.lastSeenAt) })}
+          {t("mastery.lastSeen", {
+            date: dateLabel(item.lastSeenAt, locale),
+          })}
         </span>
       </div>
 
@@ -449,6 +454,7 @@ export function MasteryView() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={t("mastery.searchPlaceholder")}
+            aria-label={t("mastery.searchPlaceholder")}
             spellCheck={false}
             className="min-w-0 flex-1 border-none bg-transparent py-2 text-ui-body outline-none placeholder:text-muted-foreground"
           />

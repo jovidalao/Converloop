@@ -4,6 +4,8 @@ import { z } from "zod";
 export type AppActionId =
   | "new-chat"
   | "command-palette"
+  | "navigate-back"
+  | "navigate-forward"
   | "toggle-sidebar"
   | "settings"
   | "focus-sidebar"
@@ -35,6 +37,8 @@ export interface AppAction {
 export const APP_ACTIONS: AppAction[] = [
   { id: "new-chat", defaultBinding: { key: "n", meta: true } },
   { id: "command-palette", defaultBinding: { key: "k", meta: true } },
+  { id: "navigate-back", defaultBinding: { key: "[", meta: true } },
+  { id: "navigate-forward", defaultBinding: { key: "]", meta: true } },
   { id: "toggle-sidebar", defaultBinding: { key: "b", meta: true } },
   { id: "settings", defaultBinding: { key: ",", meta: true } },
   { id: "focus-sidebar", defaultBinding: { key: "1", meta: true } },

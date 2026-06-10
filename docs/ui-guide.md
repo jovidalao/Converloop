@@ -72,3 +72,14 @@ Craft 化改造(原 `craft-ui-plan.md` 的 Phase 0–7)已落地:6 色语义 tok
 1. `rg "text-\[#|text-muted-foreground/|text-\[11px\]|text-\[0\.7rem\]|text-lg|text-xl" src`
 2. `pnpm check`
 3. 看普通聊天、Coach 打开、设置/数据/能力库页,确认标题、正文、说明、badge 有稳定层级,无重叠/溢出/突兀默认组件。
+
+## 2026-06-11 UI 审查落地约定
+
+- `:focus-visible` 在 base 层必须真实绘制中性 1px focus ring;组件级 `focus-visible:ring-*` 可以覆盖,但不能依赖“只设置 CSS 变量”的空规则。
+- Hover 才显示的行内操作必须同时支持 `:focus-within`;不可让 Tab 落到不可见按钮上。
+- 自绘 modal / palette 必须具备打开后移入焦点、Tab trap、Esc 关闭、背景 inert、关闭后恢复焦点。优先复用 `src/lib/modal-focus.ts`。
+- 聊天输入框在回复流式期间保持可编辑;提交入口可以禁用,但不要让 textarea 因 `disabled` 丢焦。听写的“下一题”gate 同时支持 Enter。
+- 流式回复 delta 进入 React state 前用 `requestAnimationFrame` 合并;流式自动贴底用 instant scroll,只有用户主动“回到最新”使用 smooth。
+- `prefers-reduced-motion: reduce` 用全局兜底压低 transition / animation,不要只逐条覆盖自定义 keyframes。
+- compact 模式隐藏 action 文案只认显式 `data-compact-label`,不要用 `[data-slot="button"] > span:not([class])` 这类结构选择器。
+- 上下文用量达到 70% 后必须有可见提示,不能只藏在 `title` 里。

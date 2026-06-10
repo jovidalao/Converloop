@@ -1,4 +1,5 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { memo } from "react";
 import ReactMarkdown, { type Components, type Options } from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -31,7 +32,7 @@ export function ExternalLink({
 // as the translation).
 // remarkPlugins: plugins added on top of GFM (e.g. bilingual reading's ⟦…⟧
 // translation markers).
-export function Markdown({
+export const Markdown = memo(function Markdown({
   children,
   className,
   components,
@@ -52,4 +53,4 @@ export function Markdown({
       </ReactMarkdown>
     </div>
   );
-}
+});

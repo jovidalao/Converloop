@@ -35,11 +35,6 @@ export function ThinkingIndicator({
     label === undefined
       ? processingMessages[Math.floor(elapsed / 4) % processingMessages.length]
       : label;
-  const accessibleLabel =
-    elapsed >= 2
-      ? `${message} ${t("turnActivity.elapsedSeconds", { n: elapsed })}`
-      : message;
-
   return (
     <div
       className={cn(
@@ -47,7 +42,7 @@ export function ThinkingIndicator({
         className,
       )}
       role="status"
-      aria-label={accessibleLabel}
+      aria-label={message}
     >
       <span className="inline-flex items-center gap-1" aria-hidden>
         <span className="size-1.5 animate-bounce rounded-full bg-current [animation-delay:-0.3s]" />
@@ -56,7 +51,10 @@ export function ThinkingIndicator({
       </span>
       <span className="animate-pulse">{message}</span>
       {elapsed >= 2 && (
-        <span className="rounded-full bg-foreground-10 px-1.5 py-0.5 text-ui-caption tabular-nums text-ui-muted">
+        <span
+          className="rounded-full bg-foreground-10 px-1.5 py-0.5 text-ui-caption tabular-nums text-ui-muted"
+          aria-hidden
+        >
           {elapsed}s
         </span>
       )}

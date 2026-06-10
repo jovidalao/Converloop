@@ -152,7 +152,9 @@ export function ReplySuggestionButton({
       <span className="inline-flex size-4 shrink-0 items-center justify-center">
         <MessageSquareReplyIcon className="size-4" />
       </span>
-      {actionLabels && <span>{t("chat.replySuggestion")}</span>}
+      {actionLabels && (
+        <span data-compact-label>{t("chat.replySuggestion")}</span>
+      )}
     </Button>
   );
 }

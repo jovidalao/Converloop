@@ -1,7 +1,8 @@
 import { XIcon } from "lucide-react";
-import { useEffect } from "react";
+import { useRef } from "react";
 import { useTranslation } from "@/i18n";
 import { APP_ACTIONS, actionKeyCaps, useKeybindings } from "@/lib/app-actions";
+import { useModalFocus } from "@/lib/modal-focus";
 import { Button } from "./ui/button";
 
 function KeyCap({ children }: { children: string }) {
@@ -22,14 +23,14 @@ export function KeyboardShortcutsDialog({
   const { t } = useTranslation();
   // Reflect custom chords as they change.
   useKeybindings();
-  useEffect(() => {
-    if (!open) return;
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [open, onClose]);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  useModalFocus({
+    open,
+    dialogRef,
+    initialFocusRef: closeRef,
+    onClose,
+  });
 
   if (!open) return null;
   return (
@@ -37,11 +38,14 @@ export function KeyboardShortcutsDialog({
       role="dialog"
       aria-modal="true"
       aria-label={t("shortcutsDialog.ariaLabel")}
+      data-modal-overlay
       className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-[12vh]"
       onMouseDown={onClose}
     >
       {/* biome-ignore lint/a11y/noStaticElementInteractions: only stops the backdrop-close handler */}
       <div
+        ref={dialogRef}
+        tabIndex={-1}
         className="w-full max-w-lg overflow-hidden rounded-xl border bg-card shadow-modal-small"
         onMouseDown={(e) => e.stopPropagation()}
       >
@@ -55,6 +59,7 @@ export function KeyboardShortcutsDialog({
             </p>
           </div>
           <Button
+            ref={closeRef}
             type="button"
             variant="ghost"
             size="icon"

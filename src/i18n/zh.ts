@@ -14,6 +14,7 @@ export const zh: Messages = {
     retry: "重试",
     loading: "加载中…",
     copy: "复制",
+    details: "详情",
   },
   errorBoundary: {
     title: "出了点问题",
@@ -34,6 +35,11 @@ export const zh: Messages = {
     sttNoProvider: "尚未选择语音转写 provider。请到设置 → 语音输入选择一个。",
     sttNoKey: "尚未配置语音转写 key。请到设置 → 语音输入填写。",
     ttsNoKey: "请先到设置 → 语音里配置 MiMo API key。",
+    requestAuth: "Provider 鉴权失败。请检查 API key 或重新登录。",
+    requestQuota: "Provider 因配额或限流拒绝了请求。",
+    requestTimeout: "Provider 请求超时。请稍后重试。",
+    requestNetwork: "网络请求失败。请检查网络连接或 provider base URL。",
+    requestFailed: "Provider 请求失败。",
   },
   onboarding: {
     title: "欢迎使用 lang-agent",
@@ -316,7 +322,7 @@ export const zh: Messages = {
     recommendedTopics: "推荐主题",
     themePlaceholder: "描述一个主题…… 或从上方选一个",
     transcriptionPlaceholder: "输入你听到的内容……",
-    awaitingEnterPlaceholder: "点击「进入下一题」继续……",
+    awaitingEnterPlaceholder: "按 Enter 或点击「进入下一题」继续……",
     listenPrompt: "听一听,把听到的内容打出来",
     nextQuestion: "进入下一题",
     refresh: "重新生成",
@@ -360,6 +366,8 @@ export const zh: Messages = {
   actions: {
     "new-chat": "新对话",
     "command-palette": "搜索对话与专项课",
+    "navigate-back": "后退",
+    "navigate-forward": "前进",
     "toggle-sidebar": "显示 / 隐藏侧栏",
     settings: "打开设置",
     "focus-sidebar": "聚焦侧栏",
@@ -554,7 +562,7 @@ export const zh: Messages = {
       description:
         "驱动聊天输入框的麦克风按钮:录音会经当前选择的 STT 提供商转写,放入输入框,确认后再发送。",
       noProviderSelected:
-        "尚未选择 STT provider,聊天输入框的麦克风按钮会保持禁用。",
+        "尚未选择 STT provider。点击聊天输入框的麦克风按钮时会提示如何设置。",
       disableVoiceInput: "关闭语音输入",
       sonioxTitle: "Soniox(多语言 · 推荐)",
       sonioxDescription:

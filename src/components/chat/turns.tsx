@@ -10,7 +10,7 @@ import {
   RefreshCwIcon,
   SparklesIcon,
 } from "lucide-react";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { memo, type ReactNode, useEffect, useRef, useState } from "react";
 import type { TutorAnalysis } from "../../agents/schema";
 import { useConfig } from "../../config";
 import type { NewConversationContext } from "../../db/conversations";
@@ -46,6 +46,12 @@ import {
 function CopyButton({ text }: { text: string }) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
+  const timerRef = useRef<number | null>(null);
+  useEffect(() => {
+    return () => {
+      if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+    };
+  }, []);
   return (
     <Button
       type="button"
@@ -55,7 +61,11 @@ function CopyButton({ text }: { text: string }) {
       onClick={() => {
         void navigator.clipboard.writeText(text).then(() => {
           setCopied(true);
-          setTimeout(() => setCopied(false), 1200);
+          if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+          timerRef.current = window.setTimeout(() => {
+            setCopied(false);
+            timerRef.current = null;
+          }, 1200);
         });
       }}
     >
@@ -239,19 +249,7 @@ function LessonMasteryButton({
 // Bilingual view is generated on demand and replaces the original; clicking again restores it.
 // Generated bilingual/suggestion/explanation content is local; expanded state is coordinated by ChatView.
 // Key invariant: TTS always reads the original (target-language) text; SpeakButton always receives the raw text.
-export function PartnerReply({
-  conversationId,
-  turnId,
-  text,
-  autoOpen = false,
-  variant,
-  offRecord = false,
-  onFirstExplain,
-  onFirstBilingual,
-  onLayoutChange,
-  onRegenerate,
-  regenerating = false,
-}: {
+type PartnerReplyProps = {
   conversationId: string;
   turnId: string;
   text: string;
@@ -267,7 +265,21 @@ export function PartnerReply({
   /** When provided, shows the "Regenerate reply" button (only attached to the latest reply). */
   onRegenerate?: () => void;
   regenerating?: boolean;
-}) {
+};
+
+export const PartnerReply = memo(function PartnerReply({
+  conversationId,
+  turnId,
+  text,
+  autoOpen = false,
+  variant,
+  offRecord = false,
+  onFirstExplain,
+  onFirstBilingual,
+  onLayoutChange,
+  onRegenerate,
+  regenerating = false,
+}: PartnerReplyProps) {
   const { t } = useTranslation();
   const { actionLabels } = useConfig();
   // One open drop-below popup at a time within this reply (explanation / reply
@@ -444,14 +456,16 @@ export function PartnerReply({
                   <LanguagesIcon className="size-4" />
                 )}
               </span>
-              {actionLabels && <span>{t("chat.bilingualReading")}</span>}
+              {actionLabels && (
+                <span data-compact-label>{t("chat.bilingualReading")}</span>
+              )}
             </Button>
           )
         }
       />
     </div>
   );
-}
+}, arePartnerReplyPropsEqual);
 
 // "More natural" rewrite: only for pure target-language turns; returned only when it exists
 // and differs from the corrected sentence, otherwise null. Shown directly inside the user bubble.
@@ -533,17 +547,7 @@ function UserMessageActions({
 
 // One user turn: bubble (original + optional "more natural" toggle) + action row / corrections.
 // The "more natural" toggle state lives here and drives both the bubble content and the action row button.
-export function UserTurn({
-  turn,
-  conversationId,
-  nativeLanguage,
-  learningMode,
-  variant,
-  onEditFrom,
-  onTurnAction,
-  onLayoutChange,
-  editDisabled = false,
-}: {
+type UserTurnProps = {
   turn: ChatTurn;
   conversationId: string;
   nativeLanguage: string;
@@ -555,7 +559,19 @@ export function UserTurn({
   onTurnAction: (actionId: string) => void;
   onLayoutChange?: () => void;
   editDisabled?: boolean;
-}) {
+};
+
+export const UserTurn = memo(function UserTurn({
+  turn,
+  conversationId,
+  nativeLanguage,
+  learningMode,
+  variant,
+  onEditFrom,
+  onTurnAction,
+  onLayoutChange,
+  editDisabled = false,
+}: UserTurnProps) {
   const { t } = useTranslation();
   // One open drop-below popup at a time within this message (reply suggestion /
   // corrected sentence / expression-gap explanation / grammar details). The
@@ -719,7 +735,7 @@ export function UserTurn({
       )}
     </div>
   );
-}
+}, areUserTurnPropsEqual);
 
 // Tracks which derived-conversation context panels have been seen; first visit expands, subsequent visits collapse.
 const DERIVED_BANNER_SEEN_KEY = "lang-agent.derivedBannerSeen";
@@ -822,15 +838,17 @@ export function DerivedContextBanner({
 // One turn = user input + partner reply + (collapsed by default) activity row.
 // The activity row consolidates progressive disclosure for the turn: the center stays light,
 // details expand on demand. When the coach panel is open, details go to the right panel; only the conversation is rendered here.
-export function TurnCard({
-  turnId,
-  live,
-  children,
-}: {
+type TurnCardProps = {
   turnId: string;
   live: boolean;
   children: ReactNode;
-}) {
+};
+
+export const TurnCard = memo(function TurnCard({
+  turnId,
+  live,
+  children,
+}: TurnCardProps) {
   return (
     <div
       data-turn-id={turnId}
@@ -838,5 +856,40 @@ export function TurnCard({
     >
       {children}
     </div>
+  );
+}, areTurnCardPropsEqual);
+
+function arePartnerReplyPropsEqual(
+  prev: PartnerReplyProps,
+  next: PartnerReplyProps,
+) {
+  return (
+    prev.conversationId === next.conversationId &&
+    prev.turnId === next.turnId &&
+    prev.text === next.text &&
+    prev.autoOpen === next.autoOpen &&
+    prev.variant === next.variant &&
+    prev.offRecord === next.offRecord &&
+    prev.regenerating === next.regenerating &&
+    Boolean(prev.onRegenerate) === Boolean(next.onRegenerate)
+  );
+}
+
+function areUserTurnPropsEqual(prev: UserTurnProps, next: UserTurnProps) {
+  return (
+    prev.turn === next.turn &&
+    prev.conversationId === next.conversationId &&
+    prev.nativeLanguage === next.nativeLanguage &&
+    prev.learningMode === next.learningMode &&
+    prev.variant === next.variant &&
+    prev.editDisabled === next.editDisabled
+  );
+}
+
+function areTurnCardPropsEqual(prev: TurnCardProps, next: TurnCardProps) {
+  return (
+    prev.turnId === next.turnId &&
+    prev.live === next.live &&
+    prev.children === next.children
   );
 }

@@ -1,5 +1,5 @@
-import { Volume2Icon } from "lucide-react";
-import { useState, useSyncExternalStore } from "react";
+import { Volume2Icon, XIcon } from "lucide-react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { useTranslation } from "@/i18n";
 import { cn } from "@/lib/utils";
 import {
@@ -51,6 +51,12 @@ export function SpeakButton({
   const [localLoading, setLocalLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (!error) return;
+    const timer = window.setTimeout(() => setError(null), 6000);
+    return () => window.clearTimeout(timer);
+  }, [error]);
+
   async function handleClick() {
     if (active) {
       stopSpeech();
@@ -98,10 +104,18 @@ export function SpeakButton({
       </button>
       {error && (
         <span
-          className="pointer-events-none absolute right-0 top-[calc(100%+4px)] z-[2] w-max max-w-56 rounded bg-destructive/15 px-1.5 py-1 text-ui-caption leading-tight text-destructive"
+          className="absolute right-0 top-[calc(100%+4px)] z-[2] flex w-max max-w-64 items-start gap-1.5 rounded border border-destructive/20 bg-card px-2 py-1.5 text-ui-caption leading-tight text-destructive shadow-minimal"
           role="alert"
         >
-          {error}
+          <span className="min-w-0 flex-1">{error}</span>
+          <button
+            type="button"
+            className="-mr-0.5 shrink-0 rounded p-0.5 text-ui-muted hover:bg-destructive/10 hover:text-destructive"
+            onClick={() => setError(null)}
+            aria-label={t("common.close")}
+          >
+            <XIcon size={12} />
+          </button>
         </span>
       )}
     </span>
