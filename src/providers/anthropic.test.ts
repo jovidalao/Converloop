@@ -69,9 +69,13 @@ describe("anthropic REST alignment", () => {
       { role: "system", content: "e" },
       { role: "user", content: "Hi" },
     ]);
-    expect(
-      system?.map((block) => Boolean(block.cache_control)),
-    ).toEqual([true, true, true, false, false]);
+    expect(system?.map((block) => Boolean(block.cache_control))).toEqual([
+      true,
+      true,
+      true,
+      false,
+      false,
+    ]);
   });
 
   it("multi-turn maps user/assistant roles", () => {
