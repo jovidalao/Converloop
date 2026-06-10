@@ -12,20 +12,15 @@ import openRouterLogo from "@lobehub/icons-static-svg/icons/openrouter.svg?raw";
 import qwenLogo from "@lobehub/icons-static-svg/icons/qwen-color.svg?raw";
 import type { LucideIcon } from "lucide-react";
 import {
-  AudioLinesIcon,
   CheckIcon,
   ChevronDownIcon,
-  CpuIcon,
   DownloadIcon,
-  MicIcon,
   MonitorIcon,
   MoonIcon,
   PlusIcon,
   RotateCcwIcon,
-  SparklesIcon,
   SunIcon,
   Trash2Icon,
-  Volume2Icon,
 } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -310,7 +305,6 @@ function SttSettings() {
 
       <div className="flex flex-col">
         <ProviderCard
-          icon={<AudioLinesIcon className="size-5 shrink-0 text-brand" />}
           title={t("settings.stt.sonioxTitle")}
           statusText={
             sonioxHasKey
@@ -387,7 +381,6 @@ function SttSettings() {
         </ProviderCard>
 
         <ProviderCard
-          icon={<MicIcon className="size-5 shrink-0 text-info" />}
           title={t("settings.stt.openaiTitle")}
           statusText={
             openAiHasKey
@@ -469,7 +462,6 @@ function SttSettings() {
         </ProviderCard>
 
         <ProviderCard
-          icon={<CpuIcon className="size-5 shrink-0 text-success" />}
           title={t("settings.stt.parakeetTitle")}
           statusText={
             localProgress.parakeet
@@ -548,7 +540,6 @@ function SttSettings() {
         </ProviderCard>
 
         <ProviderCard
-          icon={<CpuIcon className="size-5 shrink-0 text-brand" />}
           title={t("settings.stt.qwen3Title")}
           statusText={
             localProgress.qwen3
@@ -853,7 +844,7 @@ function ProviderCard({
   onActivate,
   children,
 }: {
-  icon: ReactNode;
+  icon?: ReactNode;
   title: string;
   statusText: string;
   configured: boolean;
@@ -2058,7 +2049,6 @@ export function SettingsView({ section }: { section: SettingsSection }) {
 
             <div className="flex flex-col">
               <ProviderCard
-                icon={<SparklesIcon className="size-5 shrink-0 text-brand" />}
                 title={t("settings.tts.mimoTitle")}
                 statusText={
                   hasTtsKey
@@ -2169,7 +2159,6 @@ export function SettingsView({ section }: { section: SettingsSection }) {
               </ProviderCard>
 
               <ProviderCard
-                icon={<Volume2Icon className="size-5 shrink-0 text-info" />}
                 title={t("settings.tts.edgeTitle")}
                 statusText={t("settings.tts.edgeStatus")}
                 configured
