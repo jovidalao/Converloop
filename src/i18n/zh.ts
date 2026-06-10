@@ -50,8 +50,8 @@ export const zh: Messages = {
     skip: "暂时跳过",
   },
   stt: {
-    startRecording: "语音输入(开始录音,再点一次转写)",
-    stopRecording: "停止录音并转写(Esc 取消)",
+    startRecording: "语音输入(开始说话,再点一次结束)",
+    stopRecording: "结束语音输入(Esc 取消)",
     micDenied: "麦克风不可用——请检查系统设置里 lang-agent 的麦克风权限。",
   },
   speak: {
@@ -481,15 +481,12 @@ export const zh: Messages = {
     languages: { en: "English", zh: "中文" },
     card: {
       inUse: "使用中",
-      configured: "已配置",
-      notConfigured: "未配置",
-      current: "✓ 这是当前正在使用的 provider。",
-      setCurrent: "设为当前 provider",
+      use: "启用",
     },
     llm: {
       title: "LLM 提供商",
       description:
-        "下面列出全部提供商,每个都可单独配置并保存。点开任意一个修改连接信息,「设为当前 provider」决定聊天实际使用哪个。",
+        "下面列出全部提供商,每个都可单独配置并保存。点开任意一个修改连接信息,「启用」按钮决定聊天实际使用哪个。",
       model: "模型",
       customModelOption: "{label} · 自定义模型",
       customModelId: "自定义模型 ID",
@@ -555,17 +552,30 @@ export const zh: Messages = {
         "驱动聊天输入框的麦克风按钮:录音会经当前选择的 STT 提供商转写,放入输入框,确认后再发送。",
       sonioxTitle: "Soniox(多语言 · 推荐)",
       sonioxDescription:
-        "使用 Soniox 异步转写。语言提示来自你的母语和目标语言,同时仍允许自动识别混合语言输入。",
+        "使用 Soniox 实时流式转写,说话时文字即时出现在输入框。语言提示来自你的母语和目标语言,同时仍允许自动识别混合语言输入。",
       sonioxApiKeyLabel: "Soniox API key {state}",
       sonioxModel: "Soniox 模型",
       sonioxModelHint:
-        "默认使用 stt-async-v4;只有当 Soniox 发布新的异步模型或 alias 时才需要改。",
+        "默认使用 stt-rt-v3;只有当 Soniox 发布新的实时模型或 alias 时才需要改。",
       openaiTitle: "OpenAI 兼容",
       openaiDescription:
         "使用 OpenAI Whisper、Groq Whisper,或实现 /audio/transcriptions 的本地服务。",
       openaiApiKeyLabel: "OpenAI 兼容 STT key {state}",
       baseUrl: "Base URL(OpenAI 兼容)",
       model: "模型",
+      parakeetTitle: "NVIDIA Parakeet V3(本地 · 免 key)",
+      parakeetDescription:
+        "完全在本机运行——无需 API key,下载后无需联网。录完整段再转写(不支持流式)。适合学欧洲语言时做快速、隐私的离线转写。",
+      parakeetLangNote:
+        "仅支持 25 种欧洲语言——不含中文、日文、韩文。这些语言请用 Soniox。",
+      parakeetModelLabel: "模型(~640 MB,只需下载一次)",
+      parakeetModelHint:
+        "从 sherpa-onnx 官方发布下载到应用数据目录。重启后保留;不进备份。",
+      parakeetDownload: "下载模型",
+      parakeetRedownload: "重新下载",
+      parakeetDownloading: "下载中…({index}/{count})",
+      parakeetDownloaded: "已下载",
+      parakeetNotDownloaded: "未下载",
       keySaved: "STT API key 已加密保存到本地。",
       keyCleared: "STT API key 已从本地清除。",
     },

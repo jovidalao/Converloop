@@ -13,7 +13,10 @@ import qwenLogo from "@lobehub/icons-static-svg/icons/qwen-color.svg?raw";
 import type { LucideIcon } from "lucide-react";
 import {
   AudioLinesIcon,
+  CheckIcon,
   ChevronDownIcon,
+  CpuIcon,
+  DownloadIcon,
   MicIcon,
   MonitorIcon,
   MoonIcon,
@@ -93,6 +96,11 @@ import {
   saveSttConfig,
   sttKeyAccount,
 } from "../stt/config";
+import {
+  downloadParakeetModel,
+  type ParakeetDownloadProgress,
+  parakeetModelStatus,
+} from "../stt/local";
 import {
   EDGE_VOICES,
   loadTtsConfig,
@@ -194,6 +202,10 @@ function SttSettings() {
     provider: SttProvider;
     text: string;
   } | null>(null);
+  // Parakeet 本地模型:下载状态(null=查询中)与下载进度(null=未在下载)。
+  const [parakeetReady, setParakeetReady] = useState<boolean | null>(null);
+  const [parakeetProgress, setParakeetProgress] =
+    useState<ParakeetDownloadProgress | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -205,10 +217,34 @@ function SttSettings() {
     ).then((items) => {
       if (alive) setKeyStatus(Object.fromEntries(items));
     });
+    void parakeetModelStatus().then((ready) => {
+      if (alive) setParakeetReady(ready);
+    });
     return () => {
       alive = false;
     };
   }, []);
+
+  async function downloadParakeet() {
+    setParakeetProgress({
+      file: "",
+      fileIndex: 0,
+      fileCount: 4,
+      received: 0,
+      total: 0,
+    });
+    try {
+      await downloadParakeetModel(setParakeetProgress);
+      setParakeetReady(true);
+    } catch (e) {
+      setStatus({
+        provider: "parakeet",
+        text: e instanceof Error ? e.message : String(e),
+      });
+    } finally {
+      setParakeetProgress(null);
+    }
+  }
 
   function update<K extends keyof SttConfig>(key: K, value: SttConfig[K]) {
     const next = { ...cfg, [key]: value };
@@ -309,7 +345,7 @@ function SttSettings() {
             <Input
               value={cfg.sonioxModel}
               onChange={(e) => update("sonioxModel", e.target.value)}
-              placeholder="stt-async-v4"
+              placeholder="stt-rt-v3"
             />
             <p className="mt-1.5 text-ui-caption leading-snug text-ui-muted">
               {t("settings.stt.sonioxModelHint")}
@@ -399,6 +435,84 @@ function SttSettings() {
           </Field>
 
           {status?.provider === "openai" && (
+            <p className="m-0 break-words text-ui-body text-primary">
+              {status.text}
+            </p>
+          )}
+        </ProviderCard>
+
+        <ProviderCard
+          icon={<CpuIcon className="size-5 shrink-0 text-success" />}
+          title={t("settings.stt.parakeetTitle")}
+          statusText={
+            parakeetProgress
+              ? t("settings.stt.parakeetDownloading", {
+                  index: parakeetProgress.fileIndex,
+                  count: parakeetProgress.fileCount,
+                })
+              : parakeetReady
+                ? t("settings.stt.parakeetDownloaded")
+                : t("settings.stt.parakeetNotDownloaded")
+          }
+          configured={!!parakeetReady}
+          active={cfg.sttProvider === "parakeet"}
+          expanded={expandedStt === "parakeet"}
+          onToggle={() =>
+            setExpandedStt((prev) => (prev === "parakeet" ? null : "parakeet"))
+          }
+          // 未下载不允许切到本地引擎(否则录音转写必然失败)。
+          onActivate={() => {
+            if (parakeetReady) update("sttProvider", "parakeet");
+          }}
+        >
+          <p className="text-ui-body leading-relaxed text-ui-muted">
+            {t("settings.stt.parakeetDescription")}
+          </p>
+          <p className="text-ui-caption leading-snug text-amber-600 dark:text-amber-500">
+            {t("settings.stt.parakeetLangNote")}
+          </p>
+          <Field label={t("settings.stt.parakeetModelLabel")}>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                onClick={() => void downloadParakeet()}
+                disabled={!!parakeetProgress}
+              >
+                <DownloadIcon className="size-4" />
+                {parakeetProgress
+                  ? t("settings.stt.parakeetDownloading", {
+                      index: parakeetProgress.fileIndex,
+                      count: parakeetProgress.fileCount,
+                    })
+                  : parakeetReady
+                    ? t("settings.stt.parakeetRedownload")
+                    : t("settings.stt.parakeetDownload")}
+              </Button>
+              {parakeetReady && !parakeetProgress && (
+                <span className="flex items-center gap-1.5 text-ui-caption text-success">
+                  <CheckIcon className="size-3.5" />
+                  {t("settings.stt.parakeetDownloaded")}
+                </span>
+              )}
+            </div>
+            {parakeetProgress && parakeetProgress.total > 0 && (
+              <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-foreground/10">
+                <div
+                  className="h-full bg-success transition-[width]"
+                  style={{
+                    width: `${Math.round(
+                      (parakeetProgress.received / parakeetProgress.total) *
+                        100,
+                    )}%`,
+                  }}
+                />
+              </div>
+            )}
+            <p className="mt-1.5 text-ui-caption leading-snug text-ui-muted">
+              {t("settings.stt.parakeetModelHint")}
+            </p>
+          </Field>
+
+          {status?.provider === "parakeet" && (
             <p className="m-0 break-words text-ui-body text-primary">
               {status.text}
             </p>
@@ -621,8 +735,9 @@ function ProviderBrandIcon({ type }: { type: ProviderType }) {
   );
 }
 
-// A provider card in the list: the header shows "in use / configured" status at
-// a glance; expanding it reveals that provider's configuration form.
+// A provider card in the list: the header shows status at a glance and carries
+// the activation control on the right (a quiet "Use" button, or a check when
+// active — Claude desktop style); expanding it reveals the configuration form.
 function ProviderCard({
   icon,
   title,
@@ -647,62 +762,61 @@ function ProviderCard({
   const { t } = useTranslation();
   return (
     <div className="border-b border-border/50 last:border-0">
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-expanded={expanded}
-        className="flex w-full items-center gap-3.5 rounded-lg px-3 py-3.5 text-left transition-colors hover:bg-accent/40"
-      >
-        {icon}
-        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span className="flex items-center gap-2">
-            <span className="truncate text-ui-body font-medium">{title}</span>
-            {active && (
-              <span className="shrink-0 rounded-full bg-primary px-2 py-0.5 text-ui-micro font-medium text-primary-foreground">
-                {t("settings.card.inUse")}
-              </span>
-            )}
-          </span>
-          <span className="truncate text-ui-caption text-ui-muted">
-            {statusText}
-          </span>
-        </span>
-        <span
-          className={cn(
-            "flex shrink-0 items-center gap-1.5 text-ui-caption",
-            configured ? "text-success-text" : "text-ui-muted",
-          )}
+      <div className="flex items-center gap-3 rounded-lg pr-3 transition-colors hover:bg-accent/40">
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={expanded}
+          className="flex min-w-0 flex-1 items-center gap-3.5 px-3 py-3.5 text-left"
         >
-          <span
+          {icon}
+          <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <span className="truncate text-ui-body font-medium">{title}</span>
+            <span className="flex items-center gap-1.5 text-ui-caption text-ui-muted">
+              <span
+                className={cn(
+                  "size-1.5 shrink-0 rounded-full",
+                  configured ? "bg-success" : "bg-foreground/25",
+                )}
+              />
+              <span className="truncate">{statusText}</span>
+            </span>
+          </span>
+        </button>
+        {active ? (
+          <span className="flex shrink-0 items-center gap-1.5 text-ui-caption font-medium text-primary">
+            <CheckIcon className="size-3.5" />
+            {t("settings.card.inUse")}
+          </span>
+        ) : (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 shrink-0 px-2.5 text-ui-caption"
+            onClick={onActivate}
+          >
+            {t("settings.card.use")}
+          </Button>
+        )}
+        <button
+          type="button"
+          onClick={onToggle}
+          tabIndex={-1}
+          aria-hidden
+          className="shrink-0 p-1 text-ui-muted"
+        >
+          <ChevronDownIcon
             className={cn(
-              "size-1.5 rounded-full",
-              configured ? "bg-success" : "bg-foreground/25",
+              "size-4 transition-transform",
+              expanded && "rotate-180",
             )}
           />
-          {configured
-            ? t("settings.card.configured")
-            : t("settings.card.notConfigured")}
-        </span>
-        <ChevronDownIcon
-          className={cn(
-            "size-4 shrink-0 text-ui-muted transition-transform",
-            expanded && "rotate-180",
-          )}
-        />
-      </button>
+        </button>
+      </div>
 
       {expanded && (
         <div className="ml-3 space-y-5 border-l border-border/50 pt-1 pb-6 pl-5">
-          {active ? (
-            <p className="text-ui-caption text-ui-muted">
-              {t("settings.card.current")}
-            </p>
-          ) : (
-            <Button size="sm" onClick={onActivate}>
-              {t("settings.card.setCurrent")}
-            </Button>
-          )}
-          <div className="space-y-5">{children}</div>
+          {children}
         </div>
       )}
     </div>

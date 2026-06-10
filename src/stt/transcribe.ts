@@ -1,16 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
-import { loadConfig } from "../config";
-import {
-  getSttApiKey,
-  languageHintsFor,
-  loadSttConfig,
-  MissingSttApiKeyError,
-} from "./config";
+import { getSttApiKey, loadSttConfig, MissingSttApiKeyError } from "./config";
 
-// HTTP goes through Rust (multipart upload, bypasses webview CORS), same as the
-// LLM calls. Soniox gets language hints from the learner's native + target
-// languages (mixed input is a core flow); the OpenAI path stays unhinted and
-// relies on the endpoint's auto-detection.
+// OpenAI 兼容引擎的批量转写(录完整段再上传)。HTTP 走 Rust(multipart,
+// 绕 webview CORS),与 LLM 调用同理;不固定 language,靠端点自检——母语/
+// 混说输入是核心链路。Soniox 走实时流式,见 realtime.ts。
 export async function transcribeAudio(
   blob: Blob,
   mime: string,
@@ -33,19 +26,6 @@ export async function transcribeAudio(
       ? "webm"
       : "wav";
   const fileName = `speech.${ext}`;
-
-  if (config.sttProvider === "soniox") {
-    const app = loadConfig();
-    const text = await invoke<string>("stt_transcribe_soniox", {
-      apiKey,
-      model: config.sonioxModel,
-      audioB64,
-      mime,
-      fileName,
-      languageHints: languageHintsFor([app.targetLanguage, app.nativeLanguage]),
-    });
-    return text.trim();
-  }
 
   const text = await invoke<string>("stt_transcribe", {
     baseUrl: config.baseUrl,

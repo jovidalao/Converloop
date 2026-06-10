@@ -229,6 +229,9 @@ export function ChatView({
   const messagesRef = useRef<HTMLDivElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  // 流式语音输入:记录开始说话前输入框里的底稿,partial 在它后面实时拼接,
+  // 取消/出错时(onTranscript(""))恢复底稿。
+  const sttBaseRef = useRef<string | null>(null);
   const hintOverlayRef = useRef<HTMLDivElement>(null);
   const stickToBottomRef = useRef(true);
   const turnGenRef = useRef(0);
@@ -1880,27 +1883,13 @@ export function ChatView({
                       </span>
                     ))}
                 </div>
-                <MicButton
-                  disabled={
-                    replyBusy ||
-                    lessonGateActive ||
-                    (isDictation && dictationAwaitingEnter)
-                  }
-                  onTranscript={(text) => {
-                    setInput((cur) =>
-                      cur.trim() ? `${cur.trimEnd()} ${text}` : text,
-                    );
-                    requestAnimationFrame(() => inputRef.current?.focus());
-                  }}
-                  onError={setError}
-                />
                 <Select
                   value={selectedModelValue}
                   onValueChange={selectModelProvider}
                   disabled={replyBusy}
                 >
                   <SelectTrigger
-                    className="h-4 w-auto min-w-[5.5rem] max-w-[min(42vw,12rem)] gap-1.5 rounded-sm border-0 bg-transparent px-1 py-0 font-normal leading-none text-ui-muted shadow-none hover:bg-accent focus-visible:ring-0 sm:max-w-[14rem] [&>svg]:size-2.5"
+                    className="h-8 w-auto min-w-[5.5rem] max-w-[min(42vw,12rem)] gap-1.5 rounded-full border-0 bg-transparent px-2 py-0 font-normal leading-none text-ui-muted shadow-none hover:bg-accent focus-visible:ring-0 sm:max-w-[14rem] [&>svg]:size-2.5"
                     aria-label={t("chat.selectModel")}
                     title={currentProviderModelLabel}
                   >
@@ -1956,6 +1945,36 @@ export function ChatView({
                     })}
                   </SelectContent>
                 </Select>
+                <MicButton
+                  disabled={
+                    replyBusy ||
+                    lessonGateActive ||
+                    (isDictation && dictationAwaitingEnter)
+                  }
+                  onPartial={(live) => {
+                    setInput((cur) => {
+                      if (sttBaseRef.current === null) {
+                        sttBaseRef.current = cur.trim()
+                          ? `${cur.trimEnd()} `
+                          : "";
+                      }
+                      return sttBaseRef.current + live;
+                    });
+                  }}
+                  onTranscript={(text) => {
+                    setInput((cur) => {
+                      const base = sttBaseRef.current;
+                      sttBaseRef.current = null;
+                      if (base !== null) {
+                        return text ? base + text : base.trimEnd();
+                      }
+                      if (!text) return cur;
+                      return cur.trim() ? `${cur.trimEnd()} ${text}` : text;
+                    });
+                    requestAnimationFrame(() => inputRef.current?.focus());
+                  }}
+                  onError={setError}
+                />
                 {replyBusy && stoppable ? (
                   <Button
                     type="button"

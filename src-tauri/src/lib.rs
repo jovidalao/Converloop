@@ -5,6 +5,7 @@ mod oauth;
 mod profile;
 mod secrets;
 mod stt;
+mod stt_local;
 
 use tauri_plugin_sql::{Migration, MigrationKind};
 
@@ -578,7 +579,9 @@ pub fn run() {
             profile::restore_profile,
             backup::export_backup,
             stt::stt_transcribe,
-            stt::stt_transcribe_soniox,
+            stt_local::parakeet_model_status,
+            stt_local::parakeet_download_model,
+            stt_local::stt_transcribe_parakeet,
             reapply_traffic_lights,
         ])
         .run(tauri::generate_context!())

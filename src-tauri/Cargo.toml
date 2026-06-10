@@ -35,9 +35,15 @@ machine-uid = "0.5"
 # LLM HTTP:走 Rust 发请求,绕过 webview CORS;reqwest 的 bytes_stream 做真流式。
 # multipart 给语音转写(stt.rs)上传音频用。
 reqwest = { version = "0.12", features = ["json", "stream", "multipart"] }
-# Soniox 异步转写要轮询等待;tokio 本就在依赖树里(tauri/tokio-tungstenite),这里只是显式声明 time。
-tokio = { version = "1", features = ["time"] }
+# Soniox 异步转写要轮询等待;tokio 本就在依赖树里(tauri/tokio-tungstenite),这里只是显式声明。
+# rt:Parakeet 本地推理是 CPU 密集,走 spawn_blocking 不堵 async 运行时。
+tokio = { version = "1", features = ["time", "rt"] }
 futures-util = "0.3"
+# 本地 STT(Parakeet TDT 0.6B V3):封装 sherpa-onnx C API 做离线识别。
+# build script 编译时从 GitHub releases 拉预编译静态库(含 onnxruntime),默认静态链接,
+# 产物二进制增大约 30–50MB;离线/CI 构建需预设 SHERPA_ONNX_LIB_DIR。模型(~640MB ONNX)
+# 不打包,运行时按需下载到 app 数据目录(见 src/stt_local.rs)。
+sherpa-onnx = "1.13.2"
 # 免费 Edge TTS 走 WebSocket(webview 无法改写 Origin 头,必须在 Rust 连);
 # native-tls 复用 reqwest 已引入的同一 TLS 栈,macOS 上即系统 Security 框架,无新系统依赖。
 tokio-tungstenite = { version = "0.24", features = ["native-tls"] }

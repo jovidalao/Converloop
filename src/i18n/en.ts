@@ -44,8 +44,8 @@ export const en = {
     stop: "Stop reading",
   },
   stt: {
-    startRecording: "Voice input (record, then click again to transcribe)",
-    stopRecording: "Stop recording and transcribe (Esc to cancel)",
+    startRecording: "Voice input (speak, then click again to finish)",
+    stopRecording: "Finish voice input (Esc to cancel)",
     micDenied:
       "Microphone unavailable — check the system microphone permission for lang-agent.",
   },
@@ -499,15 +499,12 @@ export const en = {
     languages: { en: "English", zh: "中文" },
     card: {
       inUse: "In use",
-      configured: "Configured",
-      notConfigured: "Not configured",
-      current: "✓ This is the provider currently in use.",
-      setCurrent: "Set as current provider",
+      use: "Use",
     },
     llm: {
       title: "LLM providers",
       description:
-        'All providers are listed below; each can be configured and saved independently. Open any one to edit its connection info — "Set as current provider" decides which one chat actually uses.',
+        'All providers are listed below; each can be configured and saved independently. Open any one to edit its connection info — the "Use" button decides which one chat actually uses.',
       model: "Model",
       customModelOption: "{label} · Custom model",
       customModelId: "Custom model ID",
@@ -575,17 +572,30 @@ export const en = {
         "Powers the microphone button in the chat composer. Recordings are transcribed by the selected STT provider and dropped into the input box for review before sending.",
       sonioxTitle: "Soniox (multilingual · recommended)",
       sonioxDescription:
-        "Uses Soniox async transcription. Language hints come from your native and target languages, while mixed-language input can still be detected automatically.",
+        "Uses Soniox real-time streaming transcription — words appear in the input box as you speak. Language hints come from your native and target languages, while mixed-language input can still be detected automatically.",
       sonioxApiKeyLabel: "Soniox API key {state}",
       sonioxModel: "Soniox model",
       sonioxModelHint:
-        "Use stt-async-v4 by default; change this only when Soniox publishes a newer async model or alias.",
+        "Use stt-rt-v3 by default; change this only when Soniox publishes a newer real-time model or alias.",
       openaiTitle: "OpenAI-compatible",
       openaiDescription:
         "Use OpenAI Whisper, Groq Whisper, or a local server that implements /audio/transcriptions.",
       openaiApiKeyLabel: "OpenAI-compatible STT key {state}",
       baseUrl: "Base URL (OpenAI-compatible)",
       model: "Model",
+      parakeetTitle: "NVIDIA Parakeet V3 (on-device · no key)",
+      parakeetDescription:
+        "Runs fully on this device — no API key, no network once downloaded. Record-then-transcribe (no live streaming). Best for fast, private transcription when learning a European language.",
+      parakeetLangNote:
+        "Supports 25 European languages only — no Chinese, Japanese, or Korean. For those, use Soniox.",
+      parakeetModelLabel: "Model (~640 MB, downloaded once)",
+      parakeetModelHint:
+        "Downloaded from the official sherpa-onnx release to your app data folder. Kept across restarts; not included in backups.",
+      parakeetDownload: "Download model",
+      parakeetRedownload: "Re-download",
+      parakeetDownloading: "Downloading… ({index}/{count})",
+      parakeetDownloaded: "Downloaded",
+      parakeetNotDownloaded: "Not downloaded",
       keySaved: "STT API key encrypted and saved locally.",
       keyCleared: "STT API key cleared from local storage.",
     },

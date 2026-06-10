@@ -322,7 +322,13 @@ provider 解析全在 TS;**LLM HTTP 走 Rust**(`src-tauri/src/llm.rs` 的 `llm_r
 
 ## 语音输入(STT)
 
-`src/stt/*` + `components/MicButton.tsx`(输入区麦克风按钮:点击录音 → 再点停止并转写 → 进输入框由用户确认后发送,Esc 取消)。采集用 webview MediaRecorder(WebKit 出 mp4/aac,Chromium 出 webm/opus);上传走 Rust `stt.rs` 绕 webview CORS。STT 在设置 → 语音输入单独配置(`lang-agent.stt`),默认 **Soniox**(`stt_transcribe_soniox`:上传 `/v1/files` → 创建 `/v1/transcriptions` → 轮询完成 → 取 `/transcript`,默认 `stt-async-v4`,语言提示来自母语+目标语,但仍启用自动语言识别)。兼容路径是 OpenAI 风格 `/audio/transcriptions`(`stt_transcribe`,OpenAI/Groq/本地 Whisper 等),不固定 language 参数——母语/混说是核心链路。两类 key 分别存加密账户 `soniox_stt_api_key` / `stt_api_key`,STT 供应商可与对话 provider 不同。macOS 需要 `src-tauri/Info.plist` 的 `NSMicrophoneUsageDescription`(打包时由 Tauri 合并;真机首次使用会弹系统麦克风授权)。
+`src/stt/*` + `components/MicButton.tsx`(输入区麦克风按钮,Esc 取消)。STT 在设置 → 语音输入单独配置(`lang-agent.stt`),三条路径:
+
+- **Soniox(默认,实时流式)**:`stt/realtime.ts` 直连 `wss://stt-rt.soniox.com/transcribe-websocket`(WS 无 CORS,只需 CSP `connect-src` 放行,不走 Rust);采集用 AudioWorklet(`public/pcm-worklet.js`,音频线程攒 s16le PCM 块,CSP `script-src 'self'` 禁 blob: 模块所以放 public/),token 边到边以 onPartial 实时拼进输入框(ChatView `sttBaseRef` 记底稿,取消/出错回滚),再点结束发空帧让服务端 flush 出最终文本。默认 `stt-rt-v3`(旧存量 `stt-async-*` 加载时迁移),语言提示来自母语+目标语,仍启用自动语言识别。
+- **OpenAI 兼容(批量)**:webview MediaRecorder 录完整段(WebKit 出 mp4/aac,Chromium 出 webm/opus),上传走 Rust `stt.rs` 的 `stt_transcribe`(OpenAI 风格 `/audio/transcriptions`,OpenAI/Groq/本地 Whisper 等)绕 webview CORS,不固定 language 参数——母语/混说是核心链路。
+- **Parakeet TDT 0.6B V3(本地,批量)**:`stt/local.ts` + Rust `stt_local.rs`,经 `sherpa-onnx` crate 做端侧离线推理,**无 key、下载后无需联网**。复用同一 `pcm-worklet.js` 采集整段 s16le(AudioContext 尽量按 16k,WebKit 忽略时由 Rust 线性重采样兜底),base64 交 `stt_transcribe_parakeet` 一次出文本(无流式)。模型 ~640MB 不打包,首次用时从 HuggingFace `csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8` 逐文件下载到 `app_config_dir/models/parakeet-tdt-0.6b-v3/`(进度走 `tauri::ipc::Channel`,原子写 `.part`→rename),`OfflineRecognizer` 懒加载全局缓存。**仅 25 种欧洲语言,无中日韩**——定位是学欧洲语言用户的离线/免 key 选项,不替代 Soniox 混说主路径。`sherpa-onnx` 的 build script 编译时联网拉预编译静态库(含 onnxruntime,产物 +30–50MB);离线/CI 需预设 `SHERPA_ONNX_LIB_DIR`。
+
+两类云端 key 分别存加密账户 `soniox_stt_api_key` / `stt_api_key`(Parakeet 无 key),STT 供应商可与对话 provider 不同。macOS 需要 `src-tauri/Info.plist` 的 `NSMicrophoneUsageDescription`(打包时由 Tauri 合并;真机首次使用会弹系统麦克风授权)。
 
 ## 朗读(TTS)
 
@@ -368,7 +374,7 @@ v1 核心链路已完成并可用:
 - ✅ 分享包 / 开发者 package(Agent-first Phase 6+):能力库与专项课页支持导入/导出商店兼容的 `lang-agent.package` JSON,一个包可包含 skill(observer/action)、lesson 和 course 草案;导入前展示读取/写入权限预览并校验白名单。旧的 runtime-only `lang-agent.agent-package` 仍保留兼容导入。
 - ✅ 首启引导:无任何数据时显示两步向导(界面/母语/目标语/水平 → provider + key/订阅登录 + 连接测试);完成/跳过后写 `app_state` 标记,老用户静默跳过
 - ✅ 数据备份:一键导出/导入单文件 JSON(全部表 + MD 档案 + 设置);设置镜像保证 localStorage 被清也不丢配置
-- ✅ 语音输入(STT):输入区麦克风按钮,BYOK Soniox / OpenAI 兼容转写端点;转写文本进输入框确认后发送
+- ✅ 语音输入(STT):输入区麦克风按钮,BYOK Soniox 实时流式(边说边出字)/ OpenAI 兼容批量转写端点;转写文本进输入框确认后发送
 - ✅ 复习可见性:Coach 面板「今日到期复习」(与喂给对话 agent 的 `getReviewDueList` 同源);学习数据页每条目可展开 `mastery_event` 证据时间线
 - ✅ 数据卫生:`turn(conversation_id, created_at)` 索引;删除/截断会话级联清理 turn 级产物;`agent_job` 30 天保留窗口;Coach 面板由轮询改为事件驱动(`lib/app-events.ts`)
 - ✅ 侧栏置顶 + 日期分组(置顶 / 今天 / 本周 / 更早);错误信息全量走 i18n(orchestrator/maintainer/STT/TTS)
