@@ -1,19 +1,22 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 
-// 本地 STT(Parakeet TDT 0.6B V3)。模型跑在 Rust 侧 sherpa-onnx,前端只负责:
+// 本地 STT(parakeet = NVIDIA Parakeet TDT 0.6B V3,qwen3 = Qwen3-ASR 0.6B int8)。
+// 模型跑在 Rust 侧 sherpa-onnx,前端只负责:
 //  1. 采集整段 s16le PCM(复用 public/pcm-worklet.js,与 Soniox 流式同一 worklet);
 //  2. 录音结束后一次性把 PCM 交给 Rust 转写(无流式)。
 // 录音会话接口刻意贴近 stt/record.ts 的批量语义,但 stop() 直接返回文本
 // (本地推理就在 stop 时同步发生),省掉中间的 Blob。
 
-export interface ParakeetCapture {
+export type LocalSttEngine = "parakeet" | "qwen3";
+
+export interface LocalCapture {
   /** 停止采集,把整段音频交给本地模型转写,返回最终文本。 */
   stop(): Promise<string>;
   /** 停止并丢弃(Esc / 卸载时)。 */
   cancel(): void;
 }
 
-export interface ParakeetDownloadProgress {
+export interface LocalDownloadProgress {
   file: string;
   fileIndex: number;
   fileCount: number;
@@ -21,18 +24,22 @@ export interface ParakeetDownloadProgress {
   total: number;
 }
 
-/** 四个模型文件是否齐全。 */
-export function parakeetModelStatus(): Promise<boolean> {
-  return invoke<boolean>("parakeet_model_status");
+/** 该引擎的模型文件是否齐全。 */
+export function localAsrModelStatus(engine: LocalSttEngine): Promise<boolean> {
+  return invoke<boolean>("local_asr_model_status", { engine });
 }
 
-/** 下载模型(~640MB),进度经 Channel 实时回调。 */
-export function downloadParakeetModel(
-  onProgress: (p: ParakeetDownloadProgress) => void,
+/** 下载模型(parakeet ~640MB / qwen3 ~1GB),进度经 Channel 实时回调。 */
+export function downloadLocalAsrModel(
+  engine: LocalSttEngine,
+  onProgress: (p: LocalDownloadProgress) => void,
 ): Promise<void> {
-  const channel = new Channel<ParakeetDownloadProgress>();
+  const channel = new Channel<LocalDownloadProgress>();
   channel.onmessage = onProgress;
-  return invoke<void>("parakeet_download_model", { onProgress: channel });
+  return invoke<void>("local_asr_download_model", {
+    engine,
+    onProgress: channel,
+  });
 }
 
 function bytesToBase64(bytes: Uint8Array): string {
@@ -44,7 +51,9 @@ function bytesToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-export async function startParakeetCapture(): Promise<ParakeetCapture> {
+export async function startLocalCapture(
+  engine: LocalSttEngine,
+): Promise<LocalCapture> {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
   const releaseMic = () => {
     for (const track of stream.getTracks()) track.stop();
@@ -99,7 +108,8 @@ export async function startParakeetCapture(): Promise<ParakeetCapture> {
         pcm.set(new Uint8Array(chunk), offset);
         offset += chunk.byteLength;
       }
-      return invoke<string>("stt_transcribe_parakeet", {
+      return invoke<string>("stt_transcribe_local", {
+        engine,
         pcmS16leB64: bytesToBase64(pcm),
         sampleRate,
       });

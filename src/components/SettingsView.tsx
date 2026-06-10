@@ -90,6 +90,7 @@ import {
   upsertCustomPromptMacro,
 } from "../runtime/prompt-macro-store";
 import {
+  type CloudSttProvider,
   loadSttConfig,
   type SttConfig,
   type SttProvider,
@@ -97,9 +98,10 @@ import {
   sttKeyAccount,
 } from "../stt/config";
 import {
-  downloadParakeetModel,
-  type ParakeetDownloadProgress,
-  parakeetModelStatus,
+  downloadLocalAsrModel,
+  type LocalDownloadProgress,
+  type LocalSttEngine,
+  localAsrModelStatus,
 } from "../stt/local";
 import {
   EDGE_VOICES,
@@ -193,56 +195,64 @@ function SttSettings() {
     () => loadSttConfig().sttProvider,
   );
   const [keyInputs, setKeyInputs] = useState<
-    Partial<Record<SttProvider, string>>
+    Partial<Record<CloudSttProvider, string>>
   >({});
   const [keyStatus, setKeyStatus] = useState<
-    Partial<Record<SttProvider, boolean>>
+    Partial<Record<CloudSttProvider, boolean>>
   >({});
   const [status, setStatus] = useState<{
     provider: SttProvider;
     text: string;
   } | null>(null);
-  // Parakeet 本地模型:下载状态(null=查询中)与下载进度(null=未在下载)。
-  const [parakeetReady, setParakeetReady] = useState<boolean | null>(null);
-  const [parakeetProgress, setParakeetProgress] =
-    useState<ParakeetDownloadProgress | null>(null);
+  // 本地模型(parakeet / qwen3):下载状态(缺省=查询中)与下载进度(缺省=未在下载)。
+  const [localReady, setLocalReady] = useState<
+    Partial<Record<LocalSttEngine, boolean>>
+  >({});
+  const [localProgress, setLocalProgress] = useState<
+    Partial<Record<LocalSttEngine, LocalDownloadProgress>>
+  >({});
 
   useEffect(() => {
     let alive = true;
     void Promise.all(
-      (["soniox", "openai"] satisfies SttProvider[]).map(
+      (["soniox", "openai"] satisfies CloudSttProvider[]).map(
         async (provider) =>
           [provider, !!(await getSecret(sttKeyAccount(provider)))] as const,
       ),
     ).then((items) => {
       if (alive) setKeyStatus(Object.fromEntries(items));
     });
-    void parakeetModelStatus().then((ready) => {
-      if (alive) setParakeetReady(ready);
-    });
+    for (const engine of ["parakeet", "qwen3"] satisfies LocalSttEngine[]) {
+      void localAsrModelStatus(engine).then((ready) => {
+        if (alive) setLocalReady((prev) => ({ ...prev, [engine]: ready }));
+      });
+    }
     return () => {
       alive = false;
     };
   }, []);
 
-  async function downloadParakeet() {
-    setParakeetProgress({
-      file: "",
-      fileIndex: 0,
-      fileCount: 4,
-      received: 0,
-      total: 0,
-    });
+  async function downloadLocal(engine: LocalSttEngine, fileCount: number) {
+    setLocalProgress((prev) => ({
+      ...prev,
+      [engine]: { file: "", fileIndex: 0, fileCount, received: 0, total: 0 },
+    }));
     try {
-      await downloadParakeetModel(setParakeetProgress);
-      setParakeetReady(true);
+      await downloadLocalAsrModel(engine, (p) =>
+        setLocalProgress((prev) => ({ ...prev, [engine]: p })),
+      );
+      setLocalReady((prev) => ({ ...prev, [engine]: true }));
     } catch (e) {
       setStatus({
-        provider: "parakeet",
+        provider: engine,
         text: e instanceof Error ? e.message : String(e),
       });
     } finally {
-      setParakeetProgress(null);
+      setLocalProgress((prev) => {
+        const next = { ...prev };
+        delete next[engine];
+        return next;
+      });
     }
   }
 
@@ -252,7 +262,7 @@ function SttSettings() {
     saveSttConfig(next);
   }
 
-  async function saveKey(provider: SttProvider) {
+  async function saveKey(provider: CloudSttProvider) {
     const value = (keyInputs[provider] ?? "").trim();
     if (!value) return;
     await setSecret(sttKeyAccount(provider), value);
@@ -261,7 +271,7 @@ function SttSettings() {
     setStatus({ provider, text: t("settings.stt.keySaved") });
   }
 
-  async function clearKey(provider: SttProvider) {
+  async function clearKey(provider: CloudSttProvider) {
     await deleteSecret(sttKeyAccount(provider));
     setKeyStatus((prev) => ({ ...prev, [provider]: false }));
     setStatus({ provider, text: t("settings.stt.keyCleared") });
@@ -279,6 +289,23 @@ function SttSettings() {
         <p className="max-w-2xl text-ui-body leading-relaxed text-ui-muted">
           {t("settings.stt.description")}
         </p>
+        <div className="flex flex-wrap items-center gap-3">
+          {!cfg.sttProvider && (
+            <p className="m-0 text-ui-caption leading-snug text-ui-muted">
+              {t("settings.stt.noProviderSelected")}
+            </p>
+          )}
+          {cfg.sttProvider && (
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => update("sttProvider", null)}
+            >
+              {t("settings.stt.disableVoiceInput")}
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="flex flex-col">
@@ -445,16 +472,16 @@ function SttSettings() {
           icon={<CpuIcon className="size-5 shrink-0 text-success" />}
           title={t("settings.stt.parakeetTitle")}
           statusText={
-            parakeetProgress
+            localProgress.parakeet
               ? t("settings.stt.parakeetDownloading", {
-                  index: parakeetProgress.fileIndex,
-                  count: parakeetProgress.fileCount,
+                  index: localProgress.parakeet.fileIndex,
+                  count: localProgress.parakeet.fileCount,
                 })
-              : parakeetReady
+              : localReady.parakeet
                 ? t("settings.stt.parakeetDownloaded")
                 : t("settings.stt.parakeetNotDownloaded")
           }
-          configured={!!parakeetReady}
+          configured={!!localReady.parakeet}
           active={cfg.sttProvider === "parakeet"}
           expanded={expandedStt === "parakeet"}
           onToggle={() =>
@@ -462,7 +489,7 @@ function SttSettings() {
           }
           // 未下载不允许切到本地引擎(否则录音转写必然失败)。
           onActivate={() => {
-            if (parakeetReady) update("sttProvider", "parakeet");
+            if (localReady.parakeet) update("sttProvider", "parakeet");
           }}
         >
           <p className="text-ui-body leading-relaxed text-ui-muted">
@@ -474,33 +501,34 @@ function SttSettings() {
           <Field label={t("settings.stt.parakeetModelLabel")}>
             <div className="flex flex-wrap items-center gap-2">
               <Button
-                onClick={() => void downloadParakeet()}
-                disabled={!!parakeetProgress}
+                onClick={() => void downloadLocal("parakeet", 4)}
+                disabled={!!localProgress.parakeet}
               >
                 <DownloadIcon className="size-4" />
-                {parakeetProgress
+                {localProgress.parakeet
                   ? t("settings.stt.parakeetDownloading", {
-                      index: parakeetProgress.fileIndex,
-                      count: parakeetProgress.fileCount,
+                      index: localProgress.parakeet.fileIndex,
+                      count: localProgress.parakeet.fileCount,
                     })
-                  : parakeetReady
+                  : localReady.parakeet
                     ? t("settings.stt.parakeetRedownload")
                     : t("settings.stt.parakeetDownload")}
               </Button>
-              {parakeetReady && !parakeetProgress && (
+              {localReady.parakeet && !localProgress.parakeet && (
                 <span className="flex items-center gap-1.5 text-ui-caption text-success">
                   <CheckIcon className="size-3.5" />
                   {t("settings.stt.parakeetDownloaded")}
                 </span>
               )}
             </div>
-            {parakeetProgress && parakeetProgress.total > 0 && (
+            {localProgress.parakeet && localProgress.parakeet.total > 0 && (
               <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-foreground/10">
                 <div
                   className="h-full bg-success transition-[width]"
                   style={{
                     width: `${Math.round(
-                      (parakeetProgress.received / parakeetProgress.total) *
+                      (localProgress.parakeet.received /
+                        localProgress.parakeet.total) *
                         100,
                     )}%`,
                   }}
@@ -513,6 +541,82 @@ function SttSettings() {
           </Field>
 
           {status?.provider === "parakeet" && (
+            <p className="m-0 break-words text-ui-body text-primary">
+              {status.text}
+            </p>
+          )}
+        </ProviderCard>
+
+        <ProviderCard
+          icon={<CpuIcon className="size-5 shrink-0 text-brand" />}
+          title={t("settings.stt.qwen3Title")}
+          statusText={
+            localProgress.qwen3
+              ? t("settings.stt.parakeetDownloading", {
+                  index: localProgress.qwen3.fileIndex,
+                  count: localProgress.qwen3.fileCount,
+                })
+              : localReady.qwen3
+                ? t("settings.stt.parakeetDownloaded")
+                : t("settings.stt.parakeetNotDownloaded")
+          }
+          configured={!!localReady.qwen3}
+          active={cfg.sttProvider === "qwen3"}
+          expanded={expandedStt === "qwen3"}
+          onToggle={() =>
+            setExpandedStt((prev) => (prev === "qwen3" ? null : "qwen3"))
+          }
+          // 未下载不允许切到本地引擎(否则录音转写必然失败)。
+          onActivate={() => {
+            if (localReady.qwen3) update("sttProvider", "qwen3");
+          }}
+        >
+          <p className="text-ui-body leading-relaxed text-ui-muted">
+            {t("settings.stt.qwen3Description")}
+          </p>
+          <Field label={t("settings.stt.qwen3ModelLabel")}>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                onClick={() => void downloadLocal("qwen3", 6)}
+                disabled={!!localProgress.qwen3}
+              >
+                <DownloadIcon className="size-4" />
+                {localProgress.qwen3
+                  ? t("settings.stt.parakeetDownloading", {
+                      index: localProgress.qwen3.fileIndex,
+                      count: localProgress.qwen3.fileCount,
+                    })
+                  : localReady.qwen3
+                    ? t("settings.stt.parakeetRedownload")
+                    : t("settings.stt.parakeetDownload")}
+              </Button>
+              {localReady.qwen3 && !localProgress.qwen3 && (
+                <span className="flex items-center gap-1.5 text-ui-caption text-success">
+                  <CheckIcon className="size-3.5" />
+                  {t("settings.stt.parakeetDownloaded")}
+                </span>
+              )}
+            </div>
+            {localProgress.qwen3 && localProgress.qwen3.total > 0 && (
+              <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-foreground/10">
+                <div
+                  className="h-full bg-success transition-[width]"
+                  style={{
+                    width: `${Math.round(
+                      (localProgress.qwen3.received /
+                        localProgress.qwen3.total) *
+                        100,
+                    )}%`,
+                  }}
+                />
+              </div>
+            )}
+            <p className="mt-1.5 text-ui-caption leading-snug text-ui-muted">
+              {t("settings.stt.parakeetModelHint")}
+            </p>
+          </Field>
+
+          {status?.provider === "qwen3" && (
             <p className="m-0 break-words text-ui-body text-primary">
               {status.text}
             </p>

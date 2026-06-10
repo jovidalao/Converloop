@@ -31,6 +31,7 @@ export const zh: Messages = {
     lessonNoWriteback: "没有可回写的学习项。",
     maintainerNoKey: "尚未配置 API key",
     maintainerRunning: "维护任务正在运行",
+    sttNoProvider: "尚未选择语音转写 provider。请到设置 → 语音输入选择一个。",
     sttNoKey: "尚未配置语音转写 key。请到设置 → 语音输入填写。",
     ttsNoKey: "请先到设置 → 语音里配置 MiMo API key。",
   },
@@ -52,6 +53,7 @@ export const zh: Messages = {
   stt: {
     startRecording: "语音输入(开始说话,再点一次结束)",
     stopRecording: "结束语音输入(Esc 取消)",
+    noProvider: "语音输入已禁用。请先到设置 → 语音输入选择一个 STT provider。",
     micDenied: "麦克风不可用——请检查系统设置里 lang-agent 的麦克风权限。",
   },
   speak: {
@@ -551,6 +553,9 @@ export const zh: Messages = {
       title: "语音输入(STT)",
       description:
         "驱动聊天输入框的麦克风按钮:录音会经当前选择的 STT 提供商转写,放入输入框,确认后再发送。",
+      noProviderSelected:
+        "尚未选择 STT provider,聊天输入框的麦克风按钮会保持禁用。",
+      disableVoiceInput: "关闭语音输入",
       sonioxTitle: "Soniox(多语言 · 推荐)",
       sonioxDescription:
         "使用 Soniox 实时流式转写,说话时文字即时出现在输入框。语言提示来自你的母语和目标语言,同时仍允许自动识别混合语言输入。",
@@ -577,6 +582,10 @@ export const zh: Messages = {
       parakeetDownloading: "下载中…({index}/{count})",
       parakeetDownloaded: "已下载",
       parakeetNotDownloaded: "未下载",
+      qwen3Title: "Qwen3-ASR(本地 · 免 key)",
+      qwen3Description:
+        "完全在本机运行——无需 API key,下载后无需联网。录完整段再转写(不支持流式)。支持中文、英语、粤语等 30+ 种语言,中文离线转写选它。",
+      qwen3ModelLabel: "模型(~1 GB,只需下载一次)",
       keySaved: "STT API key 已加密保存到本地。",
       keyCleared: "STT API key 已从本地清除。",
     },

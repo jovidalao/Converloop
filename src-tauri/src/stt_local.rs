@@ -1,12 +1,14 @@
-//! 本地语音转写:NVIDIA Parakeet TDT 0.6B V3(经 sherpa-onnx 离线推理)。
+//! 本地语音转写(sherpa-onnx 离线推理),两个引擎:
+//!  - parakeet: NVIDIA Parakeet TDT 0.6B V3(transducer)。25 种欧洲语言,无 CJK。
+//!  - qwen3: Qwen3-ASR 0.6B int8(LLM 解码)。30+ 语言含中文/粤语,补上 CJK 缺口。
 //! 与 stt.rs 的云端引擎不同——模型跑在本机、无需 key、无需联网(下载后)。
 //!
-//! 该模型不支持流式,只做批量:前端 AudioWorklet 采集整段 s16le PCM(base64 传入)
+//! 两个模型都不支持流式,只做批量:前端 AudioWorklet 采集整段 s16le PCM(base64 传入)
 //! → 解码为 f32 →(必要时)线性重采样到 16k → OfflineRecognizer 一次出文本。
 //!
-//! 模型 ~640MB,不打包进应用,运行时按需从 HuggingFace 下载到
-//! app_config_dir/models/parakeet-tdt-0.6b-v3/(与 sqlite/档案同目录)。
-//! recognizer 懒加载并全局缓存(避免每次转写重载 640MB)。
+//! 模型不打包进应用,运行时按需从 HuggingFace 下载到
+//! app_config_dir/models/<engine-dir>/(与 sqlite/档案同目录)。
+//! recognizer 懒加载并全局缓存;同一时刻只常驻一个引擎(两个同驻 >2GB 内存)。
 use base64::Engine;
 use futures_util::StreamExt;
 use serde::Serialize;
@@ -16,31 +18,64 @@ use std::sync::{Mutex, OnceLock};
 use tauri::ipc::Channel;
 use tauri::Manager;
 
-const MODEL_DIR: &str = "models/parakeet-tdt-0.6b-v3";
-/// sherpa-onnx 官方转好的 int8 ONNX,逐文件下载(免去 tar.bz2 解压依赖)。
-const HF_BASE: &str =
-    "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8/resolve/main";
-const MODEL_FILES: [&str; 4] = [
-    "encoder.int8.onnx",
-    "decoder.int8.onnx",
-    "joiner.int8.onnx",
-    "tokens.txt",
-];
+/// 一个本地引擎的模型来源:HF 仓库基址 + 逐文件下载清单(免去 tar.bz2 解压依赖)。
+struct LocalModelSpec {
+    /// app_config_dir 下的模型目录。
+    dir: &'static str,
+    hf_base: &'static str,
+    files: &'static [&'static str],
+}
+
+const PARAKEET: LocalModelSpec = LocalModelSpec {
+    dir: "models/parakeet-tdt-0.6b-v3",
+    hf_base:
+        "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8/resolve/main",
+    files: &[
+        "encoder.int8.onnx",
+        "decoder.int8.onnx",
+        "joiner.int8.onnx",
+        "tokens.txt",
+    ],
+};
+
+const QWEN3: LocalModelSpec = LocalModelSpec {
+    dir: "models/qwen3-asr-0.6b-int8",
+    hf_base:
+        "https://huggingface.co/csukuangfj2/sherpa-onnx-qwen3-asr-0.6B-int8-2026-03-25/resolve/main",
+    files: &[
+        "conv_frontend.onnx",
+        "encoder.int8.onnx",
+        "decoder.int8.onnx",
+        "tokenizer/merges.txt",
+        "tokenizer/vocab.json",
+        "tokenizer/tokenizer_config.json",
+    ],
+};
+
+fn spec_for(engine: &str) -> Result<&'static LocalModelSpec, String> {
+    match engine {
+        "parakeet" => Ok(&PARAKEET),
+        "qwen3" => Ok(&QWEN3),
+        other => Err(format!("未知本地 STT 引擎: {other}")),
+    }
+}
+
 const TARGET_SAMPLE_RATE: i32 = 16_000;
 
-fn model_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+fn model_dir(app: &tauri::AppHandle, spec: &LocalModelSpec) -> Result<PathBuf, String> {
     let dir = app.path().app_config_dir().map_err(|e| e.to_string())?;
-    Ok(dir.join(MODEL_DIR))
+    Ok(dir.join(spec.dir))
 }
 
-fn files_present(dir: &Path) -> bool {
-    MODEL_FILES.iter().all(|f| dir.join(f).is_file())
+fn files_present(dir: &Path, spec: &LocalModelSpec) -> bool {
+    spec.files.iter().all(|f| dir.join(f).is_file())
 }
 
-/// 四个模型文件是否齐全(前端据此决定 UI 状态 + 是否允许切到 Parakeet)。
+/// 模型文件是否齐全(前端据此决定 UI 状态 + 是否允许切到该本地引擎)。
 #[tauri::command]
-pub fn parakeet_model_status(app: tauri::AppHandle) -> Result<bool, String> {
-    Ok(files_present(&model_dir(&app)?))
+pub fn local_asr_model_status(app: tauri::AppHandle, engine: String) -> Result<bool, String> {
+    let spec = spec_for(&engine)?;
+    Ok(files_present(&model_dir(&app, spec)?, spec))
 }
 
 #[derive(Clone, Serialize)]
@@ -59,20 +94,26 @@ pub struct DownloadProgress {
 /// 逐个文件下载模型,进度经 Channel 实时推给前端。原子写:先写 .part 再 rename。
 /// 已存在的文件跳过(支持断点续传式重试——整文件粒度)。
 #[tauri::command]
-pub async fn parakeet_download_model(
+pub async fn local_asr_download_model(
     app: tauri::AppHandle,
+    engine: String,
     on_progress: Channel<DownloadProgress>,
 ) -> Result<(), String> {
-    let dir = model_dir(&app)?;
+    let spec = spec_for(&engine)?;
+    let dir = model_dir(&app, spec)?;
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let client = reqwest::Client::new();
 
-    for (idx, name) in MODEL_FILES.iter().enumerate() {
+    for (idx, name) in spec.files.iter().enumerate() {
         let dest = dir.join(name);
         if dest.is_file() {
             continue;
         }
-        let url = format!("{HF_BASE}/{name}");
+        // 清单里可能带子目录(如 qwen3 的 tokenizer/)。
+        if let Some(parent) = dest.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+        let url = format!("{}/{name}", spec.hf_base);
         let resp = client
             .get(&url)
             .send()
@@ -100,7 +141,7 @@ pub async fn parakeet_download_model(
                 let _ = on_progress.send(DownloadProgress {
                     file: name.to_string(),
                     file_index: idx + 1,
-                    file_count: MODEL_FILES.len(),
+                    file_count: spec.files.len(),
                     received,
                     total,
                 });
@@ -113,7 +154,7 @@ pub async fn parakeet_download_model(
         let _ = on_progress.send(DownloadProgress {
             file: name.to_string(),
             file_index: idx + 1,
-            file_count: MODEL_FILES.len(),
+            file_count: spec.files.len(),
             received: total.max(received),
             total,
         });
@@ -121,19 +162,35 @@ pub async fn parakeet_download_model(
     Ok(())
 }
 
-/// 懒加载的全局 recognizer。OfflineRecognizer 是 Send+Sync,Mutex 保证同一时刻只一段
-/// 在解码(批量短句,串行足够)。模型路径固定,首次转写时构建一次后常驻。
-static RECOGNIZER: OnceLock<Mutex<Option<OfflineRecognizer>>> = OnceLock::new();
+/// 懒加载的全局 recognizer,带引擎标记:切换引擎时先 drop 旧实例再建新的
+/// (Parakeet ~0.7GB + Qwen3 ~1.5GB,不允许同时常驻)。Mutex 保证同一时刻只
+/// 一段在解码(批量短句,串行足够)。
+static RECOGNIZER: OnceLock<Mutex<Option<(String, OfflineRecognizer)>>> = OnceLock::new();
 
-fn build_recognizer(dir: &Path) -> Result<OfflineRecognizer, String> {
+fn build_recognizer(engine: &str, dir: &Path) -> Result<OfflineRecognizer, String> {
     let path = |f: &str| dir.join(f).to_string_lossy().into_owned();
     let mut config = OfflineRecognizerConfig::default();
-    config.model_config.transducer.encoder = Some(path("encoder.int8.onnx"));
-    config.model_config.transducer.decoder = Some(path("decoder.int8.onnx"));
-    config.model_config.transducer.joiner = Some(path("joiner.int8.onnx"));
-    config.model_config.tokens = Some(path("tokens.txt"));
+    match engine {
+        "qwen3" => {
+            // LLM 解码引擎:tokenizer 传目录(含 vocab.json/merges.txt);
+            // 特征维度 128(默认 80 是 transducer 的)。
+            config.feat_config.feature_dim = 128;
+            config.model_config.qwen3_asr.conv_frontend = Some(path("conv_frontend.onnx"));
+            config.model_config.qwen3_asr.encoder = Some(path("encoder.int8.onnx"));
+            config.model_config.qwen3_asr.decoder = Some(path("decoder.int8.onnx"));
+            config.model_config.qwen3_asr.tokenizer = Some(path("tokenizer"));
+            // 默认 128 token 会截断较长录音的转写。
+            config.model_config.qwen3_asr.max_new_tokens = 256;
+        }
+        _ => {
+            config.model_config.transducer.encoder = Some(path("encoder.int8.onnx"));
+            config.model_config.transducer.decoder = Some(path("decoder.int8.onnx"));
+            config.model_config.transducer.joiner = Some(path("joiner.int8.onnx"));
+            config.model_config.tokens = Some(path("tokens.txt"));
+        }
+    }
     OfflineRecognizer::create(&config)
-        .ok_or_else(|| "Parakeet 模型加载失败(文件损坏?可重新下载)".to_string())
+        .ok_or_else(|| "本地模型加载失败(文件损坏?可重新下载)".to_string())
 }
 
 /// 简单线性重采样到 16k。前端已尽量按 16k 采集;此处仅作兜底(WebKit 可能忽略
@@ -157,14 +214,16 @@ fn resample_to_16k(samples: &[f32], from_rate: i32) -> Vec<f32> {
 }
 
 #[tauri::command]
-pub async fn stt_transcribe_parakeet(
+pub async fn stt_transcribe_local(
     app: tauri::AppHandle,
+    engine: String,
     pcm_s16le_b64: String,
     sample_rate: i32,
 ) -> Result<String, String> {
-    let dir = model_dir(&app)?;
-    if !files_present(&dir) {
-        return Err("Parakeet 模型尚未下载".to_string());
+    let spec = spec_for(&engine)?;
+    let dir = model_dir(&app, spec)?;
+    if !files_present(&dir, spec) {
+        return Err("本地模型尚未下载".to_string());
     }
     let bytes = base64::engine::general_purpose::STANDARD
         .decode(pcm_s16le_b64)
@@ -181,19 +240,20 @@ pub async fn stt_transcribe_parakeet(
 
         let lock = RECOGNIZER.get_or_init(|| Mutex::new(None));
         let mut guard = lock.lock().map_err(|_| "recognizer 锁中毒".to_string())?;
-        if guard.is_none() {
-            *guard = Some(build_recognizer(&dir)?);
+        if guard.as_ref().map(|(e, _)| e.as_str()) != Some(engine.as_str()) {
+            *guard = None; // 先释放旧引擎再加载,避免两份模型同驻内存
+            *guard = Some((engine.clone(), build_recognizer(&engine, &dir)?));
         }
-        let recognizer = guard.as_ref().unwrap();
+        let recognizer = &guard.as_ref().unwrap().1;
 
         let stream = recognizer.create_stream();
         stream.accept_waveform(TARGET_SAMPLE_RATE, &samples);
         recognizer.decode(&stream);
         let result = stream
             .get_result()
-            .ok_or_else(|| "Parakeet 识别无结果".to_string())?;
+            .ok_or_else(|| "本地引擎识别无结果".to_string())?;
         Ok(result.text.trim().to_string())
     })
     .await
-    .map_err(|e| format!("Parakeet 任务失败: {e}"))?
+    .map_err(|e| format!("本地转写任务失败: {e}"))?
 }

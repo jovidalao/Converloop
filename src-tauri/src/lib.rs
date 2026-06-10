@@ -579,9 +579,9 @@ pub fn run() {
             profile::restore_profile,
             backup::export_backup,
             stt::stt_transcribe,
-            stt_local::parakeet_model_status,
-            stt_local::parakeet_download_model,
-            stt_local::stt_transcribe_parakeet,
+            stt_local::local_asr_model_status,
+            stt_local::local_asr_download_model,
+            stt_local::stt_transcribe_local,
             reapply_traffic_lights,
         ])
         .run(tauri::generate_context!())

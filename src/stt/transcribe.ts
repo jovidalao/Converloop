@@ -9,7 +9,7 @@ export async function transcribeAudio(
   mime: string,
 ): Promise<string> {
   const config = loadSttConfig();
-  const apiKey = await getSttApiKey(config.sttProvider);
+  const apiKey = await getSttApiKey("openai");
   if (!apiKey) throw new MissingSttApiKeyError();
 
   const buffer = await blob.arrayBuffer();

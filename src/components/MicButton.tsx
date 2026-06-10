@@ -1,8 +1,13 @@
 import { MicIcon, SquareIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "@/i18n";
-import { loadSttConfig, MissingSttApiKeyError } from "../stt/config";
-import { type ParakeetCapture, startParakeetCapture } from "../stt/local";
+import {
+  loadSttConfig,
+  MissingSttApiKeyError,
+  MissingSttProviderError,
+  STT_CONFIG_CHANGED_EVENT,
+} from "../stt/config";
+import { type LocalCapture, startLocalCapture } from "../stt/local";
 import { type StreamingSession, startSonioxStream } from "../stt/realtime";
 import { type ActiveRecording, startRecording } from "../stt/record";
 import { transcribeAudio } from "../stt/transcribe";
@@ -13,14 +18,14 @@ import { Spinner } from "./ui/spinner";
 //  - Soniox(stream):实时流式,说话时 onPartial 持续把「已定 + 暂定」文本推给输入框,
 //    停止后以 onTranscript(最终文本) 收尾;
 //  - OpenAI 兼容(batch):录完整段 → 上传转写 → onTranscript;
-//  - Parakeet(local):录完整段 → 本地 sherpa-onnx 转写 → onTranscript(无流式)。
+//  - Parakeet / Qwen3(local):录完整段 → 本地 sherpa-onnx 转写 → onTranscript(无流式)。
 // 约定:流式会话一旦推过 onPartial,必以一次 onTranscript 收尾(取消/出错时
 // 传 ""),调用方据此回滚或落定文本。学习者发送前还要确认文本——这个确认
 // 本身就是学习环节的一部分。Esc 取消录音。
 type LiveSession =
   | { kind: "stream"; session: StreamingSession }
   | { kind: "batch"; recording: ActiveRecording }
-  | { kind: "local"; capture: ParakeetCapture };
+  | { kind: "local"; capture: LocalCapture };
 
 export function MicButton({
   disabled = false,
@@ -37,7 +42,25 @@ export function MicButton({
   const [state, setState] = useState<"idle" | "recording" | "transcribing">(
     "idle",
   );
+  const [providerSelected, setProviderSelected] = useState(
+    () => loadSttConfig().sttProvider !== null,
+  );
   const sessionRef = useRef<LiveSession | null>(null);
+
+  useEffect(() => {
+    const syncProviderSelection = () => {
+      setProviderSelected(loadSttConfig().sttProvider !== null);
+    };
+    window.addEventListener(STT_CONFIG_CHANGED_EVENT, syncProviderSelection);
+    window.addEventListener("storage", syncProviderSelection);
+    return () => {
+      window.removeEventListener(
+        STT_CONFIG_CHANGED_EVENT,
+        syncProviderSelection,
+      );
+      window.removeEventListener("storage", syncProviderSelection);
+    };
+  }, []);
 
   // Discard any live recording on unmount (conversation switch etc.).
   useEffect(() => {
@@ -77,6 +100,8 @@ export function MicButton({
     if (state === "idle") {
       try {
         const provider = loadSttConfig().sttProvider;
+        setProviderSelected(provider !== null);
+        if (!provider) throw new MissingSttProviderError();
         if (provider === "soniox") {
           const session = await startSonioxStream({
             onPartial,
@@ -89,10 +114,10 @@ export function MicButton({
             },
           });
           sessionRef.current = { kind: "stream", session };
-        } else if (provider === "parakeet") {
+        } else if (provider === "parakeet" || provider === "qwen3") {
           sessionRef.current = {
             kind: "local",
-            capture: await startParakeetCapture(),
+            capture: await startLocalCapture(provider),
           };
         } else {
           sessionRef.current = {
@@ -103,7 +128,10 @@ export function MicButton({
         setState("recording");
       } catch (e) {
         onError(
-          e instanceof MissingSttApiKeyError ? e.message : t("stt.micDenied"),
+          e instanceof MissingSttProviderError ||
+            e instanceof MissingSttApiKeyError
+            ? e.message
+            : t("stt.micDenied"),
         );
       }
       return;
@@ -134,22 +162,29 @@ export function MicButton({
     }
   }
 
+  const micDisabled =
+    disabled ||
+    state === "transcribing" ||
+    (!providerSelected && state === "idle");
+  const label =
+    state === "recording"
+      ? t("stt.stopRecording")
+      : providerSelected
+        ? t("stt.startRecording")
+        : t("stt.noProvider");
+
   return (
     <Button
       type="button"
       size="icon"
       variant={state === "recording" ? "default" : "ghost"}
       onClick={() => void toggle()}
-      disabled={disabled || state === "transcribing"}
+      disabled={micDisabled}
       className={`size-8 rounded-full transition-transform active:scale-90${
         state === "recording" ? " animate-pulse" : ""
       }`}
-      title={
-        state === "recording" ? t("stt.stopRecording") : t("stt.startRecording")
-      }
-      aria-label={
-        state === "recording" ? t("stt.stopRecording") : t("stt.startRecording")
-      }
+      title={label}
+      aria-label={label}
       aria-pressed={state === "recording"}
     >
       {state === "transcribing" ? (

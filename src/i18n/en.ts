@@ -34,6 +34,8 @@ export const en = {
     lessonNoWriteback: "No learning items to write back.",
     maintainerNoKey: "No API key configured",
     maintainerRunning: "Maintenance job already running",
+    sttNoProvider:
+      "No speech-to-text provider selected. Choose one in Settings → Voice input.",
     sttNoKey:
       "No speech-to-text key configured. Add one in Settings → Voice input.",
     ttsNoKey:
@@ -46,6 +48,8 @@ export const en = {
   stt: {
     startRecording: "Voice input (speak, then click again to finish)",
     stopRecording: "Finish voice input (Esc to cancel)",
+    noProvider:
+      "Voice input is disabled until you choose an STT provider in Settings → Voice input.",
     micDenied:
       "Microphone unavailable — check the system microphone permission for lang-agent.",
   },
@@ -572,6 +576,9 @@ export const en = {
       title: "Voice input (speech-to-text)",
       description:
         "Powers the microphone button in the chat composer. Recordings are transcribed by the selected STT provider and dropped into the input box for review before sending.",
+      noProviderSelected:
+        "No STT provider is selected, so the chat microphone button is disabled.",
+      disableVoiceInput: "Disable voice input",
       sonioxTitle: "Soniox (multilingual · recommended)",
       sonioxDescription:
         "Uses Soniox real-time streaming transcription — words appear in the input box as you speak. Language hints come from your native and target languages, while mixed-language input can still be detected automatically.",
@@ -598,6 +605,10 @@ export const en = {
       parakeetDownloading: "Downloading… ({index}/{count})",
       parakeetDownloaded: "Downloaded",
       parakeetNotDownloaded: "Not downloaded",
+      qwen3Title: "Qwen3-ASR (on-device · no key)",
+      qwen3Description:
+        "Runs fully on this device — no API key, no network once downloaded. Record-then-transcribe (no live streaming). Supports 30+ languages including Chinese, English, and Cantonese — the local pick for CJK.",
+      qwen3ModelLabel: "Model (~1 GB, downloaded once)",
       keySaved: "STT API key encrypted and saved locally.",
       keyCleared: "STT API key cleared from local storage.",
     },
