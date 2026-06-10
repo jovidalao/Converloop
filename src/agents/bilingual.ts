@@ -69,6 +69,7 @@ export async function bilingual(
     messages,
     temperature: 0.2,
     maxTokens: MAX_OUTPUT_TOKENS,
+    meta: { label: "bilingual" },
   });
 
   const md = stripFences(raw);

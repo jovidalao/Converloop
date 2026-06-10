@@ -140,7 +140,11 @@ export async function runMaintainer(
   let newMd: string;
   try {
     newMd = stripFences(
-      await provider.generate({ messages, temperature: 0.3 }),
+      await provider.generate({
+        messages,
+        temperature: 0.3,
+        meta: { label: "maintainer" },
+      }),
     );
   } catch (e) {
     return {

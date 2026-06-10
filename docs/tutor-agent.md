@@ -91,6 +91,8 @@ export type TutorAnalysis = z.infer<typeof TutorAnalysis>;
 
 ## System Prompt
 
+实现按**稳定优先拆成 3 条 system 消息**(`src/agents/tutor.ts` 的 `systemMessages`):①稳定批改规则(只依赖语言配置,分含/不含 EXPRESSION GAP 两个变体)②学习者体验偏好(慢变)③弱项表 + key hints(每轮随输入重排,不缓存)。Anthropic 适配器给除最后一块外的块打缓存断点;OpenAI 兼容线格式重新合并成单条 system。JSON 降级时的 schema reminder 追加在**最后一条** system 上,保持缓存前缀不变。下面的 prompt 文本是合并后的逻辑视图:
+
 ```text
 You are a precise language tutor analyzing a single message from a
 {native_language} speaker learning {target_language} at {level} level. You give

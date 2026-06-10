@@ -36,6 +36,39 @@ const baseCtx: ConversationContext = {
 };
 
 describe("converse", () => {
+  it("splits the system prompt into stable-first blocks for prefix caching", async () => {
+    const calls: GenerateOptions[] = [];
+    await converse(
+      streamProvider(calls),
+      {
+        ...baseCtx,
+        calibrationHint: "Accuracy is trending up.",
+        sessionAdjustments: "Increase difficulty slightly.",
+      },
+      () => {},
+    );
+
+    const system = calls[0].messages.filter((m) => m.role === "system");
+    expect(system).toHaveLength(3);
+    // Block 1: stable rules only (no per-learner or per-turn data).
+    expect(system[0].content).toContain("conversation partner");
+    expect(system[0].content).not.toContain("hiking");
+    expect(system[0].content).not.toContain("Kyoto");
+    // Block 2: slow-changing learner context (preferences + profile).
+    expect(system[1].content).toContain("LEARNER PROFILE");
+    expect(system[1].content).toContain("hiking");
+    // Block 3: per-turn dynamic data (calibration, lists, adjustments, summary).
+    expect(system[2].content).toContain("Accuracy is trending up.");
+    expect(system[2].content).toContain("DUE FOR REVIEW");
+    expect(system[2].content).toContain("SESSION ADJUSTMENTS");
+    expect(system[2].content).toContain("Kyoto");
+    // History rides along as real alternating messages after the system blocks.
+    expect(calls[0].messages[3]).toEqual({
+      role: "user",
+      content: "Let's talk about travel plans.",
+    });
+  });
+
   it("answers /btw standalone questions without conversation history", async () => {
     const calls: GenerateOptions[] = [];
     const reply = await converse(

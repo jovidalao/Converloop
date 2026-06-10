@@ -74,6 +74,9 @@ HARD RULES
 - Keep it concise: at most 6 bullets per section. Prune items that are stale
   (not seen recently) or resolved (now "known"). Quality over completeness — this
   goes into a prompt every turn.
+- Put expression_gap items in "## Expression gaps": situations the learner wanted
+  to express but could not yet say naturally. Keep the original intent and the
+  target expression if provided.
 - Only change the level (e.g. B1 → B2) when the data clearly justifies it, and
   keep the same level otherwise.
 - Update the "updated" date in the header to {today}.

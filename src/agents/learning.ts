@@ -18,8 +18,13 @@ export interface LearningAgentContext {
   customInstructions?: string; // additional instructions appended by the user in the agent library (lesson teacher)
 }
 
-function systemPrompt(ctx: LearningAgentContext): string {
-  const base = `You are a dedicated teacher for a customized language-learning session called "${ctx.agentName}".
+// The system prompt is split into stable-first system messages so providers can prefix-cache it
+// (Anthropic puts a cache breakpoint on every block except the last; see providers/anthropic.ts):
+//   1. stable base rules (config-only)
+//   2. lesson-stable context — learner preferences + the custom lesson prompt
+//   3. per-turn data — learning data scope + rolling summary
+function systemMessages(ctx: LearningAgentContext): ChatMessage[] {
+  const rules = `You are a dedicated teacher for a customized language-learning session called "${ctx.agentName}".
 The learner is a ${ctx.nativeLanguage} speaker learning ${ctx.targetLanguage} at roughly ${ctx.level} level.
 
 BASE RULES
@@ -34,17 +39,22 @@ BASE RULES
   specific item or expression from that data. Refer to it by its human label or
   example, not by raw database key.
 - Start with the most useful next step, then ask the learner to do something small and concrete.
-- Keep the lesson focused and interactive. Avoid long generic lectures.
-
-LEARNER EXPERIENCE PREFERENCES
+- Keep the lesson focused and interactive. Avoid long generic lectures.`;
+  const lessonContext = `LEARNER EXPERIENCE PREFERENCES
 ${ctx.experiencePreferences || "(none)"}
 
 CUSTOM LESSON PROMPT
-${ctx.agentPrompt}
-
-=== AVAILABLE LEARNER DATA ===
+${ctx.agentPrompt}`;
+  const data = `=== AVAILABLE LEARNER DATA ===
 ${ctx.dataContext || "(no learner data available yet)"}${storyBlock(ctx)}`;
-  return appendUserInstructions(base, ctx.customInstructions);
+  return [
+    { role: "system", content: rules },
+    { role: "system", content: lessonContext },
+    {
+      role: "system",
+      content: appendUserInstructions(data, ctx.customInstructions),
+    },
+  ];
 }
 
 // STORY SO FAR = rolling summary of earlier lesson content (auto-compressed). It
@@ -70,7 +80,7 @@ export async function runLearningAgent(
   onContext?: (promptTokens: number) => void,
 ): Promise<string> {
   const messages: ChatMessage[] = [
-    { role: "system", content: systemPrompt(ctx) },
+    ...systemMessages(ctx),
     ...buildHistoryMessages(ctx.historyTurns),
     { role: "user", content: latestUserMessage(ctx) },
   ];

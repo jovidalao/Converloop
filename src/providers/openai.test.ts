@@ -62,6 +62,24 @@ describe("openai json_schema fallback", () => {
     expect(body.response_format).toBeUndefined();
     expect(body.messages).toBe(msgs); // unchanged reference
   });
+
+  it("merges multiple system blocks into one system message for the wire format", () => {
+    const body = buildBody(
+      cfg,
+      {
+        messages: [
+          { role: "system", content: "stable rules" },
+          { role: "system", content: "dynamic data" },
+          { role: "user", content: "hi" },
+        ],
+      },
+      false,
+    ) as Record<string, unknown>;
+    expect(body.messages).toEqual([
+      { role: "system", content: "stable rules\n\ndynamic data" },
+      { role: "user", content: "hi" },
+    ]);
+  });
 });
 
 describe("withSchemaReminder", () => {

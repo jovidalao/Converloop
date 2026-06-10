@@ -97,8 +97,8 @@ function formatKeyHints(items: MasteryKeyHint[] | undefined): string {
 // Dictation grading: the learner listened to one sentence and typed what they heard. We KNOW the correct sentence
 // (the standard answer), so correction is a direct comparison — what they missed or misheard — not a free-form
 // conversational correction. Output is the same TutorAnalysis shape so the UI renders identically.
-function dictationSystemPrompt(ctx: TutorContext): string {
-  const base = `You are a precise dictation grader for a ${ctx.nativeLanguage} speaker
+function dictationRulesPrompt(ctx: TutorContext): string {
+  return `You are a precise dictation grader for a ${ctx.nativeLanguage} speaker
 learning ${ctx.targetLanguage} at ${ctx.level} level. The learner just LISTENED to ONE
 ${ctx.targetLanguage} sentence and TYPED what they heard. You are given the EXACT sentence that was
 spoken — the standard answer. Grade their transcription ONLY by comparing it to that standard answer.
@@ -125,18 +125,13 @@ RULES
 OUTPUT CONTRACT
 - Return exactly ONE JSON object. No markdown fences, no prose, no reasoning.
 - Always include: is_correct, corrected, natural, issues, mastery_updates, expression_gap.
-- Use [] for empty arrays and expression_gap:null. Do not include keys outside the schema.
-
-=== LEARNER EXPERIENCE PREFERENCES ===
-${ctx.experiencePreferences || "(none)"}`;
-  return appendUserInstructions(base, ctx.customInstructions);
+- Use [] for empty arrays and expression_gap:null. Do not include keys outside the schema.`;
 }
 
 // See docs/tutor-agent.md#system-prompt. includeGap toggles the expression-gap (native/mixed input)
 // half of the prompt; omit it for pure target-language turns so it matches the shallow core schema.
-function systemPrompt(ctx: TutorContext, includeGap: boolean): string {
-  if (ctx.standardAnswer) return dictationSystemPrompt(ctx);
-  const base = `You are a precise language tutor analyzing a single message from a
+function tutorRulesPrompt(ctx: TutorContext, includeGap: boolean): string {
+  return `You are a precise language tutor analyzing a single message from a
 ${ctx.nativeLanguage} speaker learning ${ctx.targetLanguage} at ${ctx.level} level. You give
 structured feedback only — a separate conversation agent handles the chat.
 ${
@@ -231,17 +226,42 @@ OUTPUT CONTRACT
 - Always include these top-level keys: is_correct, corrected, natural, issues,
   mastery_updates${includeGap ? ", expression_gap" : ""}.
 - Use [] for empty arrays.${includeGap ? " Use expression_gap:null when there is no expression gap." : ""}
-- Do not include keys outside the schema.
+- Do not include keys outside the schema.`;
+}
 
-=== LEARNER EXPERIENCE PREFERENCES ===
-${ctx.experiencePreferences || "(none)"}
-
-=== KNOWN WEAK POINTS (reuse these mastery_key values) ===
+// The system prompt is split into stable-first system messages so providers can prefix-cache it
+// (Anthropic puts a cache breakpoint on every block except the last; see providers/anthropic.ts):
+//   1. stable grading rules (config-only; two variants, with/without the expression-gap half)
+//   2. slow-changing learner preferences (change when the profile is edited/maintained)
+//   3. per-turn weak list + key hints (re-ranked against each input)
+function systemMessages(ctx: TutorContext, includeGap: boolean): ChatMessage[] {
+  const preferencesBlock = `=== LEARNER EXPERIENCE PREFERENCES ===
+${ctx.experiencePreferences || "(none)"}`;
+  if (ctx.standardAnswer) {
+    return [
+      { role: "system", content: dictationRulesPrompt(ctx) },
+      {
+        role: "system",
+        content: appendUserInstructions(
+          preferencesBlock,
+          ctx.customInstructions,
+        ),
+      },
+    ];
+  }
+  const dataBlock = `=== KNOWN WEAK POINTS (reuse these mastery_key values) ===
 ${formatWeakList(ctx.weakList)}
 
 === RECENT MASTERY KEY HINTS (reuse instead of making duplicates) ===
 ${formatKeyHints(ctx.keyHints)}`;
-  return appendUserInstructions(base, ctx.customInstructions);
+  return [
+    { role: "system", content: tutorRulesPrompt(ctx, includeGap) },
+    { role: "system", content: preferencesBlock },
+    {
+      role: "system",
+      content: appendUserInstructions(dataBlock, ctx.customInstructions),
+    },
+  ];
 }
 
 function userPrompt(ctx: TutorContext): string {
@@ -554,13 +574,19 @@ function fallbackMessages(
   schema: ReturnType<typeof tutorJsonSchema>,
 ): ChatMessage[] {
   const reminder = `Respond with ONE JSON object only (no markdown, no reasoning). It MUST match this schema:\n${JSON.stringify(schema.schema)}`;
-  const firstSystem = messages.findIndex((m) => m.role === "system");
-  if (firstSystem === -1)
+  // Append to the LAST system message: the earlier system blocks are the stable cached prefix
+  // (see systemMessages), and the reminder belongs with the per-request tail anyway.
+  let lastSystem = -1;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === "system") {
+      lastSystem = i;
+      break;
+    }
+  }
+  if (lastSystem === -1)
     return [{ role: "system", content: reminder }, ...messages];
   return messages.map((m, index) =>
-    index === firstSystem
-      ? { ...m, content: `${m.content}\n\n${reminder}` }
-      : m,
+    index === lastSystem ? { ...m, content: `${m.content}\n\n${reminder}` } : m,
   );
 }
 
@@ -750,7 +776,7 @@ export async function analyze(
   const includeGap =
     Boolean(ctx.standardAnswer) || likelyContainsNativeFallback(ctx);
   const messages: ChatMessage[] = [
-    { role: "system", content: systemPrompt(ctx, includeGap) },
+    ...systemMessages(ctx, includeGap),
     { role: "user", content: userPrompt(ctx) },
   ];
   try {

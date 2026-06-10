@@ -37,13 +37,29 @@ export function withSchemaReminder(
   );
 }
 
+// Agents may send several system messages (stable prefix vs per-turn data — see the Anthropic
+// adapter, which turns them into separate cache blocks). Many OpenAI-compatible chat templates
+// only honor the first system message, so for this wire format merge them into one, keeping the
+// exact joined text the agents produced before the split.
+export function mergeSystemMessages(messages: ChatMessage[]): ChatMessage[] {
+  const systemTexts = messages
+    .filter((m) => m.role === "system")
+    .map((m) => m.content);
+  if (systemTexts.length <= 1) return messages;
+  return [
+    { role: "system", content: systemTexts.join("\n\n") },
+    ...messages.filter((m) => m.role !== "system"),
+  ];
+}
+
 /** Matches the official chat/completions request body; exported for unit tests. */
 export function buildBody(
   cfg: OpenAIConfig,
   opts: GenerateOptions,
   stream: boolean,
 ): Body {
-  const body: Body = { model: cfg.model, messages: opts.messages, stream };
+  const merged = mergeSystemMessages(opts.messages);
+  const body: Body = { model: cfg.model, messages: merged, stream };
   // Ask for a final usage chunk on streamed responses (prompt_tokens = real context size). Endpoints that don't
   // support stream_options ignore it, and we silently fall back to the local estimate.
   if (stream) body.stream_options = { include_usage: true };
@@ -52,7 +68,7 @@ export function buildBody(
   if (opts.jsonSchema && cfg.jsonObjectFallback) {
     // Provider can't enforce json_schema → ask for a plain JSON object and carry the schema in the prompt.
     body.response_format = { type: "json_object" };
-    body.messages = withSchemaReminder(opts.messages, opts.jsonSchema);
+    body.messages = withSchemaReminder(merged, opts.jsonSchema);
   } else if (opts.jsonSchema) {
     body.response_format = {
       type: "json_schema",

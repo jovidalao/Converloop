@@ -57,5 +57,8 @@ export async function translate(
     { role: "system", content: systemPrompt(ctx) },
     { role: "user", content: userPrompt(ctx) },
   ];
-  return provider.stream({ messages, temperature: 0.2 }, onDelta);
+  return provider.stream(
+    { messages, temperature: 0.2, meta: { label: "translate" } },
+    onDelta,
+  );
 }

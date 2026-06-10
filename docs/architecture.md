@@ -339,9 +339,10 @@ provider 解析全在 TS;**LLM HTTP 走 Rust**(`src-tauri/src/llm.rs` 的 `llm_r
 
 ## 缓存与延迟
 
-- 把稳定的 system 段放最前打缓存断点(Anthropic `cache_control` / OpenAI 自动前缀缓存);profile/weak-list 每轮变,放断点之后。两个热 agent 共享前缀 → 命中。
-- ⚠️ 缓存只省**输入** token,且有最小长度门槛。多 agent **不比单调用便宜**(略贵 10–15%)。真正收益是**延迟**(并行 + 对话流式秒回)和**关注点分离**,不是省钱。
-- OpenAI 自动前缀缓存即生效,无需显式标记;Anthropic 的显式 `cache_control` 已加(`providers/anthropic.ts`:稳定 system 段打缓存断点)。
+- 热路径三个主 prompt(对话 / 导师 / 专项课)都按**稳定优先拆成多条 system 消息**:①稳定规则(只依赖语言配置)②慢变上下文(偏好 / MD 档案 / 课程 prompt)③每轮动态数据(随输入重排的弱项 / 复习 / 脚手架清单、摘要)。各 agent 的块划分见各自契约文档。
+- **Anthropic**(`providers/anthropic.ts`):每条 system 消息映射成独立 system block,**除最后一块外**的块打 `cache_control` 断点(上限 3)——稳定前缀跨轮、跨会话命中,动态尾巴不再为每轮必失效的缓存付 25% 写入溢价。单条 system 的小 agent(讲解/翻译等,prompt 全稳定)保持整块断点。
+- **OpenAI 兼容**(`providers/openai.ts`):发送前把多条 system 合并回单条(很多兼容端点的 chat template 只认第一条 system),合并文本与拆分前一致;自动前缀缓存受益于稳定优先的排序。Gemini / Codex Responses 同样在适配器内合并。
+- ⚠️ 缓存只省**输入** token,且有最小长度门槛(低于门槛的断点静默不生效,无额外成本)。多 agent **不比单调用便宜**。真正收益是**延迟**(并行 + 对话流式秒回)和**关注点分离**,缓存是在此之上把重复前缀的成本压下来。
 
 ## 复习去哪了
 

@@ -61,5 +61,8 @@ export async function explain(
     { role: "system", content: systemPrompt(ctx) },
     { role: "user", content: userPrompt(ctx) },
   ];
-  return provider.stream({ messages, temperature: 0.3 }, onDelta);
+  return provider.stream(
+    { messages, temperature: 0.3, meta: { label: "explain" } },
+    onDelta,
+  );
 }

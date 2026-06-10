@@ -89,6 +89,7 @@ export async function suggestReplyText(
       messages,
       temperature: 0.55,
       maxTokens: MAX_OUTPUT_TOKENS,
+      meta: { label: "reply_suggestion" },
       onFinish: (reason) => {
         finish = reason;
       },

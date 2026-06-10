@@ -35,7 +35,14 @@ interface AnthropicMessage {
   content: string;
 }
 
-/** OpenAI-style messages → Anthropic system + messages. Stable system section gets a cache breakpoint. */
+// Anthropic allows 4 cache breakpoints per request; we keep one in reserve for safety.
+const MAX_CACHE_BREAKPOINTS = 3;
+
+/** OpenAI-style messages → Anthropic system + messages. Each system message becomes its own
+ *  block so agents can order them stable-first: with multiple blocks, every block except the
+ *  last (the per-turn dynamic tail) gets a cache breakpoint — the stable prefix is cached and
+ *  the dynamic tail never pays the cache-write surcharge. A single system message keeps its
+ *  breakpoint (the small on-demand agents have fully stable prompts). */
 export function toAnthropicMessages(messages: ChatMessage[]): {
   system?: SystemBlock[];
   messages: AnthropicMessage[];
@@ -53,14 +60,18 @@ export function toAnthropicMessages(messages: ChatMessage[]): {
     }
   }
 
+  const cachedThrough =
+    systemTexts.length > 1
+      ? Math.min(systemTexts.length - 1, MAX_CACHE_BREAKPOINTS)
+      : systemTexts.length;
   const system = systemTexts.length
-    ? [
-        {
-          type: "text" as const,
-          text: systemTexts.join("\n\n"),
-          cache_control: { type: "ephemeral" as const },
-        },
-      ]
+    ? systemTexts.map((text, i) => ({
+        type: "text" as const,
+        text,
+        ...(i < cachedThrough
+          ? { cache_control: { type: "ephemeral" as const } }
+          : {}),
+      }))
     : undefined;
 
   return { system, messages: out };

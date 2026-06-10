@@ -38,6 +38,42 @@ describe("anthropic REST alignment", () => {
     expect(messages).toEqual([{ role: "user", content: "Hi" }]);
   });
 
+  it("multiple system messages: stable blocks cached, dynamic tail uncached", () => {
+    const { system } = toAnthropicMessages([
+      { role: "system", content: "Stable rules." },
+      { role: "system", content: "Slow-changing profile." },
+      { role: "system", content: "Per-turn dynamic data." },
+      { role: "user", content: "Hi" },
+    ]);
+    expect(system).toEqual([
+      {
+        type: "text",
+        text: "Stable rules.",
+        cache_control: { type: "ephemeral" },
+      },
+      {
+        type: "text",
+        text: "Slow-changing profile.",
+        cache_control: { type: "ephemeral" },
+      },
+      { type: "text", text: "Per-turn dynamic data." },
+    ]);
+  });
+
+  it("caps cache breakpoints at 3 system blocks", () => {
+    const { system } = toAnthropicMessages([
+      { role: "system", content: "a" },
+      { role: "system", content: "b" },
+      { role: "system", content: "c" },
+      { role: "system", content: "d" },
+      { role: "system", content: "e" },
+      { role: "user", content: "Hi" },
+    ]);
+    expect(
+      system?.map((block) => Boolean(block.cache_control)),
+    ).toEqual([true, true, true, false, false]);
+  });
+
   it("multi-turn maps user/assistant roles", () => {
     const { messages } = toAnthropicMessages([
       { role: "user", content: "Hi" },

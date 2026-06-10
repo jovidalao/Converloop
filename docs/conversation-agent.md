@@ -44,6 +44,10 @@
 
 ## System Prompt
 
+实现按**稳定优先拆成 3 条 system 消息**(`src/agents/conversation.ts` 的 `systemMessages`),让 provider 能做前缀缓存:Anthropic 适配器给除最后一块外的每块打缓存断点;OpenAI 兼容线格式发送前重新合并成单条 system(文本顺序不变);Gemini 同样合并进 systemInstruction。见 [architecture.md#缓存与延迟](./architecture.md#缓存与延迟)。
+
+**块 1 —— 稳定规则(只依赖语言配置,跨会话缓存命中):**
+
 ```text
 You are a warm, natural conversation partner for a {native_language} speaker
 learning {target_language} at roughly {level} level. Your only job here is to
@@ -52,8 +56,6 @@ keep the conversation flowing — another agent handles correction and feedback.
 RULES
 - Respond IN {target_language}, calibrated to {level}: slightly stretch the user,
   never overwhelm them.
-- (only when evidence is sufficient) Current read on this learner from recent
-  activity: {calibration_hint} Let this fine-tune your difficulty and reply length.
 - Follow the learner experience preferences below for language variety, spelling,
   phrasing, tone, and other standing requests.
 - Respond to what the user MEANS. Do NOT correct their mistakes and do NOT echo
@@ -83,29 +85,40 @@ RULES
   bullet lists) when it genuinely aids clarity — e.g. highlighting a key word or
   listing a few options — but stay conversational: no headings, no code blocks
   unless the topic calls for it.
+- Write your reply as flowing paragraphs, not one sentence per line. Only start a
+  new paragraph when the topic genuinely shifts.
+```
 
+**块 2 —— 慢变学习者上下文(偏好 + MD 档案;维护 agent 跑过 / 用户编辑后才变):**
+
+```text
 === LEARNER EXPERIENCE PREFERENCES ===
 {experience_preferences}
 
 === LEARNER PROFILE ===
 {md_profile_slice}
+```
+
+**块 3 —— 每轮动态数据(随输入重排,不缓存):**
+
+```text
+=== CURRENT READ ON THIS LEARNER (recent activity) ===   ← 证据充足时才出现
+{calibration_hint} Let this fine-tune your difficulty and reply length.
 
 === COMFORTABLE WITH (safe scaffolds, do not reteach) ===
 {comfortable_items}
 
 === DUE FOR REVIEW (weave in at most one, only if it fits) ===
 {review_items}
+
+=== SESSION ADJUSTMENTS (apply on top of everything above) ===   ← 有会话修饰符时才出现
+{session_adjustments}
+
+=== STORY SO FAR (earlier in this conversation) ===   ← 有滚动摘要时才出现
+{summary}
 ```
 
-User message:
-
-```text
-=== RECENT CONVERSATION ===
-{history}
-
-=== USER ===
-{user_input}
-```
+会话历史不再作为扁平文本塞进 user 消息:水位之后的原文轮次经 `buildHistoryMessages` 变成**真实的 user/assistant 交替消息**(模型不再偶发用用户口吻回复),最后一条 user 消息只含本轮输入(或派生会话的 `APP INSTRUCTION`)。
 
 ## `/btw` 独立问答模式
 
@@ -120,7 +133,7 @@ User message:
 
 长对话里,早期内容会被原文窗口挤出去 → agent「忘记前面」。解决:**阈值驱动的自动压缩**(实现见 `src/agents/summarize.ts` + `src/profile/summary-runner.ts`)。
 
-- **怎么喂**:`history` = 一份 `STORY SO FAR` 摘要(会话较早内容的目标语 recap)+ 水位 `summary_through_id` 之后的**全部原文轮次**。不到阈值时摘要为空,退化为纯原文。
+- **怎么喂**:`STORY SO FAR` 摘要(会话较早内容的目标语 recap)放在 system 的动态块里;水位 `summary_through_id` 之后的**全部原文轮次**作为真实交替消息发送。不到阈值时摘要为空,退化为纯原文。
 - **何时压缩**:每轮持久化后,后台估算「下一轮整段 prompt」的 token(`lib/tokens` 字符启发式);≥ 上下文上限的 **70%**(`getContextLimit`:查表 + 用户可在设置覆盖)时触发,把最老的、未入摘要的原文轮次逐批折叠进摘要,直到估算回落到 ~50%,且**至少保留若干轮原文**(近处永不丢)。
 - **谁记账**:代码维护 `summary` / `summary_through_id` 两列与水位推进;LLM(summarize agent)只产出摘要文本。合并式增量(不从头重写),目标语,受字符预算约束。
 - **隔离**:摘要按会话(`conversation` 表两列)。与全局 MD 档案、掌握表互不影响。
@@ -131,20 +144,21 @@ User message:
 
 聊天框下方的用量条反映**真实发给模型的整段 prompt**(system prompt + 脚手架 + 摘要 + 历史 + 输入),不是可见气泡之和。每轮 `converse()`(及 `runLearningAgent`)组装好 messages 后经回调 `onContext` 上报:先用 `lib/tokens` 字符启发式估算秒显,待 provider 流回真实输入 token 再覆盖为精确值——Anthropic `input_tokens` + cache 读/写桶之和(缓存命中时只算未缓存尾巴会少算)、OpenAI `prompt_tokens`(需 `stream_options.include_usage`)、Gemini `promptTokenCount`、Codex `response.usage.input_tokens`;不报 usage 的端点保留估算。本会话首次发送前(刚打开会话)退回「气泡估算」,会偏低。
 
-## 对话上下文(摘要段,放在 user 消息里,不进 system,保持可缓存前缀稳定)
+## 对话上下文(摘要在 system 动态块,历史是真实消息)
 
 ```text
-=== STORY SO FAR (earlier in this conversation) ===
-{summary}   ← 仅当存在摘要时出现;空则整段省略
-=== RECENT CONVERSATION ===
-{verbatim turns after watermark}
-=== USER ===
-{user_input}
+system 块 3 末尾:
+  === STORY SO FAR (earlier in this conversation) ===
+  {summary}   ← 仅当存在摘要时出现;空则整段省略
+
+messages:
+  user / assistant 交替的原文轮次(水位之后,buildHistoryMessages)
+  user: {user_input}
 ```
 
 ## 实现要点
 
 - **流式**:边收边推到 UI,不等导师 agent。
-- **并行**:和导师 agent 同时发出,共享可缓存前缀(system 稳定段在前,profile 在后;见 [architecture](./architecture.md))。
+- **并行**:和导师 agent 同时发出;system 按稳定优先分块,稳定块跨轮缓存命中(见 [architecture](./architecture.md#缓存与延迟))。
 - **降级**:导师 agent 崩了不影响这里——对话照常进行,只是批改面板暂时不可用。
 - **压缩在后台**:`maybeCompressConversation` 单飞、不阻塞热路径、不抛;首 token 不受影响。

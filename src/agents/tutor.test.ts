@@ -18,6 +18,15 @@ const ctx: TutorContext = {
   userInput: "I go home yesterday.",
 };
 
+// The tutor sends several system blocks (stable rules / preferences / per-turn data);
+// join them when an assertion doesn't care which block carries the text.
+function joinSystem(opts: GenerateOptions): string {
+  return opts.messages
+    .filter((m) => m.role === "system")
+    .map((m) => m.content)
+    .join("\n\n");
+}
+
 function stubProvider(
   generate: (opts: GenerateOptions, call: number) => string,
 ): ModelProvider {
@@ -207,7 +216,7 @@ describe("analyze", () => {
         "- Target-language variety: Australian English.\n- Correction preference: do not flag punctuation-only differences as mistakes.",
     });
 
-    const system = calls[0].messages[0]?.content;
+    const system = joinSystem(calls[0]);
     expect(system).toContain("Australian English");
     expect(system).toContain("punctuation-only differences");
   });
@@ -231,7 +240,7 @@ describe("analyze", () => {
       ],
     });
 
-    const system = calls[0].messages[0]?.content;
+    const system = joinSystem(calls[0]);
     expect(system).toContain("RECENT MASTERY KEY HINTS");
     expect(system).toContain("grammar:past_tense");
   });

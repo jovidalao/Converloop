@@ -57,29 +57,20 @@ function formatComfortableItems(items: ComfortableItem[]): string {
 }
 
 // See docs/conversation-agent.md#system-prompt
-function systemPrompt(ctx: ConversationContext): string {
-  if (ctx.standaloneQuestion) return standaloneSystemPrompt(ctx);
-  // When evidence is sufficient, include a dynamic reading as an extra calibration line; otherwise use only the static level.
-  const calibrationLine = ctx.calibrationHint
-    ? `\n- Current read on this learner from recent activity: ${ctx.calibrationHint} Let this fine-tune your difficulty and reply length.`
-    : "";
-  // Session-level adjustments (from branches) take priority over default behavior; omit the entire block when there are no adjustments.
-  const adjustmentsBlock = ctx.sessionAdjustments
-    ? `\n\n=== SESSION ADJUSTMENTS (apply on top of everything above) ===\n${ctx.sessionAdjustments}`
-    : "";
-  // STORY SO FAR = rolling summary of earlier content (auto-compressed). It lives
-  // in the system prompt now that the recent turns are real chat messages; omit
-  // the block entirely when there is no summary.
-  const storyBlock = ctx.summary
-    ? `\n\n=== STORY SO FAR (earlier in this conversation) ===\n${ctx.summary}`
-    : "";
-  const base = `You are a warm, natural conversation partner for a ${ctx.nativeLanguage} speaker
+// The system prompt is split into three system messages ordered stable-first so providers can
+// prefix-cache it (the Anthropic adapter puts a cache breakpoint on every block except the last;
+// OpenAI-style providers re-join them, where automatic prefix caching also profits from this order):
+//   1. stable rules — depends only on the language config
+//   2. slow-changing learner context — preferences + MD profile (changes when the maintainer runs)
+//   3. per-turn dynamic data — calibration, ranked scaffold/review lists, session adjustments, summary
+function stableRulesPrompt(ctx: ConversationContext): string {
+  return `You are a warm, natural conversation partner for a ${ctx.nativeLanguage} speaker
 learning ${ctx.targetLanguage} at roughly ${ctx.level} level. Your only job here is to
 keep the conversation flowing — another agent handles correction and feedback.
 
 RULES
 - Respond IN ${ctx.targetLanguage}, calibrated to ${ctx.level}: slightly stretch the user,
-  never overwhelm them.${calibrationLine}
+  never overwhelm them.
 - Follow the learner experience preferences below for language variety, spelling,
   phrasing, tone, and other standing requests.
 - Respond to what the user MEANS. Do NOT correct their mistakes and do NOT echo
@@ -110,20 +101,48 @@ RULES
   listing a few options — but stay conversational: no headings, no code blocks
   unless the topic calls for it.
 - Write your reply as flowing paragraphs, not one sentence per line. Only start a
-  new paragraph when the topic genuinely shifts.${adjustmentsBlock}
+  new paragraph when the topic genuinely shifts.`;
+}
 
-=== LEARNER EXPERIENCE PREFERENCES ===
+function learnerContextPrompt(ctx: ConversationContext): string {
+  return `=== LEARNER EXPERIENCE PREFERENCES ===
 ${ctx.experiencePreferences || "(none)"}
 
 === LEARNER PROFILE ===
-${ctx.profileSlice || "(no profile yet)"}
+${ctx.profileSlice || "(no profile yet)"}`;
+}
 
-=== COMFORTABLE WITH (safe scaffolds, do not reteach) ===
+function dynamicDataPrompt(ctx: ConversationContext): string {
+  // When evidence is sufficient, include a dynamic reading as an extra calibration section; otherwise rely on the static level alone.
+  const calibrationBlock = ctx.calibrationHint
+    ? `=== CURRENT READ ON THIS LEARNER (recent activity) ===\n${ctx.calibrationHint} Let this fine-tune your difficulty and reply length.\n\n`
+    : "";
+  // Session-level adjustments (from branches) take priority over default behavior; omit the entire block when there are no adjustments.
+  const adjustmentsBlock = ctx.sessionAdjustments
+    ? `\n\n=== SESSION ADJUSTMENTS (apply on top of everything above) ===\n${ctx.sessionAdjustments}`
+    : "";
+  // STORY SO FAR = rolling summary of earlier content (auto-compressed). It lives
+  // in the system prompt now that the recent turns are real chat messages; omit
+  // the block entirely when there is no summary.
+  const storyBlock = ctx.summary
+    ? `\n\n=== STORY SO FAR (earlier in this conversation) ===\n${ctx.summary}`
+    : "";
+  const base = `${calibrationBlock}=== COMFORTABLE WITH (safe scaffolds, do not reteach) ===
 ${formatComfortableItems(ctx.comfortableItems)}
 
 === DUE FOR REVIEW (weave in at most one, only if it fits) ===
-${formatReviewItems(ctx.reviewItems)}${storyBlock}`;
+${formatReviewItems(ctx.reviewItems)}${adjustmentsBlock}${storyBlock}`;
   return appendUserInstructions(base, ctx.customInstructions);
+}
+
+function systemMessages(ctx: ConversationContext): ChatMessage[] {
+  if (ctx.standaloneQuestion)
+    return [{ role: "system", content: standaloneSystemPrompt(ctx) }];
+  return [
+    { role: "system", content: stableRulesPrompt(ctx) },
+    { role: "system", content: learnerContextPrompt(ctx) },
+    { role: "system", content: dynamicDataPrompt(ctx) },
+  ];
 }
 
 function standaloneSystemPrompt(ctx: ConversationContext): string {
@@ -159,7 +178,7 @@ export async function converse(
   onContext?: (promptTokens: number) => void,
 ): Promise<string> {
   const messages: ChatMessage[] = [
-    { role: "system", content: systemPrompt(ctx) },
+    ...systemMessages(ctx),
     ...(ctx.standaloneQuestion ? [] : buildHistoryMessages(ctx.historyTurns)),
     { role: "user", content: latestUserMessage(ctx) },
   ];
