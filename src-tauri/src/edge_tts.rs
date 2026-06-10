@@ -198,12 +198,12 @@ pub async fn edge_tts_synthesize(
         .map_err(|e| format!("连接 Edge TTS 失败:{e}"))?;
 
     let ts = date_to_string();
-    ws.send(Message::Text(speech_config_message(&ts).into()))
+    ws.send(Message::Text(speech_config_message(&ts)))
         .await
         .map_err(|e| format!("发送配置失败:{e}"))?;
     let ssml_doc = ssml(text, &voice, &rate, &pitch);
     ws.send(Message::Text(
-        ssml_message(&rand_hex(), &ts, &ssml_doc).into(),
+        ssml_message(&rand_hex(), &ts, &ssml_doc),
     ))
     .await
     .map_err(|e| format!("发送 SSML 失败:{e}"))?;

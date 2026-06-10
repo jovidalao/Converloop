@@ -143,7 +143,7 @@ fn write_response(stream: &mut TcpStream, status: u16, body: &str) {
     let res = format!(
         "HTTP/1.1 {status} {reason}\r\nContent-Type: text/html; charset=utf-8\r\n\
 Content-Length: {}\r\nConnection: close\r\n\r\n{body}",
-        body.as_bytes().len()
+        body.len()
     );
     let _ = stream.write_all(res.as_bytes());
     let _ = stream.flush();
