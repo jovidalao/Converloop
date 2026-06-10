@@ -38,6 +38,8 @@ export const db = drizzle(
       return { rows: [] };
     }
 
+    // Caveat: a JOIN selecting two columns with the same name would collapse them in the
+    // object form and break this positional reconstruction — alias such columns if ever needed.
     const rows = await sqlite.select<Record<string, unknown>[]>(sql, params);
     const values = rows.map((row) => Object.values(row));
     return { rows: method === "get" ? (values[0] ?? []) : values };
