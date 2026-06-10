@@ -212,17 +212,54 @@ const ADD_TURN_EXCLUDE_FROM_CONTEXT: &str =
     "ALTER TABLE turn ADD COLUMN exclude_from_context INTEGER NOT NULL DEFAULT 0;";
 
 // 红绿灯沿用 macOS 原生按钮,位置参照 Codex 顶栏:左侧 21pt,垂直居中于 46pt chrome。
-// decorum 把按钮中心放在距窗顶 (button_h + y)/2 + 4 处;关闭按钮 button_h = 14,
-// 解 (14 + y)/2 + 4 = 23 → y = 24。
+// 纯 AppKit 几何定位(不经 decorum):titlebar 容器撑到 chrome 高、顶边贴窗顶,
+// 按钮放容器纵向正中——正中对称,与视图是否翻转无关,无需标定魔数。
 #[cfg(target_os = "macos")]
-const TRAFFIC_LIGHTS_X: f32 = 21.0;
+const TRAFFIC_LIGHTS_X: f64 = 21.0;
 #[cfg(target_os = "macos")]
-const TRAFFIC_LIGHTS_Y: f32 = 24.0;
+const TRAFFIC_LIGHTS_CHROME_H: f64 = 46.0;
 
 #[cfg(target_os = "macos")]
 fn apply_traffic_lights_inset(win: &tauri::WebviewWindow) {
-    use tauri_plugin_decorum::WebviewWindowExt;
-    let _ = win.set_traffic_lights_inset(TRAFFIC_LIGHTS_X, TRAFFIC_LIGHTS_Y);
+    use objc2_app_kit::{NSWindow, NSWindowButton};
+    use objc2_foundation::NSPoint;
+
+    let Ok(raw) = win.ns_window() else { return };
+    let ns_window: &NSWindow = unsafe { &*raw.cast() };
+
+    let buttons: Vec<_> = [
+        NSWindowButton::CloseButton,
+        NSWindowButton::MiniaturizeButton,
+        NSWindowButton::ZoomButton,
+    ]
+    .into_iter()
+    .filter_map(|kind| ns_window.standardWindowButton(kind))
+    .collect();
+    let [close, mini, ..] = buttons.as_slice() else {
+        return;
+    };
+
+    // 相邻按钮间距:首次取系统原生值,此后保持我们设置的恒定差值。
+    let delta = mini.frame().origin.x - close.frame().origin.x;
+    let spacing = if delta > 0.0 { delta } else { 20.0 };
+
+    // titlebar 容器(close.superview().superview())撑到 chrome 高、顶边贴窗顶
+    // (NSWindow 坐标原点在左下,故 origin.y = 窗高 − chrome 高)。
+    // SAFETY: superview 仅在主线程访问已存在的视图层级;Tauri 的窗口 API 在主线程调用本函数。
+    if let Some(container) = unsafe { close.superview().and_then(|v| v.superview()) } {
+        let mut rect = container.frame();
+        rect.size.height = TRAFFIC_LIGHTS_CHROME_H;
+        rect.origin.y = ns_window.frame().size.height - TRAFFIC_LIGHTS_CHROME_H;
+        container.setFrame(rect);
+    }
+
+    for (i, button) in buttons.iter().enumerate() {
+        let height = button.frame().size.height;
+        button.setFrameOrigin(NSPoint {
+            x: TRAFFIC_LIGHTS_X + i as f64 * spacing,
+            y: (TRAFFIC_LIGHTS_CHROME_H - height) / 2.0,
+        });
+    }
 }
 
 /// 给整个窗口铺一层原生毛玻璃(Sidebar 材质)。窗口透明 + 前端只让侧栏/标题栏/教练栏
@@ -248,8 +285,7 @@ fn reapply_traffic_lights(window: tauri::WebviewWindow) {
 
 /// 把交通灯钉在自定义位置。关键是「绘制前」重定位:监听 AppKit 原生的
 /// NSWindowDidResizeNotification(主线程、同步、绘制前派发),在回调里重设 inset。
-/// 不再用 Tauri 的 on_window_event(它在绘制后才触发,会看到灯先跳回默认位再跳回来),
-/// 也不注册 decorum 插件(它内置的 resize delegate 会复位到默认位、和我们打架)。
+/// 不用 Tauri 的 on_window_event(它在绘制后才触发,会看到灯先跳回默认位再跳回来)。
 #[cfg(target_os = "macos")]
 fn setup_traffic_lights(win: tauri::WebviewWindow) {
     use block2::RcBlock;
