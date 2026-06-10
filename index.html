@@ -5,18 +5,7 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>lang-agent</title>
-    <script>
-      (function () {
-        var t = localStorage.getItem("lang-agent-theme") || "system";
-        var dark =
-          t === "dark" ||
-          (t === "system" &&
-            window.matchMedia("(prefers-color-scheme: dark)").matches);
-        if (dark) document.documentElement.classList.add("dark");
-        var a = localStorage.getItem("lang-agent-accent") || "gray";
-        document.documentElement.setAttribute("data-accent", a);
-      })();
-    </script>
+    <script src="/theme-init.js"></script>
   </head>
 
   <body>

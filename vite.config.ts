@@ -34,6 +34,17 @@ export default defineConfig(async () => ({
   server: {
     port: 1420,
     strictPort: true,
+    headers: {
+      // Mirror of app.security.csp in src-tauri/tauri.conf.json — Tauri only
+      // injects that CSP into production (tauri://) pages, so the dev server
+      // must send it itself for dev parity. Dev-only differences: ws: source
+      // for Vite HMR (WebKit doesn't match ws: under 'self'), script-src
+      // 'unsafe-inline' for the react-refresh preamble (in production Tauri
+      // allows inline scripts in bundled HTML via generated hashes), and
+      // worker-src blob: for the HMR client's ping worker.
+      "Content-Security-Policy":
+        "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' blob:; worker-src blob:; connect-src 'self' ws://localhost:1420 ipc: http://ipc.localhost",
+    },
     host: host || false,
     hmr: host
       ? {
