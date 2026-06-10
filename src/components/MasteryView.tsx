@@ -1,5 +1,6 @@
 import {
   CheckCircle2Icon,
+  HistoryIcon,
   PencilIcon,
   SaveIcon,
   SearchIcon,
@@ -13,10 +14,11 @@ import type { DataEditPreview } from "../data-edit";
 import {
   deleteMasteryItem,
   getAllMastery,
+  listMasteryEvents,
   markMasteryKnown,
   updateMasteryItem,
 } from "../db/mastery";
-import type { MasteryItem } from "../db/schema";
+import type { MasteryEvent, MasteryItem } from "../db/schema";
 import {
   applyLearningDataEditPreview,
   MissingApiKeyError,
@@ -86,6 +88,76 @@ function operationLabel(op: DataEditPreview["operations"][number]): string {
   return parts.join(" · ");
 }
 
+// Tones for the evidence timeline, mirroring the coach panel's signal colors.
+const EVENT_KIND_TONE: Record<string, string> = {
+  error: "bg-destructive/10 text-destructive",
+  correct: "bg-success/10 text-success",
+  introduced: "bg-muted text-ui-muted",
+  gap: "bg-accent text-primary",
+};
+
+// Evidence timeline behind one learning item: every mastery_event recorded for
+// its key, newest first. Read-only — this is the audit trail that explains the
+// current status/counters.
+function MasteryHistory({ itemKey }: { itemKey: string }) {
+  const { t } = useTranslation();
+  const [events, setEvents] = useState<MasteryEvent[] | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    void listMasteryEvents(itemKey).then((rows) => {
+      if (alive) setEvents(rows);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [itemKey]);
+
+  if (events === null) {
+    return (
+      <p className="m-0 mt-2 text-ui-caption text-ui-muted">
+        {t("common.loading")}
+      </p>
+    );
+  }
+  if (events.length === 0) {
+    return (
+      <p className="m-0 mt-2 text-ui-caption text-ui-muted">
+        {t("mastery.history.empty")}
+      </p>
+    );
+  }
+  return (
+    <ul className="m-0 mt-2 flex max-h-56 list-none flex-col gap-1 overflow-y-auto border-t p-0 pt-2">
+      {events.map((ev) => (
+        <li key={ev.id} className="flex items-start gap-2 py-0.5">
+          <span
+            className={`mt-px shrink-0 rounded-full px-1.5 py-0.5 text-ui-caption font-semibold ${
+              EVENT_KIND_TONE[ev.kind] ?? "bg-muted text-ui-muted"
+            }`}
+          >
+            {t(
+              `coach.signal.${ev.kind as "error" | "correct" | "introduced" | "gap"}`,
+            )}
+          </span>
+          <span className="min-w-0 flex-1 text-ui-caption leading-snug">
+            {(ev.evidence?.trim() || ev.note?.trim()) && (
+              <span className="block truncate text-foreground">
+                {ev.evidence?.trim() || ev.note?.trim()}
+              </span>
+            )}
+            <span className="text-ui-muted">
+              {new Date(ev.createdAt).toLocaleString()}
+              {ev.source !== "tutor" &&
+                ` · ${t(`mastery.history.source.${ev.source as "review" | "manual"}`)}`}
+            </span>
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function MasteryRow({
   item,
   onRefresh,
@@ -96,6 +168,7 @@ function MasteryRow({
   const { t } = useTranslation();
   const confirm = useConfirm();
   const [editing, setEditing] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [label, setLabel] = useState(item.label);
   const [example, setExample] = useState(item.example ?? "");
   const [notes, setNotes] = useState(item.notes ?? "");
@@ -221,6 +294,17 @@ function MasteryRow({
           </>
         ) : (
           <>
+            <Button
+              type="button"
+              variant="action"
+              size="action"
+              data-active={historyOpen}
+              aria-expanded={historyOpen}
+              onClick={() => setHistoryOpen((v) => !v)}
+              title={t("mastery.history.toggle")}
+            >
+              <HistoryIcon size={15} />
+            </Button>
             {item.status !== "known" && (
               <Button
                 type="button"
@@ -253,6 +337,7 @@ function MasteryRow({
           </>
         )}
       </div>
+      {historyOpen && !editing && <MasteryHistory itemKey={item.key} />}
     </div>
   );
 }

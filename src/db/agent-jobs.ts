@@ -1,4 +1,4 @@
-import { and, count, desc, eq, type SQL } from "drizzle-orm";
+import { and, count, desc, eq, inArray, lt, type SQL } from "drizzle-orm";
 import { db } from "./client";
 import { type AgentJob, agentJob } from "./schema";
 
@@ -73,6 +73,32 @@ export async function recordAgentRun(run: {
     startedAt: run.startedAt,
     finishedAt: run.finishedAt,
   });
+}
+
+// Retention: the run log is operational data, not learning evidence (that is mastery_event).
+// Every hot-path turn writes rows here, so without pruning it grows without bound. Finished
+// rows (succeeded/failed) older than the window are dropped at startup; pending/running rows
+// are kept so an interrupted background job is never silently erased.
+const AGENT_JOB_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+
+export async function pruneAgentJobs(
+  maxAgeMs: number = AGENT_JOB_RETENTION_MS,
+): Promise<number> {
+  const cutoff = Date.now() - maxAgeMs;
+  const stale = await db
+    .select({ id: agentJob.id })
+    .from(agentJob)
+    .where(
+      and(
+        lt(agentJob.updatedAt, cutoff),
+        inArray(agentJob.status, ["succeeded", "failed"]),
+      ),
+    );
+  for (let i = 0; i < stale.length; i += 200) {
+    const chunk = stale.slice(i, i + 200).map((r) => r.id);
+    await db.delete(agentJob).where(inArray(agentJob.id, chunk));
+  }
+  return stale.length;
 }
 
 export async function listAgentJobs(limit = 50): Promise<AgentJob[]> {

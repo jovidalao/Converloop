@@ -10,6 +10,8 @@ import {
   MicIcon,
   PencilIcon,
   PencilRulerIcon,
+  PinIcon,
+  PinOffIcon,
   ScrollTextIcon,
   SettingsIcon,
   SlidersHorizontalIcon,
@@ -89,6 +91,37 @@ function conversationTypeIcon(c: ConversationMeta): ReactNode {
   }
 }
 
+// Sidebar history groups: pinned rows first, then recency buckets. Computed
+// client-side from the already-sorted list (pinned first, then updated_at desc).
+type SidebarGroupKey = "pinned" | "today" | "week" | "earlier";
+
+function groupConversations(
+  conversations: ConversationMeta[],
+): { key: SidebarGroupKey; items: ConversationMeta[] }[] {
+  const now = new Date();
+  const startOfToday = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+  ).getTime();
+  const startOfWeek = startOfToday - 6 * 24 * 60 * 60 * 1000;
+  const buckets: Record<SidebarGroupKey, ConversationMeta[]> = {
+    pinned: [],
+    today: [],
+    week: [],
+    earlier: [],
+  };
+  for (const c of conversations) {
+    if (c.pinned) buckets.pinned.push(c);
+    else if (c.updatedAt >= startOfToday) buckets.today.push(c);
+    else if (c.updatedAt >= startOfWeek) buckets.week.push(c);
+    else buckets.earlier.push(c);
+  }
+  return (["pinned", "today", "week", "earlier"] as const)
+    .map((key) => ({ key, items: buckets[key] }))
+    .filter((g) => g.items.length > 0);
+}
+
 interface SidebarProps {
   conversations: ConversationMeta[];
   activeId: string;
@@ -105,6 +138,7 @@ interface SidebarProps {
   onDeriveConversation: (conversationId: string, actionId: string) => void;
   onRename: (id: string, title: string) => void;
   onDelete: (id: string) => void;
+  onTogglePin: (id: string, pinned: boolean) => void;
   onOpenView: (view: MainView) => void;
   /** Sidebar is drilled into the settings sub-menu (derived from the active view). */
   settingsMode: boolean;
@@ -130,6 +164,7 @@ export function Sidebar({
   onDeriveConversation,
   onRename,
   onDelete,
+  onTogglePin,
   onOpenView,
   settingsMode,
   onExitSettings,
@@ -331,81 +366,106 @@ export function Sidebar({
             </div>
 
             <nav className="codex-sidebar-scroll">
-              <div className="codex-section-label">{t("sidebar.recent")}</div>
-              {conversations.map((c) => {
-                const active = view === "chat" && c.id === activeId;
-                if (editingId === c.id) {
-                  return (
-                    <input
-                      key={c.id}
-                      className="codex-sidebar-edit"
-                      value={draft}
-                      // biome-ignore lint/a11y/noAutofocus: user-triggered inline rename — focus the field as it opens
-                      autoFocus
-                      onChange={(e) => setDraft(e.target.value)}
-                      onBlur={commitEdit}
-                      onKeyDown={(e) => {
-                        // Let the IME consume Enter/Escape while composing (a CJK
-                        // user confirming/cancelling a candidate must not commit
-                        // or abort the rename mid-composition).
-                        if (e.nativeEvent.isComposing) return;
-                        if (e.key === "Enter") commitEdit();
-                        if (e.key === "Escape") setEditingId(null);
-                      }}
-                    />
-                  );
-                }
-                return (
-                  <EntityRow
-                    key={c.id}
-                    active={active}
-                    icon={conversationTypeIcon(c)}
-                    title={c.title}
-                    onSelect={() => onSelect(c.id)}
-                    onContextMenu={(e) => openConversationMenu(e, c)}
-                    onDoubleClick={() => startEdit(c)}
-                    actions={
-                      <>
-                        <EntityRowAction
-                          label={t("common.rename")}
-                          icon={<PencilIcon className="size-3.5" />}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            startEdit(c);
+              {groupConversations(conversations).map((group) => (
+                <div key={group.key}>
+                  <div className="codex-section-label">
+                    {t(`sidebar.group.${group.key}`)}
+                  </div>
+                  {group.items.map((c) => {
+                    const active = view === "chat" && c.id === activeId;
+                    if (editingId === c.id) {
+                      return (
+                        <input
+                          key={c.id}
+                          className="codex-sidebar-edit"
+                          value={draft}
+                          // biome-ignore lint/a11y/noAutofocus: user-triggered inline rename — focus the field as it opens
+                          autoFocus
+                          onChange={(e) => setDraft(e.target.value)}
+                          onBlur={commitEdit}
+                          onKeyDown={(e) => {
+                            // Let the IME consume Enter/Escape while composing (a CJK
+                            // user confirming/cancelling a candidate must not commit
+                            // or abort the rename mid-composition).
+                            if (e.nativeEvent.isComposing) return;
+                            if (e.key === "Enter") commitEdit();
+                            if (e.key === "Escape") setEditingId(null);
                           }}
                         />
-                        <EntityRowAction
-                          label={t("common.delete")}
-                          icon={<Trash2Icon className="size-3.5" />}
-                          onClick={async (e) => {
-                            e.stopPropagation();
-                            if (
-                              await confirm({
-                                title: t("sidebar.deleteConversationTitle", {
-                                  title: c.title,
-                                }),
-                                description: t(
-                                  "sidebar.deleteConversationDescription",
-                                ),
-                              })
-                            ) {
-                              onDelete(c.id);
-                            }
-                          }}
-                        />
-                        {c.kind === "practice" &&
-                          derivationActions.length > 0 && (
-                            <EntityRowAction
-                              label={t("sidebar.deriveNewConversation")}
-                              icon={<SparklesIcon className="size-3.5" />}
-                              onClick={(e) => openMenuFromButton(e, c)}
-                            />
-                          )}
-                      </>
+                      );
                     }
-                  />
-                );
-              })}
+                    return (
+                      <EntityRow
+                        key={c.id}
+                        active={active}
+                        icon={conversationTypeIcon(c)}
+                        title={c.title}
+                        onSelect={() => onSelect(c.id)}
+                        onContextMenu={(e) => openConversationMenu(e, c)}
+                        onDoubleClick={() => startEdit(c)}
+                        actions={
+                          <>
+                            <EntityRowAction
+                              label={
+                                c.pinned ? t("sidebar.unpin") : t("sidebar.pin")
+                              }
+                              icon={
+                                c.pinned ? (
+                                  <PinOffIcon className="size-3.5" />
+                                ) : (
+                                  <PinIcon className="size-3.5" />
+                                )
+                              }
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onTogglePin(c.id, !c.pinned);
+                              }}
+                            />
+                            <EntityRowAction
+                              label={t("common.rename")}
+                              icon={<PencilIcon className="size-3.5" />}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                startEdit(c);
+                              }}
+                            />
+                            <EntityRowAction
+                              label={t("common.delete")}
+                              icon={<Trash2Icon className="size-3.5" />}
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                if (
+                                  await confirm({
+                                    title: t(
+                                      "sidebar.deleteConversationTitle",
+                                      {
+                                        title: c.title,
+                                      },
+                                    ),
+                                    description: t(
+                                      "sidebar.deleteConversationDescription",
+                                    ),
+                                  })
+                                ) {
+                                  onDelete(c.id);
+                                }
+                              }}
+                            />
+                            {c.kind === "practice" &&
+                              derivationActions.length > 0 && (
+                                <EntityRowAction
+                                  label={t("sidebar.deriveNewConversation")}
+                                  icon={<SparklesIcon className="size-3.5" />}
+                                  onClick={(e) => openMenuFromButton(e, c)}
+                                />
+                              )}
+                          </>
+                        }
+                      />
+                    );
+                  })}
+                </div>
+              ))}
               {conversations.length === 0 && (
                 <div className="px-3 py-2 text-ui-body text-[color:var(--codex-sidebar-muted)]">
                   {t("sidebar.noConversations")}

@@ -70,7 +70,7 @@ AI 语言学习 agent —— 第一版范围、数据流、存储与现状。Age
 
 migration 定义在 **Rust 侧**(`src-tauri/src/lib.rs`,`tauri_plugin_sql::Builder::add_migrations`),`Database.load()` 时触发。Drizzle 只做类型安全查询,不接管 migration —— TS 侧 `src/db/schema.ts` **手动镜像** Rust 的建表,两边保持一致。
 
-当前 33 个 migration:
+当前 36 个 migration:
 
 | ver | 描述 | 表 / 变更 |
 |---|---|---|
@@ -107,6 +107,9 @@ migration 定义在 **Rust 侧**(`src-tauri/src/lib.rs`,`tauri_plugin_sql::Build
 | 31 | create_memory_proposal | `memory_proposal` |
 | 32 | add_turn_exclude_from_context | `turn.exclude_from_context` |
 | 33 | add_learning_agent_package_meta_json | `learning_agent.package_meta_json` |
+| 34 | add_turn_display_text | `turn.display_text`(提示词宏气泡原文) |
+| 35 | create_turn_conversation_index | `turn(conversation_id, created_at)` 索引(会话上下文加载不再全表扫) |
+| 36 | add_conversation_pinned | `conversation.pinned`(侧栏置顶) |
 
 ### `mastery_item`(掌握项,起点,别一上来搞知识追踪)
 
@@ -160,7 +163,9 @@ migration 定义在 **Rust 侧**(`src-tauri/src/lib.rs`,`tauri_plugin_sql::Build
 
 ### `conversation` / `turn`(多会话)
 
-`conversation`(侧边栏列表,ChatGPT 式:首条消息后标题改成截断的输入)+ `turn`(每轮 input/reply/analysis JSON,挂在 conversation 下)。`conversation.kind` 区分普通练习与 `learning_agent` 专项课会话;专项课用 `learning_agent_id` 找到对应老师 prompt。代码在 `src/db/{conversations,turns}.ts`。
+`conversation`(侧边栏列表,ChatGPT 式:首条消息后标题改成截断的输入)+ `turn`(每轮 input/reply/analysis JSON,挂在 conversation 下)。`conversation.kind` 区分普通练习与 `learning_agent` 专项课会话;专项课用 `learning_agent_id` 找到对应老师 prompt。`conversation.pinned`(v36)驱动侧栏置顶;侧栏列表按 置顶 → 今天 → 本周 → 更早 分组。代码在 `src/db/{conversations,turns}.ts`。
+
+删除会话会级联清理挂在其 turns 上的 `turn_annotation` / `memory_proposal` / `agent_job` 与 `app_state` 的 inputHints 缓存,并把子分支的 `parent_conversation_id` 置空;**`mastery_event` 刻意保留**(它是掌握计数背后的永久证据日志)。「从此处重新编辑」截断 turns 时同样级联。
 
 ### `learning_agent`(定制化学习 Agent / 自定义 Runtime Agent)
 
@@ -227,6 +232,8 @@ migration 定义在 **Rust 侧**(`src-tauri/src/lib.rs`,`tauri_plugin_sql::Build
   finished_at?: number
 }
 ```
+
+`agent_job` 是运维日志而非学习证据:启动时自动清理 30 天前的已完成行(`pruneAgentJobs`,pending/running 永不清),防止热路径日志无限增长。
 
 `learning_project` 保存 Task Agent 产出的学习计划:
 
@@ -308,6 +315,11 @@ provider 解析全在 TS;**LLM HTTP 走 Rust**(`src-tauri/src/llm.rs` 的 `llm_r
 
 不在热路径。用户点对话回复上的「讲解」按钮时触发(`orchestrator.explainReply` → `agents/explain.ts` → `components/ReplyExplanation.tsx`)。它和对话 agent **同源读 MD 档案切片**,据此判断"这个学习者大概哪里看不懂",只讲该讲的,用**母语**流式输出,不讲显而易见的。**侧重语法结构 / 习语 / 地道用法等逐词读不出来的部分,不逐词解释单词**(单词让学习者自己查,除非在此处含义不显)。按需讲解 / 双语阅读 / 划词解析作为 `transformer` 登记进能力库;调用时经 `runTransformer` 记录 `agent_job` 运行日志,但不持久化生成的正文。
 
+## 数据备份与设置持久化
+
+- **备份**(设置 → 通用):`src/lib/backup.ts` 把全部 SQLite 表 + learner-profile.md + 非密设置打成单个可读 JSON,经 Rust `export_backup` 原子写入「下载」目录并在文件管理器高亮;导入走 `<input type="file">`,确认后**整体替换**并重载应用。密钥/令牌绝不进备份。
+- **设置镜像**(`src/lib/settings-mirror.ts`):localStorage 仍是同步真相源,但用户资产类 key(provider 配置、TTS/STT、键位、宏、agent 开关、locale/主题)写入 `app_state` 快照;启动时(render 前,`main.tsx` boot)把本地缺失的 key 从镜像恢复——WebView 数据被系统清掉也不丢配置,且随备份迁移。纯 UI 痕迹(面板宽度等)刻意不入镜像。
+
 ## 语音输入(STT)
 
 `src/stt/*` + `components/MicButton.tsx`(输入区麦克风按钮:点击录音 → 再点停止并转写 → 进输入框由用户确认后发送,Esc 取消)。采集用 webview MediaRecorder(WebKit 出 mp4/aac,Chromium 出 webm/opus);上传走 Rust `stt.rs` 绕 webview CORS。STT 在设置 → 语音输入单独配置(`lang-agent.stt`),默认 **Soniox**(`stt_transcribe_soniox`:上传 `/v1/files` → 创建 `/v1/transcriptions` → 轮询完成 → 取 `/transcript`,默认 `stt-async-v4`,语言提示来自母语+目标语,但仍启用自动语言识别)。兼容路径是 OpenAI 风格 `/audio/transcriptions`(`stt_transcribe`,OpenAI/Groq/本地 Whisper 等),不固定 language 参数——母语/混说是核心链路。两类 key 分别存加密账户 `soniox_stt_api_key` / `stt_api_key`,STT 供应商可与对话 provider 不同。macOS 需要 `src-tauri/Info.plist` 的 `NSMicrophoneUsageDescription`(打包时由 Tauri 合并;真机首次使用会弹系统麦克风授权)。
@@ -354,7 +366,12 @@ v1 核心链路已完成并可用:
 - ✅ Agent 能力库:能力库页(侧栏 → 能力库)按 kind 展示注册表里的内置 Agent(做什么/时机/读写)、启用/禁用(`runtime/enablement.ts`,localStorage)、运行日志(`agent_job`)。按需讲解 / 双语阅读 / 划词解析也作为不可关闭的 `transformer` 能力展示并记录运行日志。能力库真相源是内存注册表,未把代码 Agent 同步进 DB。
 - ✅ 自定义 Agent(Agent-first Phase 5):能力库提供 6 问式 prompt Agent 创建(observer/action)。observer 每轮产出 `turn_annotation` 并可提出 `memory_proposal`;Coach Panel 展示自定义观察和待确认记忆,确认后由代码执行有限数据操作。action 通过 LLM 生成分支指令并创建非破坏式分支;内置「变成专项课」动作可从当前会话生成专项课并跳转。
 - ✅ 分享包 / 开发者 package(Agent-first Phase 6+):能力库与专项课页支持导入/导出商店兼容的 `lang-agent.package` JSON,一个包可包含 skill(observer/action)、lesson 和 course 草案;导入前展示读取/写入权限预览并校验白名单。旧的 runtime-only `lang-agent.agent-package` 仍保留兼容导入。
+- ✅ 首启引导:无任何数据时显示两步向导(界面/母语/目标语/水平 → provider + key/订阅登录 + 连接测试);完成/跳过后写 `app_state` 标记,老用户静默跳过
+- ✅ 数据备份:一键导出/导入单文件 JSON(全部表 + MD 档案 + 设置);设置镜像保证 localStorage 被清也不丢配置
 - ✅ 语音输入(STT):输入区麦克风按钮,BYOK Soniox / OpenAI 兼容转写端点;转写文本进输入框确认后发送
+- ✅ 复习可见性:Coach 面板「今日到期复习」(与喂给对话 agent 的 `getReviewDueList` 同源);学习数据页每条目可展开 `mastery_event` 证据时间线
+- ✅ 数据卫生:`turn(conversation_id, created_at)` 索引;删除/截断会话级联清理 turn 级产物;`agent_job` 30 天保留窗口;Coach 面板由轮询改为事件驱动(`lib/app-events.ts`)
+- ✅ 侧栏置顶 + 日期分组(置顶 / 今天 / 本周 / 更早);错误信息全量走 i18n(orchestrator/maintainer/STT/TTS)
 
 ## 踩坑记录
 
@@ -363,5 +380,5 @@ v1 核心链路已完成并可用:
 - **sqlite-proxy 桥接**(`src/db/client.ts`):Drizzle 生成 `?` 占位符,sqlx 原生接受可直接透传;`run` 走 plugin `execute`,`all/values/get` 走 `select` 后 `Object.values` 还原成 Drizzle 要的值数组(列序 = SELECT 序)。权限:`capabilities/default.json` 需 `sql:default` + `sql:allow-load/execute/select`。
 - **zod 钉 v3**:`zod-to-json-schema` 为 v3 设计;`tutorJsonSchema()` 去 `$schema`、inline refs(`$refStrategy: "none"`)让 OpenAI 端点能直接吃。
 - **原子写 MD**:Rust 侧写临时文件再 rename(`src-tauri/src/profile.rs`),避免对话 agent 读到半截文件。
-- **日期用 UTC**。
+- **日期用 UTC**。例外:学习成就页的打卡/热力图按**本地日**统计(`db/learning-stats.ts` 的 `localDayNumber`)——「今天练没练」对用户是本地概念。
 - **双平台(macOS + Windows)**:新增原生 / chrome 功能遵守 [cross-platform.md](./cross-platform.md) 的三条约定(`cfg` 守卫 / `data-platform` / 薄 port);CI 在 macOS + Windows 都跑 `cargo build`。

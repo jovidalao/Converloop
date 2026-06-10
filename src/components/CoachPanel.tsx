@@ -1,7 +1,9 @@
 import { ArrowRightIcon, GraduationCapIcon, RefreshCwIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type TFunction, useTranslation } from "@/i18n";
+import { onAppEvent } from "@/lib/app-events";
 import { cn } from "@/lib/utils";
+import { getReviewDueList, type ReviewItem } from "../db/mastery";
 import {
   deriveSignals,
   type Signal,
@@ -366,6 +368,54 @@ function TurnReviewList({
   );
 }
 
+// "Due for review" — the same code-selected candidates fed to the conversation
+// agent each turn (getReviewDueList). Surfacing them makes the passive-review
+// loop visible: the learner can see what the AI was asked to weave back in.
+function DueReviewList({ items }: { items: ReviewItem[] }) {
+  const { t } = useTranslation();
+  if (items.length === 0) {
+    return (
+      <p className="m-0 text-ui-body text-ui-muted">
+        {t("coach.dueReview.empty")}
+      </p>
+    );
+  }
+  return (
+    <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
+      {items.map((item) => (
+        <li
+          key={item.key}
+          className="flex flex-col gap-1 rounded-md border bg-card px-2.5 py-2"
+        >
+          <div className="flex items-center gap-1.5">
+            <span className="rounded bg-background px-1.5 py-0.5 text-ui-caption font-medium text-ui-muted">
+              {t(
+                `coach.type.${item.type as "vocab" | "grammar" | "collocation" | "error_pattern" | "expression_gap"}`,
+              )}
+            </span>
+            <span className="min-w-0 flex-1 truncate text-ui-meta font-medium text-foreground">
+              {item.label}
+            </span>
+            <span className="shrink-0 rounded-full bg-info/10 px-1.5 py-0.5 text-ui-caption font-semibold text-info-text">
+              {t("coach.dueReview.retention", {
+                p: Math.round(item.retention * 100),
+              })}
+            </span>
+          </div>
+          {item.example?.trim() && (
+            <p
+              className="m-0 truncate text-ui-caption text-ui-muted"
+              title={item.example}
+            >
+              {item.example.trim()}
+            </p>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function MasteryLink({
   onOpenView,
 }: {
@@ -455,8 +505,6 @@ export function CoachPanel({
   const [annotations, setAnnotations] = useState<TurnAnnotation[]>([]);
   const [convProposals, setConvProposals] = useState<MemoryProposal[]>([]);
 
-  const latestTurn = turns.length ? turns[turns.length - 1] : null;
-
   // Whole-conversation aggregate: deduplicate signals derived from corrections +
   // accurate/to-improve counts; pure in-memory, no DB.
   const conversationSignals = useMemo(() => {
@@ -503,6 +551,24 @@ export function CoachPanel({
     [turns],
   );
 
+  // Due-for-review candidates: refetched when the conversation changes and when
+  // a new turn's grading lands (accounting updates retention right after).
+  const [dueItems, setDueItems] = useState<ReviewItem[]>([]);
+  const gradedCount = useMemo(
+    () => turns.filter((t) => !t.excludeFromContext && t.analysis).length,
+    [turns],
+  );
+  // biome-ignore lint/correctness/useExhaustiveDependencies: conversationId/gradedCount are refetch triggers only; the effect reads the mastery table
+  useEffect(() => {
+    let cancelled = false;
+    void getReviewDueList().then((items) => {
+      if (!cancelled) setDueItems(items);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [conversationId, gradedCount]);
+
   const refreshExtras = useCallback(() => {
     void Promise.all([
       conversationId
@@ -517,26 +583,14 @@ export function CoachPanel({
     });
   }, [conversationId]);
 
-  // Agent annotations/write proposals are committed to DB asynchronously. No
-  // permanent polling: each new activity (new turn, grading arrival) opens a
-  // short-lived polling window that stops automatically after a few seconds.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: latestTurn id / analysisPending are change triggers only; grading arrival restarts the window
+  // Agent annotations/write proposals are committed to DB asynchronously; the
+  // data layer emits coach-data-changed when a row lands, so the panel refetches
+  // exactly once per write instead of polling on a timer.
   useEffect(() => {
     refreshExtras();
     if (!conversationId) return;
-    let ticks = 0;
-    const timer = window.setInterval(() => {
-      refreshExtras();
-      ticks += 1;
-      if (ticks >= 8) window.clearInterval(timer);
-    }, 1500);
-    return () => window.clearInterval(timer);
-  }, [
-    conversationId,
-    latestTurn?.id,
-    latestTurn?.analysisPending,
-    refreshExtras,
-  ]);
+    return onAppEvent("coach-data-changed", () => refreshExtras());
+  }, [conversationId, refreshExtras]);
 
   // The chat input generates coaching hints for the next reply and caches them
   // keyed by the last on-record turn. The panel mirrors that same cached set as a
@@ -565,8 +619,9 @@ export function CoachPanel({
       });
   }, [conversationId]);
 
-  // Hints are written asynchronously after a reply arrives; reuse the same
-  // short-lived polling window so they surface shortly after the turn.
+  // Hints are written asynchronously after a reply arrives; the orchestrator
+  // emits input-hints-changed when the cache updates, so reload then (plus one
+  // initial read for the already-cached set).
   useEffect(() => {
     if (!conversationId || !hintWatermark) {
       setHints([]);
@@ -579,15 +634,12 @@ export function CoachPanel({
         if (!cancelled && !regeneratingRef.current) setHints(h);
       });
     load();
-    let ticks = 0;
-    const timer = window.setInterval(() => {
-      load();
-      ticks += 1;
-      if (ticks >= 8) window.clearInterval(timer);
-    }, 1500);
+    const off = onAppEvent("input-hints-changed", (p) => {
+      if (p.conversationId === conversationId) load();
+    });
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
+      off();
     };
   }, [conversationId, hintWatermark]);
 
@@ -642,6 +694,12 @@ export function CoachPanel({
                 regenerating={regenerating}
                 onUseHint={onUseHint}
               />
+            </Section>
+            <Section title={t("coach.dueReview.title")}>
+              <p className="m-0 -mt-1 text-ui-caption leading-snug text-ui-muted">
+                {t("coach.dueReview.subtitle")}
+              </p>
+              <DueReviewList items={dueItems} />
             </Section>
             {learnerTurns.length > 0 && (
               <Section title={t("coach.reviewTitle")}>

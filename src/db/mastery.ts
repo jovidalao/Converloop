@@ -13,7 +13,12 @@ import {
   type Signal,
   statusFromCounts,
 } from "./mastery-logic";
-import { type MasteryItem, masteryEvent, masteryItem } from "./schema";
+import {
+  type MasteryEvent as MasteryEventRow,
+  type MasteryItem,
+  masteryEvent,
+  masteryItem,
+} from "./schema";
 
 function payloadJson(payload: unknown): string | null {
   if (payload == null) return null;
@@ -189,6 +194,21 @@ export async function getMasteryKeyHints(
 
 export async function getAllMastery(): Promise<MasteryItem[]> {
   return db.select().from(masteryItem).orderBy(desc(masteryItem.lastSeenAt));
+}
+
+// Evidence timeline for one learning item: every recorded observation (error /
+// correct / introduced / gap) behind the current counters, newest first. This is
+// what makes the snapshot auditable — the data page shows it when a row expands.
+export async function listMasteryEvents(
+  key: string,
+  limit = 50,
+): Promise<MasteryEventRow[]> {
+  return db
+    .select()
+    .from(masteryEvent)
+    .where(eq(masteryEvent.key, normalizeKey(key)))
+    .orderBy(desc(masteryEvent.createdAt))
+    .limit(limit);
 }
 
 export async function updateMasteryItem(

@@ -75,6 +75,8 @@ export const conversation = sqliteTable("conversation", {
   branchSourceTurnId: text("branch_source_turn_id"),
   branchKind: text("branch_kind"),
   agentModifiersJson: text("agent_modifiers_json"),
+  // Sidebar pinning (migration v36): pinned conversations sort above the recency list. 0 = not pinned.
+  pinned: integer("pinned").notNull().default(0),
 });
 
 export type Conversation = typeof conversation.$inferSelect;

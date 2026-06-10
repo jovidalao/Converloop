@@ -33,7 +33,13 @@ import {
   takenMacroNames,
 } from "@/commands";
 import { type Locale, type MessageKey, useTranslation } from "@/i18n";
+import {
+  exportBackupToDownloads,
+  importBackupBundle,
+  parseBackupBundle,
+} from "@/lib/backup";
 import { isWindows } from "@/lib/platform";
+import { snapshotSettingsToMirror } from "@/lib/settings-mirror";
 import { cn } from "@/lib/utils";
 import {
   type AppConfig,
@@ -99,6 +105,7 @@ import {
 import { synthesizeEdge } from "../tts/edge";
 import { synthesizeMimo } from "../tts/mimo";
 import { clearTtsCache, getTtsCacheCount } from "../tts/speak";
+import { useConfirm } from "./confirm";
 import { PreferencesPanel } from "./PreferencesPanel";
 import { ShortcutsEditor } from "./ShortcutsEditor";
 import { type Accent, type Theme, useTheme } from "./theme-provider";
@@ -402,6 +409,117 @@ function SttSettings() {
   );
 }
 
+// Learning-data backup: export everything (SQLite + profile MD + settings) to a
+// single JSON file in Downloads; import fully replaces current data (confirmed,
+// then the app reloads so every module re-reads the restored state). Keys are
+// excluded — they are device-bound encrypted and never leave the machine.
+function BackupSection() {
+  const { t, locale } = useTranslation();
+  const confirm = useConfirm();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState<"export" | "import" | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleExport() {
+    if (busy) return;
+    setBusy("export");
+    setStatus(null);
+    setError(null);
+    try {
+      // Fold the latest localStorage values into app_state first so the bundle
+      // carries the freshest settings snapshot.
+      await snapshotSettingsToMirror().catch(() => {});
+      const { path } = await exportBackupToDownloads();
+      setStatus(t("settings.backup.exported", { path }));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function handleImportFile(file: File) {
+    if (busy) return;
+    setBusy("import");
+    setStatus(null);
+    setError(null);
+    try {
+      const raw = await file.text();
+      const { bundle, summary } = parseBackupBundle(raw);
+      const ok = await confirm({
+        title: t("settings.backup.importConfirmTitle"),
+        description: t("settings.backup.importConfirmDesc", {
+          conversations: summary.conversations,
+          turns: summary.turns,
+          masteryItems: summary.masteryItems,
+          date: summary.exportedAt
+            ? new Date(summary.exportedAt).toLocaleString(locale)
+            : "?",
+        }),
+        confirmText: t("settings.backup.importButton"),
+      });
+      if (!ok) return;
+      await importBackupBundle(bundle);
+      setStatus(t("settings.backup.imported"));
+      window.setTimeout(() => window.location.reload(), 1200);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  }
+
+  return (
+    <div>
+      <SettingRow label={t("settings.backup.exportLabel")}>
+        <Button
+          variant="secondary"
+          disabled={busy !== null}
+          onClick={() => void handleExport()}
+        >
+          {busy === "export"
+            ? t("settings.backup.exporting")
+            : t("settings.backup.exportButton")}
+        </Button>
+      </SettingRow>
+      <SettingRow label={t("settings.backup.importLabel")}>
+        <Button
+          variant="secondary"
+          disabled={busy !== null}
+          onClick={() => fileRef.current?.click()}
+        >
+          {busy === "import"
+            ? t("settings.backup.importing")
+            : t("settings.backup.importButton")}
+        </Button>
+      </SettingRow>
+      <input
+        ref={fileRef}
+        type="file"
+        accept="application/json,.json"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) void handleImportFile(file);
+        }}
+      />
+      <p className="mt-2 text-ui-caption leading-snug text-ui-muted">
+        {t("settings.backup.note")}
+      </p>
+      {status && (
+        <p className="mt-2 break-all text-ui-body text-primary">{status}</p>
+      )}
+      {error && (
+        <p className="mt-2 break-words text-ui-body text-destructive">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
 const THEMES: { value: Theme; labelKey: MessageKey; icon: LucideIcon }[] = [
   { value: "light", labelKey: "settings.themes.light", icon: SunIcon },
   { value: "dark", labelKey: "settings.themes.dark", icon: MoonIcon },
@@ -436,7 +554,8 @@ const LOCALES: { value: Locale; labelKey: MessageKey }[] = [
 ];
 
 type BiLabel = { en: string; zh: string };
-const STUDY_LANGUAGES: { value: string; label: BiLabel }[] = [
+// Shared with the first-run onboarding wizard.
+export const STUDY_LANGUAGES: { value: string; label: BiLabel }[] = [
   { value: "Chinese", label: { en: "Chinese", zh: "中文" } },
   { value: "English", label: { en: "English", zh: "英语" } },
   { value: "Japanese", label: { en: "Japanese", zh: "日语" } },
@@ -448,7 +567,7 @@ const STUDY_LANGUAGES: { value: string; label: BiLabel }[] = [
   { value: "Russian", label: { en: "Russian", zh: "俄语" } },
   { value: "Italian", label: { en: "Italian", zh: "意大利语" } },
 ];
-const LEVELS: { value: string; label: BiLabel }[] = [
+export const LEVELS: { value: string; label: BiLabel }[] = [
   { value: "A1", label: { en: "A1 · Beginner", zh: "A1 · 入门" } },
   { value: "A2", label: { en: "A2 · Elementary", zh: "A2 · 初级" } },
   { value: "B1", label: { en: "B1 · Intermediate", zh: "B1 · 中级" } },
@@ -1549,6 +1668,9 @@ export function SettingsView({ section }: { section: SettingsSection }) {
                 </Button>
               )}
             </div>
+            <p className="mt-1.5 text-ui-caption leading-snug text-ui-muted">
+              {t("settings.llm.keyStorageNote")}
+            </p>
           </Field>
         )}
 
@@ -1666,6 +1788,8 @@ export function SettingsView({ section }: { section: SettingsSection }) {
                 onChange={(v) => update("actionLabels", v)}
               />
             </div>
+
+            <BackupSection />
 
             <ShortcutsEditor />
           </section>

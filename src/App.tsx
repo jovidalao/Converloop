@@ -36,6 +36,7 @@ import { LearningAgentsView } from "./components/LearningAgentsView";
 import { LearningRecordsView } from "./components/LearningRecordsView";
 import { LogsView } from "./components/LogsView";
 import { MasteryView } from "./components/MasteryView";
+import { OnboardingWizard } from "./components/OnboardingWizard";
 import { ProfileView } from "./components/ProfileView";
 import { SettingsView } from "./components/SettingsView";
 import { type MainView, Sidebar } from "./components/Sidebar";
@@ -46,6 +47,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "./components/ui/tooltip";
+import { pruneAgentJobs } from "./db/agent-jobs";
+import { getAppState, setAppState } from "./db/app-state";
 import {
   type ConversationMeta,
   clearActiveConversationId,
@@ -57,6 +60,7 @@ import {
   listConversations,
   renameConversation,
   setActiveConversationId,
+  setConversationPinned,
   titleFromInput,
 } from "./db/conversations";
 import {
@@ -96,6 +100,10 @@ type AppLocation = {
 };
 
 type DraftKind = "chat" | "quickfire" | "dictation" | "learning_agent";
+
+// app_state flag: set after the first-run wizard finishes (or is skipped, or
+// the app starts with existing data). Travels with backups like other markers.
+const ONBOARDING_DONE_KEY = "lang-agent.onboardingDone";
 
 function sameLocation(a: AppLocation, b: AppLocation): boolean {
   return a.view === b.view && a.activeId === b.activeId;
@@ -154,6 +162,7 @@ function App() {
   } | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [derivationBusy, setDerivationBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [resizingSidebar, setResizingSidebar] = useState(false);
@@ -487,6 +496,16 @@ function App() {
       setActiveId(id ?? draftId);
       await refresh();
       setReady(true);
+      // First run (no history at all): walk through languages + provider setup once.
+      // Existing users get the flag set silently so the wizard never appears.
+      const onboarded = await getAppState(ONBOARDING_DONE_KEY);
+      if (!onboarded) {
+        const convs = await listConversations();
+        if (convs.length === 0) setOnboardingOpen(true);
+        else await setAppState(ONBOARDING_DONE_KEY, "1");
+      }
+      // Run-log retention: prune old finished agent_job rows in the background after the UI is up.
+      void pruneAgentJobs().catch(() => {});
     })();
   }, [refresh, refreshLearningAgents]);
 
@@ -572,6 +591,11 @@ function App() {
 
   async function rename(id: string, title: string) {
     await renameConversation(id, title);
+    await refresh();
+  }
+
+  async function togglePin(id: string, pinned: boolean) {
+    await setConversationPinned(id, pinned);
     await refresh();
   }
 
@@ -965,6 +989,7 @@ function App() {
           }
           onRename={(id, t) => void rename(id, t)}
           onDelete={(id) => void remove(id)}
+          onTogglePin={(id, pinned) => void togglePin(id, pinned)}
           onOpenView={(v) => navigateTo({ view: v, activeId })}
           settingsMode={settingsMode}
           onExitSettings={() => navigateTo({ view: "chat", activeId })}
@@ -1047,6 +1072,15 @@ function App() {
         open={shortcutsOpen}
         onClose={() => setShortcutsOpen(false)}
       />
+
+      {onboardingOpen && (
+        <OnboardingWizard
+          onDone={() => {
+            setOnboardingOpen(false);
+            void setAppState(ONBOARDING_DONE_KEY, "1");
+          }}
+        />
+      )}
 
       {toast && (
         <div className="-translate-x-1/2 fixed bottom-6 left-1/2 z-50 flex max-w-[min(90vw,30rem)] items-center gap-3 rounded-lg border border-destructive/30 bg-card px-4 py-3 text-ui-body text-foreground shadow-lg">

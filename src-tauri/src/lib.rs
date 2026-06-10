@@ -1,3 +1,4 @@
+mod backup;
 mod edge_tts;
 mod llm;
 mod oauth;
@@ -141,6 +142,15 @@ const ADD_LEARNING_AGENT_PACKAGE_META_JSON: &str =
 // 而 user_input 落库的是展开后的英文提示词(喂给对话 agent、并计入后续上下文)。
 // display_text 仅供 UI 渲染气泡;普通轮次为 NULL(气泡照常显示 user_input)。
 const ADD_TURN_DISPLAY_TEXT: &str = "ALTER TABLE turn ADD COLUMN display_text TEXT;";
+
+// 会话上下文加载(loadChatHistory / getTurnsAfterId)按 conversation_id 过滤再按时间排序;
+// 没有索引时每次都是全表扫,轮次累积到几千条后会拖慢每一轮的热路径。
+const CREATE_TURN_CONVERSATION_INDEX: &str =
+    "CREATE INDEX IF NOT EXISTS turn_conversation_created_idx ON turn (conversation_id, created_at);";
+
+// 侧边栏置顶:置顶会话排在列表最前,不随 updated_at 下沉。0 = 未置顶。
+const ADD_CONVERSATION_PINNED: &str =
+    "ALTER TABLE conversation ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;";
 
 const CREATE_AGENT_JOB: &str = "\
 CREATE TABLE IF NOT EXISTS agent_job (
@@ -521,6 +531,18 @@ pub fn run() {
             sql: ADD_TURN_DISPLAY_TEXT,
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 35,
+            description: "create_turn_conversation_index",
+            sql: CREATE_TURN_CONVERSATION_INDEX,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 36,
+            description: "add_conversation_pinned",
+            sql: ADD_CONVERSATION_PINNED,
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()
@@ -554,6 +576,7 @@ pub fn run() {
             profile::write_profile,
             profile::snapshot_profile,
             profile::restore_profile,
+            backup::export_backup,
             stt::stt_transcribe,
             stt::stt_transcribe_soniox,
             reapply_traffic_lights,

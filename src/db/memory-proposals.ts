@@ -2,6 +2,7 @@ import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { DataEditOperation } from "../agents/data-editor";
 import { applyDataEditOperations } from "../data-edit";
+import { emitAppEvent } from "../lib/app-events";
 import { db } from "./client";
 import { type MemoryProposal, memoryProposal, turn } from "./schema";
 
@@ -33,6 +34,7 @@ export async function createMemoryProposal(input: {
     operationsJson: JSON.stringify(operations),
     resultJson: null,
   });
+  emitAppEvent("coach-data-changed", { turnId: input.turnId ?? undefined });
   return id;
 }
 

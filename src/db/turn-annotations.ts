@@ -1,4 +1,5 @@
 import { desc, eq } from "drizzle-orm";
+import { emitAppEvent } from "../lib/app-events";
 import { db } from "./client";
 import { type TurnAnnotation, turn, turnAnnotation } from "./schema";
 
@@ -24,6 +25,7 @@ export async function createTurnAnnotation(input: {
     payloadJson: payloadJson(input.payload),
     createdAt: Date.now(),
   });
+  emitAppEvent("coach-data-changed", { turnId: input.turnId });
   return id;
 }
 

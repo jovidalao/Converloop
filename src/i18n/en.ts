@@ -20,8 +20,28 @@ export const en = {
   },
   // User-facing errors thrown outside React (orchestrator / background runners).
   errors: {
+    missingApiKey:
+      "No API key configured, please fill it in on the settings page",
+    lessonOnly:
+      "Only focused-lesson sessions can confirm lesson mastery signals",
+    lessonNoAgent: "This focused lesson has no learning agent linked",
+    agentNotFound: "Learning agent not found",
+    lessonTurnNotFound: "Focused-lesson turn not found",
+    regenerateTurnNotFound: "Reply to regenerate not found",
+    suggestionTurnNotFound: "Message for reply suggestion not found",
+    lessonNotLearnerOutput:
+      "This turn is not learner output; nothing was written.",
+    lessonNoWriteback: "No learning items to write back.",
+    maintainerNoKey: "No API key configured",
+    maintainerRunning: "Maintenance job already running",
     sttNoKey:
       "No speech-to-text key configured. Add one in Settings → Voice input.",
+    ttsNoKey:
+      "Please configure the MiMo API key in Settings → Text-to-Speech first.",
+  },
+  speak: {
+    play: "Read aloud",
+    stop: "Stop reading",
   },
   stt: {
     startRecording: "Voice input (record, then click again to transcribe)",
@@ -29,9 +49,21 @@ export const en = {
     micDenied:
       "Microphone unavailable — check the system microphone permission for lang-agent.",
   },
-  speak: {
-    play: "Read aloud",
-    stop: "Stop reading",
+  onboarding: {
+    title: "Welcome to lang-agent",
+    subtitleLanguages:
+      "Tell the coach who's learning what — you can change any of this later in Settings.",
+    subtitleProvider:
+      "Connect one AI model to power conversations and corrections. Your key stays on this device.",
+    provider: "Model provider",
+    keyPlaceholder: "Paste your {provider} API key",
+    saveAndTest: "Save key & test connection",
+    testOk: "Connected — the model replied “{sample}”.",
+    loginOk: "Signed in. Subscription token saved.",
+    noCredential: "No key or login found for this provider yet.",
+    next: "Next",
+    finish: "Start learning",
+    skip: "Skip for now",
   },
   slashMenu: {
     ariaLabel: "Slash commands",
@@ -141,6 +173,13 @@ export const en = {
       toImprove: "To improve",
       memory: "Learning memory",
     },
+    dueReview: {
+      title: "Due for review",
+      subtitle:
+        "Retention on these has dropped — the AI is nudged to weave them back into the conversation naturally.",
+      empty: "Nothing is due for review right now.",
+      retention: "retention {p}%",
+    },
     reviewTitle: "Turn-by-turn review",
     conversationMemoryTitle: "Conversation learning memory",
     conversationMemoryEmpty: "No learning recorded for this conversation yet.",
@@ -236,7 +275,14 @@ export const en = {
     customLearning: "Custom learning",
     customLearningTooltip:
       "Browse focused lessons and preview one before starting",
-    recent: "Recent",
+    group: {
+      pinned: "Pinned",
+      today: "Today",
+      week: "This week",
+      earlier: "Earlier",
+    },
+    pin: "Pin",
+    unpin: "Unpin",
     noConversations: "No conversations yet",
     settings: "Settings",
     settingsTooltip: "Settings {shortcut}",
@@ -417,6 +463,20 @@ export const en = {
         "Auto-open bilingual reading for AI replies (sentence by sentence)",
       actionLabels: "Show text labels on chat action buttons",
       glass: "Enable macOS glass effect",
+    },
+    backup: {
+      exportLabel: "Export learning data",
+      exportButton: "Export backup",
+      exporting: "Exporting…",
+      exported: "Backup saved to {path}",
+      importLabel: "Restore from a backup",
+      importButton: "Import backup",
+      importing: "Importing…",
+      imported: "Backup restored. Reloading…",
+      importConfirmTitle: "Replace all learning data?",
+      importConfirmDesc:
+        "This restores the backup ({conversations} conversations · {turns} turns · {masteryItems} learning items, exported {date}) and OVERWRITES everything currently in the app. This cannot be undone.",
+      note: "The backup is one readable JSON file: conversations, learning data, your profile, and settings. API keys and login tokens are never included.",
     },
     shortcuts: {
       title: "Keyboard shortcuts",
@@ -694,6 +754,14 @@ export const en = {
     examplePlaceholder: "Example / original expression",
     notesPlaceholder: "Notes / target expression",
     markKnown: "Mark as mastered",
+    history: {
+      toggle: "Evidence timeline",
+      empty: "No recorded observations for this item yet.",
+      source: {
+        review: "lesson write-back",
+        manual: "added manually",
+      },
+    },
     searchPlaceholder: "Search key, label, example",
     allStatuses: "All statuses",
     allTypes: "All types",

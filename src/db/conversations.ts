@@ -1,6 +1,14 @@
-import { and, count, desc, eq, gte, isNull } from "drizzle-orm";
+import { and, count, desc, eq, gte, inArray, isNull } from "drizzle-orm";
+import { deleteAppState } from "./app-state";
 import { db } from "./client";
-import { type Conversation, conversation, turn } from "./schema";
+import {
+  agentJob,
+  type Conversation,
+  conversation,
+  memoryProposal,
+  turn,
+  turnAnnotation,
+} from "./schema";
 
 export type ConversationMeta = Conversation;
 export type ConversationKind = Conversation["kind"];
@@ -226,9 +234,23 @@ export function clearActiveConversationId(): void {
   localStorage.removeItem(ACTIVE_KEY);
 }
 
-// Most recently active first (updated_at descending), for the sidebar list.
+// Pinned first, then most recently active (updated_at descending), for the sidebar list.
 export async function listConversations(): Promise<ConversationMeta[]> {
-  return db.select().from(conversation).orderBy(desc(conversation.updatedAt));
+  return db
+    .select()
+    .from(conversation)
+    .orderBy(desc(conversation.pinned), desc(conversation.updatedAt));
+}
+
+// Sidebar pin/unpin. Pinned conversations sort above the recency list and never sink.
+export async function setConversationPinned(
+  id: string,
+  pinned: boolean,
+): Promise<void> {
+  await db
+    .update(conversation)
+    .set({ pinned: pinned ? 1 : 0 })
+    .where(eq(conversation.id, id));
 }
 
 export async function getConversation(
@@ -450,6 +472,15 @@ export async function truncateConversationFrom(
     .where(eq(turn.id, fromId))
     .limit(1);
   if (!mark) return;
+  const dropped = (
+    await db
+      .select({ id: turn.id })
+      .from(turn)
+      .where(
+        and(eq(turn.conversationId, id), gte(turn.createdAt, mark.createdAt)),
+      )
+  ).map((r) => r.id);
+  await cleanupTurnArtifacts(dropped);
   await db
     .delete(turn)
     .where(
@@ -475,10 +506,43 @@ export async function truncateConversationFrom(
   }
 }
 
-// Delete a conversation along with all its turns. Mastery/profile is global, not handled here.
+// Per-turn artifacts that would otherwise be orphaned when turns are deleted: custom-observer
+// annotations, pending write proposals, and hot-path run logs all hang off turn_id. mastery_event
+// is deliberately NOT cleaned — it is the permanent evidence log behind mastery counts.
+async function cleanupTurnArtifacts(turnIds: string[]): Promise<void> {
+  // SQLite caps bound parameters (999); chunk to stay well under it.
+  for (let i = 0; i < turnIds.length; i += 200) {
+    const chunk = turnIds.slice(i, i + 200);
+    await db
+      .delete(turnAnnotation)
+      .where(inArray(turnAnnotation.turnId, chunk));
+    await db
+      .delete(memoryProposal)
+      .where(inArray(memoryProposal.turnId, chunk));
+    await db.delete(agentJob).where(inArray(agentJob.turnId, chunk));
+  }
+}
+
+// Delete a conversation along with all its turns and the per-turn artifacts hanging off them.
+// Mastery/profile is global, not handled here; mastery_event evidence is kept. Child branches keep
+// their content but drop the dangling parent pointer.
 export async function deleteConversation(id: string): Promise<void> {
+  const ids = (
+    await db
+      .select({ id: turn.id })
+      .from(turn)
+      .where(eq(turn.conversationId, id))
+  ).map((r) => r.id);
+  await cleanupTurnArtifacts(ids);
   await db.delete(turn).where(eq(turn.conversationId, id));
   await db.delete(conversation).where(eq(conversation.id, id));
+  // Cached input hints for this conversation (app_state) are now stale garbage.
+  await deleteAppState(`inputHints:${id}`);
+  // Children of this conversation would point at a missing parent; drop the lineage pointer.
+  await db
+    .update(conversation)
+    .set({ parentConversationId: null })
+    .where(eq(conversation.parentConversationId, id));
 }
 
 // Called at startup: returns the conversation id to activate. Returns null when there is no history; the frontend then displays an unsaved new conversation draft.

@@ -30,3 +30,14 @@ export async function setAppState(key: string, value: string): Promise<void> {
 
   await db.insert(appState).values({ key, value, updatedAt: now });
 }
+
+// Remove a marker (e.g. a per-conversation cache entry when the conversation is deleted).
+export async function deleteAppState(key: string): Promise<void> {
+  await db.delete(appState).where(eq(appState.key, key));
+}
+
+// List all keys with the given prefix (per-conversation cache families, backup export).
+export async function listAppStateKeys(prefix: string): Promise<string[]> {
+  const rows = await db.select({ key: appState.key }).from(appState);
+  return rows.map((r) => r.key).filter((k) => k.startsWith(prefix));
+}

@@ -1,3 +1,4 @@
+import { staticT } from "../i18n";
 import { getSecret } from "../keychain";
 
 export const MIMO_TTS_KEY_ACCOUNT = "mimo_tts_api_key";
@@ -119,9 +120,7 @@ export async function getMimoTtsApiKey(): Promise<string | null> {
 
 export class MissingTtsApiKeyError extends Error {
   constructor() {
-    super(
-      "Please configure the MiMo API key in Settings → Text-to-Speech first.",
-    );
+    super(staticT("errors.ttsNoKey"));
     this.name = "MissingTtsApiKeyError";
   }
 }

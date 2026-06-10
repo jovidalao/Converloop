@@ -7,6 +7,7 @@ import {
   getRecentlyIntroduced,
   getTurnCount,
 } from "../db/turns";
+import { staticT } from "../i18n";
 import { readProfile } from "./profile";
 
 // Single-flight: only one maintenance job may run at a time. If a new trigger arrives while one is running, skip it (it will be picked up next time).
@@ -42,7 +43,8 @@ async function setLastMaintainedAt(ts: number): Promise<void> {
 
 async function runJob(): Promise<MaintainerResult> {
   const provider = await getProvider();
-  if (!provider) return { written: false, reason: "No API key configured" };
+  if (!provider)
+    return { written: false, reason: staticT("errors.maintainerNoKey") };
 
   const config = loadConfig();
   // Capture the watermark before querying to avoid missing turns that arrive during the run (they are > watermark and will be fed next time).
@@ -72,7 +74,7 @@ async function runJob(): Promise<MaintainerResult> {
 // Manual trigger (profile page "Refresh profile"). Single-flight.
 export async function runMaintainerNow(): Promise<MaintainerResult> {
   if (running)
-    return { written: false, reason: "Maintenance job already running" };
+    return { written: false, reason: staticT("errors.maintainerRunning") };
   running = true;
   const startedDirtyVersion = dirtyVersion;
   try {

@@ -76,8 +76,10 @@ import {
   toHistoryTurns,
   updateTurnReply,
 } from "./db/turns";
+import { staticT } from "./i18n";
 import { buildLearningDataContext } from "./learning-data";
 import { runAbortableStream } from "./lib/abortable-stream";
+import { emitAppEvent } from "./lib/app-events";
 import { rankMasteryItemsForInput } from "./lib/mastery-relevance";
 import { estimateTokens } from "./lib/tokens";
 import {
@@ -114,7 +116,7 @@ const SUGGESTION_CONTEXT_CHARS = 12000;
 
 export class MissingApiKeyError extends Error {
   constructor() {
-    super("No API key configured, please fill it in on the settings page");
+    super(staticT("errors.missingApiKey"));
     this.name = "MissingApiKeyError";
   }
 }
@@ -411,22 +413,19 @@ export async function previewLearningTurnMastery(
 
   const conversation = await getConversation(conversationId);
   if (conversation?.kind !== "learning_agent") {
-    throw new Error(
-      "Only focused-lesson sessions can confirm lesson mastery signals",
-    );
+    throw new Error(staticT("errors.lessonOnly"));
   }
   const agentId = conversation.learningAgentId;
-  if (!agentId)
-    throw new Error("This focused lesson has no learning agent linked");
+  if (!agentId) throw new Error(staticT("errors.lessonNoAgent"));
   const agent = await getLearningAgent(agentId);
-  if (!agent) throw new Error("Learning agent not found");
+  if (!agent) throw new Error(staticT("errors.agentNotFound"));
   const turn = await getTurn(turnId);
   if (!turn || turn.conversationId !== conversationId) {
-    throw new Error("Focused-lesson turn not found");
+    throw new Error(staticT("errors.lessonTurnNotFound"));
   }
   if (!turn.userInput.trim()) {
     return {
-      summary: "This turn is not learner output; nothing was written.",
+      summary: staticT("errors.lessonNotLearnerOutput"),
       signals: [],
     };
   }
@@ -444,7 +443,7 @@ export async function previewLearningTurnMastery(
     .slice(0, 40)
     .map(toLessonWritebackCandidate);
   if (candidates.length === 0) {
-    return { summary: "No learning items to write back.", signals: [] };
+    return { summary: staticT("errors.lessonNoWriteback"), signals: [] };
   }
   const idx = lessonTurns.findIndex((item) => item.id === turnId);
   const history = formatTurns(
@@ -487,18 +486,15 @@ export async function applyLearningTurnMasteryPreview(
 ): Promise<{ summary: string; applied: number }> {
   const conversation = await getConversation(conversationId);
   if (conversation?.kind !== "learning_agent") {
-    throw new Error(
-      "Only focused-lesson sessions can confirm lesson mastery signals",
-    );
+    throw new Error(staticT("errors.lessonOnly"));
   }
   const agentId = conversation.learningAgentId;
-  if (!agentId)
-    throw new Error("This focused lesson has no learning agent linked");
+  if (!agentId) throw new Error(staticT("errors.lessonNoAgent"));
   const agent = await getLearningAgent(agentId);
-  if (!agent) throw new Error("Learning agent not found");
+  if (!agent) throw new Error(staticT("errors.agentNotFound"));
   const turn = await getTurn(turnId);
   if (!turn || turn.conversationId !== conversationId) {
-    throw new Error("Focused-lesson turn not found");
+    throw new Error(staticT("errors.lessonTurnNotFound"));
   }
   const signals = lessonPreviewToSignals(preview, agent);
   if (signals.length > 0) {
@@ -952,11 +948,10 @@ async function runLearningTurn(
 
   const conversation = await getConversation(conversationId);
   const agentId = conversation?.learningAgentId;
-  if (!agentId)
-    throw new Error("This focused lesson has no learning agent linked");
+  if (!agentId) throw new Error(staticT("errors.lessonNoAgent"));
 
   const agent = await getLearningAgent(agentId);
-  if (!agent) throw new Error("Learning agent not found");
+  if (!agent) throw new Error(staticT("errors.agentNotFound"));
 
   const config = loadConfig();
   // Auto-compression: lesson context = rolling summary (older content) + all verbatim turns after the watermark. Falls back to pure verbatim when summary is NULL.
@@ -1060,7 +1055,7 @@ export async function regenerateReply(
     summaryData.throughId,
   );
   const idx = verbatimTurns.findIndex((t) => t.id === turnId);
-  if (idx < 0) throw new Error("Reply to regenerate not found");
+  if (idx < 0) throw new Error(staticT("errors.regenerateTurnNotFound"));
   const target = verbatimTurns[idx];
   // History uses only verbatim turns "before this turn": exclude the regenerated turn and everything after it, to avoid feeding the old reply back in.
   const history = formatTurns(verbatimTurns.slice(0, idx));
@@ -1193,7 +1188,7 @@ export async function suggestReply(
     getTurnsAfterId(conversationId, null),
   ]);
   const idx = turns.findIndex((t) => t.id === turnId);
-  if (idx < 0) throw new Error("Message for reply suggestion not found");
+  if (idx < 0) throw new Error(staticT("errors.suggestionTurnNotFound"));
 
   const target = turns[idx];
   const contextTurns =
@@ -1358,6 +1353,7 @@ export async function generateInputHintsForConversation(
         INPUT_HINTS_CACHE_PREFIX + conversationId,
         JSON.stringify({ throughTurnId, hints } satisfies CachedInputHints),
       );
+      emitAppEvent("input-hints-changed", { conversationId });
     }
     return hints;
   } catch {
