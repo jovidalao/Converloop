@@ -1,5 +1,11 @@
-import { ArrowRightIcon, MicIcon, SnailIcon, Volume2Icon } from "lucide-react";
-import { useState } from "react";
+import {
+  ArrowRightIcon,
+  MicIcon,
+  SnailIcon,
+  Volume2Icon,
+  XIcon,
+} from "lucide-react";
+import { useEffect, useState } from "react";
 
 import { parseDictationReply } from "../db/conversations";
 import { useTranslation } from "../i18n";
@@ -21,23 +27,33 @@ function ReplayControls({
 }) {
   const { t } = useTranslation();
   const [loading, setLoading] = useState<"normal" | "slow" | null>(null);
+  // Surface TTS failures (e.g. missing key): a silent no-op replay button is indistinguishable from a dead one.
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!error) return;
+    const timer = window.setTimeout(() => setError(null), 6000);
+    return () => window.clearTimeout(timer);
+  }, [error]);
 
   async function replay(rate: number, kind: "normal" | "slow") {
     if (loading || !sentence.trim()) return;
     setLoading(kind);
+    setError(null);
     try {
       stopSpeech();
       const audio = await speakText(sentence);
       onReplay?.();
       setLoading(null);
       await playSpeech(audio, sentence, { rate });
-    } catch {
+    } catch (e) {
       setLoading(null);
+      setError(e instanceof Error ? e.message : String(e));
     }
   }
 
   return (
-    <span className="flex shrink-0 items-center gap-1">
+    <span className="relative flex shrink-0 items-center gap-1">
       <button
         type="button"
         className="inline-flex size-[1.65rem] items-center justify-center rounded-full bg-accent text-primary transition-colors hover:bg-accent/70"
@@ -64,6 +80,22 @@ function ReplayControls({
           <SnailIcon size={15} />
         )}
       </button>
+      {error && (
+        <span
+          className="absolute right-0 top-[calc(100%+4px)] z-[2] flex w-max max-w-64 items-start gap-1.5 rounded border border-destructive/20 bg-card px-2 py-1.5 text-ui-caption leading-tight text-destructive shadow-minimal"
+          role="alert"
+        >
+          <span className="min-w-0 flex-1">{error}</span>
+          <button
+            type="button"
+            className="-mr-0.5 shrink-0 rounded p-0.5 text-ui-muted hover:bg-destructive/10 hover:text-destructive"
+            onClick={() => setError(null)}
+            aria-label={t("common.close")}
+          >
+            <XIcon size={12} />
+          </button>
+        </span>
+      )}
     </span>
   );
 }

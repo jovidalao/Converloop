@@ -681,6 +681,8 @@ export async function runTurn(
     signal?: AbortSignal;
     /** Dictation/shadowing: replays of the previous sentence before this answer (slow replays included). */
     replayCount?: number;
+    /** "Say it again": this message re-produces the learner's previous sentence using the correction, from memory. */
+    redo?: boolean;
   } = {},
 ): Promise<TurnResult> {
   // Off-record turn (/btw "by the way"): standalone helper answer, no correction, not counted in future context, no compression.
@@ -837,6 +839,7 @@ export async function runTurn(
     standardAnswerMode,
     dictationFocusWords,
     sayDrillReplayCount: opts.replayCount,
+    redoTurn: opts.redo,
     callbacks: cb,
     turnPersisted,
   };

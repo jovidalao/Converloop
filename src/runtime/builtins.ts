@@ -133,6 +133,11 @@ const conversationReply: ReplyProducer = {
       c.sayDrillReplayCount && c.sayDrillReplayCount > 0
         ? `PACING — the learner needed ${c.sayDrillReplayCount} replay(s) of the previous sentence (slow replays included): make the NEXT sentence a touch easier or shorter. If they answer without replays, you can stretch again.`
         : undefined;
+    // "Say it again": the latest message re-produces the learner's corrected previous sentence from memory — without
+    // this note the agent reads it as a puzzling near-duplicate and may comment on the repetition.
+    const redoNote = c.redoTurn
+      ? "REDO ATTEMPT — the learner is re-saying their previous sentence from memory, using the correction they just received. Acknowledge the improved attempt in a brief, natural way and carry the conversation forward; do NOT point out the repetition or treat it as a new topic."
+      : undefined;
     return converse(
       ctx.provider,
       {
@@ -145,6 +150,7 @@ const conversationReply: ReplyProducer = {
         sessionAdjustments: formatModifierInstructions(c.agentModifiers, {
           dictationFocusWords: c.dictationFocusWords,
           replayNote,
+          redoNote,
         }),
         summary: ctx.summary,
         historyTurns: ctx.historyTurns,
@@ -246,9 +252,14 @@ const tutorObserver: Observer = {
       try {
         // Drill turns never write production mastery (that would pollute the weak list with mishearings).
         // Dictation still records into the isolated listening dimension ("listening:<word>" keys + code-derived
-        // corrects); shadowing records nothing (STT noise is too coarse to count).
+        // corrects); shadowing records nothing (STT noise is too coarse to count). Weak-spot drill evidence is
+        // tagged source="review" so the targeted retrieval shows up as such in the mastery-event audit trail.
         if (!ctx.dictationStandardAnswer) {
-          await recordAnalysis(analysis, turnId);
+          await recordAnalysis(
+            analysis,
+            turnId,
+            ctx.agentModifiers.reviewDrill ? "review" : "tutor",
+          );
         } else if (ctx.standardAnswerMode !== "shadowing") {
           await recordDictationAnalysis(
             analysis,

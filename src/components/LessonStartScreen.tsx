@@ -3,7 +3,7 @@ import { BookOpenCheckIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTranslation } from "@/i18n";
 
-// Lesson start page (shown when a 定制化学习 lesson is selected but not yet materialized): the learner reads what the
+// Lesson start page (shown when a focused lesson is selected but not yet materialized): the learner reads what the
 // lesson does, then chooses to begin. The DB row is created only after Start.
 export function LessonStartScreen({
   name,

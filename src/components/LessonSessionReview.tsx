@@ -2,10 +2,10 @@ import { CheckCircle2Icon, ListChecksIcon, XIcon } from "lucide-react";
 import { useState } from "react";
 
 import { useTranslation } from "@/i18n";
+import { describeError } from "@/lib/error-display";
 import {
   applyLessonSessionMasteryPreview,
   type LessonMasteryPreview,
-  MissingApiKeyError,
   previewLessonSessionMastery,
 } from "../orchestrator";
 import { Button } from "./ui/button";
@@ -43,13 +43,7 @@ export function LessonSessionReview({
       if (result.signals.length === 0) setMessage(result.summary);
       else setPreview(result);
     } catch (e) {
-      setError(
-        e instanceof MissingApiKeyError
-          ? e.message
-          : e instanceof Error
-            ? e.message
-            : String(e),
-      );
+      setError(describeError(e, t).summary);
     } finally {
       setBusy(false);
     }
@@ -71,7 +65,7 @@ export function LessonSessionReview({
       );
       setPreview(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(describeError(e, t).summary);
     } finally {
       setApplying(false);
     }
@@ -107,6 +101,7 @@ export function LessonSessionReview({
             <span
               className="min-w-0 flex-1 truncate text-ui-caption text-destructive"
               role="alert"
+              title={error}
             >
               {error}
             </span>

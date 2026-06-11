@@ -385,7 +385,7 @@ v1 核心链路已完成并可用:
 - ✅ 情景演练(原快问快答改名):复习项定向出题(场景使理想答案自然要求 DUE-FOR-REVIEW 项)+ 明显没完成任务时同题重试一次
 - ✅ 普通对话复习 elicitation(交替「自己示范」与「设计让用户必须产出的问题」)+ 批改面板「重说一遍」(把改对的意思凭记忆再产出一次,走正常批改)
 - ✅ 专项课课程回顾:会话级回写 observer 一次扫全课 transcript,批量提出 correct 证据(≤8 条),用户一键确认后 `recordSignals(source="review")` 入账
-- ✅ 学习项目进度:`learning_project` 关联生成课程(migration v37/v38),逐课完成标记 + 进度 + 下一课;今日训练页(侧栏「今日训练」)用已有数据拼每日清单(到期复习 → 闪练、听漏词 → 听写、进行中项目 → 下一课,完成态由当日会话类型推导)
+- ✅ 学习项目进度:`learning_project` 关联生成课程(migration v37/v38),逐课完成标记 + 进度 + 下一课;新对话起始页嵌练习统计卡(PracticeStats,仿 Claude macOS 用量卡:顶部标签切换概览/趋势/知识点/易错点,只读),原「今日训练」每日清单与设置里的「学习成就」页均已移除并并入此卡,各练习入口在侧栏/命令面板/练习中心
 
 ## 踩坑记录
 
@@ -394,5 +394,5 @@ v1 核心链路已完成并可用:
 - **sqlite-proxy 桥接**(`src/db/client.ts`):Drizzle 生成 `?` 占位符,sqlx 原生接受可直接透传;`run` 走 plugin `execute`,`all/values/get` 走 `select` 后 `Object.values` 还原成 Drizzle 要的值数组(列序 = SELECT 序)。权限:`capabilities/default.json` 需 `sql:default` + `sql:allow-load/execute/select`。
 - **zod 钉 v3**:`zod-to-json-schema` 为 v3 设计;`tutorJsonSchema()` 去 `$schema`、inline refs(`$refStrategy: "none"`)让 OpenAI 端点能直接吃。
 - **原子写 MD**:Rust 侧写临时文件再 rename(`src-tauri/src/profile.rs`),避免对话 agent 读到半截文件。
-- **日期用 UTC**。例外:学习成就页的打卡/热力图按**本地日**统计(`db/learning-stats.ts` 的 `localDayNumber`)——「今天练没练」对用户是本地概念。
+- **日期用 UTC**。例外:练习统计卡的打卡/热力图按**本地日**统计(`db/learning-stats.ts` 的 `localDayNumber`)——「今天练没练」对用户是本地概念。
 - **双平台(macOS + Windows)**:新增原生 / chrome 功能遵守 [cross-platform.md](./cross-platform.md) 的三条约定(`cfg` 守卫 / `data-platform` / 薄 port);CI 在 macOS + Windows 都跑 `cargo build`。

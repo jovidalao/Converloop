@@ -187,9 +187,30 @@ function applySignal(item, signal) {
 ```
 
 实现上还会把每条信号写入 `mastery_event`:聚合快照(`mastery_item`)用于查询排序,
-事件日志用于审计、合并 key、以后调整公式后重算。
+事件日志用于审计、合并 key、以后调整公式后重算。`mastery_event.source` 标记证据来源:
+普通批改轮是 `tutor`,弱项闪练轮传 `review`(定向检索证据在审计线上可区分),手动操作是 `manual`。
 
 公式以后再调,关键是它在代码里,可测可改,不依赖模型。
+
+## 标准答案比对模式(听写 / 跟读)
+
+`TutorContext.standardAnswer` 一旦设置,导师不做自由批改,而是把用户输入与这句**唯一正确目标**逐处 diff
+(prompt 整体换成比对版;`standardAnswerMode` 区分两种 drill,缺省 `dictation`)。输出仍是同一个
+`TutorAnalysis` schema,UI 渲染不变,但记账完全不同——两种 drill 都**不写生产向 mastery**:
+
+- **听写(`dictation`)**:用户听一句、盲打一句。每个听漏/听错的词产出一条 issue,
+  `mastery_key = "listening:" + 该处最关键的实义词(小写)`、`mastery_type="vocab"`、label 为该词原文。
+  这些 key 构成隔离的**听力维度**:所有生产向查询(weak list / key hints / review 候选 / comfortable /
+  维护 agent 输入)统一排除 `listening:`(及遗留 `dictation:`、`shadowing:`)前缀,只有听写会话通过
+  `getListeningFocusWords` 读回它们,把没听熟的词编进后续句子。**correct 证据由代码反推**
+  (`recordDictationAnalysis`):句中出现且本轮没听错的已跟踪听力词,代码记一条 correct——LLM 永不碰计数,
+  听力条目也因此能恢复,不会像旧的单一聚合 key 那样永远 100% 错误率。`mastery_updates` 恒为 `[]`。
+- **跟读(`shadowing`)**:用户朗读已展示的句子,输入是 STT 转写。diff 出的差异≈发音问题(粗信号),
+  issue 的解释给发音提示(重音/元音/连读),`mastery_key="shadowing:attempt"` 仅作展示占位——
+  跟读轮**什么都不写**(STT 噪声太粗,不计入任何维度)。
+
+实现见 `src/agents/tutor.ts` 的 `dictationRulesPrompt` / `shadowingRulesPrompt` 与
+`src/db/mastery.ts` 的 `recordDictationAnalysis` / `excludeListeningKeys`;改任意一处记得同步这里。
 
 ## 怎么真正拿到结构化输出
 

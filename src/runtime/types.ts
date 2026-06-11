@@ -130,6 +130,8 @@ export interface PracticeContext extends BaseContext {
   dictationFocusWords?: string[];
   /** Dictation/shadowing: replays of the previous sentence (incl. slow replays) — live difficulty signal for the next sentence. */
   sayDrillReplayCount?: number;
+  /** "Say it again": this turn re-produces the learner's previous sentence using the correction, from memory. */
+  redoTurn?: boolean;
 }
 
 export interface LearningContext extends BaseContext {

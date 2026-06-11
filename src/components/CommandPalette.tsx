@@ -3,8 +3,10 @@ import {
   GraduationCapIcon,
   HeadphonesIcon,
   MessageSquareIcon,
+  MicIcon,
   SearchIcon,
   SquarePenIcon,
+  TargetIcon,
   ZapIcon,
 } from "lucide-react";
 import {
@@ -34,15 +36,32 @@ function conversationIcon(c: ConversationMeta) {
       return <ZapIcon className={cls} />;
     case "dictation":
       return <HeadphonesIcon className={cls} />;
+    case "shadowing":
+      return <MicIcon className={cls} />;
+    case "review_drill":
+      return <TargetIcon className={cls} />;
     default:
       return <MessageSquareIcon className={cls} />;
   }
 }
 
-// The three kinds of targets the command palette can jump to / trigger: start a
-// new chat, start a new session of a lesson, or open a past conversation.
+// Practice-mode launchers: every drill the sidebar can start is also reachable
+// from the palette, so a keyboard-first session never needs the mouse.
+type PaletteMode = "quickfire" | "dictation" | "shadowing" | "review-drill";
+
+const MODE_ICONS: Record<PaletteMode, typeof ZapIcon> = {
+  quickfire: ZapIcon,
+  dictation: HeadphonesIcon,
+  shadowing: MicIcon,
+  "review-drill": TargetIcon,
+};
+
+// The kinds of targets the command palette can jump to / trigger: start a new
+// chat, launch a practice mode (drill), start a new session of a lesson, or
+// open a past conversation.
 type PaletteItem =
   | { kind: "new-chat" }
+  | { kind: "mode"; mode: PaletteMode; label: string }
   | { kind: "start-agent"; agent: LearningAgentMeta }
   | { kind: "conversation"; conv: ConversationMeta };
 
@@ -54,10 +73,15 @@ interface CommandPaletteProps {
   onSelectConversation: (id: string) => void;
   onStartLearningAgent: (agentId: string) => void;
   onNewChat: () => void;
+  onStartQuickfire: () => void;
+  onStartDictation: () => void;
+  onStartShadowing: () => void;
+  onStartReviewDrill: () => void;
 }
 
 function keyFor(item: PaletteItem): string {
   if (item.kind === "new-chat") return "new-chat";
+  if (item.kind === "mode") return `mode:${item.mode}`;
   if (item.kind === "start-agent") return `agent:${item.agent.id}`;
   return `conv:${item.conv.id}`;
 }
@@ -75,6 +99,10 @@ export function CommandPalette({
   onSelectConversation,
   onStartLearningAgent,
   onNewChat,
+  onStartQuickfire,
+  onStartDictation,
+  onStartShadowing,
+  onStartReviewDrill,
 }: CommandPaletteProps) {
   const { t, locale } = useTranslation();
   const [query, setQuery] = useState("");
@@ -106,6 +134,23 @@ export function CommandPalette({
     if (!q) {
       result.push({ label: null, items: [{ kind: "new-chat" }] });
     }
+
+    // Practice-mode launchers: always listed when idle; filtered by their
+    // localized names when searching.
+    const modeDefs: { mode: PaletteMode; label: string }[] = [
+      { mode: "quickfire", label: t("sidebar.quickfire") },
+      { mode: "dictation", label: t("sidebar.dictation") },
+      { mode: "shadowing", label: t("sidebar.shadowing") },
+      { mode: "review-drill", label: t("sidebar.reviewDrill") },
+    ];
+    const modes = (
+      q ? modeDefs.filter((m) => m.label.toLowerCase().includes(q)) : modeDefs
+    ).map((m): PaletteItem => ({ kind: "mode", mode: m.mode, label: m.label }));
+    if (modes.length)
+      result.push({
+        label: t("commandPalette.practiceModes"),
+        items: modes,
+      });
 
     const agents = (
       q
@@ -152,7 +197,12 @@ export function CommandPalette({
 
   function activate(item: PaletteItem) {
     if (item.kind === "new-chat") onNewChat();
-    else if (item.kind === "start-agent") onStartLearningAgent(item.agent.id);
+    else if (item.kind === "mode") {
+      if (item.mode === "quickfire") onStartQuickfire();
+      else if (item.mode === "dictation") onStartDictation();
+      else if (item.mode === "shadowing") onStartShadowing();
+      else onStartReviewDrill();
+    } else if (item.kind === "start-agent") onStartLearningAgent(item.agent.id);
     else onSelectConversation(item.conv.id);
     onClose();
   }
@@ -283,6 +333,15 @@ function PaletteRow({
         <kbd className="rounded border border-border/60 bg-muted px-1.5 py-0.5 font-sans text-ui-caption text-ui-muted">
           {actionShortcutLabel("new-chat")}
         </kbd>
+      </>
+    );
+  }
+  if (item.kind === "mode") {
+    const Icon = MODE_ICONS[item.mode];
+    return (
+      <>
+        <Icon className="size-4 shrink-0 text-ui-muted" />
+        <span className="min-w-0 flex-1 truncate">{item.label}</span>
       </>
     );
   }

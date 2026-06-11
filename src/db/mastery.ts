@@ -45,6 +45,18 @@ export function isListeningKey(key: string): boolean {
   return normalizeKey(key).startsWith(LISTENING_KEY_PREFIX);
 }
 
+// Keys from the isolated drill dimensions (listening / shadowing / the legacy dictation aggregate). Turn analyses
+// carry them, but they are not production "memory" — display surfaces (e.g. the coach panel's conversation-memory
+// section) skip them, matching the SQL-side excludeListeningKeys.
+export function isIsolatedDrillKey(key: string): boolean {
+  const k = normalizeKey(key);
+  return (
+    k.startsWith(LISTENING_KEY_PREFIX) ||
+    k.startsWith("shadowing:") ||
+    k.startsWith("dictation:")
+  );
+}
+
 async function insertMasteryEvent(
   sig: Signal,
   now: number,
@@ -117,9 +129,10 @@ async function upsertSignal(sig: Signal, now: number): Promise<void> {
 async function recordAnalysisInner(
   analysis: TutorAnalysis,
   turnId?: string,
+  source: MasteryEventSource = "tutor",
 ): Promise<void> {
   const now = Date.now();
-  await recordSignalsInner(deriveSignals(analysis), turnId, "tutor", now);
+  await recordSignalsInner(deriveSignals(analysis), turnId, source, now);
 }
 
 async function recordSignalsInner(
@@ -139,11 +152,16 @@ async function recordSignalsInner(
 // Code is the ground truth for counts, must be deterministic — chain all bookkeeping onto a single promise chain, execute one turn at a time.
 let recordQueue: Promise<unknown> = Promise.resolve();
 
+// source: where the evidence comes from — "tutor" for ordinary graded turns; the weak-spot drill passes "review"
+// so its targeted retrieval evidence is distinguishable in the mastery-event audit trail.
 export function recordAnalysis(
   analysis: TutorAnalysis,
   turnId?: string,
+  source: MasteryEventSource = "tutor",
 ): Promise<void> {
-  const next = recordQueue.then(() => recordAnalysisInner(analysis, turnId));
+  const next = recordQueue.then(() =>
+    recordAnalysisInner(analysis, turnId, source),
+  );
   // The chain must not break due to one turn throwing (otherwise subsequent bookkeeping is stuck forever); caller still receives the real result.
   recordQueue = next.catch(() => {});
   return next;

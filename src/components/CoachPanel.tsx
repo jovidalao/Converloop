@@ -3,7 +3,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type TFunction, useTranslation } from "@/i18n";
 import { onAppEvent } from "@/lib/app-events";
 import { cn } from "@/lib/utils";
-import { getReviewDueList, type ReviewItem } from "../db/mastery";
+import {
+  getReviewDueList,
+  isIsolatedDrillKey,
+  type ReviewItem,
+} from "../db/mastery";
 import {
   deriveSignals,
   type Signal,
@@ -506,12 +510,15 @@ export function CoachPanel({
   const [convProposals, setConvProposals] = useState<MemoryProposal[]>([]);
 
   // Whole-conversation aggregate: deduplicate signals derived from corrections +
-  // accurate/to-improve counts; pure in-memory, no DB.
+  // accurate/to-improve counts; pure in-memory, no DB. Isolated drill keys
+  // (listening:/shadowing:) are skipped — they are not conversation "memory"
+  // (shadowing records nothing at all), so showing them here would mislead.
   const conversationSignals = useMemo(() => {
     const map = new Map<string, Signal>();
     for (const t of turns) {
       if (t.excludeFromContext || !t.analysis) continue;
       for (const s of deriveSignals(t.analysis)) {
+        if (isIsolatedDrillKey(s.key)) continue;
         if (!map.has(s.key)) map.set(s.key, s);
       }
     }

@@ -33,14 +33,12 @@ import { CommandPalette } from "./components/CommandPalette";
 import { CustomLearningView } from "./components/CustomLearningView";
 import { KeyboardShortcutsDialog } from "./components/KeyboardShortcutsDialog";
 import { LearningAgentsView } from "./components/LearningAgentsView";
-import { LearningRecordsView } from "./components/LearningRecordsView";
 import { LogsView } from "./components/LogsView";
 import { MasteryView } from "./components/MasteryView";
 import { OnboardingWizard } from "./components/OnboardingWizard";
 import { ProfileView } from "./components/ProfileView";
 import { SettingsView } from "./components/SettingsView";
 import { type MainView, Sidebar } from "./components/Sidebar";
-import { TodayView } from "./components/TodayView";
 import { Button } from "./components/ui/button";
 import {
   Tooltip,
@@ -132,7 +130,6 @@ const SETTINGS_VIEWS: ReadonlySet<MainView> = new Set<MainView>([
   "settings-commands",
   "design",
   "mastery",
-  "records",
   "agents",
   "settings-logs",
   "profile",
@@ -772,10 +769,8 @@ function App() {
   const coachVisible = coachEligible && coachOpen && !smallWindow;
   const settingsMode = isSettingsView(view);
   const TOPBAR_TITLES: Partial<Record<MainView, string>> = {
-    today: t("viewTitles.today"),
     profile: t("viewTitles.profile"),
     mastery: t("viewTitles.mastery"),
-    records: t("viewTitles.records"),
     learning: t("viewTitles.learning"),
     "learning-gallery": t("viewTitles.customLearning"),
     design: t("viewTitles.design"),
@@ -799,25 +794,17 @@ function App() {
               ? t("app.shadowing")
               : draftKind === "review_drill"
                 ? t("app.reviewDrill")
-                : t("app.newChat")
+                : draftKind === "quickfire"
+                  ? t("app.quickfire")
+                  : t("app.newChat")
         : (activeConversation?.title ?? "")
       : (TOPBAR_TITLES[view] ?? "");
 
   const secondaryView =
-    view === "today" ? (
-      <TodayView
-        onStartReviewDrill={openReviewDrillDraft}
-        onStartDictation={openDictationDraft}
-        onStartShadowing={openShadowingDraft}
-        onStartQuickfire={openQuickfireDraft}
-        onStartLesson={openLearningAgentDraft}
-      />
-    ) : view === "profile" ? (
+    view === "profile" ? (
       <ProfileView />
     ) : view === "mastery" ? (
       <MasteryView />
-    ) : view === "records" ? (
-      <LearningRecordsView />
     ) : view === "learning" ? (
       <LearningAgentsView
         onRefresh={refreshLearningAgents}
@@ -828,6 +815,10 @@ function App() {
         onStartLesson={openLearningAgentDraft}
         onOpenCreate={() => navigateTo({ view: "learning", activeId })}
         onRefresh={refreshLearningAgents}
+        onStartReviewDrill={openReviewDrillDraft}
+        onStartDictation={openDictationDraft}
+        onStartShadowing={openShadowingDraft}
+        onStartQuickfire={openQuickfireDraft}
       />
     ) : view === "design" ? (
       <AppDesignView />
@@ -1086,17 +1077,9 @@ function App() {
           conversations={conversations}
           activeId={activeId}
           newChatActive={draftActive && draftKind === "chat"}
-          quickfireActive={draftActive && draftKind === "quickfire"}
-          dictationActive={draftActive && draftKind === "dictation"}
-          shadowingActive={draftActive && draftKind === "shadowing"}
-          reviewDrillActive={draftActive && draftKind === "review_drill"}
-          onStartShadowing={openShadowingDraft}
-          onStartReviewDrill={openReviewDrillDraft}
           view={view}
           onSelect={selectConversation}
           onNewChat={openDraftConversation}
-          onStartQuickfire={openQuickfireDraft}
-          onStartDictation={openDictationDraft}
           onDeriveConversation={(id, actionId) =>
             void deriveConversation(id, actionId)
           }
@@ -1183,6 +1166,10 @@ function App() {
         onSelectConversation={selectConversation}
         onStartLearningAgent={openLearningAgentDraft}
         onNewChat={openDraftConversation}
+        onStartQuickfire={openQuickfireDraft}
+        onStartDictation={openDictationDraft}
+        onStartShadowing={openShadowingDraft}
+        onStartReviewDrill={openReviewDrillDraft}
       />
 
       <KeyboardShortcutsDialog

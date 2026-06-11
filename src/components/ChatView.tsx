@@ -46,6 +46,7 @@ import {
   loadChatHistory,
 } from "../db/turns";
 import { useTranslation } from "../i18n";
+import { type DisplayError, describeError } from "../lib/error-display";
 import { estimatePromptTokens } from "../lib/tokens";
 import {
   generateAndSetConversationTitle,
@@ -53,7 +54,6 @@ import {
   loadCachedConversationTopics,
   loadCachedInputHints,
   loadCachedQuickfireTopics,
-  MissingApiKeyError,
   recommendConversationTopics,
   recommendQuickfireTopics,
   regenerateReply,
@@ -157,11 +157,6 @@ interface ChatViewProps {
 const INPUT_TEXTAREA_MIN_HEIGHT = 56;
 const INPUT_TEXTAREA_MAX_HEIGHT = 104;
 
-type DisplayError = {
-  summary: string;
-  detail?: string;
-};
-
 export function ChatView({
   conversationId,
   isDraft = false,
@@ -221,6 +216,8 @@ export function ChatView({
   const [shadowingTheme, setShadowingTheme] = useState<string | null>(null);
   // Weak-spot drill conversation marker (null for others); drives the mode badge and drill-flavored actions.
   const [reviewDrillActive, setReviewDrillActive] = useState(false);
+  // Number of snapshotted drill items — drives the "answered/total" progress badge above the composer.
+  const [reviewDrillItemCount, setReviewDrillItemCount] = useState(0);
   // Redo invitation after the learner taps "Say it again" on a correction: a banner above the composer asking them
   // to re-produce the corrected meaning from memory; cleared on send or dismiss.
   const [redoActive, setRedoActive] = useState(false);
@@ -228,7 +225,7 @@ export function ChatView({
   // NOT spoken and the listen card is replaced by a "next question" gate. The learner reads their correction, then taps
   // the gate to start the next item (plays the audio, re-enables input). True only between submit and that tap.
   const [dictationAwaitingEnter, setDictationAwaitingEnter] = useState(false);
-  // Lesson start screen: name + intro of the picked 定制化学习 lesson, shown before its first turn fires (null until
+  // Lesson start screen: name + intro of the picked focused lesson, shown before its first turn fires (null until
   // resolved, or once the lesson has started). The Start button kicks off the lesson.
   const [lessonInfo, setLessonInfo] = useState<{
     name: string;
@@ -303,47 +300,7 @@ export function ChatView({
 
   const showUnknownError = useCallback(
     (e: unknown) => {
-      const raw = e instanceof Error ? e.message : String(e);
-      if (e instanceof MissingApiKeyError) {
-        setError({ summary: raw });
-        return;
-      }
-      const lower = raw.toLowerCase();
-      const detail = raw.trim() ? raw : undefined;
-      if (
-        /\b(401|403)\b/.test(lower) ||
-        lower.includes("unauthorized") ||
-        lower.includes("forbidden") ||
-        lower.includes("invalid api key")
-      ) {
-        setError({ summary: t("errors.requestAuth"), detail });
-        return;
-      }
-      if (
-        /\b(429)\b/.test(lower) ||
-        lower.includes("quota") ||
-        lower.includes("rate limit")
-      ) {
-        setError({ summary: t("errors.requestQuota"), detail });
-        return;
-      }
-      if (lower.includes("timeout") || lower.includes("timed out")) {
-        setError({ summary: t("errors.requestTimeout"), detail });
-        return;
-      }
-      if (
-        lower.includes("network") ||
-        lower.includes("fetch") ||
-        lower.includes("offline")
-      ) {
-        setError({ summary: t("errors.requestNetwork"), detail });
-        return;
-      }
-      if (raw.length > 180 || raw.includes("\n") || /^[{[]/.test(raw.trim())) {
-        setError({ summary: t("errors.requestFailed"), detail });
-        return;
-      }
-      setError({ summary: raw });
+      setError(describeError(e, t));
     },
     [t],
   );
@@ -399,13 +356,20 @@ export function ChatView({
   const isSayDrill = isDictation || isShadowing;
   const isReviewDrill = reviewDrillDraftActive || reviewDrillActive;
   // Practice sub-mode for the turn renderers: each drill trims actions that don't apply. Shadowing reuses the
-  // dictation variant (fixed target sentence → no "more natural" / reply suggestion); the weak-spot drill reuses
-  // quickfire (model-answer turns → no next-sentence suggestion, no branch).
-  const practiceVariant: "quickfire" | "dictation" | undefined = isSayDrill
+  // dictation variant (fixed target sentence → no "more natural" / reply suggestion); the weak-spot drill gets its
+  // own variant (no branch, and no reply suggestion — a generated suggestion would hand over the retrieval answer
+  // and fake a clean correct signal on the target key).
+  const practiceVariant:
+    | "quickfire"
+    | "dictation"
+    | "review_drill"
+    | undefined = isSayDrill
     ? "dictation"
-    : quickfireScenario !== null || isReviewDrill
-      ? "quickfire"
-      : undefined;
+    : isReviewDrill
+      ? "review_drill"
+      : quickfireScenario !== null
+        ? "quickfire"
+        : undefined;
   // New-chat start page: a plain uncommitted practice draft (not Rapid Q&A / drills / lesson). Drives the topic start
   // screen; picking a chip materializes the conversation and the AI opens it on that topic. The composer still sends a
   // normal first turn (type-your-own), so this only changes the empty-state, not the send path.
@@ -556,6 +520,7 @@ export function ChatView({
     setDictationTheme(null);
     setShadowingTheme(null);
     setReviewDrillActive(false);
+    setReviewDrillItemCount(0);
     setDictationAwaitingEnter(false);
     setRedoActive(false);
     sayDrillReplayCountRef.current = 0;
@@ -598,7 +563,10 @@ export function ChatView({
         if (mods.quickfire) setQuickfireScenario(mods.quickfire.scenario);
         if (mods.dictation) setDictationTheme(mods.dictation.theme);
         if (mods.shadowing) setShadowingTheme(mods.shadowing.theme);
-        if (mods.reviewDrill) setReviewDrillActive(true);
+        if (mods.reviewDrill) {
+          setReviewDrillActive(true);
+          setReviewDrillItemCount(mods.reviewDrill.items.length);
+        }
         if (
           loaded.length === 0 &&
           !derivationStartedRef.current &&
@@ -1358,6 +1326,7 @@ export function ChatView({
       return;
     await onCreateReviewDrillDraft?.(conversationId, items);
     setReviewDrillActive(true);
+    setReviewDrillItemCount(items.length);
     await startReviewDrill();
   }
 
@@ -1479,10 +1448,14 @@ export function ChatView({
     offRecord?: boolean;
     displayText?: string;
     titleSeed?: string;
+    redo?: boolean;
   }) {
     const isRetry = opts?.text !== undefined;
     const text = (opts?.text ?? input).trim();
     if (!text || replyBusy) return;
+    // Redo turn ("say it again"): captured before the banner state is consumed below, and carried through retries so
+    // the conversation agent keeps treating the re-attempt as a redo, not a brand-new message.
+    const redo = opts?.redo ?? redoActive;
     const offRecord = opts?.offRecord ?? false;
     const displayText = opts?.displayText;
     const isPromptMacro = displayText !== undefined;
@@ -1550,6 +1523,7 @@ export function ChatView({
         conversationId,
         {
           onReplyDelta: (d) => {
+            if (turnGenRef.current !== turnGen) return;
             acc += d;
             setStreaming(acc);
           },
@@ -1572,7 +1546,13 @@ export function ChatView({
           },
         },
         turnId,
-        { offRecord, displayText, signal: controller.signal, replayCount },
+        {
+          offRecord,
+          displayText,
+          signal: controller.signal,
+          replayCount,
+          redo,
+        },
       );
       if (turnGenRef.current === turnGen && !replyCommittedRef.current) {
         commitPartnerReply(turnId, result.reply);
@@ -1630,6 +1610,7 @@ export function ChatView({
             offRecord,
             displayText,
             titleSeed: opts?.titleSeed,
+            redo,
           }),
       });
     } finally {
@@ -1873,6 +1854,15 @@ export function ChatView({
               ? { label: t("chat.reviewDrillBadge"), tone: "info" }
               : { label: t("chat.practiceBadge"), tone: "muted" },
   ];
+  // Weak-spot drill progress: answered micro-tasks out of the snapshotted item count (capped — the drill keeps
+  // cycling shaky items after the first full pass).
+  if (isReviewDrill && reviewDrillItemCount > 0) {
+    const answered = turns.filter((turn) => turn.userText.trim()).length;
+    optionBadges.push({
+      label: `${Math.min(answered, reviewDrillItemCount)}/${reviewDrillItemCount}`,
+      tone: "muted",
+    });
+  }
   if (derivedBanner) {
     optionBadges.push({
       label: derivedBanner.label ?? t("chat.derivedBadge"),
@@ -2056,9 +2046,11 @@ export function ChatView({
                     turnId={turn.id}
                     text={turn.partnerText}
                     variant={
-                      quickfireScenario !== null || isReviewDrill
-                        ? "quickfire"
-                        : undefined
+                      isReviewDrill
+                        ? "review_drill"
+                        : quickfireScenario !== null
+                          ? "quickfire"
+                          : undefined
                     }
                     offRecord={turn.excludeFromContext}
                     autoOpen={
@@ -2154,7 +2146,10 @@ export function ChatView({
         />
       )}
       {redoActive && !replyBusy && (
-        <div className="mx-4 mb-1 flex items-center gap-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-ui-caption text-foreground">
+        <div
+          className="mx-4 mb-1 flex items-center gap-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-ui-caption text-foreground"
+          role="status"
+        >
           <RotateCcwIcon size={14} className="shrink-0 text-primary" />
           <span className="min-w-0 flex-1">{t("chat.redoPrompt")}</span>
           <button

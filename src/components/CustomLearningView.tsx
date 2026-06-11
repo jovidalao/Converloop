@@ -1,10 +1,14 @@
 import {
   BookOpenCheckIcon,
+  HeadphonesIcon,
+  MicIcon,
   PencilIcon,
   PlusIcon,
+  TargetIcon,
   Trash2Icon,
+  ZapIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useState } from "react";
 import { useTranslation } from "@/i18n";
 import {
   deleteLearningAgent,
@@ -24,6 +28,43 @@ interface CustomLearningViewProps {
   onOpenCreate: () => void;
   /** Refresh the app-level lesson list (command palette) after an edit / delete here. */
   onRefresh: () => Promise<void>;
+  /** Built-in training-mode launchers (drills), shown above the lesson gallery. */
+  onStartReviewDrill: () => void;
+  onStartDictation: () => void;
+  onStartShadowing: () => void;
+  onStartQuickfire: () => void;
+}
+
+// A built-in training-mode card: icon + name + one-line description, starts the drill on click. Visually matches the
+// lesson cards below (same border / hover), so the gallery reads as one surface of mixed training modes + lessons.
+function DrillCard({
+  icon,
+  title,
+  description,
+  onStart,
+}: {
+  icon: ReactNode;
+  title: string;
+  description: string;
+  onStart: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onStart}
+      className="group block w-full cursor-pointer rounded-lg border bg-card p-4 text-left transition-colors hover:border-primary/50 hover:bg-accent/40"
+    >
+      <span className="flex items-center gap-2">
+        <span className="shrink-0 text-primary">{icon}</span>
+        <span className="min-w-0 flex-1 truncate font-medium text-foreground">
+          {title}
+        </span>
+      </span>
+      <span className="m-0 mt-1.5 block text-ui-body leading-relaxed text-ui-muted">
+        {description}
+      </span>
+    </button>
+  );
 }
 
 // Custom-learning gallery: a masonry of lesson cards (built-in + custom) shown in the main area. Each card is its own
@@ -33,6 +74,10 @@ export function CustomLearningView({
   onStartLesson,
   onOpenCreate,
   onRefresh,
+  onStartReviewDrill,
+  onStartDictation,
+  onStartShadowing,
+  onStartQuickfire,
 }: CustomLearningViewProps) {
   const { t } = useTranslation();
   const confirm = useConfirm();
@@ -93,19 +138,52 @@ export function CustomLearningView({
           </Button>
         </div>
 
+        <div className="mb-2 text-ui-caption font-medium text-ui-muted">
+          {t("customLearning.drillsLabel")}
+        </div>
+        <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <DrillCard
+            icon={<TargetIcon className="size-4" />}
+            title={t("customLearning.reviewDrillTitle")}
+            description={t("customLearning.reviewDrillDesc")}
+            onStart={onStartReviewDrill}
+          />
+          <DrillCard
+            icon={<HeadphonesIcon className="size-4" />}
+            title={t("customLearning.dictationTitle")}
+            description={t("customLearning.dictationDesc")}
+            onStart={onStartDictation}
+          />
+          <DrillCard
+            icon={<MicIcon className="size-4" />}
+            title={t("customLearning.shadowingTitle")}
+            description={t("customLearning.shadowingDesc")}
+            onStart={onStartShadowing}
+          />
+          <DrillCard
+            icon={<ZapIcon className="size-4" />}
+            title={t("customLearning.quickfireTitle")}
+            description={t("customLearning.quickfireDesc")}
+            onStart={onStartQuickfire}
+          />
+        </div>
+
+        <div className="mb-2 text-ui-caption font-medium text-ui-muted">
+          {t("customLearning.lessonsLabel")}
+        </div>
         {lessons.length === 0 ? (
           <div className="rounded-lg border border-dashed px-4 py-10 text-center text-ui-body text-ui-muted">
             {t("customLearning.empty")}
           </div>
         ) : (
-          <div className="columns-1 gap-3 sm:columns-2 xl:columns-3 [&>*]:mb-3">
+          <div className="grid grid-cols-1 items-stretch gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {lessons.map((lesson) => (
               // biome-ignore lint/a11y/useSemanticElements: can't be a <button> — it nests edit/delete action buttons
               <div
                 key={lesson.id}
                 role="button"
                 tabIndex={0}
-                className="group relative block w-full break-inside-avoid cursor-pointer rounded-lg border bg-card p-4 text-left transition-colors hover:border-primary/50 hover:bg-accent/40"
+                className="group relative flex h-full w-full cursor-pointer flex-col rounded-lg border bg-card p-4 text-left transition-colors hover:border-primary/50 hover:bg-accent/40"
                 onClick={() =>
                   setExpandedLessonId((cur) =>
                     cur === lesson.id ? null : lesson.id,

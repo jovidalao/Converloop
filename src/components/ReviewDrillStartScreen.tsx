@@ -19,25 +19,34 @@ export function ReviewDrillStartScreen({
 }) {
   const { t } = useTranslation();
   const [items, setItems] = useState<ReviewDrillItem[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [reloadTick, setReloadTick] = useState(0);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reloadTick is a retry trigger only; the effect doesn't read it
   useEffect(() => {
     let cancelled = false;
-    void getReviewDueList(5).then((rows) => {
-      if (cancelled) return;
-      setItems(
-        rows.map((row) => ({
-          key: row.key,
-          label: row.label,
-          type: row.type,
-          example: row.example,
-          notes: row.notes,
-        })),
-      );
-    });
+    setItems(null);
+    setError(null);
+    getReviewDueList(5)
+      .then((rows) => {
+        if (cancelled) return;
+        setItems(
+          rows.map((row) => ({
+            key: row.key,
+            label: row.label,
+            type: row.type,
+            example: row.example,
+            notes: row.notes,
+          })),
+        );
+      })
+      .catch((e) => {
+        if (!cancelled) setError(e instanceof Error ? e.message : String(e));
+      });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [reloadTick]);
 
   return (
     <div className="flex w-full max-w-2xl flex-col gap-5 pt-4 pb-2">
@@ -55,7 +64,25 @@ export function ReviewDrillStartScreen({
         <span className="text-ui-caption font-medium text-ui-muted">
           {t("reviewDrill.itemsLabel")}
         </span>
-        {items === null ? (
+        {error ? (
+          <div className="flex items-center gap-3">
+            <p
+              className="m-0 min-w-0 flex-1 text-ui-body text-destructive"
+              role="alert"
+            >
+              {t("common.loadFailed")}: {error}
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="shrink-0"
+              onClick={() => setReloadTick((n) => n + 1)}
+            >
+              {t("common.retry")}
+            </Button>
+          </div>
+        ) : items === null ? (
           <div className="flex items-center gap-2 text-ui-body text-ui-muted">
             <Spinner className="size-3.5" />
             {t("common.loading")}

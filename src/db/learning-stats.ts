@@ -1,9 +1,8 @@
-import { count, desc, gt } from "drizzle-orm";
+import { count } from "drizzle-orm";
 import { db } from "./client";
-import type { MasteryType } from "./mastery-values";
 import { masteryItem, turn } from "./schema";
 
-// Read-only learning-achievements stats for the records page. Pure helpers
+// Read-only learning-achievements stats for the practice-stats card. Pure helpers
 // (localDayNumber / computeStreaks) are unit-tested; getLearningStats just wires
 // them to the DB. Aggregation is done in JS over a thin column projection — the
 // row counts here (turns, mastery items) are small enough that this stays cheap
@@ -57,33 +56,17 @@ export function isCountablePracticeTurn(input: {
   return input.userInput.trim().length > 0;
 }
 
-export interface MistakeRow {
-  key: string;
-  label: string;
-  type: MasteryType;
-  errorCount: number;
-  seenCount: number;
-  example: string | null;
-  lastSeenAt: number;
-}
-
 export interface LearningStats {
   totalSentences: number;
   activeDays: number;
   currentStreak: number;
-  longestStreak: number;
   mastered: number;
   learning: number;
   struggling: number;
   totalKnowledge: number;
-  mistakeTotal: number;
   /** localDayNumber → sentences practiced that day. */
   dayCounts: Map<number, number>;
-  /** Top items the user has gotten wrong, most-missed first (capped). */
-  mistakes: MistakeRow[];
 }
-
-const MISTAKE_LIMIT = 12;
 
 export async function getLearningStats(): Promise<LearningStats> {
   const today = localDayNumber(Date.now());
@@ -103,7 +86,7 @@ export async function getLearningStats(): Promise<LearningStats> {
     const day = localDayNumber(row.createdAt);
     dayCounts.set(day, (dayCounts.get(day) ?? 0) + 1);
   }
-  const { current, longest } = computeStreaks(dayCounts.keys(), today);
+  const { current } = computeStreaks(dayCounts.keys(), today);
 
   const statusRows = await db
     .select({ status: masteryItem.status, n: count() })
@@ -118,31 +101,14 @@ export async function getLearningStats(): Promise<LearningStats> {
     else if (row.status === "struggling") struggling = row.n;
   }
 
-  const mistakeRows = await db
-    .select({
-      key: masteryItem.key,
-      label: masteryItem.label,
-      type: masteryItem.type,
-      errorCount: masteryItem.errorCount,
-      seenCount: masteryItem.seenCount,
-      example: masteryItem.example,
-      lastSeenAt: masteryItem.lastSeenAt,
-    })
-    .from(masteryItem)
-    .where(gt(masteryItem.errorCount, 0))
-    .orderBy(desc(masteryItem.errorCount), desc(masteryItem.lastSeenAt));
-
   return {
     totalSentences: turns.length,
     activeDays: dayCounts.size,
     currentStreak: current,
-    longestStreak: longest,
     mastered,
     learning,
     struggling,
     totalKnowledge: mastered + learning + struggling,
-    mistakeTotal: mistakeRows.length,
     dayCounts,
-    mistakes: mistakeRows.slice(0, MISTAKE_LIMIT),
   };
 }

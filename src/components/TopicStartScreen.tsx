@@ -15,6 +15,7 @@ export function TopicStartScreen({
   icon,
   title,
   description,
+  header,
   recommendedLabel,
   refreshLabel,
   topics,
@@ -22,12 +23,17 @@ export function TopicStartScreen({
   busy,
   onPick,
   onRefresh,
+  children,
 }: {
-  icon: ReactNode;
-  title: string;
-  description: string;
+  icon?: ReactNode;
+  title?: string;
+  description?: string;
+  /** Replaces the default icon + title + description header (the new-chat page uses a Claude-style hero instead). */
+  header?: ReactNode;
   recommendedLabel: string;
   refreshLabel: string;
+  /** Optional content slot between the header and the topic chips (the new-chat page embeds the practice-stats card here). */
+  children?: ReactNode;
   /** null = nothing to show yet; [] = none (silently degrade to type-your-own). */
   topics: string[] | null;
   /** A fresh recommendation fetch is in flight — show the loading skeletons while there are no chips. */
@@ -40,15 +46,19 @@ export function TopicStartScreen({
 
   return (
     <div className="flex w-full max-w-2xl flex-col gap-5 pt-4 pb-2">
-      <div className="flex flex-col gap-2">
-        <div className="flex items-center gap-2 text-ui-title font-semibold text-foreground">
-          {icon}
-          {title}
+      {header ?? (
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2 text-ui-title font-semibold text-foreground">
+            {icon}
+            {title}
+          </div>
+          <p className="m-0 text-ui-body leading-relaxed text-ui-muted">
+            {description}
+          </p>
         </div>
-        <p className="m-0 text-ui-body leading-relaxed text-ui-muted">
-          {description}
-        </p>
-      </div>
+      )}
+
+      {children}
 
       <div className="flex flex-col gap-2.5">
         <div className="flex items-center justify-between">

@@ -255,8 +255,9 @@ type PartnerReplyProps = {
   turnId: string;
   text: string;
   autoOpen?: boolean;
-  // Rapid-fire model answers are not part of a thread, so the "reply suggestion" (next-sentence) action is hidden.
-  variant?: "quickfire";
+  // Rapid-fire / weak-spot-drill model answers are not part of a thread, so the "reply suggestion" (next-sentence)
+  // action is hidden for both.
+  variant?: "quickfire" | "review_drill";
   /** /btw off-record reply: hide "Reply suggestion" (it looks up context by turnId; off-record turns are excluded and would error). */
   offRecord?: boolean;
   /** Fired once on the user's first manual open of explain/bilingual (signals comprehension difficulty; auto-open doesn't count). */
@@ -307,7 +308,8 @@ export const PartnerReply = memo(function PartnerReply({
   const bilingualHidden = isAgentHidden("builtin:transformer:bilingual");
   const suggestionHidden =
     isAgentHidden("builtin:transformer:reply_suggestion") ||
-    variant === "quickfire";
+    variant === "quickfire" ||
+    variant === "review_drill";
 
   // When a reply is replaced by "Regenerate", the old bilingual view no longer corresponds to it
   // — collapse and reset. Skip on first mount to avoid fighting with autoOpen.
@@ -536,6 +538,7 @@ function UserMessageActions({
           variant="action"
           size="action"
           title={t("chat.redo")}
+          aria-label={t("chat.redo")}
           onClick={onRedo}
         >
           <RotateCcwIcon size={16} />
@@ -553,6 +556,7 @@ function UserMessageActions({
               variant="action"
               size="action"
               title={`${a.label}:${a.description ?? ""}`}
+              aria-label={a.label}
               onClick={() => onTurnAction(a.id)}
             >
               <GitBranchIcon size={16} />
@@ -570,8 +574,10 @@ type UserTurnProps = {
   nativeLanguage: string;
   learningMode: boolean;
   // Practice sub-mode driving which actions apply: dictation hides reply-suggestion / "more natural" / branch
-  // (you transcribe a known sentence); quickfire hides only branch. undefined = ordinary practice (all actions).
-  variant?: "quickfire" | "dictation";
+  // (you transcribe a known sentence); quickfire hides only branch; review_drill hides branch AND reply-suggestion
+  // (a generated suggestion IS the retrieval answer — one click would fake a clean correct signal on the target key).
+  // undefined = ordinary practice (all actions).
+  variant?: "quickfire" | "dictation" | "review_drill";
   onEditFrom: () => void;
   /** "Say it again" — see UserMessageActions. Undefined hides the action (lessons, sentence drills). */
   onRedo?: () => void;
@@ -726,7 +732,9 @@ export const UserTurn = memo(function UserTurn({
             onRedo={variant === "dictation" ? undefined : onRedo}
             onTurnAction={onTurnAction}
             editDisabled={editDisabled}
-            showReplySuggestion={variant !== "dictation"}
+            showReplySuggestion={
+              variant !== "dictation" && variant !== "review_drill"
+            }
             showBranch={variant === undefined}
           />
         }
@@ -751,7 +759,7 @@ export const UserTurn = memo(function UserTurn({
             : undefined
         }
       />
-      {variant !== "dictation" && (
+      {variant !== "dictation" && variant !== "review_drill" && (
         <ReplySuggestionPanel suggestion={replySuggestion} />
       )}
     </div>
@@ -880,6 +888,8 @@ export const TurnCard = memo(function TurnCard({
   );
 }, areTurnCardPropsEqual);
 
+// NOTE: every prop added to PartnerReplyProps must be represented here (closure props at least by presence) —
+// otherwise the memo silently freezes the new prop on existing turns.
 function arePartnerReplyPropsEqual(
   prev: PartnerReplyProps,
   next: PartnerReplyProps,
@@ -896,6 +906,8 @@ function arePartnerReplyPropsEqual(
   );
 }
 
+// NOTE: every prop added to UserTurnProps must be represented here (closure props at least by presence) —
+// otherwise the memo silently freezes the new prop on existing turns.
 function areUserTurnPropsEqual(prev: UserTurnProps, next: UserTurnProps) {
   return (
     prev.turn === next.turn &&
@@ -903,7 +915,8 @@ function areUserTurnPropsEqual(prev: UserTurnProps, next: UserTurnProps) {
     prev.nativeLanguage === next.nativeLanguage &&
     prev.learningMode === next.learningMode &&
     prev.variant === next.variant &&
-    prev.editDisabled === next.editDisabled
+    prev.editDisabled === next.editDisabled &&
+    Boolean(prev.onRedo) === Boolean(next.onRedo)
   );
 }
 

@@ -147,12 +147,15 @@ function oneLineModifier(s: string, max = 140): string {
 }
 
 // Per-turn dynamic extras layered onto the modifier instructions by the orchestrator (the modifiers themselves are
-// static per conversation; these change every turn). Only the matching drill blocks read them.
+// static per conversation; these change every turn). The drill-specific extras are read by the matching drill
+// blocks; redoNote applies to any conversation (it is appended as its own adjustment line).
 export interface ModifierInstructionExtras {
   /** Dictation: tracked listening-weak words (recently missed / due again) to weave into upcoming sentences. */
   dictationFocusWords?: string[];
   /** Dictation/shadowing: how many times the learner replayed the previous sentence (incl. slow replays) — a live difficulty signal for the NEXT sentence. */
   replayNote?: string;
+  /** "Say it again": the latest message re-produces the learner's corrected previous sentence from memory. */
+  redoNote?: string;
 }
 
 // Convert session-level adjustments into English instructions fed to the conversation agent; returns empty string when there are no adjustments.
@@ -262,9 +265,11 @@ ${items}
     • expression gaps → give the MEANING to convey (use the learner's native language for the meaning, e.g. from the item's example), and ask them to say it in the target language.
   CRITICAL: never reveal, spell out, or hint at the target wording before they attempt — the whole point is retrieval from memory. Keep each prompt to one or two sentences, plain and friendly, in the target language (except the native-language meaning for expression gaps).
   After the learner answers: give a ONE-sentence natural model showing the target item in use, then immediately present the next micro-task. If their attempt clearly didn't use the target item, you may re-prompt the SAME item once with a slightly stronger setup before moving on.
+  ROUND COMPLETE — right after EVERY item in the list has been attempted at least once, pause before the next micro-task and give a short wrap-up in the learner's NATIVE language: one line per item marking it solid (✓) or worth another pass (✗) based on their attempts, then say this is a natural stopping point. After the wrap-up, continue cycling ONLY through the ✗ items, one micro-task per turn, for as long as they keep answering.
   Do NOT correct or critique in detail — another agent handles grading. No chit-chat.`);
   }
   if (mods.note?.trim()) lines.push(`- ${mods.note.trim()}`);
+  if (extras.redoNote) lines.push(`- ${extras.redoNote}`);
   return lines.join("\n");
 }
 
