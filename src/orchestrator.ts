@@ -3,7 +3,10 @@ import { bilingual } from "./agents/bilingual";
 import { converse } from "./agents/conversation";
 import { generateConversationTopics } from "./agents/conversation-topics";
 import { explain } from "./agents/explain";
-import { generateInputHints } from "./agents/input-hints";
+import {
+  cleanInputHintForDisplay,
+  generateInputHints,
+} from "./agents/input-hints";
 import { generateLearningAgentDraft } from "./agents/learning-agent-builder";
 import {
   analyzeLessonSessionWriteback,
@@ -1499,8 +1502,12 @@ export async function loadCachedInputHints(
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw) as CachedInputHints;
-    if (parsed.throughTurnId === throughTurnId && Array.isArray(parsed.hints))
-      return parsed.hints;
+    if (parsed.throughTurnId === throughTurnId && Array.isArray(parsed.hints)) {
+      return parsed.hints
+        .filter((hint): hint is string => typeof hint === "string")
+        .map(cleanInputHintForDisplay)
+        .filter((hint) => hint.length > 0);
+    }
   } catch {
     // Corrupt cache entry — treat as a miss.
   }
@@ -1518,18 +1525,28 @@ export async function generateInputHintsForConversation(
 
   const config = loadConfig();
   try {
-    const [turns, profileMd] = await Promise.all([
+    const [turns, profileMd, weakList] = await Promise.all([
       getTurnsAfterId(conversationId, null),
       readProfile(config),
+      getWeakList(8),
     ]);
     const recent = tailTurnsByChars(turns, 4000);
     const recentHistory = formatTurns(recent);
+    // Compact past-mistakes list so the single hint can quietly re-expose a weak spot.
+    // Listening/drill keys are already excluded by getWeakList (excludeListeningKeys).
+    const pastMistakes = weakList
+      .map((w) => {
+        const note = w.notes?.trim();
+        return `- ${w.label}${note ? ` (${note})` : ""}`;
+      })
+      .join("\n");
     const hints = await generateInputHints(provider, {
       targetLanguage: config.targetLanguage,
       nativeLanguage: config.nativeLanguage,
       level: config.level,
       recentHistory,
       profileSlice: profileSliceForConversation(profileMd),
+      pastMistakes,
     });
     if (hints.length > 0) {
       const throughTurnId = turns[turns.length - 1]?.id ?? null;

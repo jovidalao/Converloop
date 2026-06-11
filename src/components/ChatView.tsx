@@ -46,6 +46,7 @@ import {
   loadChatHistory,
 } from "../db/turns";
 import { useTranslation } from "../i18n";
+import { onAppEvent } from "../lib/app-events";
 import { type DisplayError, describeError } from "../lib/error-display";
 import { estimatePromptTokens } from "../lib/tokens";
 import {
@@ -263,17 +264,17 @@ export function ChatView({
   const [error, setError] = useState<DisplayError | null>(null);
   // Retry entry for the last failed operation (send / regenerate / lesson start all share the bottom error bar).
   const [retry, setRetry] = useState<{ run: () => void } | null>(null);
+  // A single most-relevant hint (no carousel rotation); rendered from inputHints[0].
   const [inputHints, setInputHints] = useState<string[] | null>(null);
-  const [hintIndex, setHintIndex] = useState(0);
   const messagesRef = useRef<HTMLDivElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const streamingFrameRef = useRef<number | null>(null);
   const streamingBufferRef = useRef("");
+  const hintOverlayRef = useRef<HTMLDivElement>(null);
   // 流式语音输入:记录开始说话前输入框里的底稿,partial 在它后面实时拼接,
   // 取消/出错时(onTranscript(""))恢复底稿。
   const sttBaseRef = useRef<string | null>(null);
-  const hintOverlayRef = useRef<HTMLDivElement>(null);
   const stickToBottomRef = useRef(true);
   const turnGenRef = useRef(0);
   const replyCommittedRef = useRef(false);
@@ -288,7 +289,6 @@ export function ChatView({
   // next answer as a live difficulty signal, then reset for the next sentence.
   const sayDrillReplayCountRef = useRef(0);
   const liveTurnIdsRef = useRef<Set<string>>(new Set()); // turns sent in this session; auto-bilingual only applies to these
-  const hintTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const config = useConfig();
   const { nativeLanguage, autoBilingual } = config;
   const confirm = useConfirm();
@@ -334,7 +334,6 @@ export function ChatView({
     if (!externalDraft) return;
     setInput(externalDraft.text);
     setInputHints(null);
-    setHintIndex(0);
     requestAnimationFrame(() => inputRef.current?.focus());
   }, [externalDraft]);
   // Rapid Q&A start page: an uncommitted quickfire draft (no conversation row yet). Drives the start screen,
@@ -397,6 +396,10 @@ export function ChatView({
     !!inputHints &&
     inputHints.length > 0 &&
     input.length === 0;
+  const inputHintWatermark = useMemo(
+    () => [...turns].reverse().find((tn) => !tn.excludeFromContext)?.id ?? null,
+    [turns],
+  );
 
   // Status bar below the input: current model + context usage (rough estimate, see lib/tokens).
   const contextLimit = getContextLimit(config);
@@ -454,18 +457,6 @@ export function ChatView({
     setSlashSelected((s) => (s < slashCommands.length ? s : 0));
   }, [slashCommands.length]);
 
-  // Cycle placeholder hints every 10 s when available; clean up on unmount or when hints change.
-  useEffect(() => {
-    if (!inputHints || inputHints.length === 0) return;
-    setHintIndex(0);
-    hintTimerRef.current = setInterval(() => {
-      setHintIndex((i) => (i + 1) % inputHints.length);
-    }, 10_000);
-    return () => {
-      if (hintTimerRef.current) clearInterval(hintTimerRef.current);
-    };
-  }, [inputHints]);
-
   // Input grows with content up to three lines; after that it scrolls internally.
   // When the input is empty, an animated coaching hint is overlaid on top — let it wrap to
   // multiple lines too, growing the box to fit the (clipped at three lines) hint so it isn't
@@ -486,7 +477,7 @@ export function ChatView({
     el.style.height = `${nextHeight}px`;
     el.style.overflowY =
       contentHeight > INPUT_TEXTAREA_MAX_HEIGHT ? "auto" : "hidden";
-  }, [input, hintsActive, hintIndex, inputHints]);
+  }, [input, hintsActive, inputHints]);
 
   function syncStickToBottom() {
     const el = messagesRef.current;
@@ -527,7 +518,6 @@ export function ChatView({
     setLessonInfo(null);
     setInputHints(null);
     setLastPromptTokens(null); // reset the context meter; repopulated on the next send in this conversation
-    if (hintTimerRef.current) clearInterval(hintTimerRef.current);
     void loadChatHistory(conversationId).then(async (loaded) => {
       if (cancelled) return;
       setTurns(loaded);
@@ -639,6 +629,33 @@ export function ChatView({
       cancelled = true;
     };
   }, [conversationId, learningMode]);
+
+  useEffect(() => {
+    if (learningMode || isSayDrill || isReviewDrill || !inputHintWatermark) {
+      return;
+    }
+    let cancelled = false;
+    const load = () =>
+      void loadCachedInputHints(conversationId, inputHintWatermark).then(
+        (hints) => {
+          if (!cancelled) setInputHints(hints.length > 0 ? hints : null);
+        },
+      );
+    load();
+    const off = onAppEvent("input-hints-changed", (p) => {
+      if (p.conversationId === conversationId) load();
+    });
+    return () => {
+      cancelled = true;
+      off();
+    };
+  }, [
+    conversationId,
+    inputHintWatermark,
+    isReviewDrill,
+    isSayDrill,
+    learningMode,
+  ]);
 
   // Rapid Q&A start page: when the draft opens, reuse the cached recommendations verbatim — no model call, no record
   // reads. Only a cold cache (first ever) or the Regenerate button generates a fresh set. Clears when committed
@@ -814,6 +831,22 @@ export function ChatView({
     requestAnimationFrame(() => inputRef.current?.focus());
   }
 
+  function refreshInputHintsAfterReply(turnGen: number) {
+    if (
+      learningMode ||
+      isSayDrill ||
+      isReviewDrill ||
+      !loadConfig().inputHintsAuto
+    ) {
+      return;
+    }
+    void generateInputHintsForConversation(conversationId).then((hints) => {
+      if (turnGenRef.current === turnGen && hints.length > 0) {
+        setInputHints(hints);
+      }
+    });
+  }
+
   async function startLesson(replacingId?: string) {
     if (!learningMode || replyBusy || kickoffStartedRef.current) return;
     stopSpeech();
@@ -954,6 +987,7 @@ export function ChatView({
         });
       await touchConversation(conversationId);
       onActivity?.();
+      refreshInputHintsAfterReply(turnGen);
     } catch (e) {
       stopSpeech(); // stop any in-progress TTS on error
       speaker?.abort();
@@ -1032,6 +1066,7 @@ export function ChatView({
       }
       await touchConversation(conversationId);
       onActivity?.();
+      refreshInputHintsAfterReply(turnGen);
     } catch (e) {
       stopSpeech();
       speaker?.abort();
@@ -1405,6 +1440,7 @@ export function ChatView({
       }
       await touchConversation(conversationId);
       onActivity?.();
+      refreshInputHintsAfterReply(turnGen);
     } catch (e) {
       stopSpeech();
       speaker?.abort();
@@ -1475,7 +1511,6 @@ export function ChatView({
     replyCommittedRef.current = false;
     // Reset hints for the new turn; hints generation fires after the reply arrives.
     setInputHints(null);
-    if (hintTimerRef.current) clearInterval(hintTimerRef.current);
     setTurns((prev) => [
       ...(opts?.replacingId
         ? prev.filter((t) => t.id !== opts.replacingId)
@@ -1576,22 +1611,9 @@ export function ChatView({
           () => onActivity?.(),
         );
       } else onActivity?.();
-      // Fire hint generation in the background after the reply is committed; silently ignore errors. Dictation has no
-      // reply-coaching hints (the learner transcribes, not composes), so skip it there. When auto-hints are off in
-      // settings, hints come only from the coach panel's manual regenerate.
-      if (
-        !offRecord &&
-        !learningMode &&
-        !isSayDrill &&
-        !isReviewDrill &&
-        loadConfig().inputHintsAuto
-      ) {
-        const capturedGen = turnGen;
-        void generateInputHintsForConversation(conversationId).then((hints) => {
-          if (turnGenRef.current === capturedGen && hints.length > 0)
-            setInputHints(hints);
-        });
-      }
+      // Fire hint generation in the background after the reply is committed; silently ignore errors. Off-record turns
+      // are not context, so they should not produce the next-reply hint.
+      if (!offRecord) refreshInputHintsAfterReply(turnGen);
     } catch (e) {
       stopSpeech(); // stop any in-progress TTS on error
       speaker?.abort();
@@ -2222,12 +2244,11 @@ export function ChatView({
                       e.key === "Tab" &&
                       !e.nativeEvent.isComposing
                     ) {
-                      const hint = inputHints?.[hintIndex]?.trim();
+                      const hint = inputHints?.[0]?.trim();
                       if (hint) {
                         e.preventDefault();
                         setInput(hint);
                         setInputHints(null);
-                        setHintIndex(0);
                         requestAnimationFrame(() => inputRef.current?.focus());
                         return;
                       }
@@ -2316,10 +2337,10 @@ export function ChatView({
                     className="pointer-events-none absolute inset-0 overflow-hidden px-4 pt-3 text-ui-chat"
                   >
                     <span
-                      key={hintIndex}
+                      key={inputHints?.[0]}
                       className="animate-hint-in line-clamp-3 text-muted-foreground"
                     >
-                      {inputHints?.[hintIndex]}
+                      {inputHints?.[0]}
                     </span>
                   </div>
                 )}

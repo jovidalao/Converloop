@@ -188,9 +188,9 @@ export const zh: Messages = {
     viewAllData: "查看全部学习数据",
     hints: {
       title: "接下来可以怎么说",
-      empty: "对方回复后,这里会给你几种可以直接借用、把对话接下去的说法。",
-      regenerate: "重新生成",
-      regenerating: "正在重新生成…",
+      empty: "对方回复后,这里会给你一种可以直接借用、把对话接下去的说法。",
+      regenerate: "换一条",
+      regenerating: "正在换…",
       use: "使用这个开头",
     },
   },
@@ -686,7 +686,7 @@ export const zh: Messages = {
     selectModel: "选择模型",
     emptyModelId: "未填写模型 ID",
     inputPlaceholderLesson: "问老师、回答练习，母语/目标语言都可以…",
-    inputPlaceholderPractice: "写下你的回复…… 输入 / 查看命令",
+    inputPlaceholderPractice: "写一句自然回复，或输入 / 选择命令",
     replySuggestionTruncated:
       "推荐回复因输出长度限制被截断（{provider}:{raw}）。可以重试，反馈问题时请在括号里附上原因。",
     generateReplySuggestion: "生成推荐回复",

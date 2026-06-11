@@ -202,11 +202,11 @@ export const en = {
     emptyTurnText: "(empty)",
     viewAllData: "View all learning data",
     hints: {
-      title: "Ways to keep going",
+      title: "A way to keep going",
       empty:
-        "Once a reply comes in, this shows a few ready-to-borrow ways to keep the conversation going.",
-      regenerate: "Regenerate",
-      regenerating: "Regenerating…",
+        "Once a reply comes in, this shows one ready-to-borrow way to keep the conversation going.",
+      regenerate: "Try another",
+      regenerating: "Finding another…",
       use: "Use this opener",
     },
   },
@@ -724,7 +724,7 @@ export const en = {
     emptyModelId: "Model ID not set",
     inputPlaceholderLesson:
       "Ask the teacher, answer exercises — native or target language…",
-    inputPlaceholderPractice: "Write your reply… type / for commands",
+    inputPlaceholderPractice: "Write a natural reply, or type / for commands",
     replySuggestionTruncated:
       "Reply suggestion truncated due to output length limit ({provider}:{raw}). You can retry; include the reason in parentheses when reporting the issue.",
     generateReplySuggestion: "Generate reply suggestion",
