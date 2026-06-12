@@ -10,6 +10,7 @@ import type {
   NewConversationContext,
 } from "../db/conversations";
 import type { ComfortableItem, ReviewItem } from "../db/mastery";
+import type { ResolvedDrill } from "../drills/types";
 import type { ProficiencySnapshot } from "../lib/proficiency";
 import type { CorrectionPreferenceFlags } from "../profile/preferences";
 import type { ModelProvider } from "../providers/types";
@@ -126,14 +127,17 @@ export interface PracticeContext extends BaseContext {
   proficiency: ProficiencySnapshot;
   /** Session-level adjustments (difficulty/role/next-day from branches); empty object for normal conversations. */
   agentModifiers: AgentModifiers;
-  /** Dictation/shadowing drill only: the exact target sentence of the previous AI turn. When set, the tutor grades
-   *  the transcription against this standard answer instead of as free-form conversation. */
+  /** Drill conversations: the resolved drill (live row preferred, modifier snapshot fallback). The
+   *  reply agent renders its instruction block from this; the tutor reads grading/mastery from it. */
+  drill?: ResolvedDrill;
+  /** Say drills only: the exact target sentence of the previous AI turn. When set, the tutor grades
+   *  the attempt against this standard answer instead of as free-form conversation. */
   dictationStandardAnswer?: string;
-  /** Which drill the standard answer belongs to: dictation (typed from ear) or shadowing (read aloud via STT). */
+  /** Which say variant the standard answer belongs to: dictation (typed from ear) or shadowing (read aloud via STT). */
   standardAnswerMode?: "dictation" | "shadowing";
-  /** Dictation only: tracked listening-weak words to weave into upcoming sentences (loaded per turn by the orchestrator). */
+  /** feed: listening-words — tracked listening-weak words to weave into upcoming sentences (loaded per turn by the orchestrator). */
   dictationFocusWords?: string[];
-  /** Dictation/shadowing: replays of the previous sentence (incl. slow replays) — live difficulty signal for the next sentence. */
+  /** Say drills: replays of the previous sentence (incl. slow replays) — live difficulty signal for the next sentence. */
   sayDrillReplayCount?: number;
   /** "Say it again": this turn re-produces the learner's previous sentence using the correction, from memory. */
   redoTurn?: boolean;

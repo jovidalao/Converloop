@@ -166,6 +166,11 @@ const ADD_LEARNING_PROJECT_COMPLETED_LESSON_IDS: &str =
 const DELETE_LEGACY_DICTATION_MASTERY: &str =
     "DELETE FROM mastery_item WHERE key LIKE 'dictation:%';";
 
+// 训练模式(drill)落在 learning_agent 表(kind="drill"):source_md 存 drill@1 Markdown 原文,
+// 是唯一事实来源;name/description/prompt 列只是它的解析缓存。
+const ADD_LEARNING_AGENT_SOURCE_MD: &str =
+    "ALTER TABLE learning_agent ADD COLUMN source_md TEXT;";
+
 const CREATE_AGENT_JOB: &str = "\
 CREATE TABLE IF NOT EXISTS agent_job (
     id          TEXT PRIMARY KEY NOT NULL,
@@ -573,6 +578,12 @@ pub fn run() {
             version: 39,
             description: "delete_legacy_dictation_mastery",
             sql: DELETE_LEGACY_DICTATION_MASTERY,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 40,
+            description: "add_learning_agent_source_md",
+            sql: ADD_LEARNING_AGENT_SOURCE_MD,
             kind: MigrationKind::Up,
         },
     ];

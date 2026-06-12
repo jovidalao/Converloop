@@ -31,7 +31,6 @@ import {
   type NewConversationContext,
   parseAgentModifiers,
   parseDictationReply,
-  type ReviewDrillItem,
   streamingDictationFeedback,
   touchConversation,
   truncateConversationFrom,
@@ -46,6 +45,13 @@ import {
   incrementExplainCount,
   loadChatHistory,
 } from "../db/turns";
+import { BUILTIN_DRILL_IDS } from "../drills/builtins";
+import { localizeDrill } from "../drills/format";
+import type {
+  DrillDefinition,
+  DrillParams,
+  DrillSummary,
+} from "../drills/types";
 import { useTranslation } from "../i18n";
 import { onAppEvent } from "../lib/app-events";
 import { type DisplayError, describeError } from "../lib/error-display";
@@ -61,11 +67,8 @@ import {
   regenerateReply,
   runTurn,
   startDerivedConversation,
-  startDictationSession,
+  startDrillSession,
   startLearningSession,
-  startQuickfireSession,
-  startReviewDrillSession,
-  startShadowingSession,
   startTopicConversation,
 } from "../orchestrator";
 import { beginAction } from "../runtime";
@@ -91,15 +94,13 @@ import {
 } from "./chat/turns";
 import { useConfirm } from "./confirm";
 import { DictationReply } from "./DictationReply";
-import { DictationStartScreen } from "./DictationStartScreen";
+import { DrillStartScreen } from "./DrillStartScreen";
 import { LessonSessionReview } from "./LessonSessionReview";
 import { LessonStartScreen } from "./LessonStartScreen";
 import { Markdown } from "./Markdown";
 import { MicButton } from "./MicButton";
 import { NewChatStartScreen } from "./NewChatStartScreen";
-import { QuickfireStartScreen } from "./QuickfireStartScreen";
 import { ReviewDrillStartScreen } from "./ReviewDrillStartScreen";
-import { ShadowingStartScreen } from "./ShadowingStartScreen";
 import { SlashBodyHint, SlashMenu } from "./SlashMenu";
 import { ThinkingIndicator } from "./TurnActivity";
 import { Button } from "./ui/button";
@@ -109,14 +110,9 @@ import { Spinner } from "./ui/spinner";
 interface ChatViewProps {
   conversationId: string;
   isDraft?: boolean;
-  /** This draft is a Rapid Q&A start page (only meaningful when isDraft): show the start screen and treat the first commit as the umbrella scenario. */
-  isQuickfireDraft?: boolean;
-  /** This draft is a dictation start page (only meaningful when isDraft): show the start screen and treat the first commit as the theme. */
-  isDictationDraft?: boolean;
-  /** This draft is a shadowing (read-aloud) start page: show the start screen and treat the first commit as the theme. */
-  isShadowingDraft?: boolean;
-  /** This draft is a weak-spot drill start page: code shows the due items; Start snapshots them into the conversation. */
-  isReviewDrillDraft?: boolean;
+  /** This draft is a drill start page (only meaningful when isDraft): show the drill's start screen
+   *  and treat the first commit (chip / typed theme / Start) as the session params. */
+  drillDraft?: DrillSummary | null;
   /** This draft is a lesson start page. The conversation row is created only when Start is pressed. */
   isLearningAgentDraft?: boolean;
   /** Metadata for the selected lesson draft, shown before the row exists in SQLite. */
@@ -129,16 +125,11 @@ interface ChatViewProps {
   onActivity?: () => void;
   /** Called after the first turn of a draft conversation is persisted; creates the real conversation row. */
   onCreateDraftConversation?: (id: string) => Promise<void>;
-  /** Materialize a Rapid Q&A draft into a real conversation with the chosen umbrella scenario (called before the AI kickoff). */
-  onCreateQuickfireDraft?: (id: string, scenario: string) => Promise<void>;
-  /** Materialize a dictation draft into a real conversation with the chosen theme (called before the AI kickoff). */
-  onCreateDictationDraft?: (id: string, theme: string) => Promise<void>;
-  /** Materialize a shadowing draft into a real conversation with the chosen theme (called before the AI kickoff). */
-  onCreateShadowingDraft?: (id: string, theme: string) => Promise<void>;
-  /** Materialize a weak-spot drill draft with the code-selected due items (called before the AI kickoff). */
-  onCreateReviewDrillDraft?: (
+  /** Materialize a drill draft into a real conversation with the chosen params (called before the AI kickoff). */
+  onCreateDrillDraft?: (
     id: string,
-    items: ReviewDrillItem[],
+    drill: DrillSummary,
+    params: DrillParams,
   ) => Promise<void>;
   /** Materialize a new-chat draft into a real conversation seeded with the chosen topic (called before the AI opens the chat). */
   onCreateTopicDraft?: (id: string, topic: string) => Promise<void>;
@@ -164,19 +155,13 @@ const INPUT_TEXTAREA_MAX_HEIGHT = 104;
 export function ChatView({
   conversationId,
   isDraft = false,
-  isQuickfireDraft = false,
-  isDictationDraft = false,
-  isShadowingDraft = false,
-  isReviewDrillDraft = false,
+  drillDraft = null,
   isLearningAgentDraft = false,
   learningAgentDraft = null,
   mode = "practice",
   onActivity,
   onCreateDraftConversation,
-  onCreateQuickfireDraft,
-  onCreateDictationDraft,
-  onCreateShadowingDraft,
-  onCreateReviewDrillDraft,
+  onCreateDrillDraft,
   onCreateTopicDraft,
   onCreateLearningAgentDraft,
   onTurnsChange,
@@ -211,18 +196,13 @@ export function ChatView({
     context: NewConversationContext;
     label?: string;
   } | null>(null);
-  // Umbrella scenario of a rapid-fire Q&A conversation (null for normal practice); drives the mode badge.
-  const [quickfireScenario, setQuickfireScenario] = useState<string | null>(
-    null,
-  );
-  // Theme of a dictation conversation (null for non-dictation); drives the mode badge + the masked sentence rendering.
-  const [dictationTheme, setDictationTheme] = useState<string | null>(null);
-  // Theme of a shadowing conversation (null for non-shadowing); drives the mode badge + the read-aloud rendering.
-  const [shadowingTheme, setShadowingTheme] = useState<string | null>(null);
-  // Weak-spot drill conversation marker (null for others); drives the mode badge and drill-flavored actions.
-  const [reviewDrillActive, setReviewDrillActive] = useState(false);
-  // Number of snapshotted drill items — drives the "answered/total" progress badge above the composer.
-  const [reviewDrillItemCount, setReviewDrillItemCount] = useState(0);
+  // The drill behind this conversation (null for plain practice): definition snapshot + item count.
+  // Drives the mode badge, the interaction mechanics (say masking / gates) and drill-flavored actions.
+  const [activeDrill, setActiveDrill] = useState<{
+    modeId: string;
+    def: DrillDefinition;
+    itemCount: number;
+  } | null>(null);
   // Redo invitation after the learner taps "Say it again" on a correction: a banner above the composer asking them
   // to re-produce the corrected meaning from memory; cleared on send or dismiss.
   const [redoActive, setRedoActive] = useState(false);
@@ -236,28 +216,16 @@ export function ChatView({
     name: string;
     description: string;
   } | null>(null);
-  // Rapid Q&A start page: recommended umbrella scenarios (null = still loading, [] = none → type-your-own).
-  const [quickfireTopics, setQuickfireTopics] = useState<string[] | null>(null);
+  // Drill start page: recommended topics (null = still loading, [] = none → type-your-own). Only one
+  // drill draft can be active per ChatView mount (remounts per draft id), so a single state set serves
+  // every drill; the recommender is picked per drill (see the effect below).
+  const [drillTopics, setDrillTopics] = useState<string[] | null>(null);
   // True while a fresh recommendation fetch is in flight — drives the loading skeletons while there are no chips.
-  const [quickfireTopicsRefreshing, setQuickfireTopicsRefreshing] =
-    useState(false);
+  const [drillTopicsRefreshing, setDrillTopicsRefreshing] = useState(false);
   // Bumped by the regenerate button to re-run the recommendation fetch.
-  const [quickfireReloadTick, setQuickfireReloadTick] = useState(0);
+  const [drillReloadTick, setDrillReloadTick] = useState(0);
   // Topics on screen when regenerate was clicked — passed to the next fetch as "avoid these" so it returns a different set.
-  const quickfireAvoidRef = useRef<string[]>([]);
-  // Dictation start page: recommended themes (null = still loading, [] = none → type-your-own), mirroring the Rapid Q&A
-  // topic state. Picking a chip (or typing a theme) starts the listening drill on that theme.
-  const [dictationTopics, setDictationTopics] = useState<string[] | null>(null);
-  const [dictationTopicsRefreshing, setDictationTopicsRefreshing] =
-    useState(false);
-  const [dictationReloadTick, setDictationReloadTick] = useState(0);
-  const dictationAvoidRef = useRef<string[]>([]);
-  // Shadowing start page: recommended themes — same shape and recommender as the dictation topics above.
-  const [shadowingTopics, setShadowingTopics] = useState<string[] | null>(null);
-  const [shadowingTopicsRefreshing, setShadowingTopicsRefreshing] =
-    useState(false);
-  const [shadowingReloadTick, setShadowingReloadTick] = useState(0);
-  const shadowingAvoidRef = useRef<string[]>([]);
+  const drillAvoidRef = useRef<string[]>([]);
   // New-chat start page: recommended conversation topics (null = still loading, [] = none → type-your-own), mirroring
   // the Rapid Q&A topic state. Picking a chip lets the AI open the chat on that topic.
   const [newChatTopics, setNewChatTopics] = useState<string[] | null>(null);
@@ -287,10 +255,7 @@ export function ChatView({
   const replyCommittedRef = useRef(false);
   const kickoffStartedRef = useRef(false);
   const derivationStartedRef = useRef(false);
-  const quickfireStartedRef = useRef(false);
-  const dictationStartedRef = useRef(false);
-  const shadowingStartedRef = useRef(false);
-  const reviewDrillStartedRef = useRef(false);
+  const drillStartedRef = useRef(false);
   const topicStartedRef = useRef(false);
   // Replays of the sentence currently awaiting an answer (dictation/shadowing, slow replays included); sent with the
   // next answer as a live difficulty signal, then reset for the next sentence.
@@ -343,28 +308,22 @@ export function ChatView({
     setInputHints(null);
     requestAnimationFrame(() => inputRef.current?.focus());
   }, [externalDraft]);
-  // Rapid Q&A start page: an uncommitted quickfire draft (no conversation row yet). Drives the start screen,
-  // the scenario-input composer, and routing the first send through startQuickfireDraft instead of a graded turn.
-  const quickfireDraftActive = isDraft && isQuickfireDraft;
-  // Dictation start page: an uncommitted dictation draft (no conversation row yet). Drives the theme start screen and
-  // routes the first commit (chip / typed-send) through startDictationDraft instead of a graded turn.
-  const dictationDraftActive = isDraft && isDictationDraft;
-  // Shadowing start page: an uncommitted shadowing draft, mirroring the dictation draft.
-  const shadowingDraftActive = isDraft && isShadowingDraft;
-  // Weak-spot drill start page: an uncommitted review-drill draft. The composer is a no-op gate — the drill only
-  // starts via the Start button on the start screen (code picks the items; there is nothing to type).
-  const reviewDrillDraftActive = isDraft && isReviewDrillDraft;
-  // A dictation conversation (draft or materialized): drives the masked-sentence rendering + the mode badge.
-  const isDictation = dictationDraftActive || dictationTheme !== null;
-  // A shadowing conversation: same [[SAY]] sentence mechanics as dictation, but the sentence is shown, not hidden.
-  const isShadowing = shadowingDraftActive || shadowingTheme !== null;
+  // Drill start page: an uncommitted drill draft (no conversation row yet). Drives the drill start
+  // screen and routes the first commit (chip / typed setup / Start) through startDrillDraft.
+  const drillDraftActive = isDraft && drillDraft !== null;
+  // The drill definition shaping this view: the draft's (start page) or the loaded conversation's.
+  const drillDef = drillDraft?.def ?? activeDrill?.def ?? null;
+  // say-hidden (dictation family): masked-sentence rendering; the learner answers by ear.
+  const isDictation = drillDef?.interaction === "say-hidden";
+  // say-visible (shadowing family): same [[SAY]] mechanics, but the sentence is shown and read aloud.
+  const isShadowing = drillDef?.interaction === "say-visible";
   // Either sentence drill: shares the [[SAY]] parsing, the gated "next question" flow, and replay counting.
   const isSayDrill = isDictation || isShadowing;
-  const isReviewDrill = reviewDrillDraftActive || reviewDrillActive;
-  // Practice sub-mode for the turn renderers: each drill trims actions that don't apply. Shadowing reuses the
-  // dictation variant (fixed target sentence → no "more natural" / reply suggestion); the weak-spot drill gets its
-  // own variant (no branch, and no reply suggestion — a generated suggestion would hand over the retrieval answer
-  // and fake a clean correct signal on the target key).
+  // Drills targeting snapshotted review items: extra progress badge + no reply suggestion (a generated
+  // suggestion would hand over the retrieval answer and fake a clean correct signal on the target key).
+  const isReviewDrill = drillDef?.setup === "review-items";
+  // Practice sub-mode for the turn renderers: each drill family trims actions that don't apply.
+  // Say drills reuse the dictation variant (fixed target sentence → no "more natural" / reply suggestion).
   const practiceVariant:
     | "quickfire"
     | "dictation"
@@ -373,20 +332,14 @@ export function ChatView({
     ? "dictation"
     : isReviewDrill
       ? "review_drill"
-      : quickfireScenario !== null
+      : drillDef
         ? "quickfire"
         : undefined;
-  // New-chat start page: a plain uncommitted practice draft (not Rapid Q&A / drills / lesson). Drives the topic start
+  // New-chat start page: a plain uncommitted practice draft (not a drill / lesson). Drives the topic start
   // screen; picking a chip materializes the conversation and the AI opens it on that topic. The composer still sends a
   // normal first turn (type-your-own), so this only changes the empty-state, not the send path.
   const newChatDraftActive =
-    isDraft &&
-    !isQuickfireDraft &&
-    !isDictationDraft &&
-    !isShadowingDraft &&
-    !isReviewDrillDraft &&
-    !isLearningAgentDraft &&
-    !learningMode;
+    isDraft && !drillDraft && !isLearningAgentDraft && !learningMode;
   // Lesson start page: an uncommitted lesson draft (no conversation row yet). Start materializes it, then runs the
   // same kickoff path as an existing empty lesson conversation.
   const lessonDraftActive = isDraft && isLearningAgentDraft;
@@ -446,22 +399,12 @@ export function ChatView({
         : [],
     [slashToken, slashDismissed, canDerive, learningMode],
   );
-  const slashOpen =
-    !compact &&
-    !quickfireDraftActive &&
-    !dictationDraftActive &&
-    !shadowingDraftActive &&
-    !reviewDrillDraftActive &&
-    slashCommands.length > 0;
+  const slashOpen = !compact && !drillDraftActive && slashCommands.length > 0;
 
   // Body mode ("/topic …"): the menu is closed, but keep the command's hint visible while the
   // arguments are typed — also surfaces why Enter does nothing while a required body is empty.
   // Hidden wherever the menu is (compact / draft start screens take a theme, not commands).
-  const draftComposerActive =
-    quickfireDraftActive ||
-    dictationDraftActive ||
-    shadowingDraftActive ||
-    reviewDrillDraftActive;
+  const draftComposerActive = drillDraftActive;
   const slashBodyHint = useMemo(() => {
     if (compact || draftComposerActive || slashToken !== null) return null;
     const parsed = parseSlashInput(input);
@@ -532,11 +475,7 @@ export function ChatView({
   useEffect(() => {
     let cancelled = false;
     setDerivedBanner(null);
-    setQuickfireScenario(null);
-    setDictationTheme(null);
-    setShadowingTheme(null);
-    setReviewDrillActive(false);
-    setReviewDrillItemCount(0);
+    setActiveDrill(null);
     setDictationAwaitingEnter(false);
     setRedoActive(false);
     sayDrillReplayCountRef.current = 0;
@@ -575,12 +514,12 @@ export function ChatView({
             context: mods.derivedContext,
             label: mods.derivation?.actionLabel,
           });
-        if (mods.quickfire) setQuickfireScenario(mods.quickfire.scenario);
-        if (mods.dictation) setDictationTheme(mods.dictation.theme);
-        if (mods.shadowing) setShadowingTheme(mods.shadowing.theme);
-        if (mods.reviewDrill) {
-          setReviewDrillActive(true);
-          setReviewDrillItemCount(mods.reviewDrill.items.length);
+        if (mods.drill) {
+          setActiveDrill({
+            modeId: mods.drill.modeId,
+            def: mods.drill.def,
+            itemCount: mods.drill.params.items?.length ?? 0,
+          });
         }
         if (
           loaded.length === 0 &&
@@ -590,40 +529,9 @@ export function ChatView({
           void startDerived();
           return;
         }
-        // Rapid-fire Q&A: the AI opens by firing the first situation (no pending derivation involved).
-        if (
-          loaded.length === 0 &&
-          !quickfireStartedRef.current &&
-          mods.quickfire
-        ) {
-          void startQuickfire();
-          return;
-        }
-        // Dictation: the AI opens by presenting the first sentence to transcribe (spoken, hidden).
-        if (
-          loaded.length === 0 &&
-          !dictationStartedRef.current &&
-          mods.dictation
-        ) {
-          void startDictation();
-          return;
-        }
-        // Shadowing: the AI opens by presenting the first sentence to read aloud (spoken + shown).
-        if (
-          loaded.length === 0 &&
-          !shadowingStartedRef.current &&
-          mods.shadowing
-        ) {
-          void startShadowing();
-          return;
-        }
-        // Weak-spot drill: the AI opens with the first retrieval micro-task.
-        if (
-          loaded.length === 0 &&
-          !reviewDrillStartedRef.current &&
-          mods.reviewDrill
-        ) {
-          void startReviewDrill();
+        // Drill conversation: the AI opens with the drill's first prompt/sentence/micro-task.
+        if (loaded.length === 0 && !drillStartedRef.current && mods.drill) {
+          void startDrill(mods.drill.def);
           return;
         }
         // Restore input hints for the reopened conversation. The watermark is the last
@@ -682,46 +590,55 @@ export function ChatView({
     learningMode,
   ]);
 
-  // Rapid Q&A start page: when the draft opens, reuse the cached recommendations verbatim — no model call, no record
-  // reads. Only a cold cache (first ever) or the Regenerate button generates a fresh set. Clears when committed
-  // (quickfireDraftActive flips false). A different draft has a new id, so ChatView remounts (key={activeId}) and this
-  // re-runs fresh — no need to depend on conversationId. Bumping quickfireReloadTick re-runs this as a manual regenerate.
+  // Drill start page (setup: topic): when the draft opens, reuse the cached recommendations verbatim —
+  // no model call, no record reads. Only a cold cache (first ever) or the Regenerate button generates a
+  // fresh set. The built-in scenario drill keeps its corner-case scenario recommender; every other
+  // drill shares the general conversation-topic recommender. Clears when committed (drillDraftActive
+  // flips false). A different draft has a new id, so ChatView remounts (key={activeId}) and this
+  // re-runs fresh; bumping drillReloadTick re-runs this as a manual regenerate.
+  const drillDraftId = drillDraft?.id ?? null;
+  const drillDraftWantsTopics =
+    drillDraftActive && drillDraft?.setup === "topic";
   useEffect(() => {
-    if (!quickfireDraftActive) {
-      setQuickfireTopics(null);
-      setQuickfireTopicsRefreshing(false);
+    if (!drillDraftWantsTopics) {
+      setDrillTopics(null);
+      setDrillTopicsRefreshing(false);
       return;
     }
+    const useScenarioRecommender = drillDraftId === BUILTIN_DRILL_IDS.quickfire;
     let cancelled = false;
     // tick 0 = initial open; > 0 = a manual regenerate, where we want a clearly different set.
-    const regenerate = quickfireReloadTick > 0;
-    setQuickfireTopicsRefreshing(true);
+    const regenerate = drillReloadTick > 0;
+    setDrillTopicsRefreshing(true);
     // On regenerate, clear the chips so the centered spinner shows and the new set is unmistakable.
-    if (regenerate) setQuickfireTopics(null);
+    if (regenerate) setDrillTopics(null);
     void (async () => {
-      // Initial open: reuse the cached chips verbatim and stop — no model call, no record reads. Generate only on a
-      // cold cache.
+      // Initial open: reuse the cached chips verbatim and stop — no model call, no record reads.
       if (!regenerate) {
-        const cached = await loadCachedQuickfireTopics();
+        const cached = useScenarioRecommender
+          ? await loadCachedQuickfireTopics()
+          : await loadCachedConversationTopics();
         if (cancelled) return;
         if (cached.length > 0) {
-          setQuickfireTopics(cached);
-          setQuickfireTopicsRefreshing(false);
+          setDrillTopics(cached);
+          setDrillTopicsRefreshing(false);
           return;
         }
       }
-      const avoid = regenerate ? quickfireAvoidRef.current : [];
-      const result = await recommendQuickfireTopics({ avoid });
+      const avoid = regenerate ? drillAvoidRef.current : [];
+      const result = useScenarioRecommender
+        ? await recommendQuickfireTopics({ avoid })
+        : await recommendConversationTopics({ avoid });
       if (cancelled) return;
-      if (result.length > 0) setQuickfireTopics(result);
+      if (result.length > 0) setDrillTopics(result);
       // Nothing available (no provider / error and no cache): stop the skeletons.
-      else setQuickfireTopics((cur) => cur ?? []);
-      setQuickfireTopicsRefreshing(false);
+      else setDrillTopics((cur) => cur ?? []);
+      setDrillTopicsRefreshing(false);
     })();
     return () => {
       cancelled = true;
     };
-  }, [quickfireDraftActive, quickfireReloadTick]);
+  }, [drillDraftWantsTopics, drillDraftId, drillReloadTick]);
 
   // New-chat start page: same shape as the Rapid Q&A effect above — reuse the cached topics verbatim on open (no model
   // call, no record reads); generate only on a cold cache or a manual regenerate. Clears when the draft commits
@@ -757,77 +674,6 @@ export function ChatView({
       cancelled = true;
     };
   }, [newChatDraftActive, newChatReloadTick]);
-
-  // Dictation start page: same shape as the Rapid Q&A / new-chat effects — reuse cached topics verbatim on open, and
-  // generate only on a cold cache or a manual regenerate. Themes are general conversation topics, so this shares the
-  // conversation-topic recommender. Clears when the draft commits (dictationDraftActive flips false).
-  useEffect(() => {
-    if (!dictationDraftActive) {
-      setDictationTopics(null);
-      setDictationTopicsRefreshing(false);
-      return;
-    }
-    let cancelled = false;
-    const regenerate = dictationReloadTick > 0;
-    setDictationTopicsRefreshing(true);
-    if (regenerate) setDictationTopics(null);
-    void (async () => {
-      if (!regenerate) {
-        const cached = await loadCachedConversationTopics();
-        if (cancelled) return;
-        if (cached.length > 0) {
-          setDictationTopics(cached);
-          setDictationTopicsRefreshing(false);
-          return;
-        }
-      }
-      const result = await recommendConversationTopics({
-        avoid: regenerate ? dictationAvoidRef.current : [],
-      });
-      if (cancelled) return;
-      if (result.length > 0) setDictationTopics(result);
-      else setDictationTopics((cur) => cur ?? []);
-      setDictationTopicsRefreshing(false);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [dictationDraftActive, dictationReloadTick]);
-
-  // Shadowing start page: identical shape to the dictation effect above (themes share the conversation-topic
-  // recommender). Clears when the draft commits (shadowingDraftActive flips false).
-  useEffect(() => {
-    if (!shadowingDraftActive) {
-      setShadowingTopics(null);
-      setShadowingTopicsRefreshing(false);
-      return;
-    }
-    let cancelled = false;
-    const regenerate = shadowingReloadTick > 0;
-    setShadowingTopicsRefreshing(true);
-    if (regenerate) setShadowingTopics(null);
-    void (async () => {
-      if (!regenerate) {
-        const cached = await loadCachedConversationTopics();
-        if (cancelled) return;
-        if (cached.length > 0) {
-          setShadowingTopics(cached);
-          setShadowingTopicsRefreshing(false);
-          return;
-        }
-      }
-      const result = await recommendConversationTopics({
-        avoid: regenerate ? shadowingAvoidRef.current : [],
-      });
-      if (cancelled) return;
-      if (result.length > 0) setShadowingTopics(result);
-      else setShadowingTopics((cur) => cur ?? []);
-      setShadowingTopicsRefreshing(false);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [shadowingDraftActive, shadowingReloadTick]);
 
   // All turns are reported to the coach panel. Turns are patched (new object) when analysis arrives, so re-reporting is automatic.
   useEffect(() => {
@@ -1059,13 +905,21 @@ export function ChatView({
     }
   }
 
-  // Rapid-fire Q&A kickoff: the AI fires the first situation into an empty quickfire conversation. Like a derived
-  // opening (AI speaks first, no grading), but the scenario already lives in the conversation's modifiers, so there
-  // is no context-generation step. Subsequent learner answers go through the normal graded send().
-  async function startQuickfire(replacingId?: string) {
-    if (learningMode || replyBusy || quickfireStartedRef.current) return;
+  // Drill kickoff: the AI opens the session (first situation / sentence / micro-task) into an empty
+  // drill conversation. Like a derived opening (AI speaks first, no grading) — the drill rules and
+  // params already live in the conversation's modifiers, so there is no context-generation step.
+  // Subsequent learner answers go through the normal graded send(). Say drills always speak the
+  // [[SAY]] sentence (that is the whole point) and never speak the feedback; chat drills follow the
+  // global auto-speak setting and speak the full reply.
+  async function startDrill(
+    defOverride?: DrillDefinition,
+    replacingId?: string,
+  ) {
+    if (learningMode || replyBusy || drillStartedRef.current) return;
+    const def = defOverride ?? drillDef;
+    const sayDrill = def ? def.interaction !== "chat" : false;
     stopSpeech();
-    quickfireStartedRef.current = true;
+    drillStartedRef.current = true;
     const turnGen = ++turnGenRef.current;
     const turnId = crypto.randomUUID();
     liveTurnIdsRef.current.add(turnId);
@@ -1085,9 +939,17 @@ export function ChatView({
     setReplyBusy(true);
     setStreaming("");
     let acc = "";
-    const speaker = loadTtsConfig().autoSpeak ? createReplySpeaker() : null;
+    const speaker = sayDrill
+      ? createReplySpeaker()
+      : loadTtsConfig().autoSpeak
+        ? createReplySpeaker()
+        : null;
+    const finishSpeaker = (reply: string) => {
+      if (sayDrill) speaker?.finish(parseDictationReply(reply).sentence);
+      else speaker?.finish(reply);
+    };
     try {
-      const result = await startQuickfireSession(
+      const result = await startDrillSession(
         conversationId,
         {
           onReplyDelta: (d) => {
@@ -1099,7 +961,7 @@ export function ChatView({
             if (turnGenRef.current !== turnGen) return;
             replyCommittedRef.current = true;
             commitPartnerReply(turnId, reply);
-            speaker?.finish(reply);
+            finishSpeaker(reply);
           },
           onContext: (tokens) => {
             if (turnGenRef.current === turnGen) setLastPromptTokens(tokens);
@@ -1112,22 +974,22 @@ export function ChatView({
       );
       if (turnGenRef.current === turnGen && !replyCommittedRef.current) {
         commitPartnerReply(turnId, result.reply);
-        speaker?.finish(result.reply);
+        finishSpeaker(result.reply);
       }
       await touchConversation(conversationId);
       onActivity?.();
-      refreshInputHintsAfterReply(turnGen);
+      if (!sayDrill) refreshInputHintsAfterReply(turnGen);
     } catch (e) {
       stopSpeech();
       speaker?.abort();
       patchTurn(turnId, {
         analysisPending: false,
-        analysisError: t("chat.quickfireStartFailed"),
+        analysisError: t("chat.drillStartFailed"),
       });
       showUnknownError(e);
       // Release the kickoff guard so retry can restart; the failed turn is replaced on retry.
-      quickfireStartedRef.current = false;
-      setRetry({ run: () => void startQuickfire(turnId) });
+      drillStartedRef.current = false;
+      setRetry({ run: () => void startDrill(def ?? undefined, turnId) });
     } finally {
       if (turnGenRef.current === turnGen) {
         setStreaming("");
@@ -1138,281 +1000,21 @@ export function ChatView({
     }
   }
 
-  // Commit an umbrella scenario from the Rapid Q&A start page (chip or typed-send): first materialize the real
-  // quickfire conversation so the AI kickoff can read the scenario from its modifiers, then fire the first situation.
-  async function startQuickfireDraft(scenario: string) {
-    const s = scenario.trim();
-    if (!s || replyBusy || quickfireStartedRef.current) return;
+  // Commit the start-page params (chip / typed setup / Start button): first materialize the real drill
+  // conversation so the AI kickoff can read the drill + params from its modifiers, then fire the opening.
+  async function startDrillDraft(params: DrillParams) {
+    if (!drillDraft || replyBusy || drillStartedRef.current) return;
+    if (drillDraft.setup === "topic" && !params.setup?.trim()) return;
+    if (drillDraft.setup === "review-items" && !params.items?.length) return;
     setInput("");
-    await onCreateQuickfireDraft?.(conversationId, s);
-    setQuickfireScenario(s); // drive the mode badge immediately
-    await startQuickfire();
-  }
-
-  // Dictation kickoff: the AI presents the first sentence to transcribe into an empty dictation conversation (AI speaks
-  // first, no grading). The theme already lives in the conversation's modifiers, so there is no context-generation
-  // step. The sentence is spoken (TTS) but its text stays hidden until the learner answers; subsequent transcriptions
-  // go through the normal graded send().
-  async function startDictation(replacingId?: string) {
-    if (learningMode || replyBusy || dictationStartedRef.current) return;
-    stopSpeech();
-    dictationStartedRef.current = true;
-    const turnGen = ++turnGenRef.current;
-    const turnId = crypto.randomUUID();
-    liveTurnIdsRef.current.add(turnId);
-    stickToBottomRef.current = true;
-    setError(null);
-    setRetry(null);
-    replyCommittedRef.current = false;
-    setTurns((prev) => [
-      ...(replacingId ? prev.filter((t) => t.id !== replacingId) : prev),
-      {
-        id: turnId,
-        userText: "",
-        analysis: null,
-        analysisPending: false,
-      },
-    ]);
-    setReplyBusy(true);
-    setStreaming("");
-    let acc = "";
-    // Dictation always speaks (that is the whole point), regardless of the global auto-speak setting; and it speaks
-    // ONLY the to-dictate sentence, never the feedback text.
-    const speaker = createReplySpeaker();
-    try {
-      const result = await startDictationSession(
-        conversationId,
-        {
-          onReplyDelta: (d) => {
-            if (turnGenRef.current !== turnGen) return;
-            acc += d;
-            setStreaming(acc);
-          },
-          onReplyComplete: (reply) => {
-            if (turnGenRef.current !== turnGen) return;
-            replyCommittedRef.current = true;
-            commitPartnerReply(turnId, reply);
-            speaker.finish(parseDictationReply(reply).sentence);
-          },
-          onContext: (tokens) => {
-            if (turnGenRef.current === turnGen) setLastPromptTokens(tokens);
-          },
-          onAnalysis: () => {
-            patchTurn(turnId, { analysisPending: false });
-          },
-        },
-        turnId,
-      );
-      if (turnGenRef.current === turnGen && !replyCommittedRef.current) {
-        commitPartnerReply(turnId, result.reply);
-        speaker.finish(parseDictationReply(result.reply).sentence);
-      }
-      await touchConversation(conversationId);
-      onActivity?.();
-    } catch (e) {
-      stopSpeech();
-      speaker.abort();
-      patchTurn(turnId, {
-        analysisPending: false,
-        analysisError: t("chat.dictationStartFailed"),
-      });
-      showUnknownError(e);
-      // Release the kickoff guard so retry can restart; the failed turn is replaced on retry.
-      dictationStartedRef.current = false;
-      setRetry({ run: () => void startDictation(turnId) });
-    } finally {
-      if (turnGenRef.current === turnGen) {
-        setStreaming("");
-        setReplyBusy(false);
-      } else {
-        speaker.abort();
-      }
-    }
-  }
-
-  // Commit a theme from the dictation start page (chip or typed-send): first materialize the real dictation
-  // conversation so the AI kickoff can read the theme from its modifiers, then present the first sentence.
-  async function startDictationDraft(theme: string) {
-    const s = theme.trim();
-    if (!s || replyBusy || dictationStartedRef.current) return;
-    setInput("");
-    await onCreateDictationDraft?.(conversationId, s);
-    setDictationTheme(s); // drive the mode badge + masked rendering immediately
-    await startDictation();
-  }
-
-  // Shadowing kickoff: the AI presents the first sentence to read aloud (spoken + shown). Mirrors startDictation —
-  // the [[SAY]] contract is shared; only the rendering differs (the sentence is visible).
-  async function startShadowing(replacingId?: string) {
-    if (learningMode || replyBusy || shadowingStartedRef.current) return;
-    stopSpeech();
-    shadowingStartedRef.current = true;
-    const turnGen = ++turnGenRef.current;
-    const turnId = crypto.randomUUID();
-    liveTurnIdsRef.current.add(turnId);
-    stickToBottomRef.current = true;
-    setError(null);
-    setRetry(null);
-    replyCommittedRef.current = false;
-    setTurns((prev) => [
-      ...(replacingId ? prev.filter((t) => t.id !== replacingId) : prev),
-      {
-        id: turnId,
-        userText: "",
-        analysis: null,
-        analysisPending: false,
-      },
-    ]);
-    setReplyBusy(true);
-    setStreaming("");
-    let acc = "";
-    // Shadowing always speaks the model reading (that's the reference the learner imitates).
-    const speaker = createReplySpeaker();
-    try {
-      const result = await startShadowingSession(
-        conversationId,
-        {
-          onReplyDelta: (d) => {
-            if (turnGenRef.current !== turnGen) return;
-            acc += d;
-            setStreaming(acc);
-          },
-          onReplyComplete: (reply) => {
-            if (turnGenRef.current !== turnGen) return;
-            replyCommittedRef.current = true;
-            commitPartnerReply(turnId, reply);
-            speaker.finish(parseDictationReply(reply).sentence);
-          },
-          onContext: (tokens) => {
-            if (turnGenRef.current === turnGen) setLastPromptTokens(tokens);
-          },
-          onAnalysis: () => {
-            patchTurn(turnId, { analysisPending: false });
-          },
-        },
-        turnId,
-      );
-      if (turnGenRef.current === turnGen && !replyCommittedRef.current) {
-        commitPartnerReply(turnId, result.reply);
-        speaker.finish(parseDictationReply(result.reply).sentence);
-      }
-      await touchConversation(conversationId);
-      onActivity?.();
-    } catch (e) {
-      stopSpeech();
-      speaker.abort();
-      patchTurn(turnId, {
-        analysisPending: false,
-        analysisError: t("chat.shadowingStartFailed"),
-      });
-      showUnknownError(e);
-      shadowingStartedRef.current = false;
-      setRetry({ run: () => void startShadowing(turnId) });
-    } finally {
-      if (turnGenRef.current === turnGen) {
-        setStreaming("");
-        setReplyBusy(false);
-      } else {
-        speaker.abort();
-      }
-    }
-  }
-
-  // Commit a theme from the shadowing start page (chip or typed-send).
-  async function startShadowingDraft(theme: string) {
-    const s = theme.trim();
-    if (!s || replyBusy || shadowingStartedRef.current) return;
-    setInput("");
-    await onCreateShadowingDraft?.(conversationId, s);
-    setShadowingTheme(s);
-    await startShadowing();
-  }
-
-  // Weak-spot drill kickoff: the AI presents the first retrieval micro-task. Like the rapid-fire kickoff — the item
-  // list already lives in the conversation's modifiers; learner answers go through the normal graded send().
-  async function startReviewDrill(replacingId?: string) {
-    if (learningMode || replyBusy || reviewDrillStartedRef.current) return;
-    stopSpeech();
-    reviewDrillStartedRef.current = true;
-    const turnGen = ++turnGenRef.current;
-    const turnId = crypto.randomUUID();
-    liveTurnIdsRef.current.add(turnId);
-    stickToBottomRef.current = true;
-    setError(null);
-    setRetry(null);
-    replyCommittedRef.current = false;
-    setTurns((prev) => [
-      ...(replacingId ? prev.filter((t) => t.id !== replacingId) : prev),
-      {
-        id: turnId,
-        userText: "",
-        analysis: null,
-        analysisPending: false,
-      },
-    ]);
-    setReplyBusy(true);
-    setStreaming("");
-    let acc = "";
-    const speaker = loadTtsConfig().autoSpeak ? createReplySpeaker() : null;
-    try {
-      const result = await startReviewDrillSession(
-        conversationId,
-        {
-          onReplyDelta: (d) => {
-            if (turnGenRef.current !== turnGen) return;
-            acc += d;
-            setStreaming(acc);
-          },
-          onReplyComplete: (reply) => {
-            if (turnGenRef.current !== turnGen) return;
-            replyCommittedRef.current = true;
-            commitPartnerReply(turnId, reply);
-            speaker?.finish(reply);
-          },
-          onContext: (tokens) => {
-            if (turnGenRef.current === turnGen) setLastPromptTokens(tokens);
-          },
-          onAnalysis: () => {
-            patchTurn(turnId, { analysisPending: false });
-          },
-        },
-        turnId,
-      );
-      if (turnGenRef.current === turnGen && !replyCommittedRef.current) {
-        commitPartnerReply(turnId, result.reply);
-        speaker?.finish(result.reply);
-      }
-      await touchConversation(conversationId);
-      onActivity?.();
-    } catch (e) {
-      stopSpeech();
-      speaker?.abort();
-      patchTurn(turnId, {
-        analysisPending: false,
-        analysisError: t("chat.reviewDrillStartFailed"),
-      });
-      showUnknownError(e);
-      reviewDrillStartedRef.current = false;
-      setRetry({ run: () => void startReviewDrill(turnId) });
-    } finally {
-      if (turnGenRef.current === turnGen) {
-        setStreaming("");
-        setReplyBusy(false);
-      } else {
-        speaker?.abort();
-      }
-    }
-  }
-
-  // Start button on the weak-spot drill start page: snapshot the code-selected items into a real conversation,
-  // then kick off the first micro-task.
-  async function startReviewDrillDraft(items: ReviewDrillItem[]) {
-    if (items.length === 0 || replyBusy || reviewDrillStartedRef.current)
-      return;
-    await onCreateReviewDrillDraft?.(conversationId, items);
-    setReviewDrillActive(true);
-    setReviewDrillItemCount(items.length);
-    await startReviewDrill();
+    await onCreateDrillDraft?.(conversationId, drillDraft, params);
+    // Drive the mode badge + interaction mechanics immediately (state lands before the kickoff streams).
+    setActiveDrill({
+      modeId: drillDraft.id,
+      def: drillDraft.def,
+      itemCount: params.items?.length ?? 0,
+    });
+    await startDrill(drillDraft.def);
   }
 
   // "Next question" gate tap: the next sentence + its audio were prepared in the background after the last
@@ -1822,23 +1424,12 @@ export function ChatView({
   function submitInput() {
     // Lesson start screen: the composer is a disabled gate — the lesson only begins via the Start button.
     if (lessonGateActive) return;
-    // Rapid Q&A start page: the composer takes a custom umbrella scenario, not a graded turn or a slash command.
-    if (quickfireDraftActive) {
-      void startQuickfireDraft(input);
+    // Drill start page: with setup "topic" the composer takes a custom theme/scenario, not a graded
+    // turn or a slash command; otherwise the composer is a gate — the drill starts via its Start button.
+    if (drillDraftActive) {
+      if (drillDraft?.setup === "topic") void startDrillDraft({ setup: input });
       return;
     }
-    // Dictation start page: the composer takes a custom theme, not a graded turn or a slash command.
-    if (dictationDraftActive) {
-      void startDictationDraft(input);
-      return;
-    }
-    // Shadowing start page: same — the first commit is the theme.
-    if (shadowingDraftActive) {
-      void startShadowingDraft(input);
-      return;
-    }
-    // Weak-spot drill start page: the composer is a gate — the drill starts only via the Start button.
-    if (reviewDrillDraftActive) return;
     const parsed = parseSlashInput(input);
     if (!parsed) {
       void send();
@@ -1908,26 +1499,25 @@ export function ChatView({
   // "Edit from here" truncates the conversation and discards in-flight analysis — disabled until all grading completes.
   const analyzing = turns.some((turn) => turn.analysisPending);
 
-  // Active option badges above the input area: shows at a glance the learning context for this turn (mode + derivation settings).
+  // Active option badges above the input area: shows at a glance the learning context for this turn
+  // (mode + derivation settings). Drill conversations badge the drill's localized name.
+  const drillBadgeName = drillDef
+    ? (drillDraft?.name ?? localizeDrill(drillDef, locale).name)
+    : null;
   const optionBadges: { label: string; tone: "info" | "muted" }[] = [
     learningMode
       ? { label: t("chat.lessonBadge"), tone: "info" }
-      : quickfireScenario || quickfireDraftActive
-        ? { label: t("chat.quickfireBadge"), tone: "info" }
-        : isDictation
-          ? { label: t("chat.dictationBadge"), tone: "info" }
-          : isShadowing
-            ? { label: t("chat.shadowingBadge"), tone: "info" }
-            : isReviewDrill
-              ? { label: t("chat.reviewDrillBadge"), tone: "info" }
-              : { label: t("chat.practiceBadge"), tone: "muted" },
+      : drillBadgeName
+        ? { label: drillBadgeName, tone: "info" }
+        : { label: t("chat.practiceBadge"), tone: "muted" },
   ];
-  // Weak-spot drill progress: answered micro-tasks out of the snapshotted item count (capped — the drill keeps
-  // cycling shaky items after the first full pass).
-  if (isReviewDrill && reviewDrillItemCount > 0) {
+  // Item-targeting drill progress: answered micro-tasks out of the snapshotted item count (capped —
+  // the drill keeps cycling shaky items after the first full pass).
+  const drillItemCount = activeDrill?.itemCount ?? 0;
+  if (isReviewDrill && drillItemCount > 0) {
     const answered = turns.filter((turn) => turn.userText.trim()).length;
     optionBadges.push({
-      label: `${Math.min(answered, reviewDrillItemCount)}/${reviewDrillItemCount}`,
+      label: `${Math.min(answered, drillItemCount)}/${drillItemCount}`,
       tone: "muted",
     });
   }
@@ -1994,44 +1584,30 @@ export function ChatView({
           )}
           {turns.length === 0 &&
             !streaming &&
-            (quickfireDraftActive ? (
-              <QuickfireStartScreen
-                topics={quickfireTopics}
-                refreshing={quickfireTopicsRefreshing}
-                busy={replyBusy}
-                onPick={(s) => void startQuickfireDraft(s)}
-                onRefresh={() => {
-                  quickfireAvoidRef.current = quickfireTopics ?? [];
-                  setQuickfireReloadTick((n) => n + 1);
-                }}
-              />
-            ) : dictationDraftActive ? (
-              <DictationStartScreen
-                topics={dictationTopics}
-                refreshing={dictationTopicsRefreshing}
-                busy={replyBusy}
-                onPick={(theme) => void startDictationDraft(theme)}
-                onRefresh={() => {
-                  dictationAvoidRef.current = dictationTopics ?? [];
-                  setDictationReloadTick((n) => n + 1);
-                }}
-              />
-            ) : shadowingDraftActive ? (
-              <ShadowingStartScreen
-                topics={shadowingTopics}
-                refreshing={shadowingTopicsRefreshing}
-                busy={replyBusy}
-                onPick={(theme) => void startShadowingDraft(theme)}
-                onRefresh={() => {
-                  shadowingAvoidRef.current = shadowingTopics ?? [];
-                  setShadowingReloadTick((n) => n + 1);
-                }}
-              />
-            ) : reviewDrillDraftActive ? (
-              <ReviewDrillStartScreen
-                busy={replyBusy}
-                onStart={(items) => void startReviewDrillDraft(items)}
-              />
+            (drillDraftActive && drillDraft ? (
+              drillDraft.setup === "review-items" ? (
+                <ReviewDrillStartScreen
+                  busy={replyBusy}
+                  title={drillDraft.name}
+                  description={drillDraft.intro}
+                  onStart={(items) => void startDrillDraft({ items })}
+                />
+              ) : (
+                <DrillStartScreen
+                  drill={drillDraft}
+                  topics={drillTopics}
+                  refreshing={drillTopicsRefreshing}
+                  busy={replyBusy}
+                  onPickTopic={(topic) =>
+                    void startDrillDraft({ setup: topic })
+                  }
+                  onStart={() => void startDrillDraft({})}
+                  onRefresh={() => {
+                    drillAvoidRef.current = drillTopics ?? [];
+                    setDrillReloadTick((n) => n + 1);
+                  }}
+                />
+              )
             ) : learningMode ? (
               lessonInfo ? (
                 <LessonStartScreen
@@ -2114,11 +1690,9 @@ export function ChatView({
                     turnId={turn.id}
                     text={turn.partnerText}
                     variant={
-                      isReviewDrill
-                        ? "review_drill"
-                        : quickfireScenario !== null
-                          ? "quickfire"
-                          : undefined
+                      practiceVariant === "dictation"
+                        ? undefined
+                        : practiceVariant
                     }
                     offRecord={turn.excludeFromContext}
                     autoOpen={
@@ -2359,31 +1933,30 @@ export function ChatView({
                       ? t("chat.lessonStartHint")
                       : learningMode
                         ? t("chat.inputPlaceholderLesson")
-                        : quickfireDraftActive
-                          ? t("quickfire.scenarioPlaceholder")
-                          : dictationDraftActive
-                            ? t("dictation.themePlaceholder")
-                            : shadowingDraftActive
-                              ? t("shadowing.themePlaceholder")
-                              : reviewDrillDraftActive
-                                ? t("reviewDrill.startHint")
-                                : isDictation
-                                  ? dictationAwaitingEnter
-                                    ? t("dictation.awaitingEnterPlaceholder")
-                                    : t("dictation.transcriptionPlaceholder")
-                                  : isShadowing
-                                    ? dictationAwaitingEnter
-                                      ? t("dictation.awaitingEnterPlaceholder")
-                                      : t("shadowing.attemptPlaceholder")
-                                    : redoActive
-                                      ? t("chat.redoPlaceholder")
-                                      : !compact &&
-                                          inputHints &&
-                                          inputHints.length > 0
-                                        ? "" // hint shown via the animated overlay below
-                                        : t("chat.inputPlaceholderPractice")
+                        : drillDraftActive
+                          ? drillDraft?.setup === "topic"
+                            ? t("drill.themePlaceholder")
+                            : t("drill.startHint")
+                          : isDictation
+                            ? dictationAwaitingEnter
+                              ? t("dictation.awaitingEnterPlaceholder")
+                              : t("dictation.transcriptionPlaceholder")
+                            : isShadowing
+                              ? dictationAwaitingEnter
+                                ? t("dictation.awaitingEnterPlaceholder")
+                                : t("shadowing.attemptPlaceholder")
+                              : redoActive
+                                ? t("chat.redoPlaceholder")
+                                : !compact &&
+                                    inputHints &&
+                                    inputHints.length > 0
+                                  ? "" // hint shown via the animated overlay below
+                                  : t("chat.inputPlaceholderPractice")
                   }
-                  disabled={lessonGateActive || reviewDrillDraftActive}
+                  disabled={
+                    lessonGateActive ||
+                    (drillDraftActive && drillDraft?.setup !== "topic")
+                  }
                   className="max-h-[6.5rem] min-h-14 w-full min-w-0 resize-none border-none bg-transparent px-4 pt-3 pb-2 text-ui-chat outline-none placeholder:text-muted-foreground"
                 />
                 {hintsActive && (
@@ -2518,7 +2091,7 @@ export function ChatView({
                   disabled={
                     replyBusy ||
                     lessonGateActive ||
-                    reviewDrillDraftActive ||
+                    (drillDraftActive && drillDraft?.setup !== "topic") ||
                     (isSayDrill && dictationAwaitingEnter)
                   }
                   onPartial={(live) => {
@@ -2564,7 +2137,7 @@ export function ChatView({
                     disabled={
                       replyBusy ||
                       lessonGateActive ||
-                      reviewDrillDraftActive ||
+                      (drillDraftActive && drillDraft?.setup !== "topic") ||
                       !input.trim() ||
                       (isSayDrill && dictationAwaitingEnter)
                     }

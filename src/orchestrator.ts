@@ -39,9 +39,9 @@ import {
 import { runTrackedAgentJob } from "./db/agent-jobs";
 import { getAppState, setAppState } from "./db/app-state";
 import {
+  type AgentModifiers,
   completeDerivedConversation,
   DEFAULT_CONVERSATION_TITLE,
-  DICTATION_OPENING_INSTRUCTION,
   failDerivedConversation,
   formatModifierInstructions,
   getConversation,
@@ -49,10 +49,7 @@ import {
   listConversations,
   parseAgentModifiers,
   parseDictationReply,
-  QUICKFIRE_OPENING_INSTRUCTION,
-  REVIEW_DRILL_OPENING_INSTRUCTION,
   renameConversation,
-  SHADOWING_OPENING_INSTRUCTION,
 } from "./db/conversations";
 import {
   createLearningAgent,
@@ -87,6 +84,13 @@ import {
   toHistoryTurns,
   updateTurnReply,
 } from "./db/turns";
+import {
+  type DrillRenderExtras,
+  renderDrillInstructions,
+  renderDrillOpening,
+} from "./drills/render";
+import { getDrill } from "./drills/store";
+import type { ResolvedDrill } from "./drills/types";
 import { staticT } from "./i18n";
 import { buildLearningDataContext } from "./learning-data";
 import { runAbortableStream } from "./lib/abortable-stream";
@@ -135,6 +139,44 @@ export class MissingApiKeyError extends Error {
     super(staticT("errors.missingApiKey"));
     this.name = "MissingApiKeyError";
   }
+}
+
+// Resolve the drill behind a conversation's modifiers. Prompt prose (task/opening/setup guidance)
+// comes from the LIVE drill row when it still exists — editing a drill updates its open sessions —
+// while the mechanics enums (interaction/grading/mastery/…) stay frozen on the modifier snapshot so
+// an in-flight session never changes shape mid-conversation. A deleted drill falls back entirely to
+// the snapshot, so old conversations keep working.
+async function resolveDrill(
+  mods: AgentModifiers,
+): Promise<ResolvedDrill | undefined> {
+  const marker = mods.drill;
+  if (!marker) return undefined;
+  try {
+    const live = await getDrill(marker.modeId);
+    if (live) {
+      return {
+        modeId: marker.modeId,
+        params: marker.params,
+        def: {
+          ...marker.def,
+          task: live.def.task,
+          opening: live.def.opening,
+          setupGuidance: live.def.setupGuidance,
+        },
+      };
+    }
+  } catch {
+    // Store unavailable — snapshot below keeps the session alive.
+  }
+  return { modeId: marker.modeId, params: marker.params, def: marker.def };
+}
+
+function drillLangExtras(config: AppConfig): DrillRenderExtras {
+  return {
+    nativeLanguage: config.nativeLanguage,
+    targetLanguage: config.targetLanguage,
+    level: config.level,
+  };
 }
 
 // Off-record slash turn (/btw): answer one standalone question with no chat/lesson history,
@@ -768,34 +810,37 @@ export async function runTurn(
   const agentModifiers = parseAgentModifiers(
     conversation?.agentModifiersJson ?? null,
   );
-  // Dictation/shadowing: the target sentence is the one the prior AI turn presented (the last verbatim reply). Hand
-  // it to the tutor as the standard answer so grading is a comparison, not free-form correction. Undefined for other
-  // conversations (or a missing prior turn), in which case the tutor grades as usual.
-  const isSayDrill = Boolean(
-    agentModifiers.dictation || agentModifiers.shadowing,
-  );
-  const dictationStandardAnswer = isSayDrill
-    ? parseDictationReply(verbatimTurns[verbatimTurns.length - 1]?.reply ?? "")
-        .sentence || undefined
-    : undefined;
+  // Drill conversations: resolve the drill document (live row preferred, snapshot fallback) and derive
+  // the per-turn behavior from its enums — interaction (say mechanics), grading, mastery, hints, feed.
+  const drill = await resolveDrill(agentModifiers);
+  const isSayDrill = drill ? drill.def.interaction !== "chat" : false;
+  // Say drills with standard-answer grading: the target sentence is the one the prior AI turn presented
+  // (the last verbatim reply). Hand it to the tutor so grading is a comparison, not free-form correction.
+  const dictationStandardAnswer =
+    isSayDrill && drill?.def.grading === "standard-answer"
+      ? parseDictationReply(
+          verbatimTurns[verbatimTurns.length - 1]?.reply ?? "",
+        ).sentence || undefined
+      : undefined;
   const standardAnswerMode: "dictation" | "shadowing" | undefined =
-    agentModifiers.shadowing
-      ? "shadowing"
-      : agentModifiers.dictation
-        ? "dictation"
-        : undefined;
-  // Dictation: load the listening-weak words so the reply agent can weave them into upcoming sentences.
-  const dictationFocusWords = agentModifiers.dictation
-    ? await getListeningFocusWords()
-    : undefined;
+    dictationStandardAnswer === undefined
+      ? undefined
+      : drill?.def.interaction === "say-visible"
+        ? "shadowing"
+        : "dictation";
+  // feed: listening-words — load the listening-weak words so the reply agent can weave them into upcoming sentences.
+  const dictationFocusWords =
+    drill?.def.feed === "listening-words"
+      ? await getListeningFocusWords()
+      : undefined;
   // In-band input hint: the reply agent appends a private [[HINT]] trailer that becomes
-  // the input-box hint (full context, no extra call). Off for drills (no hints there)
-  // and when the user disabled auto hints.
+  // the input-box hint (full context, no extra call). Drills opt in via hints: on (all
+  // built-ins keep it off); also gated by the user's auto-hints setting.
   const wantsInlineHint =
-    !isSayDrill && !agentModifiers.reviewDrill && config.inputHintsAuto;
-  // Weak-spot drill: the snapshotted target items go to the FRONT of the tutor's weak list, so it reuses exactly
-  // these keys and its "correct" signals land on them (dropUntrackedCorrects keeps corrects only for listed keys).
-  const drillItems = agentModifiers.reviewDrill?.items ?? [];
+    (drill ? drill.def.hints === "on" : true) && config.inputHintsAuto;
+  // Drills with snapshotted target items (setup: review-items): the items go to the FRONT of the tutor's weak list,
+  // so it reuses exactly these keys and its "correct" signals land on them (dropUntrackedCorrects keeps corrects only for listed keys).
+  const drillItems = drill?.params.items ?? [];
   const weakListWithDrill =
     drillItems.length > 0
       ? [
@@ -848,6 +893,7 @@ export async function runTurn(
     reviewItems,
     proficiency,
     agentModifiers,
+    drill,
     dictationStandardAnswer,
     standardAnswerMode,
     dictationFocusWords,
@@ -997,10 +1043,12 @@ async function openConversationWithInstruction(
   const openingModifiers = parseAgentModifiers(
     conv?.agentModifiersJson ?? null,
   );
-  // Dictation kickoff also gets the listening review words, so even the first sentence can re-expose one.
-  const dictationFocusWords = openingModifiers.dictation
-    ? await getListeningFocusWords()
-    : undefined;
+  const drill = await resolveDrill(openingModifiers);
+  // feed: listening-words — the kickoff also gets the listening review words, so even the first sentence can re-expose one.
+  const dictationFocusWords =
+    drill?.def.feed === "listening-words"
+      ? await getListeningFocusWords()
+      : undefined;
 
   const ctx: PracticeContext = {
     kind: "practice",
@@ -1026,6 +1074,7 @@ async function openConversationWithInstruction(
     reviewItems,
     proficiency,
     agentModifiers: openingModifiers,
+    drill,
     dictationFocusWords,
     callbacks: cb,
     turnPersisted,
@@ -1070,68 +1119,26 @@ export async function startDerivedConversation(
   );
 }
 
-// Kick off a rapid-fire Q&A drill: the AI presents the first situation. The quickfire scenario/rules live in the
-// conversation's agent_modifiers_json and reach the reply agent through SESSION ADJUSTMENTS, so only the opening
-// instruction is needed here. Subsequent learner answers go through the normal practice runTurn (graded as usual).
-export async function startQuickfireSession(
+// Kick off a drill session: the AI opens with the drill's # Opening instruction (say drills get the
+// [[SAY]] wrapping requirement appended by code). The drill rules/params live in agent_modifiers_json
+// and reach the reply agent through SESSION ADJUSTMENTS; subsequent learner answers go through the
+// normal graded runTurn.
+export async function startDrillSession(
   conversationId: string,
   cb: TurnCallbacks,
   turnId?: string,
 ): Promise<TurnResult> {
-  return openConversationWithInstruction(
-    conversationId,
-    QUICKFIRE_OPENING_INSTRUCTION,
-    cb,
-    turnId,
+  const conv = await getConversation(conversationId);
+  const drill = await resolveDrill(
+    parseAgentModifiers(conv?.agentModifiersJson ?? null),
   );
-}
-
-// Kick off a dictation drill: the AI presents the first sentence to transcribe (spoken by the UI, text hidden until
-// answered). The dictation theme/rules live in agent_modifiers_json and reach the reply agent through SESSION
-// ADJUSTMENTS, exactly like rapid-fire; subsequent learner transcriptions go through the normal practice runTurn and
-// are graded by the tutor as usual.
-export async function startDictationSession(
-  conversationId: string,
-  cb: TurnCallbacks,
-  turnId?: string,
-): Promise<TurnResult> {
-  return openConversationWithInstruction(
-    conversationId,
-    DICTATION_OPENING_INSTRUCTION,
-    cb,
-    turnId,
+  if (!drill) throw new Error("This conversation has no drill configured");
+  const opening = renderDrillOpening(
+    drill.def,
+    drill.params,
+    drillLangExtras(loadConfig()),
   );
-}
-
-// Kick off a shadowing (read-aloud) drill: same shape as dictation — the AI presents the first sentence via the
-// [[SAY]] contract; the UI shows it, speaks a model reading, and the learner reads it aloud (graded via STT).
-export async function startShadowingSession(
-  conversationId: string,
-  cb: TurnCallbacks,
-  turnId?: string,
-): Promise<TurnResult> {
-  return openConversationWithInstruction(
-    conversationId,
-    SHADOWING_OPENING_INSTRUCTION,
-    cb,
-    turnId,
-  );
-}
-
-// Kick off a weak-spot retrieval drill: the AI presents the first micro-task targeting the first snapshotted item.
-// The item list lives in agent_modifiers_json and reaches the reply agent via SESSION ADJUSTMENTS; learner answers
-// go through the normal graded runTurn with the drill items prepended to the tutor weak list.
-export async function startReviewDrillSession(
-  conversationId: string,
-  cb: TurnCallbacks,
-  turnId?: string,
-): Promise<TurnResult> {
-  return openConversationWithInstruction(
-    conversationId,
-    REVIEW_DRILL_OPENING_INSTRUCTION,
-    cb,
-    turnId,
-  );
+  return openConversationWithInstruction(conversationId, opening, cb, turnId);
 }
 
 // Open a normal practice conversation on a chosen topic (the AI speaks first). The learner picked a recommended chip
@@ -1295,6 +1302,8 @@ export async function regenerateReply(
     profileMd,
     "conversation",
   );
+  const regenModifiers = parseAgentModifiers(conv?.agentModifiersJson ?? null);
+  const regenDrill = await resolveDrill(regenModifiers);
 
   const reply = await converse(
     provider,
@@ -1307,9 +1316,15 @@ export async function regenerateReply(
       comfortableItems,
       reviewItems,
       calibrationHint: proficiency.calibrationHint,
-      sessionAdjustments: formatModifierInstructions(
-        parseAgentModifiers(conv?.agentModifiersJson ?? null),
-      ),
+      sessionAdjustments: formatModifierInstructions(regenModifiers, {
+        drillBlock: regenDrill
+          ? renderDrillInstructions(
+              regenDrill.def,
+              regenDrill.params,
+              drillLangExtras(config),
+            )
+          : undefined,
+      }),
       summary: summaryData.summary ?? "",
       historyTurns: toHistoryTurns(verbatimTurns.slice(0, idx)),
       userInput: target.userInput,

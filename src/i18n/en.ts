@@ -394,6 +394,13 @@ export const en = {
     start: "Start drill",
     startHint: "Press “Start drill” above to begin",
   },
+  drill: {
+    start: "Start",
+    startHint: "Use the Start button above to begin",
+    recommendedTopics: "Recommended topics",
+    refresh: "Regenerate",
+    themePlaceholder: "Describe a topic… or pick one above",
+  },
   newChat: {
     greetingMorning: "Good morning — warm up with a sentence or two?",
     greetingAfternoon: "Good afternoon — a few sentences to reset?",
@@ -813,6 +820,7 @@ export const en = {
     editFromHereConfirm: "Discard and edit",
     lessonBadge: "Lesson",
     practiceBadge: "Practice",
+    drillStartFailed: "Failed to start the training session",
     quickfireBadge: "Scenario drill",
     quickfireStartFailed: "Failed to start the scenario drill",
     dictationBadge: "Dictation",

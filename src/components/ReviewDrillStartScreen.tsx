@@ -13,9 +13,14 @@ import { getReviewDueList } from "../db/mastery";
 export function ReviewDrillStartScreen({
   busy,
   onStart,
+  title,
+  description,
 }: {
   busy: boolean;
   onStart: (items: ReviewDrillItem[]) => void;
+  /** Display overrides from the drill document; default to the built-in weak-spot drill copy. */
+  title?: string;
+  description?: string;
 }) {
   const { t } = useTranslation();
   const [items, setItems] = useState<ReviewDrillItem[] | null>(null);
@@ -53,10 +58,10 @@ export function ReviewDrillStartScreen({
       <div className="flex flex-col gap-2">
         <div className="flex items-center gap-2 text-ui-title font-semibold text-foreground">
           <TargetIcon className="size-5 text-primary" />
-          {t("reviewDrill.startTitle")}
+          {title ?? t("reviewDrill.startTitle")}
         </div>
         <p className="m-0 text-ui-body leading-relaxed text-ui-muted">
-          {t("reviewDrill.startDescription")}
+          {description ?? t("reviewDrill.startDescription")}
         </p>
       </div>
 

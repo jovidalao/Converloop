@@ -89,7 +89,7 @@ export const learningAgent = sqliteTable("learning_agent", {
   prompt: text("prompt").notNull(),
   dataScopeJson: text("data_scope_json").notNull(),
   kind: text("kind", {
-    enum: ["lesson", "observer", "action"],
+    enum: ["lesson", "observer", "action", "drill"],
   })
     .notNull()
     .default("lesson"),
@@ -104,6 +104,9 @@ export const learningAgent = sqliteTable("learning_agent", {
     .default("none"),
   outputSchemaJson: text("output_schema_json"),
   packageMetaJson: text("package_meta_json"),
+  // kind="drill" rows: the canonical drill@1 Markdown document (frontmatter + sections). The
+  // name/description/prompt columns are derived caches of its parsed fields.
+  sourceMd: text("source_md"),
   builtIn: integer("built_in").notNull().default(0),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),

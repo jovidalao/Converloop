@@ -20,6 +20,7 @@ import {
 import { createLearningAgent } from "../db/learning-agents";
 import { recordAnalysis, recordDictationAnalysis } from "../db/mastery";
 import { formatTurns, getTurnsAfterId, updateTurnAnalysis } from "../db/turns";
+import { renderDrillInstructions } from "../drills/render";
 import { logError } from "../lib/log";
 import { maybeRunMaintainer } from "../profile/maintainer-runner";
 import { getBuiltinAgentOverride } from "./builtin-overrides";
@@ -128,7 +129,7 @@ const conversationReply: ReplyProducer = {
   },
   run: (ctx, onDelta) => {
     const c = ctx as PracticeContext;
-    // Dictation/shadowing live extras: listening review words + how often the learner replayed the last sentence.
+    // Say-drill live extra: how often the learner replayed the last sentence (difficulty signal).
     const replayNote =
       c.sayDrillReplayCount && c.sayDrillReplayCount > 0
         ? `PACING — the learner needed ${c.sayDrillReplayCount} replay(s) of the previous sentence (slow replays included): make the NEXT sentence a touch easier or shorter. If they answer without replays, you can stretch again.`
@@ -137,6 +138,15 @@ const conversationReply: ReplyProducer = {
     // this note the agent reads it as a puzzling near-duplicate and may comment on the repetition.
     const redoNote = c.redoTurn
       ? "REDO ATTEMPT — the learner is re-saying their previous sentence from memory, using the correction they just received. Acknowledge the improved attempt in a brief, natural way and carry the conversation forward; do NOT point out the repetition or treat it as a new topic."
+      : undefined;
+    // Drill conversations: render the per-turn instruction block from the drill document (the [[SAY]]
+    // contract / item list / listening feed are appended by code in render.ts, never by the document).
+    const drillBlock = c.drill
+      ? renderDrillInstructions(c.drill.def, c.drill.params, {
+          ...ctx.langs,
+          listeningFocusWords: c.dictationFocusWords,
+          replayNote,
+        })
       : undefined;
     return converse(
       ctx.provider,
@@ -148,8 +158,7 @@ const conversationReply: ReplyProducer = {
         reviewItems: c.reviewItems,
         calibrationHint: c.proficiency.calibrationHint,
         sessionAdjustments: formatModifierInstructions(c.agentModifiers, {
-          dictationFocusWords: c.dictationFocusWords,
-          replayNote,
+          drillBlock,
           redoNote,
         }),
         summary: ctx.summary,
@@ -222,6 +231,11 @@ const tutorObserver: Observer = {
     canDisable: true,
   },
   run: async (ctx: PracticeContext) => {
+    // Drills can opt out of correction entirely (grading: none).
+    if (ctx.drill?.def.grading === "none") {
+      ctx.callbacks.onAnalysis(null);
+      return;
+    }
     const { analysis, proseFeedback, diagnostic, error } = await analyze(
       ctx.provider,
       {
@@ -251,17 +265,18 @@ const tutorObserver: Observer = {
     if (analysis) {
       ctx.callbacks.onAnalysis(analysis);
       try {
-        // Drill turns never write production mastery (that would pollute the weak list with mishearings).
-        // Dictation still records into the isolated listening dimension ("listening:<word>" keys + code-derived
-        // corrects); shadowing records nothing (STT noise is too coarse to count). Weak-spot drill evidence is
-        // tagged source="review" so the targeted retrieval shows up as such in the mastery-event audit trail.
-        if (!ctx.dictationStandardAnswer) {
+        // Mastery routing follows the drill's mastery enum (code bookkeeping; the LLM never touches counts):
+        //   production → normal ledger;  review → same ledger tagged source="review" (targeted retrieval);
+        //   listening → isolated "listening:<word>" dimension (mishearings must not pollute the weak list);
+        //   none → record nothing (e.g. shadowing: STT noise is too coarse to count).
+        const mastery = ctx.drill?.def.mastery ?? "production";
+        if (mastery === "production" || mastery === "review") {
           await recordAnalysis(
             analysis,
             turnId,
-            ctx.agentModifiers.reviewDrill ? "review" : "tutor",
+            mastery === "review" ? "review" : "tutor",
           );
-        } else if (ctx.standardAnswerMode !== "shadowing") {
+        } else if (mastery === "listening" && ctx.dictationStandardAnswer) {
           await recordDictationAnalysis(
             analysis,
             ctx.dictationStandardAnswer,

@@ -1,4 +1,11 @@
 import { and, count, desc, eq, gte, inArray, isNull } from "drizzle-orm";
+import { BUILTIN_DRILL_IDS, getBuiltinDrillSeed } from "../drills/builtins";
+import type {
+  DrillConversationModifier,
+  DrillDefinition,
+  DrillParams,
+  ReviewDrillItem,
+} from "../drills/types";
 import { deleteAppState } from "./app-state";
 import { db } from "./client";
 import {
@@ -9,6 +16,17 @@ import {
   turn,
   turnAnnotation,
 } from "./schema";
+
+// The say sentinel + parsers moved to the drills module (one definition shared by the agent contract
+// and the UI); re-exported here so existing call sites keep working.
+export {
+  DICTATION_SAY_CLOSE,
+  DICTATION_SAY_OPEN,
+  type DictationReplyParts,
+  parseDictationReply,
+  streamingDictationFeedback,
+} from "../drills/say";
+export type { DrillConversationModifier, DrillParams, ReviewDrillItem };
 
 export type ConversationMeta = Conversation;
 export type ConversationKind = Conversation["kind"];
@@ -56,44 +74,9 @@ export interface ConversationDerivationState {
   error?: string | null;
 }
 
-// Rapid-fire Q&A drill: the learner sets one umbrella scenario, the reply agent invents a fresh micro-prompt each
-// turn — rotating task types (respond / describe / narrate / explain / opinion), not only "respond" (see
-// formatModifierInstructions). Still a practice-kind conversation, so tutor correction / mastery / coach all run.
-export interface QuickfireModifiers {
-  scenario: string;
-}
-
-// Dictation drill: the conversation agent presents one sentence per turn (spoken aloud by the UI, its text hidden via
-// the [[SAY]] tags until the learner answers), gives brief feedback on the previous transcription, then the next
-// sentence. A practice-kind conversation reshaped by this marker via formatModifierInstructions — the tutor still
-// grades each transcription as usual. Theme is the only thing carried here.
-export interface DictationModifiers {
-  theme: string;
-}
-
-// Shadowing (read-aloud) drill: the mirror of dictation. The agent presents one sentence per turn inside the same
-// [[SAY]] tags; the UI SHOWS the sentence and speaks it, the learner reads it aloud, and their STT transcription is
-// graded against the sentence as the standard answer (unrecognized words ≈ pronunciation trouble). Theme only.
-export interface ShadowingModifiers {
-  theme: string;
-}
-
-// Weak-spot drill (active retrieval): code snapshots the due-for-review items at creation; each turn the agent
-// designs ONE micro-task that REQUIRES the target item to complete, cycling through the list. The tutor grades as
-// usual, with these items prepended to its weak list so clean correct/error signals land on exactly these keys.
-export interface ReviewDrillItem {
-  key: string;
-  label: string;
-  type: string;
-  example: string | null;
-  notes: string | null;
-}
-
-export interface ReviewDrillModifiers {
-  items: ReviewDrillItem[];
-}
-
 // Session-level adjustments: behavior changes the reply agent should follow. LLM observes; behavior is injected by code (formatted as instructions).
+// Drill conversations carry one generic `drill` modifier ({ modeId, params, def snapshot }); the
+// legacy per-drill keys (quickfire/dictation/shadowing/reviewDrill) are normalized into it at parse time.
 export interface AgentModifiers {
   difficultyDelta?: number; // +1 harder / -1 easier
   swapRoles?: boolean;
@@ -101,10 +84,43 @@ export interface AgentModifiers {
   note?: string; // free-form supplementary instruction
   derivation?: ConversationDerivationState;
   derivedContext?: NewConversationContext;
-  quickfire?: QuickfireModifiers;
-  dictation?: DictationModifiers;
-  shadowing?: ShadowingModifiers;
-  reviewDrill?: ReviewDrillModifiers;
+  drill?: DrillConversationModifier;
+}
+
+// Legacy modifier JSON (pre-drill@1 rows): each built-in drill had its own marker key. Normalized to
+// the generic drill modifier on read; stored rows are not rewritten.
+interface LegacyDrillModifiers {
+  quickfire?: { scenario: string };
+  dictation?: { theme: string };
+  shadowing?: { theme: string };
+  reviewDrill?: { items: ReviewDrillItem[] };
+}
+
+function legacyDrillModifier(
+  raw: LegacyDrillModifiers,
+): DrillConversationModifier | undefined {
+  const make = (
+    modeId: string,
+    params: DrillParams,
+  ): DrillConversationModifier | undefined => {
+    const seed = getBuiltinDrillSeed(modeId);
+    return seed ? { modeId, params, def: seed.def } : undefined;
+  };
+  if (raw.quickfire) {
+    return make(BUILTIN_DRILL_IDS.quickfire, { setup: raw.quickfire.scenario });
+  }
+  if (raw.dictation) {
+    return make(BUILTIN_DRILL_IDS.dictation, { setup: raw.dictation.theme });
+  }
+  if (raw.shadowing) {
+    return make(BUILTIN_DRILL_IDS.shadowing, { setup: raw.shadowing.theme });
+  }
+  if (raw.reviewDrill) {
+    return make(BUILTIN_DRILL_IDS.reviewDrill, {
+      items: raw.reviewDrill.items ?? [],
+    });
+  }
+  return undefined;
 }
 
 export function parseAgentModifiers(json: string | null): AgentModifiers {
@@ -112,7 +128,12 @@ export function parseAgentModifiers(json: string | null): AgentModifiers {
   try {
     const raw = JSON.parse(json) as unknown;
     if (raw && typeof raw === "object" && !Array.isArray(raw)) {
-      return raw as AgentModifiers;
+      const mods = raw as AgentModifiers & LegacyDrillModifiers;
+      if (!mods.drill) {
+        const drill = legacyDrillModifier(mods);
+        if (drill) return { ...mods, drill };
+      }
+      return mods;
     }
   } catch {
     // Corrupted JSON falls back to no adjustments
@@ -120,8 +141,9 @@ export function parseAgentModifiers(json: string | null): AgentModifiers {
   return {};
 }
 
-// The user-facing type of a conversation, used to badge each history row with an icon. Quickfire and dictation are
-// both practice-kind rows distinguished only by their modifier; everything else practice-kind is a plain conversation.
+// The user-facing type of a conversation, used to badge each history row with an icon. Drill rows are
+// practice-kind rows distinguished only by their modifier; custom drills map onto the closest built-in
+// family via their interaction/setup preset (the icon, not the behavior).
 export type ConversationType =
   | "practice"
   | "quickfire"
@@ -132,30 +154,22 @@ export type ConversationType =
 
 export function conversationType(c: ConversationMeta): ConversationType {
   if (c.kind === "learning_agent") return "learning_agent";
-  const mods = parseAgentModifiers(c.agentModifiersJson);
-  if (mods.quickfire) return "quickfire";
-  if (mods.dictation) return "dictation";
-  if (mods.shadowing) return "shadowing";
-  if (mods.reviewDrill) return "review_drill";
-  return "practice";
+  const drill = parseAgentModifiers(c.agentModifiersJson).drill;
+  if (!drill) return "practice";
+  if (drill.def.setup === "review-items") return "review_drill";
+  if (drill.def.interaction === "say-hidden") return "dictation";
+  if (drill.def.interaction === "say-visible") return "shadowing";
+  return "quickfire";
 }
 
-// Collapse whitespace and truncate, so long stored examples don't bloat the drill instructions.
-function oneLineModifier(s: string, max = 140): string {
-  const clean = s.replace(/\s+/g, " ").trim();
-  return clean.length > max ? `${clean.slice(0, max)}...` : clean;
-}
-
-// Per-turn dynamic extras layered onto the modifier instructions by the orchestrator (the modifiers themselves are
-// static per conversation; these change every turn). The drill-specific extras are read by the matching drill
-// blocks; redoNote applies to any conversation (it is appended as its own adjustment line).
+// Per-turn dynamic extras layered onto the modifier instructions by the orchestrator (the modifiers
+// themselves are static per conversation; these change every turn). Drill-specific extras (listening
+// focus words, replay pacing) live in drills/render.ts; redoNote applies to any conversation.
 export interface ModifierInstructionExtras {
-  /** Dictation: tracked listening-weak words (recently missed / due again) to weave into upcoming sentences. */
-  dictationFocusWords?: string[];
-  /** Dictation/shadowing: how many times the learner replayed the previous sentence (incl. slow replays) — a live difficulty signal for the NEXT sentence. */
-  replayNote?: string;
   /** "Say it again": the latest message re-produces the learner's corrected previous sentence from memory. */
   redoNote?: string;
+  /** Pre-rendered drill instruction block (drills/render.ts), appended after the generic adjustments. */
+  drillBlock?: string;
 }
 
 // Convert session-level adjustments into English instructions fed to the conversation agent; returns empty string when there are no adjustments.
@@ -194,134 +208,10 @@ export function formatModifierInstructions(
     ctx.constraints.length > 0 ? ctx.constraints.join(" / ") : "(none)"
   }`);
   }
-  if (mods.quickfire?.scenario.trim()) {
-    lines.push(`- RAPID-FIRE Q&A DRILL — this overrides the default "keep a flowing conversation" behavior.
-  Umbrella scenario the learner chose: "${mods.quickfire.scenario.trim()}".
-  Run a fast, energetic drill. Every turn, invent ONE fresh, specific micro-prompt that fits this umbrella scenario for the learner to speak to in the target language. VARY the task type across turns — do NOT make every prompt "reply to what someone said". Rotate among:
-    (a) RESPOND — react to / handle a concrete situation (someone says or does something);
-    (b) DESCRIBE — describe an object, place, person, or what they're seeing in the scene;
-    (c) NARRATE — recount what just happened, or a related experience ("tell them about the time…");
-    (d) EXPLAIN — explain how or why (how they'd do something, why something went wrong);
-    (e) OPINION — give a quick opinion or preference with a reason.
-  KEEP THE WHOLE PROMPT IN THE TARGET LANGUAGE — scene, set-up, and the ask — calibrated to the learner's level so it reads at a glance; they perform the task OUT LOUD in the target language. (The app has a bilingual reading mode the learner can toggle for a native-language gloss, so do NOT mix in their native language yourself — a monolingual target-language message is what renders cleanly.) When you set the scene, do NOT spell out the exact words or phrases the ideal answer needs — paint the SITUATION and let them produce the language themselves, so it stays a real production challenge rather than a copying task.
-  Make every micro-prompt vivid and fun: open with a fitting emoji and sprinkle a few more through the scene (e.g. 🛬 🧾 🙇 😬 ⏰ 🛒 🤝) so it reads like a lively flash card rather than a dry exam question. Keep it to one or two punchy sentences, clearly different from the previous prompts in BOTH task type and content — do NOT build a continuous storyline.
-  After the learner answers, your next message has TWO short parts: FIRST a brief model answer in the target language showing one natural way to do the task they just attempted (handle / describe / narrate / explain / etc., one or two sentences, introduced with a short lead-in); keep the model answer itself clean and natural, no need to load it with emoji. THEN immediately present the NEXT prompt (target-language scene + emoji, as above). Keep the whole turn short and energetic.
-  REVIEW HOOK — when an item in the DUE-FOR-REVIEW list fits this umbrella scenario, design the next micro-prompt so a natural ideal answer REQUIRES that item (the situation forces the structure / expression). This targeted elicitation takes priority over pure novelty. Never name or reveal the item — the scene does the work. At most one review item per prompt; skip when none fits.
-  SECOND CHANCE — if the learner's answer clearly missed the task (off-task, blank-ish, or a bare word where a sentence was asked), do NOT move on: give one short encouraging line in the target language and re-present the SAME prompt for a second attempt, with no model answer yet. Offer at most ONE retry per prompt; after the retry, model and move on as usual.
-  Do NOT correct or critique the learner's answer — another agent handles that. Do NOT chit-chat or ask how they are doing; just model, then next prompt.`);
-  }
-  if (mods.dictation) {
-    const theme = mods.dictation.theme.trim() || "everyday life";
-    const focusWords = (extras.dictationFocusWords ?? []).filter((w) =>
-      w.trim(),
-    );
-    const focusBlock = focusWords.length
-      ? `\n  LISTENING REVIEW — the learner previously missed these words by ear: ${focusWords
-          .map((w) => `"${w.trim()}"`)
-          .join(
-            ", ",
-          )}. Where it fits the theme naturally, build upcoming sentences so ONE of these words reappears (at most one per sentence) — that re-exposure is how listening review happens. Never announce that a word is a review word.`
-      : "";
-    const replayBlock = extras.replayNote ? `\n  ${extras.replayNote}` : "";
-    lines.push(`- DICTATION DRILL — this overrides the default "keep a flowing conversation" behavior.
-  Theme the learner chose: "${theme}".
-  You are running a LISTENING DICTATION. Each turn you present ONE sentence for the learner to transcribe by ear; they type exactly what they hear. The app SPEAKS your sentence aloud and HIDES its text until they answer.
-  STRICT OUTPUT FORMAT — follow it on EVERY turn:
-    • If the learner just submitted a transcription, FIRST write a brief note in the learner's NATIVE language (1–3 short lines): whether they got it, the exact words they missed or misheard, and one quick listening tip. Do NOT restate the full correct sentence — the app reveals it automatically — and do not enumerate every spelling slip (a separate grader marks the transcription precisely); keep it to an encouraging, human read of how they did.
-    • THEN, as the LAST thing in your message, output the next sentence to dictate wrapped EXACTLY as: ${DICTATION_SAY_OPEN}the sentence${DICTATION_SAY_CLOSE} with nothing after the closing tag.
-  The text inside ${DICTATION_SAY_OPEN}…${DICTATION_SAY_CLOSE} MUST be a single, complete, natural sentence in the TARGET language, calibrated to the learner's level, fitting the theme, and clearly different from earlier ones. Put ONLY that sentence between the tags. NEVER write the upcoming sentence anywhere except inside the tags, and never describe it in advance.${focusBlock}${replayBlock}`);
-  }
-  if (mods.shadowing) {
-    const theme = mods.shadowing.theme.trim() || "everyday life";
-    const replayBlock = extras.replayNote ? `\n  ${extras.replayNote}` : "";
-    lines.push(`- SHADOWING (READ-ALOUD) DRILL — this overrides the default "keep a flowing conversation" behavior.
-  Theme the learner chose: "${theme}".
-  You are running a PRONUNCIATION SHADOWING drill — the mirror of dictation. Each turn you present ONE sentence; the app SHOWS the sentence, speaks a model reading aloud, and the learner READS IT ALOUD. Their speech is transcribed by speech recognition and compared to your sentence — words the recognizer missed usually mean the learner's pronunciation of them was off.
-  STRICT OUTPUT FORMAT — follow it on EVERY turn:
-    • If the learner just submitted an attempt, FIRST write a brief note in the learner's NATIVE language (1–3 short lines): how the reading went, which words the recognizer did not pick up (likely pronunciation trouble), and one concrete articulation tip (stress, vowel, linking). Speech recognition is imperfect — frame misses as "worth another try", never as certain failure. Do NOT restate the full sentence.
-    • THEN, as the LAST thing in your message, output the next sentence to read wrapped EXACTLY as: ${DICTATION_SAY_OPEN}the sentence${DICTATION_SAY_CLOSE} with nothing after the closing tag.
-  The text inside ${DICTATION_SAY_OPEN}…${DICTATION_SAY_CLOSE} MUST be a single, complete, natural sentence in the TARGET language, calibrated to the learner's level, fitting the theme, and clearly different from earlier ones. Put ONLY that sentence between the tags.${replayBlock}`);
-  }
-  if (mods.reviewDrill && mods.reviewDrill.items.length > 0) {
-    const items = mods.reviewDrill.items
-      .map((item, i) => {
-        const details = [
-          item.example
-            ? `it came up as "${oneLineModifier(item.example)}"`
-            : null,
-          item.notes ? `note: "${oneLineModifier(item.notes)}"` : null,
-        ].filter(Boolean);
-        return `    ${i + 1}. [${item.type}] ${item.label} (${item.key})${
-          details.length ? ` — ${details.join("; ")}` : ""
-        }`;
-      })
-      .join("\n");
-    lines.push(`- WEAK-SPOT RETRIEVAL DRILL — this overrides the default "keep a flowing conversation" behavior.
-  The app selected these due-for-review items for targeted retrieval practice:
-${items}
-  Work through the items IN ORDER, one item per turn (after the last, cycle back to items that went badly). Each turn, design ONE short, concrete micro-task that the learner can only complete by PRODUCING the target item themselves:
-    • grammar / error patterns → paint a tiny situation whose natural answer requires that structure;
-    • vocab / collocations → a situation where that word/phrase is the natural choice;
-    • expression gaps → give the MEANING to convey (use the learner's native language for the meaning, e.g. from the item's example), and ask them to say it in the target language.
-  CRITICAL: never reveal, spell out, or hint at the target wording before they attempt — the whole point is retrieval from memory. Keep each prompt to one or two sentences, plain and friendly, in the target language (except the native-language meaning for expression gaps).
-  After the learner answers: give a ONE-sentence natural model showing the target item in use, then immediately present the next micro-task. If their attempt clearly didn't use the target item, you may re-prompt the SAME item once with a slightly stronger setup before moving on.
-  ROUND COMPLETE — right after EVERY item in the list has been attempted at least once, pause before the next micro-task and give a short wrap-up in the learner's NATIVE language: one line per item marking it solid (✓) or worth another pass (✗) based on their attempts, then say this is a natural stopping point. After the wrap-up, continue cycling ONLY through the ✗ items, one micro-task per turn, for as long as they keep answering.
-  Do NOT correct or critique in detail — another agent handles grading. No chit-chat.`);
-  }
+  if (extras.drillBlock?.trim()) lines.push(extras.drillBlock.trim());
   if (mods.note?.trim()) lines.push(`- ${mods.note.trim()}`);
   if (extras.redoNote) lines.push(`- ${extras.redoNote}`);
   return lines.join("\n");
-}
-
-// Opening instruction for the AI's first turn of a rapid-fire drill: present the first prompt only, no model answer yet.
-export const QUICKFIRE_OPENING_INSTRUCTION =
-  "Start the rapid-fire Q&A drill now. Present the FIRST prompt within the umbrella scenario for the learner — it can be a situation to handle, or something to describe, narrate, or explain. Follow the drill rules: keep the prompt in the target language (calibrated to their level) with a fitting emoji. Do not give a model answer yet — there is nothing to model on the first turn.";
-
-// Sentinel tags wrapping the sentence to dictate in a dictation reply. The agent is instructed to emit the
-// to-be-transcribed sentence (and only that) between these, so the UI can hide its text and speak it on its own while
-// still showing any feedback that precedes it. Kept here so the agent contract and the UI parser share one definition.
-export const DICTATION_SAY_OPEN = "[[SAY]]";
-export const DICTATION_SAY_CLOSE = "[[/SAY]]";
-
-// Opening instruction for the AI's first turn of a dictation drill: just the first sentence, wrapped, no preamble.
-export const DICTATION_OPENING_INSTRUCTION = `Start the dictation drill now. Output ONLY the first sentence to dictate, wrapped exactly as ${DICTATION_SAY_OPEN}the sentence${DICTATION_SAY_CLOSE} — no greeting, no preamble, nothing before or after the tags.`;
-
-// Opening instruction for the AI's first turn of a shadowing drill: same wrapped-sentence contract as dictation.
-export const SHADOWING_OPENING_INSTRUCTION = `Start the shadowing drill now. Output ONLY the first sentence for the learner to read aloud, wrapped exactly as ${DICTATION_SAY_OPEN}the sentence${DICTATION_SAY_CLOSE} — no greeting, no preamble, nothing before or after the tags.`;
-
-// Opening instruction for the AI's first turn of a weak-spot retrieval drill: present the first micro-task only.
-export const REVIEW_DRILL_OPENING_INSTRUCTION =
-  "Start the weak-spot retrieval drill now. Present the FIRST micro-task, targeting the first item in the drill list. Follow the drill rules: a tiny concrete situation that requires producing the target item, without revealing or hinting at the target wording. No greeting or preamble beyond one short friendly lead-in line.";
-
-export interface DictationReplyParts {
-  /** Feedback on the learner's previous transcription (shown). Empty on the opening turn. */
-  feedback: string;
-  /** The sentence to dictate (spoken; hidden until answered). Falls back to the whole reply if the agent omits the tags. */
-  sentence: string;
-}
-
-// Split a dictation reply into the visible feedback and the to-dictate sentence. When the agent omits the sentinel we
-// treat the whole reply as the sentence (so the text is never accidentally revealed), with no feedback.
-export function parseDictationReply(reply: string): DictationReplyParts {
-  const open = reply.indexOf(DICTATION_SAY_OPEN);
-  const close = reply.indexOf(
-    DICTATION_SAY_CLOSE,
-    open + DICTATION_SAY_OPEN.length,
-  );
-  if (open >= 0 && close > open) {
-    const sentence = reply
-      .slice(open + DICTATION_SAY_OPEN.length, close)
-      .trim();
-    return { feedback: reply.slice(0, open).trim(), sentence };
-  }
-  return { feedback: "", sentence: reply.trim() };
-}
-
-// The portion of a still-streaming dictation reply that is safe to show: everything before the sentinel begins (the
-// feedback). Cuts at the first "[[" so a partial "[[SAY" tag never leaks the hidden sentence.
-export function streamingDictationFeedback(streamed: string): string {
-  const i = streamed.indexOf("[[");
-  return (i >= 0 ? streamed.slice(0, i) : streamed).trim();
 }
 
 // Placeholder title for new conversations; ChatView changes it to truncated input content after the first message is sent (ChatGPT style).
@@ -388,89 +278,35 @@ export async function createConversation(
   return id;
 }
 
-// Create a rapid-fire Q&A conversation: a normal practice conversation (tutor / mastery / coach all apply) whose
-// reply agent is reshaped into a drill via the quickfire modifier. The AI opens with the first situation (see
-// startQuickfireSession), so the title is seeded from the umbrella scenario rather than a first user message.
-export async function createQuickfireConversation(
-  scenario: string,
-  id: string = crypto.randomUUID(),
+// Create a drill conversation: a practice-kind row carrying the generic drill modifier — a live
+// reference (modeId) for prompt resolution (edits to the drill propagate) plus a full definition
+// snapshot (mechanics never morph mid-session; conversations survive drill deletion). The AI opens
+// the session via startDrillSession; learner answers then go through the normal graded runTurn.
+export async function createDrillConversation(
+  drill: { id: string; def: DrillDefinition },
+  params: DrillParams,
+  opts: { title?: string; id?: string } = {},
 ): Promise<string> {
+  const id = opts.id ?? crypto.randomUUID();
   const now = Date.now();
   const modifiers: AgentModifiers = {
-    quickfire: { scenario: scenario.trim() },
+    drill: {
+      modeId: drill.id,
+      params: {
+        setup: params.setup?.trim() || undefined,
+        items: params.items,
+      },
+      def: drill.def,
+    },
   };
+  const title =
+    opts.title?.trim() ||
+    (params.setup?.trim()
+      ? titleFromInput(params.setup)
+      : titleFromInput(drill.def.name));
   await db.insert(conversation).values({
     id,
-    title: titleFromInput(scenario),
-    createdAt: now,
-    updatedAt: now,
-    kind: "practice",
-    learningAgentId: null,
-    agentModifiersJson: JSON.stringify(modifiers),
-  });
-  return id;
-}
-
-// Create a dictation drill conversation: a practice-kind row carrying the dictation marker (theme). The drill UI reads
-// the theme from the modifier to generate level-appropriate sentences; there is no AI "opening" turn — the first
-// sentence is synthesized and spoken on the start page, and only answered items are persisted as turns.
-export async function createDictationConversation(
-  theme: string,
-  id: string = crypto.randomUUID(),
-): Promise<string> {
-  const now = Date.now();
-  const modifiers: AgentModifiers = {
-    dictation: { theme: theme.trim() },
-  };
-  await db.insert(conversation).values({
-    id,
-    title: titleFromInput(theme),
-    createdAt: now,
-    updatedAt: now,
-    kind: "practice",
-    learningAgentId: null,
-    agentModifiersJson: JSON.stringify(modifiers),
-  });
-  return id;
-}
-
-// Create a shadowing (read-aloud) conversation: a practice-kind row carrying the shadowing marker (theme). Mirrors
-// createDictationConversation; the AI presents the first sentence via startShadowingSession.
-export async function createShadowingConversation(
-  theme: string,
-  id: string = crypto.randomUUID(),
-): Promise<string> {
-  const now = Date.now();
-  const modifiers: AgentModifiers = {
-    shadowing: { theme: theme.trim() },
-  };
-  await db.insert(conversation).values({
-    id,
-    title: titleFromInput(theme),
-    createdAt: now,
-    updatedAt: now,
-    kind: "practice",
-    learningAgentId: null,
-    agentModifiersJson: JSON.stringify(modifiers),
-  });
-  return id;
-}
-
-// Create a weak-spot retrieval drill conversation: a practice-kind row that snapshots the due-for-review items the
-// code selected at creation time. The drill instructions live in formatModifierInstructions; the tutor grades each
-// answer normally with these items prepended to its weak list (see orchestrator).
-export async function createReviewDrillConversation(
-  items: ReviewDrillItem[],
-  title: string,
-  id: string = crypto.randomUUID(),
-): Promise<string> {
-  const now = Date.now();
-  const modifiers: AgentModifiers = {
-    reviewDrill: { items },
-  };
-  await db.insert(conversation).values({
-    id,
-    title: titleFromInput(title),
+    title,
     createdAt: now,
     updatedAt: now,
     kind: "practice",

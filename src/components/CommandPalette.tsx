@@ -22,6 +22,8 @@ import { actionShortcutLabel } from "@/lib/app-actions";
 import { useModalFocus } from "@/lib/modal-focus";
 import { type ConversationMeta, conversationType } from "../db/conversations";
 import type { LearningAgentMeta } from "../db/learning-agents";
+import type { DrillSummary } from "../drills/types";
+import { DrillIcon } from "./drill-icons";
 import { formatRelativeTime } from "./Sidebar";
 
 // Type badge for a past-conversation row, mirroring the sidebar history icons
@@ -45,23 +47,12 @@ function conversationIcon(c: ConversationMeta) {
   }
 }
 
-// Practice-mode launchers: every drill the sidebar can start is also reachable
-// from the palette, so a keyboard-first session never needs the mouse.
-type PaletteMode = "quickfire" | "dictation" | "shadowing" | "review-drill";
-
-const MODE_ICONS: Record<PaletteMode, typeof ZapIcon> = {
-  quickfire: ZapIcon,
-  dictation: HeadphonesIcon,
-  shadowing: MicIcon,
-  "review-drill": TargetIcon,
-};
-
 // The kinds of targets the command palette can jump to / trigger: start a new
-// chat, launch a practice mode (drill), start a new session of a lesson, or
+// chat, launch a training mode (drill), start a new session of a lesson, or
 // open a past conversation.
 type PaletteItem =
   | { kind: "new-chat" }
-  | { kind: "mode"; mode: PaletteMode; label: string }
+  | { kind: "mode"; drill: DrillSummary }
   | { kind: "start-agent"; agent: LearningAgentMeta }
   | { kind: "conversation"; conv: ConversationMeta };
 
@@ -70,18 +61,17 @@ interface CommandPaletteProps {
   onClose: () => void;
   conversations: ConversationMeta[];
   learningAgents: LearningAgentMeta[];
+  /** Training modes (drills): built-ins + custom, already localized for display. */
+  drills: DrillSummary[];
   onSelectConversation: (id: string) => void;
   onStartLearningAgent: (agentId: string) => void;
   onNewChat: () => void;
-  onStartQuickfire: () => void;
-  onStartDictation: () => void;
-  onStartShadowing: () => void;
-  onStartReviewDrill: () => void;
+  onStartDrill: (drill: DrillSummary) => void;
 }
 
 function keyFor(item: PaletteItem): string {
   if (item.kind === "new-chat") return "new-chat";
-  if (item.kind === "mode") return `mode:${item.mode}`;
+  if (item.kind === "mode") return `mode:${item.drill.id}`;
   if (item.kind === "start-agent") return `agent:${item.agent.id}`;
   return `conv:${item.conv.id}`;
 }
@@ -96,13 +86,11 @@ export function CommandPalette({
   onClose,
   conversations,
   learningAgents,
+  drills,
   onSelectConversation,
   onStartLearningAgent,
   onNewChat,
-  onStartQuickfire,
-  onStartDictation,
-  onStartShadowing,
-  onStartReviewDrill,
+  onStartDrill,
 }: CommandPaletteProps) {
   const { t, locale } = useTranslation();
   const [query, setQuery] = useState("");
@@ -135,17 +123,17 @@ export function CommandPalette({
       result.push({ label: null, items: [{ kind: "new-chat" }] });
     }
 
-    // Practice-mode launchers: always listed when idle; filtered by their
+    // Training-mode launchers: always listed when idle; filtered by their
     // localized names when searching.
-    const modeDefs: { mode: PaletteMode; label: string }[] = [
-      { mode: "quickfire", label: t("sidebar.quickfire") },
-      { mode: "dictation", label: t("sidebar.dictation") },
-      { mode: "shadowing", label: t("sidebar.shadowing") },
-      { mode: "review-drill", label: t("sidebar.reviewDrill") },
-    ];
     const modes = (
-      q ? modeDefs.filter((m) => m.label.toLowerCase().includes(q)) : modeDefs
-    ).map((m): PaletteItem => ({ kind: "mode", mode: m.mode, label: m.label }));
+      q
+        ? drills.filter(
+            (d) =>
+              d.name.toLowerCase().includes(q) ||
+              d.description.toLowerCase().includes(q),
+          )
+        : drills
+    ).map((drill): PaletteItem => ({ kind: "mode", drill }));
     if (modes.length)
       result.push({
         label: t("commandPalette.practiceModes"),
@@ -176,7 +164,7 @@ export function CommandPalette({
       });
 
     return result;
-  }, [query, learningAgents, conversations, t]);
+  }, [query, learningAgents, drills, conversations, t]);
 
   const flat = useMemo(() => groups.flatMap((g) => g.items), [groups]);
 
@@ -197,12 +185,8 @@ export function CommandPalette({
 
   function activate(item: PaletteItem) {
     if (item.kind === "new-chat") onNewChat();
-    else if (item.kind === "mode") {
-      if (item.mode === "quickfire") onStartQuickfire();
-      else if (item.mode === "dictation") onStartDictation();
-      else if (item.mode === "shadowing") onStartShadowing();
-      else onStartReviewDrill();
-    } else if (item.kind === "start-agent") onStartLearningAgent(item.agent.id);
+    else if (item.kind === "mode") onStartDrill(item.drill);
+    else if (item.kind === "start-agent") onStartLearningAgent(item.agent.id);
     else onSelectConversation(item.conv.id);
     onClose();
   }
@@ -337,11 +321,13 @@ function PaletteRow({
     );
   }
   if (item.kind === "mode") {
-    const Icon = MODE_ICONS[item.mode];
     return (
       <>
-        <Icon className="size-4 shrink-0 text-ui-muted" />
-        <span className="min-w-0 flex-1 truncate">{item.label}</span>
+        <DrillIcon
+          name={item.drill.icon}
+          className="size-4 shrink-0 text-ui-muted"
+        />
+        <span className="min-w-0 flex-1 truncate">{item.drill.name}</span>
       </>
     );
   }

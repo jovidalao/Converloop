@@ -367,6 +367,13 @@ export const zh: Messages = {
     start: "开始闪练",
     startHint: "点上方「开始闪练」开始",
   },
+  drill: {
+    start: "开始训练",
+    startHint: "点上方「开始训练」开始",
+    recommendedTopics: "推荐主题",
+    refresh: "重新生成",
+    themePlaceholder: "描述一个主题…… 或从上方选一个",
+  },
   newChat: {
     greetingMorning: "早上好,先来两句热热身?",
     greetingAfternoon: "下午好,练几句换换脑子?",
@@ -770,6 +777,7 @@ export const zh: Messages = {
     editFromHereConfirm: "丢弃并编辑",
     lessonBadge: "课程",
     practiceBadge: "练习",
+    drillStartFailed: "训练启动失败",
     quickfireBadge: "情景演练",
     quickfireStartFailed: "情景演练启动失败",
     dictationBadge: "听写",

@@ -1,14 +1,10 @@
 import {
   BookOpenCheckIcon,
-  HeadphonesIcon,
-  MicIcon,
   PencilIcon,
   PlusIcon,
-  TargetIcon,
   Trash2Icon,
-  ZapIcon,
 } from "lucide-react";
-import { type ReactNode, useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "@/i18n";
 import {
   deleteLearningAgent,
@@ -17,35 +13,32 @@ import {
   listLearningAgents,
   updateLearningAgent,
 } from "../db/learning-agents";
+import type { DrillSummary } from "../drills/types";
 import { useConfirm } from "./confirm";
+import { DrillIcon } from "./drill-icons";
 import { LearningAgentEditDialog } from "./LearningAgentEditDialog";
 import { Button } from "./ui/button";
 
 interface CustomLearningViewProps {
+  /** Training modes (drills): built-ins + custom, already localized for display. */
+  drills: DrillSummary[];
   /** Start a lesson immediately (opens its conversation and kicks off — no intermediate start screen). */
   onStartLesson: (agentId: string) => void;
+  /** Open a drill's start page. */
+  onStartDrill: (drill: DrillSummary) => void;
   /** Open the create / manage page (project generator, NL creation, import / export). */
   onOpenCreate: () => void;
   /** Refresh the app-level lesson list (command palette) after an edit / delete here. */
   onRefresh: () => Promise<void>;
-  /** Built-in training-mode launchers (drills), shown above the lesson gallery. */
-  onStartReviewDrill: () => void;
-  onStartDictation: () => void;
-  onStartShadowing: () => void;
-  onStartQuickfire: () => void;
 }
 
-// A built-in training-mode card: icon + name + one-line description, starts the drill on click. Visually matches the
+// A training-mode card: icon + name + one-line description, starts the drill on click. Visually matches the
 // lesson cards below (same border / hover), so the gallery reads as one surface of mixed training modes + lessons.
 function DrillCard({
-  icon,
-  title,
-  description,
+  drill,
   onStart,
 }: {
-  icon: ReactNode;
-  title: string;
-  description: string;
+  drill: DrillSummary;
   onStart: () => void;
 }) {
   return (
@@ -55,13 +48,15 @@ function DrillCard({
       className="group block w-full cursor-pointer rounded-lg border bg-card p-4 text-left transition-colors hover:border-primary/50 hover:bg-accent/40"
     >
       <span className="flex items-center gap-2">
-        <span className="shrink-0 text-primary">{icon}</span>
+        <span className="shrink-0 text-primary">
+          <DrillIcon name={drill.icon} className="size-4" />
+        </span>
         <span className="min-w-0 flex-1 truncate font-medium text-foreground">
-          {title}
+          {drill.name}
         </span>
       </span>
       <span className="m-0 mt-1.5 block text-ui-body leading-relaxed text-ui-muted">
-        {description}
+        {drill.description}
       </span>
     </button>
   );
@@ -71,13 +66,11 @@ function DrillCard({
 // intro — clicking it starts the lesson right away. Custom lessons expose edit / delete on hover. Creating new lessons
 // lives on the separate create page, reached via the header button.
 export function CustomLearningView({
+  drills,
   onStartLesson,
+  onStartDrill,
   onOpenCreate,
   onRefresh,
-  onStartReviewDrill,
-  onStartDictation,
-  onStartShadowing,
-  onStartQuickfire,
 }: CustomLearningViewProps) {
   const { t } = useTranslation();
   const confirm = useConfirm();
@@ -142,30 +135,13 @@ export function CustomLearningView({
           {t("customLearning.drillsLabel")}
         </div>
         <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <DrillCard
-            icon={<TargetIcon className="size-4" />}
-            title={t("customLearning.reviewDrillTitle")}
-            description={t("customLearning.reviewDrillDesc")}
-            onStart={onStartReviewDrill}
-          />
-          <DrillCard
-            icon={<HeadphonesIcon className="size-4" />}
-            title={t("customLearning.dictationTitle")}
-            description={t("customLearning.dictationDesc")}
-            onStart={onStartDictation}
-          />
-          <DrillCard
-            icon={<MicIcon className="size-4" />}
-            title={t("customLearning.shadowingTitle")}
-            description={t("customLearning.shadowingDesc")}
-            onStart={onStartShadowing}
-          />
-          <DrillCard
-            icon={<ZapIcon className="size-4" />}
-            title={t("customLearning.quickfireTitle")}
-            description={t("customLearning.quickfireDesc")}
-            onStart={onStartQuickfire}
-          />
+          {drills.map((drill) => (
+            <DrillCard
+              key={drill.id}
+              drill={drill}
+              onStart={() => onStartDrill(drill)}
+            />
+          ))}
         </div>
 
         <div className="mb-2 text-ui-caption font-medium text-ui-muted">

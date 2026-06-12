@@ -157,8 +157,16 @@ export async function getRecentProductionTurns(limit = 20): Promise<Turn[]> {
         const mods = JSON.parse(row.modifiers) as {
           dictation?: unknown;
           shadowing?: unknown;
+          drill?: { def?: { interaction?: string } };
         };
-        if (mods && (mods.dictation || mods.shadowing)) continue;
+        const drillInteraction = mods?.drill?.def?.interaction;
+        if (
+          mods &&
+          (mods.dictation ||
+            mods.shadowing ||
+            (drillInteraction && drillInteraction !== "chat"))
+        )
+          continue;
       } catch {
         // Corrupt modifiers: treat as a normal practice conversation.
       }
