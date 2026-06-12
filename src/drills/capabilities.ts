@@ -115,7 +115,7 @@ The section body is the observer's instructions. It can never write memory direc
     key: "turn-actions",
     frontmatterKeys: ["turnActions"],
     bodySections: [],
-    doc: `\`turnActions\` (capability \`turn-actions\`) — which reply-action buttons stay available on drill turns. Subset of \`[explain, bilingual, suggestion, redo, branch]\`; omit the key to keep all. Drop \`suggestion\`/\`redo\` when a generated answer would defeat the exercise.`,
+    doc: `\`turnActions\` (capability \`turn-actions\`) — which reply-action buttons stay available on drill turns. Subset of \`[explain, bilingual, suggestion, redo, branch]\`; omit the key to keep the interaction preset's defaults. Listing can only RESTRICT further (it never re-enables an action the preset hides). Drop \`suggestion\`/\`redo\` when a generated answer would defeat the exercise.`,
   },
 ];
 

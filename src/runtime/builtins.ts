@@ -25,6 +25,7 @@ import { logError } from "../lib/log";
 import { maybeRunMaintainer } from "../profile/maintainer-runner";
 import { getBuiltinAgentOverride } from "./builtin-overrides";
 import { generateDerivedConversation } from "./derive-conversation";
+import { runDrillObserver } from "./drill-observer";
 import {
   registerAction,
   registerObserver,
@@ -305,9 +306,37 @@ const tutorObserver: Observer = {
   },
 };
 
+// Drill observer host: one registered observer that runs the # Observer section of whichever drill
+// the current conversation belongs to (no-op for non-drill turns and drills without the section).
+// Annotations land on the turn under drill:<modeId>:observer; memory writes are proposal-only.
+const drillObserverHost: Observer = {
+  id: "builtin:drill_observer",
+  kind: "observer",
+  card: {
+    title: "Drill observer",
+    description:
+      "Runs a training mode's own # Observer instructions after each answer in that drill — extra notes in the coach panel.",
+    entry: "auto_turn",
+    timing:
+      "Every drill turn · parallel with the reply (only for drills with an # Observer section)",
+    reads:
+      "Current answer · recent drill turns · the scopes the drill declares",
+    writes:
+      "Turn annotations; memory writes are proposals only (require user confirmation)",
+    canDisable: true,
+  },
+  run: async (ctx: PracticeContext) => {
+    const drill = ctx.drill;
+    const instructions = drill?.def.observer?.trim();
+    if (!drill || !instructions) return;
+    await runDrillObserver(ctx, drill, instructions);
+  },
+};
+
 registerReplyProducer(conversationReply);
 registerReplyProducer(learningReply);
 registerObserver(tutorObserver);
+registerObserver(drillObserverHost);
 
 const transformers: TransformerInfo[] = [
   {

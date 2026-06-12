@@ -116,7 +116,7 @@ function hasScope(
 }
 
 export async function buildLearningDataContext(
-  agent: LearningAgentMeta,
+  agent: Pick<LearningAgentMeta, "dataScopes">,
   config: AppConfig,
 ): Promise<string> {
   const scopes = agent.dataScopes;

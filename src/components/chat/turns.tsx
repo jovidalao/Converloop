@@ -44,7 +44,7 @@ import {
 } from "./reply-suggestion";
 
 // Copy the reply; briefly shows a checkmark after copying.
-function CopyButton({ text }: { text: string }) {
+export function CopyButton({ text }: { text: string }) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   const timerRef = useRef<number | null>(null);
@@ -258,6 +258,8 @@ type PartnerReplyProps = {
   // Rapid-fire / weak-spot-drill model answers are not part of a thread, so the "reply suggestion" (next-sentence)
   // action is hidden for both.
   variant?: "quickfire" | "review_drill";
+  /** Drill turnActions allow-list: restricts (never re-enables) the variant preset's reply actions. */
+  allowedActions?: readonly string[];
   /** /btw off-record reply: hide "Reply suggestion" (it looks up context by turnId; off-record turns are excluded and would error). */
   offRecord?: boolean;
   /** Fired once on the user's first manual open of explain/bilingual (signals comprehension difficulty; auto-open doesn't count). */
@@ -269,12 +271,23 @@ type PartnerReplyProps = {
   regenerating?: boolean;
 };
 
+// Drill turnActions: an action stays visible only when the variant preset shows it AND (no allow-list
+// or the list contains it). Listing can only restrict — it never re-enables a preset-hidden action.
+function drillActionAllowed(
+  allowed: readonly string[] | undefined,
+  action: "explain" | "bilingual" | "suggestion" | "redo" | "branch",
+  presetDefault: boolean,
+): boolean {
+  return presetDefault && (allowed === undefined || allowed.includes(action));
+}
+
 export const PartnerReply = memo(function PartnerReply({
   conversationId,
   turnId,
   text,
   autoOpen = false,
   variant,
+  allowedActions,
   offRecord = false,
   onFirstExplain,
   onFirstBilingual,
@@ -305,11 +318,17 @@ export const PartnerReply = memo(function PartnerReply({
     onLayoutChange,
   });
   // When a transformer capability is "deleted" (hidden), its trigger button is also hidden.
-  const bilingualHidden = isAgentHidden("builtin:transformer:bilingual");
+  const bilingualHidden =
+    isAgentHidden("builtin:transformer:bilingual") ||
+    !drillActionAllowed(allowedActions, "bilingual", true);
   const suggestionHidden =
     isAgentHidden("builtin:transformer:reply_suggestion") ||
-    variant === "quickfire" ||
-    variant === "review_drill";
+    !drillActionAllowed(
+      allowedActions,
+      "suggestion",
+      variant !== "quickfire" && variant !== "review_drill",
+    );
+  const explainHidden = !drillActionAllowed(allowedActions, "explain", true);
 
   // When a reply is replaced by "Regenerate", the old bilingual view no longer corresponds to it
   // — collapse and reset. Skip on first mount to avoid fighting with autoOpen.
@@ -414,6 +433,7 @@ export const PartnerReply = memo(function PartnerReply({
         conversationId={conversationId}
         turnId={turnId}
         text={text}
+        hideExplain={explainHidden}
         onFirstOpen={onFirstExplain}
         onLayoutChange={onLayoutChange}
         actions={
@@ -580,6 +600,8 @@ type UserTurnProps = {
   // (a generated suggestion IS the retrieval answer — one click would fake a clean correct signal on the target key).
   // undefined = ordinary practice (all actions).
   variant?: "quickfire" | "dictation" | "review_drill";
+  /** Drill turnActions allow-list: restricts (never re-enables) the variant preset's reply actions. */
+  allowedActions?: readonly string[];
   onEditFrom: () => void;
   /** "Say it again" — see UserMessageActions. Undefined hides the action (lessons, sentence drills). */
   onRedo?: () => void;
@@ -594,6 +616,7 @@ export const UserTurn = memo(function UserTurn({
   nativeLanguage,
   learningMode,
   variant,
+  allowedActions,
   onEditFrom,
   onRedo,
   onTurnAction,
@@ -732,13 +755,27 @@ export const UserTurn = memo(function UserTurn({
             turn={turn}
             suggestion={replySuggestion}
             onEditFrom={onEditFrom}
-            onRedo={variant === "dictation" ? undefined : onRedo}
+            onRedo={
+              drillActionAllowed(
+                allowedActions,
+                "redo",
+                variant !== "dictation",
+              )
+                ? onRedo
+                : undefined
+            }
             onTurnAction={onTurnAction}
             editDisabled={editDisabled}
-            showReplySuggestion={
-              variant !== "dictation" && variant !== "review_drill"
-            }
-            showBranch={variant === undefined}
+            showReplySuggestion={drillActionAllowed(
+              allowedActions,
+              "suggestion",
+              variant !== "dictation" && variant !== "review_drill",
+            )}
+            showBranch={drillActionAllowed(
+              allowedActions,
+              "branch",
+              variant === undefined,
+            )}
           />
         }
         correction={
@@ -762,9 +799,11 @@ export const UserTurn = memo(function UserTurn({
             : undefined
         }
       />
-      {variant !== "dictation" && variant !== "review_drill" && (
-        <ReplySuggestionPanel suggestion={replySuggestion} />
-      )}
+      {drillActionAllowed(
+        allowedActions,
+        "suggestion",
+        variant !== "dictation" && variant !== "review_drill",
+      ) && <ReplySuggestionPanel suggestion={replySuggestion} />}
     </div>
   );
 }, areUserTurnPropsEqual);
@@ -918,6 +957,7 @@ function areUserTurnPropsEqual(prev: UserTurnProps, next: UserTurnProps) {
     prev.nativeLanguage === next.nativeLanguage &&
     prev.learningMode === next.learningMode &&
     prev.variant === next.variant &&
+    prev.allowedActions === next.allowedActions &&
     prev.editDisabled === next.editDisabled &&
     Boolean(prev.onRedo) === Boolean(next.onRedo)
   );

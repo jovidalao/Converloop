@@ -367,6 +367,11 @@ export const zh: Messages = {
     start: "开始闪练",
     startHint: "点上方「开始闪练」开始",
   },
+  drillReport: {
+    button: "本节训练报告",
+    generating: "正在生成训练报告……",
+    title: "训练报告",
+  },
   drillDialog: {
     createTitle: "新建训练",
     editTitle: "编辑训练",

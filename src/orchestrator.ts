@@ -112,6 +112,7 @@ import {
 } from "./profile/preferences";
 import { profileSliceForConversation, readProfile } from "./profile/profile";
 import { maybeCompressConversation } from "./profile/summary-runner";
+import type { ChatMessage } from "./providers/types";
 import {
   type ConversationCallbacks,
   derivePendingAction,
@@ -593,6 +594,56 @@ export async function confirmLearningTurnMastery(
 // Character budget for the session-review transcript: enough for a long lesson, bounded so one marathon session
 // doesn't blow the context. Truncated from the most recent turns down.
 const LESSON_SESSION_TRANSCRIPT_CHARS = 24000;
+
+// End-of-session drill report (# Report section): one bounded pass over the session transcript
+// following the drill author's report instructions. Read-only — it returns Markdown for display and
+// never touches mastery or memory (an # Observer with proposals is the only write path, and even
+// that requires user confirmation).
+export async function generateDrillSessionReport(
+  conversationId: string,
+): Promise<string> {
+  const provider = await getProvider();
+  if (!provider) throw new MissingApiKeyError();
+  const conversation = await getConversation(conversationId);
+  const drill = await resolveDrill(
+    parseAgentModifiers(conversation?.agentModifiersJson ?? null),
+  );
+  const reportInstructions = drill?.def.report?.trim();
+  if (!drill || !reportInstructions) {
+    throw new Error("This conversation's training mode has no report section");
+  }
+  const config = loadConfig();
+  const turns = tailTurnsByChars(
+    await getTurnsAfterId(conversationId, null),
+    LESSON_SESSION_TRANSCRIPT_CHARS,
+  );
+  const messages: ChatMessage[] = [
+    {
+      role: "system",
+      content: `You write the end-of-session report for a training mode ("${drill.def.name}") in a language-learning app.
+Follow the training mode's report instructions below over the session transcript. Ground every claim in the transcript — do not invent practice that is not there. Return clean Markdown only (no preamble), in the learner's native language unless the instructions say otherwise.
+
+=== REPORT INSTRUCTIONS ===
+${reportInstructions}`,
+    },
+    {
+      role: "user",
+      content: `=== LANGUAGES ===
+Native: ${config.nativeLanguage}
+Target: ${config.targetLanguage}
+Level: ${config.level}
+
+=== SESSION TRANSCRIPT ===
+${formatTurns(turns) || "(empty session)"}`,
+    },
+  ];
+  return provider.generate({
+    messages,
+    temperature: 0.3,
+    maxTokens: 2048,
+    meta: { label: `drill:${drill.modeId}:report` },
+  });
+}
 
 // Whole-session mastery review for a focused lesson: one bounded observer pass over the full transcript proposing
 // batch "correct" evidence for the non-known items the lesson touched. The learner confirms before anything is

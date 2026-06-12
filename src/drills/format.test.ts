@@ -236,3 +236,47 @@ describe("custom say drills (render pipeline)", () => {
     expect(block).toContain("calibrated to B1");
   });
 });
+
+describe("extension capabilities (observer / report / turnActions)", () => {
+  const extendedDoc = `${VALID_DOC.replace(
+    "format: lang-agent/drill@1",
+    `format: lang-agent/drill@1
+requires: [observer, report, turn-actions]
+observer:
+  scopes: [weak_all, profile]
+  writeback: propose
+turnActions: [explain, bilingual]`,
+  )}
+# Observer
+
+Score the fluency of each answer from 1-5 and note hesitation patterns.
+
+# Report
+
+Summarize sentences attempted and the three structures that slowed the learner down most.
+`;
+
+  it("parses observer/report sections with their config", () => {
+    const result = parseDrillDocument(extendedDoc);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.def.observer).toContain("fluency");
+    expect(result.def.observerScopes).toEqual(["weak_all", "profile"]);
+    expect(result.def.observerWriteback).toBe("propose");
+    expect(result.def.report).toContain("Summarize");
+    expect(result.def.turnActions).toEqual(["explain", "bilingual"]);
+    expect(result.warnings).toEqual([]);
+  });
+
+  it("warns when extension sections are present but not listed in requires", () => {
+    const noRequires = extendedDoc.replace(
+      "requires: [observer, report, turn-actions]\n",
+      "",
+    );
+    const result = parseDrillDocument(noRequires);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.warnings.join(" ")).toContain("observer");
+    expect(result.warnings.join(" ")).toContain("report");
+  });
+});

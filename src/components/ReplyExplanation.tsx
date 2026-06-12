@@ -30,6 +30,7 @@ export function ReplyExplanation({
   actions,
   trailingActions,
   extraPanels,
+  hideExplain = false,
   onFirstOpen,
   onLayoutChange,
 }: {
@@ -42,6 +43,8 @@ export function ReplyExplanation({
   actions?: ReactNode;
   trailingActions?: ReactNode;
   extraPanels?: ReactNode;
+  /** Drill turnActions: hide the explain button for this turn (other actions stay). */
+  hideExplain?: boolean;
   /** Fires once the first time the user opens the explanation (comprehension
    * signal accounting, see db/turns). */
   onFirstOpen?: () => void;
@@ -108,7 +111,8 @@ export function ReplyExplanation({
   const expanded = open && (explanation || error);
   // When "Reply explanation" is removed (hidden), only the explain button is
   // hidden; copy / read-aloud / bilingual and other actions stay as usual.
-  const explainHidden = isAgentHidden("builtin:transformer:explain");
+  const explainHidden =
+    isAgentHidden("builtin:transformer:explain") || hideExplain;
 
   return (
     <div className="flex w-full flex-col gap-1.5">

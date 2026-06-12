@@ -394,6 +394,11 @@ export const en = {
     start: "Start drill",
     startHint: "Press “Start drill” above to begin",
   },
+  drillReport: {
+    button: "Session report",
+    generating: "Writing the session report…",
+    title: "Session report",
+  },
   drillDialog: {
     createTitle: "New training mode",
     editTitle: "Edit training mode",

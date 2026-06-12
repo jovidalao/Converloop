@@ -95,6 +95,7 @@ import {
 } from "./chat/turns";
 import { useConfirm } from "./confirm";
 import { DictationReply } from "./DictationReply";
+import { DrillSessionReport } from "./DrillSessionReport";
 import { DrillStartScreen } from "./DrillStartScreen";
 import { LessonSessionReview } from "./LessonSessionReview";
 import { LessonStartScreen } from "./LessonStartScreen";
@@ -1661,6 +1662,7 @@ export function ChatView({
                   nativeLanguage={nativeLanguage}
                   learningMode={learningMode}
                   variant={practiceVariant}
+                  allowedActions={drillDef?.turnActions}
                   onLayoutChange={requestLayoutScroll}
                   editDisabled={analyzing || replyBusy}
                   onEditFrom={() => void editFromHere(turn.id)}
@@ -1705,6 +1707,7 @@ export function ChatView({
                         ? undefined
                         : practiceVariant
                     }
+                    allowedActions={drillDef?.turnActions}
                     offRecord={turn.excludeFromContext}
                     autoOpen={
                       !learningMode &&
@@ -1794,6 +1797,12 @@ export function ChatView({
       )}
       {learningMode && !compact && (
         <LessonSessionReview
+          conversationId={conversationId}
+          visible={turns.filter((tn) => tn.userText.trim()).length >= 3}
+        />
+      )}
+      {!learningMode && !compact && activeDrill?.def.report && (
+        <DrillSessionReport
           conversationId={conversationId}
           visible={turns.filter((tn) => tn.userText.trim()).length >= 3}
         />
