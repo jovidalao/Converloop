@@ -19,6 +19,8 @@ export interface ConversationTopicsContext {
   recentTopics?: string[];
   /** Topics just shown to the learner on a regenerate — return a clearly different set, not rewordings of these. */
   avoid?: string[];
+  /** Drill start pages: the drill document's # Setup section — what kind of themes fit this training mode. */
+  drillGuidance?: string;
   /** Random source — injectable so tests are deterministic; defaults to Math.random. Drives lens sampling + shuffle. */
   rng?: () => number;
 }
@@ -109,12 +111,17 @@ export async function generateConversationTopics(
           .map((a) => `- ${a}`)
           .join("\n")}\n`
       : "";
+  // Drill start pages: the topics seed a training mode rather than a free chat — honor the drill
+  // author's guidance about what kind of themes fit.
+  const guidanceBlock = ctx.drillGuidance?.trim()
+    ? `\nThese topics will seed a TRAINING MODE, not a free chat. The training mode's author says the themes should be:\n${ctx.drillGuidance.trim()}\n`
+    : "";
 
   const messages: ChatMessage[] = [
     {
       role: "user",
       content: `You are a ${ctx.targetLanguage} conversation partner for a ${ctx.nativeLanguage} speaker at ${ctx.level} level. You are proposing topics to KICK OFF a fresh casual conversation: the learner picks one and you open the chat on it, drawing them into talking.
-${profileBlock}${recentBlock}${avoidBlock}
+${profileBlock}${recentBlock}${avoidBlock}${guidanceBlock}
 Propose inviting, concrete conversation starters this learner would actually enjoy talking about — warm and low-pressure, the kind of thing a friend would bring up. Steer away from dry textbook prompts and heavy or sensitive subjects.
 
 For THIS batch, lean into these angles:

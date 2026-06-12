@@ -65,9 +65,7 @@ Start now.
   });
 
   it("rejects a missing # Task section", () => {
-    const result = parseDrillDocument(
-      VALID_DOC.replace("# Task", "# NotTask"),
-    );
+    const result = parseDrillDocument(VALID_DOC.replace("# Task", "# NotTask"));
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.errors.join(" ")).toContain('"# Task"');
@@ -186,5 +184,55 @@ describe("extractDrillDocument", () => {
   it("falls back to the raw reply when it already starts with frontmatter", () => {
     const bare = "---\nformat: lang-agent/drill@1\n---\n\n# Task\n\nx";
     expect(extractDrillDocument(bare)).toBe(bare);
+  });
+});
+
+describe("custom say drills (render pipeline)", () => {
+  const sayDoc = VALID_DOC.replace(
+    "interaction: chat",
+    "interaction: say-hidden",
+  )
+    .replace("grading: tutor", "grading: standard-answer")
+    .replace("mastery: production", "mastery: listening");
+
+  it("appends the code-owned say contract to a custom say-hidden drill", async () => {
+    const { renderDrillInstructions, renderDrillOpening } = await import(
+      "./render"
+    );
+    const parsed = parseDrillDocument(sayDoc);
+    if (!parsed.ok) throw new Error("doc should parse");
+    const block = renderDrillInstructions(parsed.def, { setup: "travel" });
+    expect(block).toContain("[[SAY]]");
+    expect(block).toContain("NEVER write the upcoming sentence");
+    const opening = renderDrillOpening(parsed.def, { setup: "travel" });
+    expect(opening).toContain("[[SAY]]the sentence[[/SAY]]");
+  });
+
+  it("keeps chat drills free of the say contract in both task and opening", async () => {
+    const { renderDrillInstructions, renderDrillOpening } = await import(
+      "./render"
+    );
+    const parsed = parseDrillDocument(VALID_DOC);
+    if (!parsed.ok) throw new Error("doc should parse");
+    expect(renderDrillInstructions(parsed.def, { setup: "x" })).not.toContain(
+      "[[SAY]]",
+    );
+    expect(renderDrillOpening(parsed.def, { setup: "x" })).not.toContain(
+      "[[SAY]]",
+    );
+  });
+
+  it("substitutes language template variables", async () => {
+    const { renderDrillInstructions } = await import("./render");
+    const parsed = parseDrillDocument(VALID_DOC);
+    if (!parsed.ok) throw new Error("doc should parse");
+    const block = renderDrillInstructions(
+      parsed.def,
+      { setup: "x" },
+      { nativeLanguage: "Chinese", targetLanguage: "English", level: "B1" },
+    );
+    expect(block).toContain("ONE Chinese sentence");
+    expect(block).toContain("into English");
+    expect(block).toContain("calibrated to B1");
   });
 });

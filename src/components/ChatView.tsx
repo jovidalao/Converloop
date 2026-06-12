@@ -60,6 +60,7 @@ import {
   generateAndSetConversationTitle,
   generateInputHintsForConversation,
   loadCachedConversationTopics,
+  loadCachedDrillTopics,
   loadCachedInputHints,
   loadCachedQuickfireTopics,
   recommendConversationTopics,
@@ -606,6 +607,13 @@ export function ChatView({
       return;
     }
     const useScenarioRecommender = drillDraftId === BUILTIN_DRILL_IDS.quickfire;
+    // Drills with a # Setup section get author-guided recommendations cached per drill; the rest
+    // share the general conversation-topic cache.
+    const guidance = drillDraft?.def.setupGuidance?.trim();
+    const guidedDrill =
+      !useScenarioRecommender && guidance && drillDraftId
+        ? { id: drillDraftId, guidance }
+        : undefined;
     let cancelled = false;
     // tick 0 = initial open; > 0 = a manual regenerate, where we want a clearly different set.
     const regenerate = drillReloadTick > 0;
@@ -617,7 +625,9 @@ export function ChatView({
       if (!regenerate) {
         const cached = useScenarioRecommender
           ? await loadCachedQuickfireTopics()
-          : await loadCachedConversationTopics();
+          : guidedDrill
+            ? await loadCachedDrillTopics(guidedDrill.id)
+            : await loadCachedConversationTopics();
         if (cancelled) return;
         if (cached.length > 0) {
           setDrillTopics(cached);
@@ -628,7 +638,7 @@ export function ChatView({
       const avoid = regenerate ? drillAvoidRef.current : [];
       const result = useScenarioRecommender
         ? await recommendQuickfireTopics({ avoid })
-        : await recommendConversationTopics({ avoid });
+        : await recommendConversationTopics({ avoid, drill: guidedDrill });
       if (cancelled) return;
       if (result.length > 0) setDrillTopics(result);
       // Nothing available (no provider / error and no cache): stop the skeletons.
@@ -638,6 +648,7 @@ export function ChatView({
     return () => {
       cancelled = true;
     };
+    // biome-ignore lint/correctness/useExhaustiveDependencies: drillDraft is identified by drillDraftId; the guidance string is stable per draft
   }, [drillDraftWantsTopics, drillDraftId, drillReloadTick]);
 
   // New-chat start page: same shape as the Rapid Q&A effect above — reuse the cached topics verbatim on open (no model

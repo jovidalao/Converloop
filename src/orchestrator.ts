@@ -1757,6 +1757,16 @@ export async function loadCachedConversationTopics(): Promise<string[]> {
   return loadCachedTopics(CONVERSATION_TOPICS_CACHE_KEY);
 }
 
+// Per-drill chip cache for drills that customize their recommender via a # Setup section (drills
+// without guidance share the general conversation-topics cache).
+const DRILL_TOPICS_CACHE_PREFIX = "drillTopics:";
+
+export async function loadCachedDrillTopics(
+  drillId: string,
+): Promise<string[]> {
+  return loadCachedTopics(DRILL_TOPICS_CACHE_PREFIX + drillId);
+}
+
 // Generate conversation topics for the new-chat start page from the learner's profile and recent conversation topics
 // (with broadly relatable everyday topics when records are thin). Mirrors recommendQuickfireTopics: always generates —
 // the start page only calls this on a cold cache or an explicit Regenerate (opts.avoid) — then caches the result so
@@ -1764,6 +1774,8 @@ export async function loadCachedConversationTopics(): Promise<string[]> {
 // degrades to the cached set (or type-your-own).
 export async function recommendConversationTopics(opts?: {
   avoid?: string[];
+  /** Drill start pages: the drill's # Setup guidance; results cache per drill instead of globally. */
+  drill?: { id: string; guidance: string };
 }): Promise<string[]> {
   const config = loadConfig();
   const avoid = opts?.avoid ?? [];
@@ -1793,13 +1805,19 @@ export async function recommendConversationTopics(opts?: {
         profileSlice,
         recentTopics,
         avoid,
+        drillGuidance: opts?.drill?.guidance,
       },
       (info) => {
         usedFallback = info.usedFallback;
       },
     );
     if (topics.length > 0 && !usedFallback) {
-      await setAppState(CONVERSATION_TOPICS_CACHE_KEY, JSON.stringify(topics));
+      await setAppState(
+        opts?.drill
+          ? DRILL_TOPICS_CACHE_PREFIX + opts.drill.id
+          : CONVERSATION_TOPICS_CACHE_KEY,
+        JSON.stringify(topics),
+      );
     }
     return topics;
   } catch {
