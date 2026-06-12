@@ -176,14 +176,14 @@ export function CustomLearningView({
             {t("customLearning.empty")}
           </div>
         ) : (
-          <div className="grid grid-cols-1 items-stretch gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="columns-1 gap-3 sm:columns-2 xl:columns-3">
             {lessons.map((lesson) => (
               // biome-ignore lint/a11y/useSemanticElements: can't be a <button> — it nests edit/delete action buttons
               <div
                 key={lesson.id}
                 role="button"
                 tabIndex={0}
-                className="group relative flex h-full w-full cursor-pointer flex-col rounded-lg border bg-card p-4 text-left transition-colors hover:border-primary/50 hover:bg-accent/40"
+                className="group relative mb-3 flex w-full cursor-pointer break-inside-avoid flex-col rounded-lg border bg-card p-4 text-left transition-colors hover:border-primary/50 hover:bg-accent/40"
                 onClick={() =>
                   setExpandedLessonId((cur) =>
                     cur === lesson.id ? null : lesson.id,
