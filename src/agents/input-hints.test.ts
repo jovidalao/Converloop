@@ -22,8 +22,27 @@ function stubProvider(raw: string, calls: GenerateOptions[]): ModelProvider {
   };
 }
 
+// Returns each element of raws in order, repeating the last one once exhausted.
+function sequenceProvider(
+  raws: string[],
+  calls: GenerateOptions[],
+): ModelProvider {
+  let i = 0;
+  return {
+    async generate(opts) {
+      calls.push(opts);
+      const raw = raws[Math.min(i, raws.length - 1)];
+      i++;
+      return raw;
+    },
+    async stream() {
+      throw new Error("not used");
+    },
+  };
+}
+
 describe("generateInputHints", () => {
-  it("uses a plain-text hint when the provider does not return a JSON array", async () => {
+  it("returns a plain-text cue → opener line as-is", async () => {
     const calls: GenerateOptions[] = [];
 
     const hints = await generateInputHints(
@@ -37,6 +56,7 @@ describe("generateInputHints", () => {
     expect(hints).toEqual([
       '追问压力最大的部分 -> "What ended up being the most stressful part?"',
     ]);
+    expect(calls).toHaveLength(1);
     expect(calls[0]?.meta?.label).toBe("input-hints");
   });
 
@@ -56,7 +76,7 @@ describe("generateInputHints", () => {
     ]);
   });
 
-  it("cleans truncated JSON-array syntax before showing a fallback hint", async () => {
+  it("salvages the hint from truncated JSON-array syntax", async () => {
     const calls: GenerateOptions[] = [];
 
     const hints = await generateInputHints(
@@ -72,7 +92,66 @@ describe("generateInputHints", () => {
     ]);
   });
 
-  it("drops a cue-only hint with no opener after the arrow", async () => {
+  it("takes the first element of a stray JSON array response", async () => {
+    const calls: GenerateOptions[] = [];
+
+    const hints = await generateInputHints(
+      stubProvider(
+        '```json\n["追问演讲细节 → How did the Q&A part go?", "分享经历 → I had a similar week."]\n```',
+        calls,
+      ),
+      ctx,
+    );
+
+    expect(hints).toEqual(["追问演讲细节 → How did the Q&A part go?"]);
+  });
+
+  it("picks the cue → opener line out of preamble lines", async () => {
+    const calls: GenerateOptions[] = [];
+
+    const hints = await generateInputHints(
+      stubProvider(
+        "Here is the best hint for this moment:\n表达共情并追问 → That sounds intense — what was the hardest part?",
+        calls,
+      ),
+      ctx,
+    );
+
+    expect(hints).toEqual([
+      "表达共情并追问 → That sounds intense — what was the hardest part?",
+    ]);
+  });
+
+  it("truncates an over-length hint instead of dropping it", async () => {
+    const calls: GenerateOptions[] = [];
+    const longOpener = `表达共情并追问 → ${"That sounds intense and exhausting. ".repeat(10)}`;
+
+    const hints = await generateInputHints(
+      stubProvider(longOpener, calls),
+      ctx,
+    );
+
+    expect(hints).toHaveLength(1);
+    expect(hints[0].length).toBeLessThanOrEqual(220);
+    expect(hints[0].endsWith("…")).toBe(true);
+  });
+
+  it("retries once when the first response is empty", async () => {
+    const calls: GenerateOptions[] = [];
+
+    const hints = await generateInputHints(
+      sequenceProvider(
+        ["", "追问压力来源 → What made it feel so stressful?"],
+        calls,
+      ),
+      ctx,
+    );
+
+    expect(calls).toHaveLength(2);
+    expect(hints).toEqual(["追问压力来源 → What made it feel so stressful?"]);
+  });
+
+  it("returns no hint when both attempts produce a cue with no opener", async () => {
     const calls: GenerateOptions[] = [];
 
     const hints = await generateInputHints(
@@ -80,6 +159,7 @@ describe("generateInputHints", () => {
       ctx,
     );
 
+    expect(calls).toHaveLength(2);
     expect(hints).toEqual([]);
   });
 });

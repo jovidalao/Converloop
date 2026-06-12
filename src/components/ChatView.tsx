@@ -266,6 +266,9 @@ export function ChatView({
   const [retry, setRetry] = useState<{ run: () => void } | null>(null);
   // A single most-relevant hint (no carousel rotation); rendered from inputHints[0].
   const [inputHints, setInputHints] = useState<string[] | null>(null);
+  // Manual "try another" from the hint overlay; ref guards double-clicks.
+  const [hintRegenerating, setHintRegenerating] = useState(false);
+  const hintRegeneratingRef = useRef(false);
   const messagesRef = useRef<HTMLDivElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -845,6 +848,26 @@ export function ChatView({
         setInputHints(hints);
       }
     });
+  }
+
+  // "Try another" on the hint overlay: re-run generation for the current turn.
+  // On failure/empty the old hint stays — worse than a new one, better than blank.
+  function regenerateInputHints() {
+    if (hintRegeneratingRef.current) return;
+    hintRegeneratingRef.current = true;
+    setHintRegenerating(true);
+    const turnGen = turnGenRef.current;
+    void generateInputHintsForConversation(conversationId)
+      .then((hints) => {
+        if (turnGenRef.current === turnGen && hints.length > 0) {
+          setInputHints(hints);
+        }
+      })
+      .finally(() => {
+        hintRegeneratingRef.current = false;
+        setHintRegenerating(false);
+        requestAnimationFrame(() => inputRef.current?.focus());
+      });
   }
 
   async function startLesson(replacingId?: string) {
@@ -2338,10 +2361,25 @@ export function ChatView({
                   >
                     <span
                       key={inputHints?.[0]}
-                      className="animate-hint-in line-clamp-3 text-muted-foreground"
+                      className="animate-hint-in line-clamp-3 pr-7 text-muted-foreground"
                     >
                       {inputHints?.[0]}
                     </span>
+                    <button
+                      type="button"
+                      onClick={regenerateInputHints}
+                      disabled={hintRegenerating}
+                      title={t("coach.hints.regenerate")}
+                      aria-label={t("coach.hints.regenerate")}
+                      className="pointer-events-auto absolute top-2.5 right-2 rounded p-1 text-ui-muted transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
+                    >
+                      <RefreshCwIcon
+                        size={13}
+                        className={
+                          hintRegenerating ? "animate-spin" : undefined
+                        }
+                      />
+                    </button>
                   </div>
                 )}
               </div>

@@ -438,10 +438,10 @@ function MasteryLink({
   );
 }
 
-// "Ways to keep going": the whole set of coaching hints generated for the next
-// reply, shown as a block. Same content the chat input cycles through one at a
-// time — the panel just lays them all out. Display only. Each hint is a native
-// cue + a target-language opener joined by an arrow.
+// "Ways to keep going": the single most-relevant coaching hint generated for the
+// next reply (no rotation). Same content the chat input overlays — the panel just
+// mirrors it. Display only. The hint is a native cue + a target-language opener
+// joined by an arrow.
 function ConversationHints({
   hints,
   regenerating,
