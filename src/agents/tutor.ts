@@ -129,7 +129,7 @@ RULES
   flag differences that are ONLY capitalization/punctuation.
 - If the transcription matches the standard answer (ignoring any opted-out capitalization/punctuation):
   is_correct=true, issues=[].
-- ALWAYS set mastery_updates=[] and expression_gap=null.
+- ALWAYS set mastery_updates=[], expression_gap=null, and highlight=null.
 
 OUTPUT CONTRACT
 - Return exactly ONE JSON object. No markdown fences, no prose, no reasoning.
@@ -161,7 +161,7 @@ RULES
     mastery_type="error_pattern" for every issue (these are not tracked as weaknesses).
 - Ignore pure capitalization/punctuation differences entirely — STT does not transcribe them reliably.
 - If the transcription matches the standard answer (ignoring capitalization/punctuation): is_correct=true, issues=[].
-- ALWAYS set mastery_updates=[] and expression_gap=null.
+- ALWAYS set mastery_updates=[], expression_gap=null, and highlight=null.
 
 OUTPUT CONTRACT
 - Return exactly ONE JSON object. No markdown fences, no prose, no reasoning.
@@ -249,6 +249,16 @@ B) EXPRESSION GAP — the message is wholly or partly in ${ctx.nativeLanguage}, 
       : ""
   }
 
+HIGHLIGHT (positive feedback)
+- "highlight": ONLY when the message is fully correct (is_correct=true, no
+  issues, no expression gap) AND the user produced something genuinely notable —
+  an idiomatic collocation, a weak-list / key-hint item used correctly and
+  unaided, natural register for the moment — set ONE short sentence IN
+  ${ctx.nativeLanguage} that quotes the exact ${ctx.targetLanguage} span and says
+  why it works. Specific praise builds momentum; generic praise erodes trust.
+- If nothing stands out, or the message has any issue, set highlight to null.
+  An ordinary correct sentence gets null, not a compliment.
+
 BOOKKEEPING (mastery_updates)
 - Do NOT list the user's errors here (they come from issues) and do NOT list
   expression_gap key_items here (handled separately). Look ONLY at the latest
@@ -268,8 +278,8 @@ Never output counts, scores, or confidence — only discrete observations.
 OUTPUT CONTRACT
 - Return exactly ONE JSON object. No markdown fences, no prose, no reasoning.
 - Always include these top-level keys: is_correct, corrected, natural, issues,
-  mastery_updates${includeGap ? ", expression_gap" : ""}.
-- Use [] for empty arrays.${includeGap ? " Use expression_gap:null when there is no expression gap." : ""}
+  mastery_updates, highlight${includeGap ? ", expression_gap" : ""}.
+- Use [] for empty arrays and highlight:null when nothing stands out.${includeGap ? " Use expression_gap:null when there is no expression gap." : ""}
 - Do not include keys outside the schema.`;
 }
 
@@ -565,11 +575,30 @@ function dropUntrackedCorrects(
   return { ...analysis, mastery_updates: updates };
 }
 
+// Backstop for the prompt rule: praise belongs only on a fully correct turn (no
+// issues, no gap) and on conversation turns, never on drills (those grade against
+// a fixed standard answer). A stray highlight elsewhere is dropped, not shown.
+function dropMisplacedHighlight(
+  analysis: TutorAnalysis,
+  ctx: TutorContext,
+): TutorAnalysis {
+  if (!analysis.highlight?.trim()) return analysis;
+  const misplaced =
+    !analysis.is_correct ||
+    analysis.issues.length > 0 ||
+    !!analysis.expression_gap ||
+    !!ctx.standardAnswer;
+  return misplaced ? { ...analysis, highlight: null } : analysis;
+}
+
 function finalizeTutorAnalysis(
   analysis: TutorAnalysis,
   ctx: TutorContext,
 ): TutorAnalysis {
-  return dropUntrackedCorrects(sanitizeExpressionGap(analysis, ctx), ctx);
+  return dropMisplacedHighlight(
+    dropUntrackedCorrects(sanitizeExpressionGap(analysis, ctx), ctx),
+    ctx,
+  );
 }
 
 function parseTutorRaw(raw: string, ctx: TutorContext): TutorParseResult {

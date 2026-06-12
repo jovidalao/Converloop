@@ -340,8 +340,9 @@ export function InlineCorrection({
         )}
         {allCorrect && (
           <span className="inline-flex items-center gap-1 px-1.5 py-1 text-ui-caption text-success">
-            <CheckIcon size={14} />
-            {t("corrections.correct")}
+            <CheckIcon size={14} className="shrink-0" />
+            {/* Specific praise when the tutor spotted something notable; the plain check otherwise. */}
+            {analysis?.highlight?.trim() || t("corrections.correct")}
           </span>
         )}
         {showFallback && (

@@ -114,6 +114,57 @@ describe("analyze", () => {
     ]);
   });
 
+  it("passes a highlight through on a fully correct turn", async () => {
+    const provider = stubProvider(() =>
+      JSON.stringify({
+        is_correct: true,
+        corrected: "I ended up taking the late train.",
+        natural: "I ended up taking the late train.",
+        issues: [],
+        mastery_updates: [],
+        expression_gap: null,
+        highlight: "“ended up taking” 用得很地道——比 “finally took” 更口语。",
+      }),
+    );
+
+    const result = await analyze(provider, ctx);
+
+    expect(result.analysis?.is_correct).toBe(true);
+    expect(result.analysis?.highlight).toContain("ended up taking");
+  });
+
+  it("drops a highlight that rides on a turn with issues", async () => {
+    const withMisplacedPraise = JSON.parse(validAnalysis) as Record<
+      string,
+      unknown
+    >;
+    withMisplacedPraise.highlight = "Great sentence!";
+    const provider = stubProvider(() => JSON.stringify(withMisplacedPraise));
+
+    const result = await analyze(provider, ctx);
+
+    expect(result.analysis?.issues).toHaveLength(1);
+    expect(result.analysis?.highlight ?? null).toBeNull();
+  });
+
+  it('normalizes a placeholder highlight ("none") to null', async () => {
+    const provider = stubProvider(() =>
+      JSON.stringify({
+        is_correct: true,
+        corrected: "I went home yesterday.",
+        natural: "I went home yesterday.",
+        issues: [],
+        mastery_updates: [],
+        expression_gap: null,
+        highlight: "none",
+      }),
+    );
+
+    const result = await analyze(provider, ctx);
+
+    expect(result.analysis?.highlight ?? null).toBeNull();
+  });
+
   it("on structured validation failure, tries JSON repair first and still returns analysis on success", async () => {
     const calls: GenerateOptions[] = [];
     const provider = stubProvider((opts, call) => {

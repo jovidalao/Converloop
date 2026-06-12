@@ -570,6 +570,20 @@ export function normalizeTutorPayload(json: unknown): unknown {
     };
   }
 
+  // Optional praise line. Placeholder strings ("null"/"none") become null; anything
+  // else coerces to a string so the schema's nullable-optional field accepts it.
+  let highlight = coerceString(
+    readAlias(o, ["highlight", "praise", "well_used", "wellUsed"]),
+  );
+  if (
+    highlight === undefined ||
+    (typeof highlight === "string" &&
+      ["", "null", "none", "n/a", "nil"].includes(
+        highlight.trim().toLowerCase(),
+      ))
+  )
+    highlight = null;
+
   return {
     ...o,
     is_correct: coerceBoolean(
@@ -606,6 +620,7 @@ export function normalizeTutorPayload(json: unknown): unknown {
     issues,
     mastery_updates,
     expression_gap,
+    highlight,
   };
 }
 

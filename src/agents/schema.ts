@@ -76,6 +76,11 @@ export const TutorAnalysisCore = z.object({
   natural: z.string(),
   issues: z.array(Issue),
   mastery_updates: z.array(MasteryUpdate),
+  // One short native-language praise line quoting something the user did notably
+  // well (idiomatic collocation, a tracked weak/review item used correctly,
+  // natural register). null when nothing stands out — never invented for
+  // ordinary sentences, never set on an incorrect message (code backstops this).
+  highlight: z.string().nullable().optional(),
 });
 
 export const TutorAnalysis = TutorAnalysisCore.extend({
