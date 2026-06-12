@@ -7,8 +7,9 @@ export interface InputHintsContext {
   level: string;
   recentHistory: string;
   profileSlice?: string;
-  // Formatted weak-spot list (past mistakes) so the single hint can quietly give the
-  // learner a chance to re-use / fix something they've gotten wrong before.
+  // Formatted re-practice list (spaced-repetition due items + recent mistakes) so the
+  // single hint can quietly give the learner a chance to re-use something that is
+  // fading or that they've gotten wrong before.
   pastMistakes?: string;
 }
 
@@ -84,7 +85,7 @@ function buildMessages(ctx: InputHintsContext): ChatMessage[] {
     ? `\nLearner profile (use their interests and what they're working on to make the hint relevant):\n${ctx.profileSlice.trim()}\n`
     : "";
   const mistakesBlock = ctx.pastMistakes?.trim()
-    ? `\nThings this learner has gotten wrong before (favor a hint that quietly gives them a chance to re-use or fix ONE of these — only if it fits the conversation naturally; never force it):\n${ctx.pastMistakes.trim()}\n`
+    ? `\nThings this learner should quietly re-practice — items they got wrong before or learned a while ago and are likely forgetting (favor a hint that naturally lets them re-use ONE of these — only if it fits the conversation; never force it):\n${ctx.pastMistakes.trim()}\n`
     : "";
   return [
     {

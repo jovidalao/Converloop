@@ -1547,16 +1547,25 @@ export async function generateInputHintsForConversation(
 
   const config = loadConfig();
   try {
-    const [turns, profileMd, weakList] = await Promise.all([
+    const [turns, profileMd, dueReview, weakList] = await Promise.all([
       getTurnsAfterId(conversationId, null),
       readProfile(config),
+      getReviewDueList(5),
       getWeakList(8),
     ]);
     const recent = tailTurnsByChars(turns, 4000);
     const recentHistory = formatTurns(recent);
-    // Compact past-mistakes list so the single hint can quietly re-expose a weak spot.
-    // Listening/drill keys are already excluded by getWeakList (excludeListeningKeys).
-    const pastMistakes = weakList
+    // Re-practice candidates for the hint: spaced-repetition picks first (retention
+    // has decayed per dueReviewScore — the same forgetting model the conversation
+    // agent's DUE-FOR-REVIEW list uses), then recent weak items to fill. Recently
+    // missed items are still fresh in memory; the fading ones are where a quiet
+    // re-exposure pays. Listening/drill keys are excluded by both queries.
+    const dueKeys = new Set(dueReview.map((item) => item.key));
+    const rePractice = [
+      ...dueReview,
+      ...weakList.filter((w) => !dueKeys.has(w.key)),
+    ].slice(0, 8);
+    const pastMistakes = rePractice
       .map((w) => {
         const note = w.notes?.trim();
         return `- ${w.label}${note ? ` (${note})` : ""}`;
