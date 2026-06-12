@@ -87,6 +87,19 @@ export function sanitizeHint(text: string): string {
   return truncateHint(cleanInputHintForDisplay(text));
 }
 
+// A stored hint line is "native-language cue → target-language opener" (see the
+// prompt below). Consumers that let the learner borrow the hint (Tab in the chat
+// input, the coach panel's "use" button) must insert ONLY the opener — inserting
+// the whole line would put both languages in the composer.
+export function splitHintParts(hint: string): {
+  cue: string | null;
+  opener: string;
+} {
+  const m = hint.match(/^(.*?)(?:→|->)([\s\S]*)$/);
+  if (!m) return { cue: null, opener: hint.trim() };
+  return { cue: m[1].trim() || null, opener: m[2].trim() };
+}
+
 function buildMessages(ctx: InputHintsContext): ChatMessage[] {
   const profileBlock = ctx.profileSlice?.trim()
     ? `\nLearner profile (use their interests and what they're working on to make the hint relevant):\n${ctx.profileSlice.trim()}\n`

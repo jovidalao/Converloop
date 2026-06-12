@@ -7,6 +7,7 @@ import {
   XIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { splitHintParts } from "../agents/input-hints";
 import {
   matchSlashCommands,
   parseSlashInput,
@@ -2274,9 +2275,11 @@ export function ChatView({
                       !e.nativeEvent.isComposing
                     ) {
                       const hint = inputHints?.[0]?.trim();
-                      if (hint) {
+                      // Insert only the target-language opener, never the native cue.
+                      const opener = hint ? splitHintParts(hint).opener : "";
+                      if (opener) {
                         e.preventDefault();
-                        setInput(hint);
+                        setInput(opener);
                         setInputHints(null);
                         requestAnimationFrame(() => inputRef.current?.focus());
                         return;

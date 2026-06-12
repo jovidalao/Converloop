@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type TFunction, useTranslation } from "@/i18n";
 import { onAppEvent } from "@/lib/app-events";
 import { cn } from "@/lib/utils";
+import { splitHintParts } from "../agents/input-hints";
 import {
   getReviewDueList,
   isIsolatedDrillKey,
@@ -462,11 +463,7 @@ function ConversationHints({
   return (
     <ul className="m-0 flex list-none flex-col gap-2 p-0">
       {hints.map((hint, i) => {
-        const parts = hint.split("→");
-        const cue = parts.length >= 2 ? parts[0].trim() : null;
-        const opener = (
-          parts.length >= 2 ? parts.slice(1).join("→") : hint
-        ).trim();
+        const { cue, opener } = splitHintParts(hint);
         return (
           <li
             key={`${i}:${hint}`}

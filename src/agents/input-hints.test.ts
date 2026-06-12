@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { GenerateOptions, ModelProvider } from "../providers/types";
-import { generateInputHints } from "./input-hints";
+import { generateInputHints, splitHintParts } from "./input-hints";
 
 const ctx = {
   nativeLanguage: "Chinese",
@@ -40,6 +40,38 @@ function sequenceProvider(
     },
   };
 }
+
+describe("splitHintParts", () => {
+  it("splits a cue → opener line", () => {
+    expect(
+      splitHintParts("追问压力来源 → What made it feel so stressful?"),
+    ).toEqual({
+      cue: "追问压力来源",
+      opener: "What made it feel so stressful?",
+    });
+  });
+
+  it("accepts the ASCII arrow", () => {
+    expect(splitHintParts("表达共情 -> That sounds intense.")).toEqual({
+      cue: "表达共情",
+      opener: "That sounds intense.",
+    });
+  });
+
+  it("splits at the first arrow and keeps later ones in the opener", () => {
+    expect(splitHintParts("解释流程 → First A → then B")).toEqual({
+      cue: "解释流程",
+      opener: "First A → then B",
+    });
+  });
+
+  it("treats an arrowless line as opener-only", () => {
+    expect(splitHintParts("How did the Q&A part go?")).toEqual({
+      cue: null,
+      opener: "How did the Q&A part go?",
+    });
+  });
+});
 
 describe("generateInputHints", () => {
   it("returns a plain-text cue → opener line as-is", async () => {
