@@ -24,6 +24,8 @@ export function ReplyExplanation({
   panelId,
   activePanelId,
   setActivePanelId,
+  conversationId,
+  turnId,
   text,
   actions,
   trailingActions,
@@ -34,6 +36,8 @@ export function ReplyExplanation({
   panelId: string;
   activePanelId: string | null;
   setActivePanelId: Dispatch<SetStateAction<string | null>>;
+  conversationId: string;
+  turnId: string;
   text: string;
   actions?: ReactNode;
   trailingActions?: ReactNode;
@@ -73,7 +77,7 @@ export function ReplyExplanation({
     setExplanation("");
     let acc = "";
     try {
-      await explainReply(text, (d) => {
+      await explainReply(conversationId, turnId, text, (d) => {
         acc += d;
         setExplanation(acc);
       });

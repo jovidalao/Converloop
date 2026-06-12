@@ -124,6 +124,8 @@ export interface TurnResult {
 // The tutor only needs enough context to disambiguate the latest utterance; supply this many recent turns. All verbatim turns after the watermark go to the conversation agent.
 const TUTOR_HISTORY_TURNS = 8;
 const SUGGESTION_CONTEXT_CHARS = 12000;
+// Explanation needs the immediate thread (what references resolve to), not the whole chat.
+const EXPLAIN_CONTEXT_CHARS = 6000;
 
 export class MissingApiKeyError extends Error {
   constructor() {
@@ -1293,6 +1295,8 @@ export async function regenerateReply(
 // On-demand explanation for a conversation reply: reads the Markdown profile (same source as the conversation agent), streams a native-language explanation.
 // Not on the hot path; not persisted — explanations are cheap and can be regenerated on demand.
 export async function explainReply(
+  conversationId: string,
+  turnId: string,
   reply: string,
   onDelta: (delta: string) => void,
 ): Promise<string> {
@@ -1300,12 +1304,29 @@ export async function explainReply(
   if (!provider) throw new MissingApiKeyError();
 
   const config = loadConfig();
-  const profileMd = await readProfile(config);
+  const [profileMd, turns] = await Promise.all([
+    readProfile(config),
+    getTurnsAfterId(conversationId, null),
+  ]);
   const experiencePreferences = formatExperiencePreferences(
     profileMd,
     "reading",
   );
   const profileSlice = profileSliceForConversation(profileMd);
+  // Context leading up to the explained reply: earlier turns plus the learner
+  // message it answers, so cross-turn references ("that place you mentioned",
+  // elliptical answers) resolve. A missing turn degrades to no history.
+  const idx = turns.findIndex((t) => t.id === turnId);
+  let history = "";
+  if (idx >= 0) {
+    const before = formatTurns(
+      tailTurnsByChars(turns.slice(0, idx), EXPLAIN_CONTEXT_CHARS),
+    );
+    const userLine = turns[idx].userInput.trim();
+    history = [before, userLine ? `User: ${userLine}` : ""]
+      .filter(Boolean)
+      .join("\n\n");
+  }
 
   return runTransformer(
     "builtin:transformer:explain",
@@ -1319,6 +1340,7 @@ export async function explainReply(
           level: config.level,
           experiencePreferences,
           profileSlice,
+          history,
           reply,
           customInstructions: getBuiltinAgentOverride(
             "builtin:transformer:explain",

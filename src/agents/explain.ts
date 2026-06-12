@@ -7,6 +7,7 @@ export interface ExplainContext {
   level: string;
   experiencePreferences: string;
   profileSlice: string; // MD profile slice (qualitative mastery status), same source as the conversation agent
+  history: string; // recent turns before this reply, so cross-turn references resolve (empty when unavailable)
   reply: string; // the conversation reply to explain
   customInstructions?: string; // additional instructions appended by the user in the agent library
 }
@@ -23,6 +24,10 @@ what they likely don't — explain only what's likely to be unclear to them.
 
 RULES
 - Write the explanation IN ${ctx.nativeLanguage} (the learner's native language).
+- The message is part of an ongoing conversation; RECENT CONVERSATION (when
+  present) gives the turns leading up to it. Use it to resolve what the message
+  actually refers to — pronouns, callbacks to something said earlier, elliptical
+  answers — and explain what the wording means HERE, not in isolation.
 - Follow the learner experience preferences below when deciding explanation
   depth, wording, examples, and translation style.
 - Focus on what BLOCKS comprehension for a non-native reader: grammar structures,
@@ -47,7 +52,13 @@ ${ctx.profileSlice || "(no profile yet)"}`;
 }
 
 function userPrompt(ctx: ExplainContext): string {
-  return `=== PARTNER MESSAGE TO EXPLAIN ===
+  const historyBlock = ctx.history.trim()
+    ? `=== RECENT CONVERSATION (context leading up to the message) ===
+${ctx.history.trim()}
+
+`
+    : "";
+  return `${historyBlock}=== PARTNER MESSAGE TO EXPLAIN ===
 ${ctx.reply}`;
 }
 
