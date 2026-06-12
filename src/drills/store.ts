@@ -3,7 +3,7 @@
 // are seeded from the compiled-in documents and are read-only in the UI (users duplicate to
 // customize), so a built-in row that drifts from its seed is simply re-seeded.
 
-import { asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq } from "drizzle-orm";
 import { db } from "../db/client";
 import { type LearningAgent, learningAgent } from "../db/schema";
 import { BUILTIN_DRILL_SEEDS } from "./builtins";
@@ -154,6 +154,25 @@ export async function createDrill(
     updatedAt: now,
   });
   return id;
+}
+
+/** Duplicate a drill (typically a built-in) into an editable custom copy of the same document. */
+export async function duplicateDrill(record: DrillRecord): Promise<string> {
+  return createDrill(record.sourceMd, record.def);
+}
+
+/** Delete a custom drill (built-ins are read-only and stay). Existing conversations keep working
+ *  off their definition snapshot. */
+export async function deleteDrill(id: string): Promise<void> {
+  await db
+    .delete(learningAgent)
+    .where(
+      and(
+        eq(learningAgent.id, id),
+        eq(learningAgent.kind, "drill"),
+        eq(learningAgent.builtIn, 0),
+      ),
+    );
 }
 
 /** Update a custom drill's document (built-ins are read-only). */

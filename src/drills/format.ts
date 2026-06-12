@@ -269,13 +269,19 @@ export function parseDrillDocument(md: string): DrillParseResult {
   return { ok: true, def, warnings };
 }
 
-/** Resolve display fields for the current UI locale ("zh-CN" matches "zh-CN" then "zh"). */
+/** Resolve display fields for the current UI locale: exact key first ("zh-CN"), then any entry
+ *  sharing the language ("zh" matches a document's "zh-CN" and vice versa). */
 export function localizeDrill(
   def: DrillDefinition,
   locale: string,
 ): { name: string; description: string; intro: string } {
-  const exact = def.locales?.[locale];
-  const lang = def.locales?.[locale.split("-")[0]];
+  const locales = def.locales ?? {};
+  const language = locale.split("-")[0].toLowerCase();
+  const exact = locales[locale];
+  const langKey = Object.keys(locales).find(
+    (key) => key.split("-")[0].toLowerCase() === language,
+  );
+  const lang = langKey ? locales[langKey] : undefined;
   const pick = (field: "name" | "description" | "intro") =>
     exact?.[field] ?? lang?.[field] ?? undefined;
   return {

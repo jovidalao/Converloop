@@ -1,5 +1,8 @@
 import {
   BookOpenCheckIcon,
+  CheckIcon,
+  ClipboardCopyIcon,
+  CopyPlusIcon,
   PencilIcon,
   PlusIcon,
   Trash2Icon,
@@ -13,8 +16,16 @@ import {
   listLearningAgents,
   updateLearningAgent,
 } from "../db/learning-agents";
-import type { DrillSummary } from "../drills/types";
+import {
+  createDrill,
+  deleteDrill,
+  duplicateDrill,
+  getDrill,
+  updateDrill,
+} from "../drills/store";
+import type { DrillDefinition, DrillSummary } from "../drills/types";
 import { useConfirm } from "./confirm";
+import { DrillDocumentDialog } from "./DrillDocumentDialog";
 import { DrillIcon } from "./drill-icons";
 import { LearningAgentEditDialog } from "./LearningAgentEditDialog";
 import { Button } from "./ui/button";
@@ -30,24 +41,47 @@ interface CustomLearningViewProps {
   onOpenCreate: () => void;
   /** Refresh the app-level lesson list (command palette) after an edit / delete here. */
   onRefresh: () => Promise<void>;
+  /** Refresh the app-level drill list after create / edit / duplicate / delete here. */
+  onRefreshDrills: () => Promise<void>;
 }
 
 // A training-mode card: icon + name + one-line description, starts the drill on click. Visually matches the
-// lesson cards below (same border / hover), so the gallery reads as one surface of mixed training modes + lessons.
+// lesson cards below (same border / hover). Hover actions: built-ins offer "duplicate to customize" +
+// export (the built-ins double as format examples for new drills); custom drills add edit + delete.
 function DrillCard({
   drill,
+  exported,
   onStart,
+  onDuplicate,
+  onExport,
+  onEdit,
+  onDelete,
 }: {
   drill: DrillSummary;
+  /** Briefly true after export — flips the icon to a check as copy feedback. */
+  exported: boolean;
   onStart: () => void;
+  onDuplicate: () => void;
+  onExport: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
 }) {
+  const { t } = useTranslation();
   return (
-    <button
-      type="button"
+    // biome-ignore lint/a11y/useSemanticElements: can't be a <button> — it nests the hover action buttons
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onStart}
-      className="group block w-full cursor-pointer rounded-lg border bg-card p-4 text-left transition-colors hover:border-primary/50 hover:bg-accent/40"
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onStart();
+        }
+      }}
+      className="group relative block w-full cursor-pointer rounded-lg border bg-card p-4 text-left transition-colors hover:border-primary/50 hover:bg-accent/40"
     >
-      <span className="flex items-center gap-2">
+      <span className="flex items-center gap-2 pr-16">
         <span className="shrink-0 text-primary">
           <DrillIcon name={drill.icon} className="size-4" />
         </span>
@@ -58,7 +92,66 @@ function DrillCard({
       <span className="m-0 mt-1.5 block text-ui-body leading-relaxed text-ui-muted">
         {drill.description}
       </span>
-    </button>
+      <span className="absolute top-2.5 right-2.5 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+        {drill.builtIn ? (
+          <button
+            type="button"
+            className="rounded-md p-1.5 text-ui-muted hover:bg-accent hover:text-foreground"
+            title={t("customLearning.duplicateDrill")}
+            aria-label={t("customLearning.duplicateDrill")}
+            onClick={(e) => {
+              e.stopPropagation();
+              onDuplicate();
+            }}
+          >
+            <CopyPlusIcon className="size-3.5" />
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="rounded-md p-1.5 text-ui-muted hover:bg-accent hover:text-foreground"
+            title={t("common.edit")}
+            aria-label={t("common.edit")}
+            onClick={(e) => {
+              e.stopPropagation();
+              onEdit();
+            }}
+          >
+            <PencilIcon className="size-3.5" />
+          </button>
+        )}
+        <button
+          type="button"
+          className="rounded-md p-1.5 text-ui-muted hover:bg-accent hover:text-foreground"
+          title={t("customLearning.exportDrill")}
+          aria-label={t("customLearning.exportDrill")}
+          onClick={(e) => {
+            e.stopPropagation();
+            onExport();
+          }}
+        >
+          {exported ? (
+            <CheckIcon className="size-3.5 text-success" />
+          ) : (
+            <ClipboardCopyIcon className="size-3.5" />
+          )}
+        </button>
+        {!drill.builtIn && (
+          <button
+            type="button"
+            className="rounded-md p-1.5 text-ui-muted hover:bg-accent hover:text-foreground"
+            title={t("common.delete")}
+            aria-label={t("common.delete")}
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
+          >
+            <Trash2Icon className="size-3.5" />
+          </button>
+        )}
+      </span>
+    </div>
   );
 }
 
@@ -71,12 +164,21 @@ export function CustomLearningView({
   onStartDrill,
   onOpenCreate,
   onRefresh,
+  onRefreshDrills,
 }: CustomLearningViewProps) {
   const { t } = useTranslation();
   const confirm = useConfirm();
   const [lessons, setLessons] = useState<LearningAgentMeta[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [expandedLessonId, setExpandedLessonId] = useState<string | null>(null);
+  // Drill dialogs: "create" opens the blank document dialog; editing holds the loaded custom drill.
+  const [creatingDrill, setCreatingDrill] = useState(false);
+  const [editingDrill, setEditingDrill] = useState<{
+    id: string;
+    sourceMd: string;
+  } | null>(null);
+  // Card id whose document was just copied — flips that card's export icon to a check for a moment.
+  const [exportedDrillId, setExportedDrillId] = useState<string | null>(null);
 
   const reload = useCallback(() => listLearningAgents().then(setLessons), []);
 
@@ -91,6 +193,56 @@ export function CustomLearningView({
     await reload();
     await onRefresh();
     setEditingId(null);
+  }
+
+  async function saveNewDrill(sourceMd: string, def: DrillDefinition) {
+    await createDrill(sourceMd, def);
+    await onRefreshDrills();
+    setCreatingDrill(false);
+  }
+
+  async function saveDrillEdit(sourceMd: string, def: DrillDefinition) {
+    if (!editingDrill) return;
+    await updateDrill(editingDrill.id, sourceMd, def);
+    await onRefreshDrills();
+    setEditingDrill(null);
+  }
+
+  async function duplicateDrillById(id: string) {
+    const record = await getDrill(id);
+    if (!record) return;
+    await duplicateDrill(record);
+    await onRefreshDrills();
+  }
+
+  async function exportDrill(id: string) {
+    const record = await getDrill(id);
+    if (!record) return;
+    await navigator.clipboard.writeText(record.sourceMd);
+    setExportedDrillId(id);
+    window.setTimeout(
+      () => setExportedDrillId((cur) => (cur === id ? null : cur)),
+      2500,
+    );
+  }
+
+  async function openDrillEditor(id: string) {
+    const record = await getDrill(id);
+    if (!record) return;
+    setEditingDrill({ id: record.id, sourceMd: record.sourceMd });
+  }
+
+  async function removeDrill(drill: DrillSummary) {
+    if (drill.builtIn) return;
+    if (
+      !(await confirm({
+        title: t("customLearning.deleteDrillTitle", { name: drill.name }),
+        description: t("customLearning.deleteDrillDescription"),
+      }))
+    )
+      return;
+    await deleteDrill(drill.id);
+    await onRefreshDrills();
   }
 
   async function removeLesson(lesson: LearningAgentMeta) {
@@ -131,15 +283,30 @@ export function CustomLearningView({
           </Button>
         </div>
 
-        <div className="mb-2 text-ui-caption font-medium text-ui-muted">
-          {t("customLearning.drillsLabel")}
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <span className="text-ui-caption font-medium text-ui-muted">
+            {t("customLearning.drillsLabel")}
+          </span>
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-ui-caption text-primary hover:bg-accent"
+            onClick={() => setCreatingDrill(true)}
+          >
+            <PlusIcon size={13} />
+            {t("customLearning.newDrill")}
+          </button>
         </div>
         <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
           {drills.map((drill) => (
             <DrillCard
               key={drill.id}
               drill={drill}
+              exported={exportedDrillId === drill.id}
               onStart={() => onStartDrill(drill)}
+              onDuplicate={() => void duplicateDrillById(drill.id)}
+              onExport={() => void exportDrill(drill.id)}
+              onEdit={() => void openDrillEditor(drill.id)}
+              onDelete={() => void removeDrill(drill)}
             />
           ))}
         </div>
@@ -243,6 +410,21 @@ export function CustomLearningView({
           agent={editing}
           onSave={(patch) => void saveLesson(editing.id, patch)}
           onCancel={() => setEditingId(null)}
+        />
+      )}
+      {creatingDrill && (
+        <DrillDocumentDialog
+          mode="create"
+          onSave={saveNewDrill}
+          onCancel={() => setCreatingDrill(false)}
+        />
+      )}
+      {editingDrill && (
+        <DrillDocumentDialog
+          mode="edit"
+          initialMd={editingDrill.sourceMd}
+          onSave={saveDrillEdit}
+          onCancel={() => setEditingDrill(null)}
         />
       )}
     </div>

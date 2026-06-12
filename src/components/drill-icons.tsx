@@ -15,8 +15,9 @@ import {
 } from "lucide-react";
 import type { ComponentType } from "react";
 
-// Allowed drill icon names (drill@1 frontmatter `icon`). A small curated lucide subset — unknown
-// names fall back to the dumbbell so imported documents can never break rendering.
+// React mapping for the allowed drill icon names (the name list itself lives in src/drills/icons.ts
+// so the authoring spec can embed it without importing React). Unknown names fall back to the
+// dumbbell so imported documents can never break rendering.
 const DRILL_ICONS: Record<string, ComponentType<{ className?: string }>> = {
   zap: ZapIcon,
   headphones: HeadphonesIcon,
@@ -43,5 +44,3 @@ export function DrillIcon({
   const Icon = (name && DRILL_ICONS[name]) || DumbbellIcon;
   return <Icon className={className} />;
 }
-
-export const DRILL_ICON_NAMES = Object.keys(DRILL_ICONS);

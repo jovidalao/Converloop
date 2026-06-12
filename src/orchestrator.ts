@@ -2,6 +2,10 @@ import { generateAutoTitle } from "./agents/auto-title";
 import { bilingual } from "./agents/bilingual";
 import { converse } from "./agents/conversation";
 import { generateConversationTopics } from "./agents/conversation-topics";
+import {
+  type GeneratedDrillDocument,
+  generateDrillDocument,
+} from "./agents/drill-builder";
 import { explain } from "./agents/explain";
 import {
   cleanInputHintForDisplay,
@@ -353,6 +357,21 @@ export async function createCustomLearningAgentFromDescription(
     level: config.level,
   });
   return createLearningAgent(draft);
+}
+
+// NL drill builder: description → drill@1 Markdown document (validated; one self-correction round).
+// Returns the document + parse result for the create dialog to preview/save — it does NOT save.
+export async function generateDrillDocumentFromDescription(
+  description: string,
+): Promise<GeneratedDrillDocument> {
+  const provider = await getProvider();
+  if (!provider) throw new MissingApiKeyError();
+  const config = loadConfig();
+  return generateDrillDocument(provider, description, {
+    nativeLanguage: config.nativeLanguage,
+    targetLanguage: config.targetLanguage,
+    level: config.level,
+  });
 }
 
 export async function createLearningProjectFromGoal(

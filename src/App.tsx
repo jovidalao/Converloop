@@ -777,6 +777,7 @@ function App() {
         onStartDrill={openDrillDraft}
         onOpenCreate={() => navigateTo({ view: "learning", activeId })}
         onRefresh={refreshLearningAgents}
+        onRefreshDrills={refreshDrills}
       />
     ) : view === "design" ? (
       <AppDesignView />

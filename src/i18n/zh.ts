@@ -367,6 +367,25 @@ export const zh: Messages = {
     start: "开始闪练",
     startHint: "点上方「开始闪练」开始",
   },
+  drillDialog: {
+    createTitle: "新建训练",
+    editTitle: "编辑训练",
+    subtitle:
+      "一个训练模式就是一份 Markdown 文档:frontmatter 定义机制,正文小节是提示词。",
+    describePlaceholder:
+      "描述你想要的训练,例如「给我中文句子,我口头翻译成英文」……",
+    generate: "AI 生成",
+    generateInvalid:
+      "AI 生成的文档未通过校验 —— 请查看下方错误,修改或重新生成。",
+    externalHint:
+      "也可以复制创作规范,粘给 ChatGPT/Claude 加上你的需求,再把结果粘贴回这里。",
+    copySpec: "复制 AI 创作规范",
+    specCopied: "已复制",
+    documentPlaceholder: "粘贴或编写 lang-agent/drill@1 Markdown 文档……",
+    errorsTitle: "文档未通过校验",
+    errorsHint: "提示:可以把这些错误原样发回给写文档的 AI,让它修正后再试。",
+    validSummary: "校验通过:「{name}」 · 交互预设:{interaction}",
+  },
   drill: {
     start: "开始训练",
     startHint: "点上方「开始训练」开始",
@@ -408,6 +427,12 @@ export const zh: Messages = {
     refresh: "重新生成",
   },
   customLearning: {
+    newDrill: "新建训练",
+    duplicateDrill: "复制为我的训练",
+    exportDrill: "复制文档 (.md)",
+    deleteDrillTitle: "删除训练「{name}」?",
+    deleteDrillDescription:
+      "训练定义将被删除;已有会话会按创建时的快照继续工作。",
     title: "训练中心",
     description:
       "从内置训练开始,或挑一门专项课先预览再进入。这里的练习都会围绕你的学习数据开一段训练会话。",

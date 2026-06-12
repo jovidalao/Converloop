@@ -394,6 +394,27 @@ export const en = {
     start: "Start drill",
     startHint: "Press “Start drill” above to begin",
   },
+  drillDialog: {
+    createTitle: "New training mode",
+    editTitle: "Edit training mode",
+    subtitle:
+      "A training mode is one Markdown document: frontmatter for the mechanics, sections for the prompts.",
+    describePlaceholder:
+      'Describe the training you want, e.g. "give me native-language sentences to translate aloud"…',
+    generate: "Generate with AI",
+    generateInvalid:
+      "The generated document failed validation — see the errors below and fix or regenerate.",
+    externalHint:
+      "Prefer your own AI? Copy the authoring guide, paste it into ChatGPT/Claude with your idea, then paste the result here.",
+    copySpec: "Copy AI authoring guide",
+    specCopied: "Copied",
+    documentPlaceholder:
+      "Paste or write a lang-agent/drill@1 Markdown document…",
+    errorsTitle: "The document failed validation",
+    errorsHint:
+      "Tip: paste these errors back to the AI that wrote the document and ask it to fix them.",
+    validSummary: "Valid: “{name}” · interaction: {interaction}",
+  },
   drill: {
     start: "Start",
     startHint: "Use the Start button above to begin",
@@ -435,6 +456,12 @@ export const en = {
     refresh: "Regenerate",
   },
   customLearning: {
+    newDrill: "New training mode",
+    duplicateDrill: "Duplicate as my training mode",
+    exportDrill: "Copy document (.md)",
+    deleteDrillTitle: "Delete training mode “{name}”?",
+    deleteDrillDescription:
+      "The training mode document will be deleted. Existing sessions keep working from their snapshot.",
     title: "Practice Center",
     description:
       "Start a built-in drill or pick a focused lesson to preview it before starting. Everything here opens a practice session built around your learning data.",
