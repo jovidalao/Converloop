@@ -100,7 +100,7 @@ import { NewChatStartScreen } from "./NewChatStartScreen";
 import { QuickfireStartScreen } from "./QuickfireStartScreen";
 import { ReviewDrillStartScreen } from "./ReviewDrillStartScreen";
 import { ShadowingStartScreen } from "./ShadowingStartScreen";
-import { SlashMenu } from "./SlashMenu";
+import { SlashBodyHint, SlashMenu } from "./SlashMenu";
 import { ThinkingIndicator } from "./TurnActivity";
 import { Button } from "./ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "./ui/select";
@@ -148,6 +148,8 @@ interface ChatViewProps {
   onTurnsChange?: (turns: ChatTurn[]) => void;
   /** Called when a conversation action creates a branch; App switches to the new conversation. */
   onNavigateConversation?: (id: string) => void;
+  /** Opens the slash-command settings page (the "Customize commands…" footer in the slash menu). */
+  onOpenCommandSettings?: () => void;
   /** Small-window mode: strip to bare chat — message bubbles + copy + composer; hide explain/speak/suggestions/corrections/badges/slash menu. */
   compact?: boolean;
   /** Text requested by another panel (currently Coach hints) to draft into the composer. */
@@ -179,6 +181,7 @@ export function ChatView({
   onCreateLearningAgentDraft,
   onTurnsChange,
   onNavigateConversation,
+  onOpenCommandSettings,
   compact = false,
   externalDraft = null,
   onExitCompact,
@@ -450,6 +453,24 @@ export function ChatView({
     !shadowingDraftActive &&
     !reviewDrillDraftActive &&
     slashCommands.length > 0;
+
+  // Body mode ("/topic …"): the menu is closed, but keep the command's hint visible while the
+  // arguments are typed — also surfaces why Enter does nothing while a required body is empty.
+  // Hidden wherever the menu is (compact / draft start screens take a theme, not commands).
+  const draftComposerActive =
+    quickfireDraftActive ||
+    dictationDraftActive ||
+    shadowingDraftActive ||
+    reviewDrillDraftActive;
+  const slashBodyHint = useMemo(() => {
+    if (compact || draftComposerActive || slashToken !== null) return null;
+    const parsed = parseSlashInput(input);
+    if (!parsed) return null;
+    const c = parsed.command;
+    if (!c.argsHint || (c.kind !== "message" && c.kind !== "prompt"))
+      return null;
+    return { command: c, hasBody: parsed.rest.length > 0 };
+  }, [compact, draftComposerActive, slashToken, input]);
 
   // When leaving the command context (no token), clear the "Esc-closed" flag so the next / re-opens the menu.
   useEffect(() => {
@@ -1796,7 +1817,7 @@ export function ChatView({
 
   // Submit input: check for slash commands first. "message" type (/btw) sends off-record;
   // "prompt" type (/topic etc.) sends a prompt macro that stays in the conversation;
-  // "action" type executes an existing conversation action; "meta" (/help) expands the full list;
+  // "action" type executes an existing conversation action;
   // non-commands send normally. Arrives here via Enter / Send when the menu is already closed.
   function submitInput() {
     // Lesson start screen: the composer is a disabled gate — the lesson only begins via the Start button.
@@ -1833,11 +1854,6 @@ export function ChatView({
       runPromptMacro(parsed.command, parsed.rest);
       return;
     }
-    if (parsed.command.kind === "meta") {
-      setInput("/"); // /help: expand the full command list
-      requestAnimationFrame(() => inputRef.current?.focus());
-      return;
-    }
     if (parsed.command.actionId) {
       setInput("");
       void runConversationAction(parsed.command.actionId);
@@ -1845,7 +1861,7 @@ export function ChatView({
   }
 
   // Select a command in the menu (Enter / click): "message"/"prompt" with args complete to "/name " for body input;
-  // a no-arg "prompt" (/surprise) runs immediately; "meta" expands all; "action" executes immediately.
+  // a no-arg "prompt" (/surprise, /recap) runs immediately; "action" executes immediately.
   function activateSlashCommand(command: SlashCommand) {
     if (command.kind === "action") {
       if (command.actionId) {
@@ -1859,8 +1875,8 @@ export function ChatView({
       runPromptMacro(command, "");
       return;
     }
-    // body-taking command (/btw, /topic, /learn) → "/name " (enter body mode); meta (/help) → "/" (expand full list)
-    setInput(command.argsHint ? `/${command.name} ` : "/");
+    // body-taking command (/btw, /topic, /learn) → "/name " (enter body mode)
+    setInput(`/${command.name} `);
     requestAnimationFrame(() => inputRef.current?.focus());
   }
 
@@ -2242,6 +2258,13 @@ export function ChatView({
               selected={slashSelected}
               onHover={setSlashSelected}
               onActivate={activateSlashCommand}
+              onCustomize={onOpenCommandSettings}
+            />
+          )}
+          {!slashOpen && slashBodyHint && (
+            <SlashBodyHint
+              command={slashBodyHint.command}
+              hasBody={slashBodyHint.hasBody}
             />
           )}
           <div className="overflow-hidden rounded-[var(--radius-panel)] border bg-card shadow-minimal transition-colors">

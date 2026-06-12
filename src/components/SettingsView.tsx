@@ -1031,6 +1031,27 @@ function MacroCard({
   );
 }
 
+// Live preview of the prompt the AI receives: the template with {input} replaced by a localized
+// stand-in, making the {input} mechanics visible while editing. Only body-taking templates need it —
+// without {input} the prompt is sent exactly as written.
+function TemplatePreview({ template }: { template: string }) {
+  const { t } = useTranslation();
+  if (!template.includes(PROMPT_INPUT_TOKEN)) return null;
+  const preview = template
+    .split(PROMPT_INPUT_TOKEN)
+    .join(`⟨${t("settings.commands.previewSample")}⟩`);
+  return (
+    <div className="space-y-1">
+      <span className="text-ui-caption font-medium text-ui-muted">
+        {t("settings.commands.previewLabel")}
+      </span>
+      <p className="whitespace-pre-wrap text-ui-caption leading-snug text-ui-subtle">
+        {preview}
+      </p>
+    </div>
+  );
+}
+
 type BuiltinForm = { description: string; argsHint: string; template: string };
 
 function effectiveBuiltinForm(
@@ -1178,6 +1199,7 @@ function CommandsSettings() {
                   }
                 />
               </Field>
+              <TemplatePreview template={f.template} />
               {takesBody && (
                 <Field label={t("settings.commands.argsHintLabel")}>
                   <Input
@@ -1268,6 +1290,7 @@ function CommandsSettings() {
                   placeholder={t("settings.commands.promptPlaceholder")}
                 />
               </Field>
+              <TemplatePreview template={c.template} />
               {takesBody && (
                 <Field label={t("settings.commands.argsHintLabel")}>
                   <Input

@@ -81,6 +81,34 @@ export const en = {
   },
   slashMenu: {
     ariaLabel: "Slash commands",
+    customBadge: "custom",
+    editedBadge: "edited",
+    customize: "Customize commands…",
+    bodyMissing: "Type your input, then press Enter",
+  },
+  // Localized menu text for the built-in slash commands (commands.ts). Prompt-macro entries only
+  // show these until the user overrides the text in settings — then their text wins as-is.
+  slashCommands: {
+    btw: "Standalone side question: excluded from context and grading",
+    btwHint: "<ask the AI anything>",
+    topic: "Switch the conversation to a topic",
+    topicHint: "<topic>",
+    roleplay: "Role-play a scenario in this conversation",
+    roleplayHint: "<scenario>",
+    learn: "Learn a topic through conversation",
+    learnHint: "<what to learn>",
+    surprise: "Start chatting about a random topic",
+    how: "Ask how to say something in the target language",
+    howHint: "<what you want to say>",
+    recap: "Recap this conversation: takeaways and what to review",
+    harder:
+      "Increase difficulty: branch into a harder version of the current conversation",
+    easier: "Decrease difficulty: branch into an easier version",
+    swap: "Swap roles: branch into a role-reversed version",
+    scene: "Change scene: keep the practice goal, switch the setting",
+    restart: "Restart: keep the setup, open a blank branch for re-practice",
+    nextDay:
+      "Continue next day: branch into a new-day continuation of the current story",
   },
   turnActivity: {
     thinking: "Thinking…",
@@ -719,6 +747,9 @@ export const en = {
         "Write the prompt. Use {input} where your typed text should go.",
       nameInvalid: "Use letters, digits, - or _; must start with a letter.",
       nameTaken: "This name is already used by another command.",
+      previewLabel: "Preview of what the AI receives",
+      // Stand-in shown inside the preview where {input} would be replaced.
+      previewSample: "what you type",
     },
   },
   chat: {

@@ -1,10 +1,11 @@
-// Chat-bar slash commands (/btw, /help, action shortcuts, and customizable prompt macros).
+// Chat-bar slash commands (/btw, action shortcuts, and customizable prompt macros).
 // This file handles "command definition + parsing/matching"; the UI is in SlashMenu, dispatch in ChatView,
 // and the prompt-macro customization UI in SettingsView. Prompt macros are template-based (see
 // BUILTIN_PROMPT_MACROS) so users can edit the built-ins and add their own; their persistence lives in
 // runtime/prompt-macro-store. Intentionally not wired into the Agent Runtime hook system: slash commands
 // are an input-layer concern. Dependencies are leaf localStorage modules (no db/provider side effects).
 
+import type { MessageKey } from "./i18n";
 import { isAgentEnabled } from "./runtime/enablement";
 import {
   type CustomPromptMacro,
@@ -12,14 +13,19 @@ import {
   getPromptMacroOverrides,
 } from "./runtime/prompt-macro-store";
 
-export type SlashCommandKind = "message" | "action" | "meta" | "prompt";
+export type SlashCommandKind = "message" | "action" | "prompt";
 
 export interface SlashCommand {
   /** Command name without the slash, lowercase, e.g. "btw". */
   name: string;
+  /** English description; the canonical default (and the stored text once a user edits a macro). */
   description: string;
+  /** i18n key for the localized menu description. Unset when the user overrode `description` (their text wins). */
+  descriptionKey?: MessageKey;
   /** Argument hint (for "message"/"prompt" kinds), e.g. "<something to ask the AI>". */
   argsHint?: string;
+  /** i18n key for the localized args hint. Unset when the user overrode `argsHint`. */
+  argsHintKey?: MessageKey;
   kind: SlashCommandKind;
   /** For "action" kind: the id of the existing conversation.action Agent to reuse. */
   actionId?: string;
@@ -31,6 +37,8 @@ export interface SlashCommand {
   buildPrompt?: (rest: string) => string;
   /** For "prompt" kind: when true, an empty body does not send (e.g. /topic needs a topic). */
   requiresArgs?: boolean;
+  /** Provenance badge for the menu: a user-defined macro or an edited built-in. Unset = stock built-in. */
+  source?: "custom" | "edited";
 }
 
 // The token inside a prompt-macro template that is replaced by the user's typed args. A template that
@@ -43,46 +51,74 @@ const GENERIC_ARGS_HINT = "<your input>";
 export interface PromptMacroDef {
   name: string;
   description: string;
+  descriptionKey?: MessageKey;
   argsHint?: string;
+  argsHintKey?: MessageKey;
   template: string;
 }
 
-// Built-in prompt macros. Template-based and English (the conversation partner replies in the target
-// language regardless); users can override any field in settings or hide nothing — only add/edit.
+// Built-in prompt macros. Templates are English (the conversation partner replies in the target
+// language regardless); description/argsHint defaults are English with an i18n key for menu display.
+// Users can override any field in settings or hide nothing — only add/edit.
 export const BUILTIN_PROMPT_MACROS: PromptMacroDef[] = [
   {
     name: "topic",
     description: "Switch the conversation to a topic",
+    descriptionKey: "slashCommands.topic",
     argsHint: "<topic>",
+    argsHintKey: "slashCommands.topicHint",
     template: `Switch the conversation to this topic now: "${PROMPT_INPUT_TOKEN}". Treat this as an explicit topic change, not as learner speech and not as a request to continue the previous thread. Open naturally with your own angle or a question that gets the user talking about it. Don't summarize the topic back or quiz them mechanically. Keep it to one or two sentences in the target language.`,
+  },
+  {
+    name: "roleplay",
+    description: "Role-play a scenario in this conversation",
+    descriptionKey: "slashCommands.roleplay",
+    argsHint: "<scenario>",
+    argsHintKey: "slashCommands.roleplayHint",
+    template: `Start a role-play of this scenario now: "${PROMPT_INPUT_TOKEN}". Take the natural counterpart role yourself and tell the user their role in one short line, then open the scene in character in the target language. Stay in character, keep each turn short, and let the user carry their side.`,
   },
   {
     name: "learn",
     description: "Learn a topic through conversation",
+    descriptionKey: "slashCommands.learn",
     argsHint: "<what to learn>",
+    argsHintKey: "slashCommands.learnHint",
     template: `The user wants to learn about "${PROMPT_INPUT_TOKEN}" through conversation. Act as a tutor-by-dialogue: give a short, level-appropriate way in, then teach interactively — explain a little, show an example, and ask a question that gets the user to use it, one step at a time. Keep it a back-and-forth, not a lecture.`,
   },
   {
     name: "surprise",
     description: "Start chatting about a random topic",
+    descriptionKey: "slashCommands.surprise",
     template:
       "Pick an interesting, everyday topic at random and start a fresh, casual conversation about it — open with a hook or a question that gets the user talking. Keep it at the user's level.",
+  },
+  {
+    name: "how",
+    description: "Ask how to say something in the target language",
+    descriptionKey: "slashCommands.how",
+    argsHint: "<what you want to say>",
+    argsHintKey: "slashCommands.howHint",
+    template: `The user wants to express this: "${PROMPT_INPUT_TOKEN}". Give the most natural way to say it in the target language, plus one alternative with a different tone or formality if useful. Add a one-line note on nuance or a common mistake, then invite the user to try it in a sentence of their own.`,
+  },
+  {
+    name: "recap",
+    description: "Recap this conversation: takeaways and what to review",
+    descriptionKey: "slashCommands.recap",
+    template:
+      "Give a short recap of the conversation so far: what was practiced, what the user did well, the mistakes most worth remembering, and two or three useful expressions to review. Keep it compact and scannable, then ask one question that lets the user retry their weakest spot.",
   },
 ];
 
 // Static (non-customizable) commands. Split so prompt macros sit between them in the menu order:
-// quick message/meta first, then prompt macros, then conversation-branching actions.
-const MESSAGE_META_COMMANDS: SlashCommand[] = [
+// quick message commands first, then prompt macros, then conversation-branching actions.
+const MESSAGE_COMMANDS: SlashCommand[] = [
   {
     name: "btw",
     description: "Standalone side question: excluded from context and grading",
+    descriptionKey: "slashCommands.btw",
     argsHint: "<ask the AI anything>",
+    argsHintKey: "slashCommands.btwHint",
     kind: "message",
-  },
-  {
-    name: "help",
-    description: "Show all available commands",
-    kind: "meta",
   },
 ];
 
@@ -91,24 +127,35 @@ const ACTION_COMMANDS: SlashCommand[] = [
     name: "harder",
     description:
       "Increase difficulty: branch into a harder version of the current conversation",
+    descriptionKey: "slashCommands.harder",
     kind: "action",
     actionId: "builtin:action:harder",
   },
   {
     name: "easier",
     description: "Decrease difficulty: branch into an easier version",
+    descriptionKey: "slashCommands.easier",
     kind: "action",
     actionId: "builtin:action:easier",
   },
   {
     name: "swap",
     description: "Swap roles: branch into a role-reversed version",
+    descriptionKey: "slashCommands.swap",
     kind: "action",
     actionId: "builtin:action:swap_roles",
   },
   {
+    name: "scene",
+    description: "Change scene: keep the practice goal, switch the setting",
+    descriptionKey: "slashCommands.scene",
+    kind: "action",
+    actionId: "builtin:action:change_scene",
+  },
+  {
     name: "restart",
     description: "Restart: keep the setup, open a blank branch for re-practice",
+    descriptionKey: "slashCommands.restart",
     kind: "action",
     actionId: "builtin:action:restart",
   },
@@ -116,6 +163,7 @@ const ACTION_COMMANDS: SlashCommand[] = [
     name: "next-day",
     description:
       "Continue next day: branch into a new-day continuation of the current story",
+    descriptionKey: "slashCommands.nextDay",
     kind: "action",
     actionId: "builtin:action:next_day",
   },
@@ -149,14 +197,15 @@ function macroToCommand(def: {
 
 function isReservedName(name: string): boolean {
   return (
-    MESSAGE_META_COMMANDS.some((c) => c.name === name) ||
+    MESSAGE_COMMANDS.some((c) => c.name === name) ||
     ACTION_COMMANDS.some((c) => c.name === name) ||
     BUILTIN_PROMPT_MACROS.some((m) => m.name === name)
   );
 }
 
 // Built-in macros with user overrides applied, then valid custom macros (skipping names that collide
-// with a built-in/static command or an earlier custom one).
+// with a built-in/static command or an earlier custom one). Localized menu keys only apply to fields
+// the user hasn't overridden (their text wins); overridden/custom macros carry a provenance badge.
 export function resolvePromptMacros(): SlashCommand[] {
   const overrides = getPromptMacroOverrides();
   const out: SlashCommand[] = [];
@@ -170,6 +219,9 @@ export function resolvePromptMacros(): SlashCommand[] {
       template: ov.template || def.template,
     });
     if (cmd) {
+      if (Object.keys(ov).length > 0) cmd.source = "edited";
+      if (!ov.description) cmd.descriptionKey = def.descriptionKey;
+      if (!ov.argsHint && cmd.argsHint) cmd.argsHintKey = def.argsHintKey;
       out.push(cmd);
       seen.add(cmd.name);
     }
@@ -177,6 +229,7 @@ export function resolvePromptMacros(): SlashCommand[] {
   for (const custom of getCustomPromptMacros()) {
     const cmd = macroToCommand(custom);
     if (cmd && !isReservedName(cmd.name) && !seen.has(cmd.name)) {
+      cmd.source = "custom";
       out.push(cmd);
       seen.add(cmd.name);
     }
@@ -184,14 +237,10 @@ export function resolvePromptMacros(): SlashCommand[] {
   return out;
 }
 
-// The full live command list: static message/meta + resolved prompt macros + branching actions.
+// The full live command list: static message commands + resolved prompt macros + branching actions.
 // Recomputed on demand so settings edits to prompt macros take effect without a reload.
 export function getSlashCommands(): SlashCommand[] {
-  return [
-    ...MESSAGE_META_COMMANDS,
-    ...resolvePromptMacros(),
-    ...ACTION_COMMANDS,
-  ];
+  return [...MESSAGE_COMMANDS, ...resolvePromptMacros(), ...ACTION_COMMANDS];
 }
 
 // Reserved + existing names a new custom macro must not reuse. Excludes `exceptId`'s own name so the
@@ -201,7 +250,7 @@ export function takenMacroNames(
   exceptId?: string,
 ): Set<string> {
   const names = new Set<string>([
-    ...MESSAGE_META_COMMANDS.map((c) => c.name),
+    ...MESSAGE_COMMANDS.map((c) => c.name),
     ...ACTION_COMMANDS.map((c) => c.name),
     ...BUILTIN_PROMPT_MACROS.map((m) => m.name),
   ]);

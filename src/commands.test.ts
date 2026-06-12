@@ -52,11 +52,34 @@ describe("parseSlashInput", () => {
     );
   });
 
-  it("/surprise is a no-arg prompt command", () => {
-    const p = parseSlashInput("/surprise");
-    expect(p?.command.kind).toBe("prompt");
-    expect(p?.command.argsHint).toBeUndefined();
-    expect(p?.command.buildPrompt?.("")).toBeTruthy();
+  it("/surprise and /recap are no-arg prompt commands", () => {
+    for (const name of ["surprise", "recap"]) {
+      const p = parseSlashInput(`/${name}`);
+      expect(p?.command.kind).toBe("prompt");
+      expect(p?.command.argsHint).toBeUndefined();
+      expect(p?.command.buildPrompt?.("")).toBeTruthy();
+    }
+  });
+
+  it("/how and /roleplay take a body and substitute it", () => {
+    const how = parseSlashInput("/how thanks for covering my shift");
+    expect(how?.command.requiresArgs).toBe(true);
+    expect(how?.command.buildPrompt?.(how.rest)).toContain(
+      "thanks for covering my shift",
+    );
+    const rp = parseSlashInput("/roleplay returning a parcel");
+    expect(rp?.command.requiresArgs).toBe(true);
+    expect(rp?.command.buildPrompt?.(rp.rest)).toContain("returning a parcel");
+  });
+
+  it("/scene parses as a branching action", () => {
+    const p = parseSlashInput("/scene");
+    expect(p?.command.kind).toBe("action");
+    expect(p?.command.actionId).toBe("builtin:action:change_scene");
+  });
+
+  it("/help was removed: treated as plain text", () => {
+    expect(parseSlashInput("/help")).toBeNull();
   });
 
   it("command name is case-insensitive", () => {
@@ -107,39 +130,43 @@ describe("matchSlashCommands", () => {
     expect(r.map((c) => c.name)).toEqual(
       expect.arrayContaining([
         "btw",
-        "help",
         "harder",
         "swap",
+        "scene",
         "next-day",
         "topic",
+        "roleplay",
         "learn",
         "surprise",
+        "how",
+        "recap",
       ]),
     );
   });
 
-  it("hides action commands when cannot derive, keeps btw/help/prompt macros", () => {
+  it("hides action commands when cannot derive, keeps btw/prompt macros", () => {
     const r = matchSlashCommands("", {
       canDerive: false,
       isLearning: false,
     }).map((c) => c.name);
     expect(r).toContain("btw");
-    expect(r).toContain("help");
     expect(r).toContain("topic");
     expect(r).not.toContain("harder");
     expect(r).not.toContain("swap");
+    expect(r).not.toContain("scene");
   });
 
-  it("hides prompt macros in a focused lesson, keeps btw/help", () => {
+  it("hides prompt macros in a focused lesson, keeps btw", () => {
     const r = matchSlashCommands("", {
       canDerive: false,
       isLearning: true,
     }).map((c) => c.name);
     expect(r).toContain("btw");
-    expect(r).toContain("help");
     expect(r).not.toContain("topic");
     expect(r).not.toContain("learn");
     expect(r).not.toContain("surprise");
+    expect(r).not.toContain("how");
+    expect(r).not.toContain("recap");
   });
 
   it("filters by prefix", () => {
@@ -157,6 +184,7 @@ describe("matchSlashCommands", () => {
 describe("prompt macro customization", () => {
   afterEach(() => {
     clearPromptMacroOverride("surprise");
+    clearPromptMacroOverride("topic");
     deleteCustomPromptMacro("test-1");
   });
 
@@ -176,6 +204,31 @@ describe("prompt macro customization", () => {
     const cmd = resolvePromptMacros().find((c) => c.name === "debate");
     expect(cmd?.requiresArgs).toBe(true);
     expect(cmd?.buildPrompt?.("AI ethics")).toBe("Let's debate AI ethics.");
+  });
+
+  it("marks edited built-ins and custom macros for the menu badge", () => {
+    setPromptMacroOverride("surprise", { template: "Custom surprise prompt" });
+    upsertCustomPromptMacro({
+      id: "test-1",
+      name: "debate",
+      template: "Let's debate {input}.",
+    });
+    const cmds = resolvePromptMacros();
+    expect(cmds.find((c) => c.name === "surprise")?.source).toBe("edited");
+    expect(cmds.find((c) => c.name === "debate")?.source).toBe("custom");
+    expect(cmds.find((c) => c.name === "topic")?.source).toBeUndefined();
+  });
+
+  it("localized menu key applies only until the user overrides that text", () => {
+    expect(
+      resolvePromptMacros().find((c) => c.name === "topic")?.descriptionKey,
+    ).toBe("slashCommands.topic");
+    setPromptMacroOverride("topic", { description: "My topic switcher" });
+    const cmd = resolvePromptMacros().find((c) => c.name === "topic");
+    expect(cmd?.descriptionKey).toBeUndefined();
+    expect(cmd?.description).toBe("My topic switcher");
+    // The untouched args hint still shows localized.
+    expect(cmd?.argsHintKey).toBe("slashCommands.topicHint");
   });
 
   it("skips a custom macro whose name collides with a built-in", () => {

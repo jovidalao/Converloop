@@ -1124,6 +1124,9 @@ function App() {
             onActivity={() => void refresh()}
             onTurnsChange={setCoachTurns}
             onNavigateConversation={selectConversation}
+            onOpenCommandSettings={() =>
+              navigateTo({ view: "settings-commands", activeId })
+            }
             compact={smallWindow}
             externalDraft={coachDraft}
             onExitCompact={() => setSmallWindow(false)}

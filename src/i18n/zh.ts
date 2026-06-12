@@ -69,6 +69,32 @@ export const zh: Messages = {
   },
   slashMenu: {
     ariaLabel: "斜杠命令",
+    customBadge: "自定义",
+    editedBadge: "已修改",
+    customize: "自定义命令…",
+    bodyMissing: "输入内容后按回车发送",
+  },
+  // 内置斜杠命令（commands.ts）的菜单文案。提示词宏的条目只在用户没有在设置里
+  // 改写对应文字时显示这些；一旦改写，以用户的文字为准。
+  slashCommands: {
+    btw: "独立提问：不进入上下文，也不参与批改",
+    btwHint: "<问 AI 任何问题>",
+    topic: "把对话切换到一个话题",
+    topicHint: "<话题>",
+    roleplay: "在当前对话里做情景角色扮演",
+    roleplayHint: "<场景>",
+    learn: "通过对话学习一个主题",
+    learnHint: "<想学什么>",
+    surprise: "随机挑一个话题开聊",
+    how: "问一句话用目标语言怎么说",
+    howHint: "<想表达的内容>",
+    recap: "回顾这次对话：收获与值得复习的表达",
+    harder: "提高难度：分支出当前对话的更难版本",
+    easier: "降低难度：分支出更简单的版本",
+    swap: "互换角色：分支出角色对调的版本",
+    scene: "更换场景：保留练习目标，切换情境",
+    restart: "重新开始：保留设定，开一个空白分支重练",
+    nextDay: "第二天继续：分支出故事新一天的续篇",
   },
   turnActivity: {
     thinking: "正在思考…",
@@ -681,6 +707,9 @@ export const zh: Messages = {
       promptPlaceholder: "写下提示词。用 {input} 标记你输入的文字插入的位置。",
       nameInvalid: "只能用字母、数字、- 或 _,且必须以字母开头。",
       nameTaken: "这个名字已被其他命令占用。",
+      previewLabel: "AI 实际收到的内容预览",
+      // 预览中代替 {input} 的占位文字。
+      previewSample: "你输入的内容",
     },
   },
   chat: {
