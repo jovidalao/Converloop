@@ -282,12 +282,9 @@ const tutorObserver: Observer = {
       } catch (e) {
         logError("turn", "Plain-text correction save failed", e);
       }
-      ctx.callbacks.onAnalysis(null, {
-        proseFeedback,
-        error: error ?? diagnostic,
-      });
+      ctx.callbacks.onAnalysis(null, { proseFeedback, error, diagnostic });
     } else if (error) {
-      ctx.callbacks.onAnalysis(null, { error });
+      ctx.callbacks.onAnalysis(null, { error, diagnostic });
     }
   },
 };

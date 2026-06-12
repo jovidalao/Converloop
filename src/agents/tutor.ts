@@ -1007,8 +1007,10 @@ export async function analyze(
     const proseFeedback = stripModelFences(proseResult.raw);
     if (proseFeedback.trim()) {
       recordTutorOutcome("prose"); // correction shown, but not recorded in mastery this turn
+      // The diagnostic is developer info; it must not ride along in `error`, which the UI
+      // renders to the learner. Callers surface it behind a collapsed details toggle.
       const diagnostic = formatTutorDiagnostic(diagnosticAttempts);
-      return { analysis: null, proseFeedback, diagnostic, error: diagnostic };
+      return { analysis: null, proseFeedback, diagnostic };
     }
 
     recordTutorOutcome("failed");
@@ -1024,7 +1026,8 @@ export async function analyze(
     return {
       analysis: null,
       diagnostic,
-      error: `Correction failed to generate content, please retry or check model settings.\n${diagnostic}`,
+      error:
+        "Correction failed to generate content, please retry or check model settings.",
     };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

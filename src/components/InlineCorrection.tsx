@@ -5,7 +5,12 @@ import {
   LanguagesIcon,
   SparklesIcon,
 } from "lucide-react";
-import type { Dispatch, ReactNode, SetStateAction } from "react";
+import {
+  type Dispatch,
+  type ReactNode,
+  type SetStateAction,
+  useState,
+} from "react";
 import { useTranslation } from "@/i18n";
 import { cn } from "@/lib/utils";
 import type { Issue, TutorAnalysis } from "../agents/schema";
@@ -256,6 +261,7 @@ export function InlineCorrection({
   proseFeedback,
   pending,
   error,
+  diagnostic,
   leading,
   activePanelId,
   setActivePanelId,
@@ -267,6 +273,9 @@ export function InlineCorrection({
   proseFeedback?: string | null;
   pending: boolean;
   error?: string | null;
+  // Developer diagnostic for a degraded correction (failure chain, raw output
+  // previews). Rendered behind a collapsed toggle — never as the error line.
+  diagnostic?: string | null;
   // Other actions rendered earlier on the same row (copy / play), to the left of
   // the toggle buttons.
   leading?: ReactNode;
@@ -286,6 +295,7 @@ export function InlineCorrection({
 }) {
   const { t } = useTranslation();
   const { actionLabels } = useConfig();
+  const [diagnosticOpen, setDiagnosticOpen] = useState(false);
 
   const gap = analysis?.expression_gap ?? null;
   const hasIssues = !!analysis && analysis.issues.length > 0;
@@ -541,6 +551,26 @@ export function InlineCorrection({
         >
           {error}
         </pre>
+      )}
+
+      {diagnostic && (
+        <div className="flex w-full flex-col items-end gap-1">
+          <button
+            type="button"
+            onClick={() => setDiagnosticOpen((open) => !open)}
+            className="text-ui-caption text-ui-subtle transition-colors hover:text-ui-muted"
+          >
+            {showProse ? `${t("corrections.degraded")} · ` : ""}
+            {diagnosticOpen
+              ? t("corrections.hideDiagnostic")
+              : t("corrections.showDiagnostic")}
+          </button>
+          {diagnosticOpen && (
+            <pre className="m-0 max-w-full whitespace-pre-wrap break-words rounded-lg border bg-card p-3 text-ui-caption leading-snug text-ui-muted">
+              {diagnostic}
+            </pre>
+          )}
+        </div>
       )}
     </div>
   );

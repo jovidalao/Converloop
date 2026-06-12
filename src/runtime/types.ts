@@ -81,7 +81,12 @@ export interface ConversationCallbacks {
   onContext?: (promptTokens: number) => void;
   onAnalysis: (
     analysis: TutorAnalysis | null,
-    opts?: { error?: string; proseFeedback?: string },
+    opts?: {
+      error?: string;
+      proseFeedback?: string;
+      /** Developer diagnostic (degradation reasons, raw output previews). Shown collapsed, never as the error line. */
+      diagnostic?: string;
+    },
   ) => void;
 }
 

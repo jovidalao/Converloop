@@ -134,6 +134,10 @@ export const en = {
     grammarDetails: "Grammar details",
     explanationHeader: "Explanation",
     keyItems: "Key words / patterns",
+    degraded:
+      "Correction fell back to plain text this turn; not recorded in mastery",
+    showDiagnostic: "Show diagnostics",
+    hideDiagnostic: "Hide diagnostics",
   },
   learningAgentDialog: {
     editAria: "Edit lesson {name}",
@@ -725,6 +729,7 @@ export const en = {
     inputPlaceholderLesson:
       "Ask the teacher, answer exercises — native or target language…",
     inputPlaceholderPractice: "Write a natural reply, or type / for commands",
+    hintTabHint: "Press Tab to insert",
     replySuggestionTruncated:
       "Reply suggestion truncated due to output length limit ({provider}:{raw}). You can retry; include the reason in parentheses when reporting the issue.",
     generateReplySuggestion: "Generate reply suggestion",

@@ -56,6 +56,8 @@ export interface ChatTurn {
   analysisProse?: string | null;
   analysisPending?: boolean;
   analysisError?: string | null;
+  /** Developer diagnostic for a degraded correction (raw previews etc.); rendered collapsed, not as the error line. */
+  analysisDiagnostic?: string | null;
   /** /btw off-record turn: still shown in history, answered standalone, excluded from future context and not corrected. */
   excludeFromContext?: boolean;
   /** Prompt-macro turn (/topic, /learn, /surprise): verbatim command text to render in the bubble instead of userText. */
@@ -127,7 +129,7 @@ export async function loadChatHistory(
       partnerText: t.reply,
       analysis,
       analysisProse: prose,
-      analysisError: diagnostic,
+      analysisDiagnostic: diagnostic,
       excludeFromContext: t.excludeFromContext === 1,
       displayText: t.displayText ?? undefined,
     };

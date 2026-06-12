@@ -122,6 +122,9 @@ export const zh: Messages = {
     grammarDetails: "语法详解",
     explanationHeader: "讲解",
     keyItems: "关键词 / 句式",
+    degraded: "本轮纠错降级为纯文本,未计入掌握度",
+    showDiagnostic: "查看诊断",
+    hideDiagnostic: "收起诊断",
   },
   learningAgentDialog: {
     editAria: "编辑专项课 {name}",
@@ -687,6 +690,7 @@ export const zh: Messages = {
     emptyModelId: "未填写模型 ID",
     inputPlaceholderLesson: "问老师、回答练习，母语/目标语言都可以…",
     inputPlaceholderPractice: "写一句自然回复，或输入 / 选择命令",
+    hintTabHint: "按 Tab 填入输入框",
     replySuggestionTruncated:
       "推荐回复因输出长度限制被截断（{provider}:{raw}）。可以重试，反馈问题时请在括号里附上原因。",
     generateReplySuggestion: "生成推荐回复",

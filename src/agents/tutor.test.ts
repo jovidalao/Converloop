@@ -201,7 +201,9 @@ describe("analyze", () => {
     const result = await analyze(provider, ctx);
 
     expect(result.analysis).toBeNull();
-    expect(result.error).toContain("finish reason: length");
+    // The dev details live in the diagnostic; the user-facing error stays a short line.
+    expect(result.diagnostic).toContain("finish reason: length");
+    expect(result.error).not.toContain("finish reason");
   });
 
   it("falls back to plain-text correction only when JSON repair also fails", async () => {
@@ -214,9 +216,11 @@ describe("analyze", () => {
 
     expect(result.analysis).toBeNull();
     expect(result.proseFeedback).toContain("【总评】");
-    expect(result.error).toContain("Structured correction degraded");
-    expect(result.error).toContain("initial json_schema");
-    expect(result.error).toContain("repair json_schema");
+    // Degradation details go to the diagnostic only; no error line rides along with prose.
+    expect(result.error).toBeUndefined();
+    expect(result.diagnostic).toContain("Structured correction degraded");
+    expect(result.diagnostic).toContain("initial json_schema");
+    expect(result.diagnostic).toContain("repair json_schema");
   });
 
   it("sends the shallow core schema (no expression_gap) for pure target-language input", async () => {

@@ -718,6 +718,7 @@ export const UserTurn = memo(function UserTurn({
         proseFeedback={turn.analysisProse}
         pending={!!turn.analysisPending}
         error={turn.analysisError}
+        diagnostic={turn.analysisDiagnostic}
         activePanelId={activePanelId}
         setActivePanelId={setActivePanelId}
         panelIds={{

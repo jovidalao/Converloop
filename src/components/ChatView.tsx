@@ -1600,6 +1600,7 @@ export function ChatView({
               analysisProse: opts?.proseFeedback ?? null,
               analysisPending: false,
               analysisError: opts?.error ?? null,
+              analysisDiagnostic: opts?.diagnostic ?? null,
             });
           },
         },
@@ -2364,6 +2365,12 @@ export function ChatView({
                       className="animate-hint-in line-clamp-3 pr-7 text-muted-foreground"
                     >
                       {inputHints?.[0]}
+                      <kbd
+                        title={t("chat.hintTabHint")}
+                        className="ml-1.5 inline-flex translate-y-px items-center rounded border border-border/70 bg-muted px-1 py-px align-middle font-sans text-ui-caption text-ui-muted"
+                      >
+                        Tab
+                      </kbd>
                     </span>
                     <button
                       type="button"
