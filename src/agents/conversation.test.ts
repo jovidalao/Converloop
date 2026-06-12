@@ -69,6 +69,24 @@ describe("converse", () => {
     });
   });
 
+  it("adds the [[HINT]] trailer instruction only when requested", async () => {
+    const withTrailer: GenerateOptions[] = [];
+    await converse(
+      streamProvider(withTrailer),
+      { ...baseCtx, includeHintTrailer: true },
+      () => {},
+    );
+    const stable = withTrailer[0].messages[0].content;
+    expect(stable).toContain("[[HINT]]");
+    expect(stable).toContain("PRIVATE HINT TRAILER");
+
+    const without: GenerateOptions[] = [];
+    await converse(streamProvider(without), baseCtx, () => {});
+    expect(without[0].messages.map((m) => m.content).join("\n")).not.toContain(
+      "[[HINT]]",
+    );
+  });
+
   it("answers /btw standalone questions without conversation history", async () => {
     const calls: GenerateOptions[] = [];
     const reply = await converse(

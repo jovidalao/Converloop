@@ -6,6 +6,7 @@ import { explain } from "./agents/explain";
 import {
   cleanInputHintForDisplay,
   generateInputHints,
+  sanitizeHint,
 } from "./agents/input-hints";
 import { generateLearningAgentDraft } from "./agents/learning-agent-builder";
 import {
@@ -90,6 +91,8 @@ import { staticT } from "./i18n";
 import { buildLearningDataContext } from "./learning-data";
 import { runAbortableStream } from "./lib/abortable-stream";
 import { emitAppEvent } from "./lib/app-events";
+import { createHintDeltaGate, splitReplyTrailer } from "./lib/hint-trailer";
+import { logError } from "./lib/log";
 import { rankMasteryItemsForInput } from "./lib/mastery-relevance";
 import { estimateTokens } from "./lib/tokens";
 import { maybeRunMaintainer } from "./profile/maintainer-runner";
@@ -785,6 +788,11 @@ export async function runTurn(
   const dictationFocusWords = agentModifiers.dictation
     ? await getListeningFocusWords()
     : undefined;
+  // In-band input hint: the reply agent appends a private [[HINT]] trailer that becomes
+  // the input-box hint (full context, no extra call). Off for drills (no hints there)
+  // and when the user disabled auto hints.
+  const wantsInlineHint =
+    !isSayDrill && !agentModifiers.reviewDrill && config.inputHintsAuto;
   // Weak-spot drill: the snapshotted target items go to the FRONT of the tutor's weak list, so it reuses exactly
   // these keys and its "correct" signals land on them (dropUntrackedCorrects keeps corrects only for listed keys).
   const drillItems = agentModifiers.reviewDrill?.items ?? [];
@@ -845,6 +853,7 @@ export async function runTurn(
     dictationFocusWords,
     sayDrillReplayCount: opts.replayCount,
     redoTurn: opts.redo,
+    includeHintTrailer: wantsInlineHint,
     callbacks: cb,
     turnPersisted,
   };
@@ -852,22 +861,26 @@ export async function runTurn(
   // Reply ∥ observer triggered in parallel. Observers are fire-and-forget; they wait for turnPersisted themselves before running accounting.
   // Off-record turns are not corrected: do not dispatch observers; instead tell the UI immediately that this turn has no correction (clears the "analyzing" state).
   // The reply is abortable (stop generating): on abort it resolves with the partial streamed so far, which is then persisted normally.
+  // The delta gate keeps the private [[HINT]] trailer (and a chunk-split marker) out of the live display.
   const replyPromise = runAbortableStream(
     (onDelta) => dispatchReply(ctx, onDelta),
-    cb.onReplyDelta,
+    createHintDeltaGate(cb.onReplyDelta),
     opts.signal,
   );
   // Neither off-record nor prompt-macro turns are graded: the former is a side question, the latter an app directive.
   if (offRecord || isPromptMacro) cb.onAnalysis(null);
   else dispatchObservers(ctx);
 
-  let reply: string;
+  let rawReply: string;
   try {
-    reply = await replyPromise;
+    rawReply = await replyPromise;
   } catch (e) {
     rejectPersisted(e); // reply failed → turn is not persisted, observers abandon accounting (consistent with pre-migration behavior)
     throw e;
   }
+  // Strip the private [[HINT]] trailer: only the visible part is persisted, spoken,
+  // and returned. The hint is cached below as this turn's input-box hint.
+  const { visible: reply, hint: trailerHint } = splitReplyTrailer(rawReply);
 
   try {
     await persistTurn(conversationId, userInput, reply, null, id, {
@@ -880,6 +893,26 @@ export async function runTurn(
   }
   resolvePersisted(id);
   cb.onReplyComplete?.(reply);
+
+  // Cache the in-band hint before returning, so the UI's post-reply check finds it
+  // (and skips the standalone-generator fallback). Cache failure only costs that
+  // fallback call — never the turn.
+  const inlineHint =
+    wantsInlineHint && trailerHint ? sanitizeHint(trailerHint) : "";
+  if (inlineHint) {
+    try {
+      await setAppState(
+        INPUT_HINTS_CACHE_PREFIX + conversationId,
+        JSON.stringify({
+          throughTurnId: id,
+          hints: [inlineHint],
+        } satisfies CachedInputHints),
+      );
+      emitAppEvent("input-hints-changed", { conversationId });
+    } catch (e) {
+      logError("turn", "In-band hint cache write failed", e);
+    }
+  }
 
   // Auto-compression: when approaching the context limit, fold the oldest verbatim turns into the rolling summary in the background. Does not block the next turn's input.
   // Non-history dynamic block = profile + review list, added on top of the fixed reserve so the watermark reflects the actual load this turn.
@@ -1538,17 +1571,26 @@ export async function loadCachedInputHints(
 
 // Generate short coaching hints for the next user reply based on recent conversation history,
 // and cache them keyed by the conversation's last-turn watermark.
+// reuseCached: return the cached hint when it matches the current watermark instead of
+// regenerating — the post-reply path passes this so an in-band [[HINT]] trailer (cached by
+// runTurn) makes the standalone fallback call unnecessary. Manual regenerate omits it.
 // Returns an empty array on any error so callers can silently degrade.
 export async function generateInputHintsForConversation(
   conversationId: string,
+  opts: { reuseCached?: boolean } = {},
 ): Promise<string[]> {
   const provider = await getProvider();
   if (!provider) return [];
 
   const config = loadConfig();
   try {
-    const [turns, profileMd, dueReview, weakList] = await Promise.all([
-      getTurnsAfterId(conversationId, null),
+    const turns = await getTurnsAfterId(conversationId, null);
+    if (opts.reuseCached) {
+      const throughTurnId = turns[turns.length - 1]?.id ?? null;
+      const cached = await loadCachedInputHints(conversationId, throughTurnId);
+      if (cached.length > 0) return cached;
+    }
+    const [profileMd, dueReview, weakList] = await Promise.all([
       readProfile(config),
       getReviewDueList(5),
       getWeakList(8),

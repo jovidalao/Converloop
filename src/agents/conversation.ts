@@ -20,6 +20,9 @@ export interface ConversationContext {
   openingInstruction?: string; // hidden opening instruction triggered by the app (conversation derivation)
   standaloneQuestion?: boolean; // /btw side question: answer this message without surrounding conversation context
   customInstructions?: string; // additional instructions appended by the user in the agent library
+  /** Append a private [[HINT]] trailer (one "cue → opener" coaching line for the input box) after the reply.
+   *  Stripped from display/TTS/history by the orchestrator (see lib/hint-trailer). Off for drills. */
+  includeHintTrailer?: boolean;
 }
 
 // Collapse whitespace and truncate to max characters, to prevent overly long examples from bloating the hot-path prompt (consistent with learning-data).
@@ -105,7 +108,31 @@ RULES
   listing a few options — but stay conversational: no headings, no code blocks
   unless the topic calls for it.
 - Write your reply as flowing paragraphs, not one sentence per line. Only start a
-  new paragraph when the topic genuinely shifts.`;
+  new paragraph when the topic genuinely shifts.${ctx.includeHintTrailer ? hintTrailerInstruction(ctx) : ""}`;
+}
+
+// Private coaching trailer: ONE "cue → opener" line the app strips from the reply
+// and shows as the input-box hint (see lib/hint-trailer). Generated in-band because
+// the reply agent knows exactly what it just asked and which review item it wove in
+// — a detached hint generator can only guess at both.
+function hintTrailerInstruction(ctx: ConversationContext): string {
+  return `
+
+PRIVATE HINT TRAILER (not part of your reply)
+After your reply, add exactly ONE final line of this form:
+[[HINT]]<cue> → <opener>
+- It is a private coaching hint the app strips out and shows in the learner's
+  input box. Never mention it, never reference it in the reply itself.
+- The cue: a few words IN ${ctx.nativeLanguage} naming the conversational move
+  (e.g. the ${ctx.nativeLanguage} for "answer their question with a detail",
+  "share a similar experience", "politely disagree").
+- The opener: a natural ${ctx.targetLanguage} reply to YOUR message above that the
+  learner could almost send as-is. If your reply ends with a question, the opener
+  MUST help answer that exact question. Use "___" for at most one personal detail.
+- Where it fits naturally, shape the opener so the learner re-uses ONE item from
+  the DUE-FOR-REVIEW list — quiet re-practice, never forced.
+- Calibrate to ${ctx.level}; keep the whole line under 200 characters; no quotes,
+  no markdown, nothing after this line.`;
 }
 
 function learnerContextPrompt(ctx: ConversationContext): string {

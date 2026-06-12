@@ -137,6 +137,8 @@ export interface PracticeContext extends BaseContext {
   sayDrillReplayCount?: number;
   /** "Say it again": this turn re-produces the learner's previous sentence using the correction, from memory. */
   redoTurn?: boolean;
+  /** Ask the reply agent for a private [[HINT]] trailer (input-box coaching hint, stripped before display/TTS/history). */
+  includeHintTrailer?: boolean;
 }
 
 export interface LearningContext extends BaseContext {

@@ -80,6 +80,13 @@ function truncateHint(hint: string): string {
   return `${hint.slice(0, MAX_HINT_CHARS - 1).trimEnd()}…`;
 }
 
+// Shared cleanup for a hint line from any source — the standalone generator below
+// or the in-band [[HINT]] reply trailer (see lib/hint-trailer): strip stray syntax,
+// drop cue-only lines (empty result), truncate runaways.
+export function sanitizeHint(text: string): string {
+  return truncateHint(cleanInputHintForDisplay(text));
+}
+
 function buildMessages(ctx: InputHintsContext): ChatMessage[] {
   const profileBlock = ctx.profileSlice?.trim()
     ? `\nLearner profile (use their interests and what they're working on to make the hint relevant):\n${ctx.profileSlice.trim()}\n`
@@ -130,7 +137,7 @@ export async function generateInputHints(
       maxTokens: MAX_OUTPUT_TOKENS,
       meta: { label: "input-hints" },
     });
-    return cleanInputHintForDisplay(extractHintLine(raw));
+    return sanitizeHint(extractHintLine(raw));
   };
 
   // One retry on an empty/unusable response (thinking budget exhausted, format
@@ -143,6 +150,5 @@ export async function generateInputHints(
     // Swallow the first error; the retry below either succeeds or throws.
   }
   if (!hint) hint = await attempt();
-  hint = truncateHint(hint);
   return hint ? [hint] : [];
 }

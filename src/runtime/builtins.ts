@@ -159,6 +159,7 @@ const conversationReply: ReplyProducer = {
         standaloneQuestion: ctx.standaloneQuestion,
         customInstructions: getBuiltinAgentOverride("builtin:conversation")
           ?.instructions,
+        includeHintTrailer: c.includeHintTrailer,
       },
       onDelta,
       ctx.callbacks.onContext,

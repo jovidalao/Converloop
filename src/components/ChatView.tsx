@@ -843,7 +843,12 @@ export function ChatView({
     ) {
       return;
     }
-    void generateInputHintsForConversation(conversationId).then((hints) => {
+    // reuseCached: the reply usually carried an in-band [[HINT]] trailer that runTurn
+    // already cached — this then costs no model call. Only a missing trailer falls
+    // back to the standalone generator.
+    void generateInputHintsForConversation(conversationId, {
+      reuseCached: true,
+    }).then((hints) => {
       if (turnGenRef.current === turnGen && hints.length > 0) {
         setInputHints(hints);
       }
