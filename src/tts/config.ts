@@ -83,6 +83,8 @@ export interface TtsConfig {
 
 const STORAGE_KEY = "lang-agent.tts";
 
+export const TTS_CONFIG_CHANGED_EVENT = "lang-agent:tts-config-changed";
+
 // Edge is the out-of-the-box default: free and keyless, so autoSpeak works on a
 // fresh install. MiMo needs a key plus a user-supplied gateway URL.
 const DEFAULT_TTS_CONFIG: TtsConfig = {
@@ -112,6 +114,7 @@ export function loadTtsConfig(): TtsConfig {
 
 export function saveTtsConfig(config: TtsConfig): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+  window.dispatchEvent(new Event(TTS_CONFIG_CHANGED_EVENT));
 }
 
 export async function getMimoTtsApiKey(): Promise<string | null> {

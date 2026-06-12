@@ -2,12 +2,14 @@ import { SparklesIcon } from "lucide-react";
 
 import { useTranslation } from "@/i18n";
 import { PracticeStats } from "./PracticeStats";
+import { ProviderStatus } from "./ProviderStatus";
 import { TopicStartScreen } from "./TopicStartScreen";
 
 // New-chat start page (shown on an empty practice draft): a Claude-style greeting hero (icon + a time-of-day
-// greeting/encouragement line), the practice-stats card, and a set of recommended conversation-topic chips generated
-// in the background from the learner's profile and recent topics. Picking a chip materializes the conversation and
-// the AI opens the chat on that topic; typing a first message in the composer below starts a normal turn instead.
+// greeting/encouragement line), the practice-stats card, a set of recommended conversation-topic chips generated
+// in the background from the learner's profile and recent topics, and a status line with the active LLM/TTS/STT
+// providers. Picking a chip materializes the conversation and the AI opens the chat on that topic; typing a first
+// message in the composer below starts a normal turn instead.
 export function NewChatStartScreen({
   topics,
   refreshing,
@@ -48,6 +50,7 @@ export function NewChatStartScreen({
       busy={busy}
       onPick={onPick}
       onRefresh={onRefresh}
+      footer={<ProviderStatus />}
     >
       <PracticeStats />
     </TopicStartScreen>

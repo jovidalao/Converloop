@@ -24,6 +24,7 @@ export function TopicStartScreen({
   onPick,
   onRefresh,
   children,
+  footer,
 }: {
   icon?: ReactNode;
   title?: string;
@@ -34,6 +35,8 @@ export function TopicStartScreen({
   refreshLabel: string;
   /** Optional content slot between the header and the topic chips (the new-chat page embeds the practice-stats card here). */
   children?: ReactNode;
+  /** Optional content slot below the topic chips (the new-chat page shows the active-provider status line here). */
+  footer?: ReactNode;
   /** null = nothing to show yet; [] = none (silently degrade to type-your-own). */
   topics: string[] | null;
   /** A fresh recommendation fetch is in flight — show the loading skeletons while there are no chips. */
@@ -113,6 +116,8 @@ export function TopicStartScreen({
           </div>
         )}
       </div>
+
+      {footer}
     </div>
   );
 }
