@@ -26,6 +26,14 @@ export default defineConfig(async () => ({
     ],
   },
 
+  // The app's only entry is the root index.html. Without this, Vite's dependency scan crawls every
+  // .html under the project root — including the vendored design-reference checkouts and
+  // src-tauri/target codegen assets — and fails on their unresolvable imports whenever the lockfile
+  // changes and a re-scan is triggered.
+  optimizeDeps: {
+    entries: ["index.html"],
+  },
+
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
   // 1. prevent Vite from obscuring rust errors
