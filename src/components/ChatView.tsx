@@ -601,6 +601,7 @@ export function ChatView({
   const drillDraftId = drillDraft?.id ?? null;
   const drillDraftWantsTopics =
     drillDraftActive && drillDraft?.setup === "topic";
+  // biome-ignore lint/correctness/useExhaustiveDependencies: drillDraft is identified by drillDraftId; its setup guidance is stable per draft
   useEffect(() => {
     if (!drillDraftWantsTopics) {
       setDrillTopics(null);
@@ -649,7 +650,6 @@ export function ChatView({
     return () => {
       cancelled = true;
     };
-    // biome-ignore lint/correctness/useExhaustiveDependencies: drillDraft is identified by drillDraftId; the guidance string is stable per draft
   }, [drillDraftWantsTopics, drillDraftId, drillReloadTick]);
 
   // New-chat start page: same shape as the Rapid Q&A effect above — reuse the cached topics verbatim on open (no model

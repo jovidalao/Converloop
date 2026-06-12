@@ -385,6 +385,7 @@ v1 核心链路已完成并可用:
 - ✅ 情景演练(原快问快答改名):复习项定向出题(场景使理想答案自然要求 DUE-FOR-REVIEW 项)+ 明显没完成任务时同题重试一次
 - ✅ 普通对话复习 elicitation(交替「自己示范」与「设计让用户必须产出的问题」)+ 批改面板「重说一遍」(把改对的意思凭记忆再产出一次,走正常批改)
 - ✅ 专项课课程回顾:会话级回写 observer 一次扫全课 transcript,批量提出 correct 证据(≤8 条),用户一键确认后 `recordSignals(source="review")` 入账
+- ✅ 训练模式 drill@1(AI-native 自定义训练):每个训练 = 一份 Markdown 文档(frontmatter 机制枚举 + 正文 prompt 小节),存 `learning_agent.source_md`(kind="drill",migration v40);四个内置训练改写为种子文档(`src/drills/seeds/`),旧 quickfire/dictation/shadowing/reviewDrill 修饰符读取时归一化为通用 `drill:{modeId,params,def}`;能力注册表 + `requires` 声明保证向前/向后兼容;创作规范由注册表生成,支持「复制给外部 AI → 粘回导入」与应用内 NL 生成(带一轮自动纠错);扩展介入点:`# Observer`(并行观察,写回仅提案)、`# Report`(节末报告)、`turnActions`(回合按钮限制)、`# Setup`(推荐器口味)。契约见 [drills.md](./drills.md)
 - ✅ 学习项目进度:`learning_project` 关联生成课程(migration v37/v38),逐课完成标记 + 进度 + 下一课;新对话起始页嵌练习统计卡(PracticeStats,仿 Claude macOS 用量卡:顶部标签切换概览/趋势/知识点/易错点,只读),原「今日训练」每日清单与设置里的「学习成就」页均已移除并并入此卡,各练习入口在侧栏/命令面板/练习中心
 
 ## 踩坑记录
