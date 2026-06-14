@@ -42,6 +42,11 @@ import {
   ReplySuggestionPanel,
   useReplySuggestion,
 } from "./reply-suggestion";
+import {
+  ReplyTransformerButtons,
+  ReplyTransformerPanels,
+  useReplyTransformers,
+} from "./reply-transformers";
 
 // Copy the reply; briefly shows a checkmark after copying.
 export function CopyButton({ text }: { text: string }) {
@@ -317,6 +322,16 @@ export const PartnerReply = memo(function PartnerReply({
     resetKey: `${turnId}:${text}`,
     onLayoutChange,
   });
+  // Custom reply transformers: per-reply buttons. "replace" mode shares the bubble with bilingual, so activating
+  // one closes the other (onReplaceActivate closes bilingual; bilingual's toggle clears replace).
+  const replyTransformers = useReplyTransformers({
+    turnId,
+    text,
+    activePanelId,
+    setActivePanelId,
+    onLayoutChange,
+    onReplaceActivate: () => setOpen(false),
+  });
   // When a transformer capability is "deleted" (hidden), its trigger button is also hidden.
   const bilingualHidden =
     isAgentHidden("builtin:transformer:bilingual") ||
@@ -362,12 +377,15 @@ export const PartnerReply = memo(function PartnerReply({
   function toggle() {
     if (loading) return;
     if (!view && !error) {
+      replyTransformers.clearReplace(); // bilingual and "replace" transformers both own the bubble
       setOpen(true);
       onFirstBilingual?.(); // user explicitly requested bilingual → comprehension-difficulty signal
       void generate();
       return;
     }
-    setOpen((o) => !o);
+    const next = !open;
+    if (next) replyTransformers.clearReplace();
+    setOpen(next);
   }
 
   // When "auto-open bilingual reading" is enabled in settings, a new reply expands and generates once on mount.
@@ -392,7 +410,9 @@ export const PartnerReply = memo(function PartnerReply({
         className="self-stretch py-0.5 text-foreground"
         data-selectable-context
       >
-        {showBilingual && error ? (
+        {replyTransformers.replaceMarkdown ? (
+          <Markdown>{replyTransformers.replaceMarkdown}</Markdown>
+        ) : showBilingual && error ? (
           <div className="flex items-center gap-3">
             <span
               className="min-w-0 flex-1 text-ui-body leading-snug text-destructive"
@@ -413,13 +433,7 @@ export const PartnerReply = memo(function PartnerReply({
             </Button>
           </div>
         ) : showBilingual && view ? (
-          <Markdown
-            className="bilingual"
-            remarkPlugins={[remarkBilingual]}
-            components={{
-              em: ({ children }) => <span className="bi-tr">{children}</span>,
-            }}
-          >
+          <Markdown className="bilingual" remarkPlugins={[remarkBilingual]}>
             {view}
           </Markdown>
         ) : (
@@ -455,12 +469,16 @@ export const PartnerReply = memo(function PartnerReply({
             {!offRecord && !suggestionHidden && (
               <ReplySuggestionButton suggestion={replySuggestion} />
             )}
+            <ReplyTransformerButtons items={replyTransformers.items} />
           </>
         }
         extraPanels={
-          offRecord || suggestionHidden ? null : (
-            <ReplySuggestionPanel suggestion={replySuggestion} />
-          )
+          <>
+            {!offRecord && !suggestionHidden && (
+              <ReplySuggestionPanel suggestion={replySuggestion} />
+            )}
+            <ReplyTransformerPanels items={replyTransformers.items} />
+          </>
         }
         trailingActions={
           bilingualHidden ? null : (

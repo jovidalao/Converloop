@@ -89,12 +89,19 @@ export const learningAgent = sqliteTable("learning_agent", {
   prompt: text("prompt").notNull(),
   dataScopeJson: text("data_scope_json").notNull(),
   kind: text("kind", {
-    enum: ["lesson", "observer", "action", "drill"],
+    enum: ["lesson", "observer", "action", "drill", "reply_transformer"],
   })
     .notNull()
     .default("lesson"),
   hook: text("hook"),
   enabled: integer("enabled").notNull().default(1),
+  // kind="reply_transformer" rows: the lucide icon name for the reply button,
+  // whether it auto-runs on each new reply, and where its output goes.
+  icon: text("icon"),
+  autoRun: integer("auto_run").notNull().default(0),
+  outputMode: text("output_mode", {
+    enum: ["panel", "replace", "coach", "memory"],
+  }),
   version: integer("version").notNull().default(1),
   allowedToolsJson: text("allowed_tools_json").notNull().default("[]"),
   writebackPolicy: text("writeback_policy", {

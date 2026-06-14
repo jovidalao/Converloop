@@ -24,6 +24,7 @@ import {
   getLearningAgent,
   LEARNING_DATA_SCOPES,
   type LearningAgentKind,
+  type LearningAgentOutputMode,
   type LearningAgentWritebackPolicy,
   type LearningDataScope,
   updateLearningAgent,
@@ -42,6 +43,11 @@ import {
 } from "../runtime";
 import { APP_DESIGN_DATA_SCOPES_HASH } from "./AppDesignView";
 import { useConfirm } from "./confirm";
+import {
+  DEFAULT_REPLY_TRANSFORMER_ICON,
+  REPLY_TRANSFORMER_ICON_NAMES,
+  replyTransformerIcon,
+} from "./reply-transformer-icons";
 import type { MainView } from "./Sidebar";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -243,17 +249,19 @@ function AgentRow({
               >
                 <PencilIcon size={15} />
               </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="size-8 text-ui-muted hover:text-foreground"
-                title={t("agentLibrary.exportTitle")}
-                aria-label={t("agentLibrary.exportTitle")}
-                onClick={() => onExport(entry.id)}
-              >
-                <DownloadIcon size={15} />
-              </Button>
+              {entry.kind !== "transformer" && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-8 text-ui-muted hover:text-foreground"
+                  title={t("agentLibrary.exportTitle")}
+                  aria-label={t("agentLibrary.exportTitle")}
+                  onClick={() => onExport(entry.id)}
+                >
+                  <DownloadIcon size={15} />
+                </Button>
+              )}
             </>
           ) : (
             <Button
@@ -330,6 +338,13 @@ function AgentRow({
 // Output preview: shows expected output shape for observer vs action agents.
 function OutputPreview({ kind }: { kind: LearningAgentKind }) {
   const { t } = useTranslation();
+  if (kind === "reply_transformer") {
+    return (
+      <span className="text-ui-caption text-ui-muted">
+        {t("agentLibrary.outputPreviewReplyTransformer")}
+      </span>
+    );
+  }
   const example =
     kind === "observer"
       ? `{
@@ -393,6 +408,10 @@ export function AgentLibraryView({
   ]);
   const [writebackPolicy, setWritebackPolicy] =
     useState<LearningAgentWritebackPolicy>("none");
+  const [icon, setIcon] = useState<string>(DEFAULT_REPLY_TRANSFORMER_ICON);
+  const [autoRun, setAutoRun] = useState(false);
+  const [outputMode, setOutputMode] =
+    useState<LearningAgentOutputMode>("panel");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [tuneId, setTuneId] = useState<string | null>(null);
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -430,6 +449,9 @@ export function AgentLibraryView({
     setPrompt("");
     setScopes(["profile", "weak_all"]);
     setWritebackPolicy("none");
+    setIcon(DEFAULT_REPLY_TRANSFORMER_ICON);
+    setAutoRun(false);
+    setOutputMode("panel");
   }
 
   function openDataScopeGuide() {
@@ -447,12 +469,19 @@ export function AgentLibraryView({
         return;
       }
       setEditingId(agent.id);
-      setKind(agent.kind === "action" ? "action" : "observer");
+      setKind(
+        agent.kind === "action" || agent.kind === "reply_transformer"
+          ? agent.kind
+          : "observer",
+      );
       setName(agent.name);
       setDescription(agent.description);
       setPrompt(agent.prompt);
       setScopes(agent.dataScopes.length ? agent.dataScopes : ["weak_all"]);
       setWritebackPolicy(agent.writebackPolicy);
+      setIcon(agent.icon ?? DEFAULT_REPLY_TRANSFORMER_ICON);
+      setAutoRun(agent.autoRun === 1);
+      setOutputMode(agent.outputMode);
       formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -475,6 +504,9 @@ export function AgentLibraryView({
           dataScopes: scopes,
           writebackPolicy: kind === "observer" ? writebackPolicy : "none",
           outputSchema: defaultAgentOutputSchema(kind),
+          icon: kind === "reply_transformer" ? icon : null,
+          autoRun: kind === "reply_transformer" ? autoRun : false,
+          outputMode: kind === "reply_transformer" ? outputMode : undefined,
         });
         resetForm();
         await refreshCatalog();
@@ -490,6 +522,9 @@ export function AgentLibraryView({
           allowedTools: ["read_learning_data"],
           writebackPolicy: kind === "observer" ? writebackPolicy : "none",
           outputSchema: defaultAgentOutputSchema(kind),
+          icon: kind === "reply_transformer" ? icon : null,
+          autoRun: kind === "reply_transformer" ? autoRun : false,
+          outputMode: kind === "reply_transformer" ? outputMode : undefined,
           enabled: true,
         });
         resetForm();
@@ -610,6 +645,11 @@ export function AgentLibraryView({
       title: t("agentLibrary.actionTitle"),
       desc: t("agentLibrary.actionDesc"),
     },
+    {
+      v: "reply_transformer",
+      title: t("agentLibrary.replyTransformerTitle"),
+      desc: t("agentLibrary.replyTransformerDesc"),
+    },
   ];
 
   return (
@@ -717,6 +757,69 @@ export function AgentLibraryView({
             </FormSection>
           )}
 
+          {kind === "reply_transformer" && (
+            <>
+              <FormSection title={t("agentLibrary.iconLabel")}>
+                <div className="flex flex-wrap gap-1.5">
+                  {REPLY_TRANSFORMER_ICON_NAMES.map((name) => {
+                    const Icon = replyTransformerIcon(name);
+                    return (
+                      <button
+                        key={name}
+                        type="button"
+                        onClick={() => setIcon(name)}
+                        aria-pressed={icon === name}
+                        aria-label={name}
+                        className={cn(
+                          "flex size-9 items-center justify-center rounded-md border",
+                          icon === name
+                            ? "border-primary bg-primary/5 text-foreground"
+                            : "bg-background text-ui-muted hover:bg-accent",
+                        )}
+                      >
+                        <Icon size={16} />
+                      </button>
+                    );
+                  })}
+                </div>
+              </FormSection>
+              <FormSection title={t("agentLibrary.outputModeLabel")}>
+                <Select
+                  value={outputMode}
+                  onValueChange={(v) =>
+                    setOutputMode(v as LearningAgentOutputMode)
+                  }
+                >
+                  <SelectTrigger className="md:w-72">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="panel">
+                      {t("agentLibrary.outputModePanel")}
+                    </SelectItem>
+                    <SelectItem value="replace">
+                      {t("agentLibrary.outputModeReplace")}
+                    </SelectItem>
+                    <SelectItem value="coach">
+                      {t("agentLibrary.outputModeCoach")}
+                    </SelectItem>
+                    <SelectItem value="memory">
+                      {t("agentLibrary.outputModeMemory")}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </FormSection>
+              <FormSection title={t("agentLibrary.autoRunLabel")}>
+                <div className="flex items-center gap-2">
+                  <Switch checked={autoRun} onCheckedChange={setAutoRun} />
+                  <span className="text-ui-caption text-ui-muted">
+                    {t("agentLibrary.autoRunHint")}
+                  </span>
+                </div>
+              </FormSection>
+            </>
+          )}
+
           <FormSection title="Prompt">
             <Textarea
               value={prompt}
@@ -724,7 +827,9 @@ export function AgentLibraryView({
               placeholder={
                 kind === "observer"
                   ? t("agentLibrary.observerPromptPlaceholder")
-                  : t("agentLibrary.actionPromptPlaceholder")
+                  : kind === "reply_transformer"
+                    ? t("agentLibrary.replyTransformerPromptPlaceholder")
+                    : t("agentLibrary.actionPromptPlaceholder")
               }
               className="min-h-28 resize-y font-mono text-ui-caption leading-relaxed"
             />

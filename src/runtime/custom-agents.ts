@@ -23,6 +23,9 @@ import type {
   DerivationContext,
   Observer,
   PracticeContext,
+  ReplyTransformer,
+  ReplyTransformerInput,
+  ReplyTransformerResult,
 } from "./types";
 
 const CustomObserverOutput = z.object({
@@ -216,6 +219,139 @@ function observerFromAgent(agent: LearningAgentMeta): Observer {
   };
 }
 
+// Strip a ``` code fence the model occasionally wraps Markdown output in.
+function stripFences(text: string): string {
+  const t = text.trim();
+  const fenced = t.match(/^```(?:\w+)?\s*\n?([\s\S]*?)\n?```\s*$/);
+  return fenced ? fenced[1].trim() : t;
+}
+
+// Reply transformer: runs on a specific AI reply (button / auto-run). panel/replace return Markdown for the chat to render;
+// coach writes a turn annotation; memory proposes learning-data writes (reusing the observer schema + writeback path).
+async function runCustomReplyTransformer(
+  agent: LearningAgentMeta,
+  input: ReplyTransformerInput,
+): Promise<ReplyTransformerResult> {
+  const provider = await getProvider();
+  if (!provider)
+    throw new Error(
+      "No API key configured, please fill it in on the settings page",
+    );
+
+  const config = loadConfig();
+  const dataContext = await buildLearningDataContext(agent, config);
+  const userContent = `=== LANGUAGES ===
+Native: ${config.nativeLanguage}
+Target: ${config.targetLanguage}
+Level: ${config.level}
+
+=== LEARNING DATA YOU MAY READ ===
+${formatDataContext(dataContext)}
+
+=== AI REPLY ===
+${input.replyText}`;
+
+  if (agent.outputMode === "memory") {
+    const messages: ChatMessage[] = [
+      {
+        role: "system",
+        content: `You are a custom reply-transformer in a language-learning app. Inspect the AI reply below and, following the user's instructions, propose learning-memory updates.
+
+Rules:
+- Return JSON only.
+- Do not claim you changed learning memory directly. Put writes in memory_proposals using only
+  create/update/delete/merge operations. For merge, key is the duplicate/source key and
+  target_key is the canonical/target key.
+- body_md is a short note in the learner's native language explaining what you propose.
+
+=== CUSTOM AGENT INSTRUCTIONS ===
+${agent.prompt}`,
+      },
+      { role: "user", content: userContent },
+    ];
+    const raw = await provider.generate({
+      messages,
+      temperature: 0.2,
+      maxTokens: 2048,
+      jsonSchema: toJsonSchema("CustomObserverOutput", CustomObserverOutput),
+      meta: { label: agent.id },
+    });
+    const output = parseStructured(raw, CustomObserverOutput, agent.name);
+    await createMemoryProposal({
+      agentId: customId(agent),
+      turnId: input.turnId,
+      summary: output.proposal_summary ?? output.title,
+      operations: (output.memory_proposals ?? []) as DataEditOperation[],
+    });
+    return {};
+  }
+
+  // panel / replace / coach: freeform Markdown.
+  const messages: ChatMessage[] = [
+    {
+      role: "system",
+      content: `You are a custom reply-transformer in a language-learning app. The learner is reading the AI reply below in their target language. Apply the user's instructions to THAT reply and output the result as Markdown for the learner to read.
+
+Output Markdown only — no preamble, no commentary, no code fences. Use the learner's native language (${config.nativeLanguage}) for explanations unless the instructions say otherwise.
+
+=== CUSTOM AGENT INSTRUCTIONS ===
+${agent.prompt}`,
+    },
+    { role: "user", content: userContent },
+  ];
+  const raw = await provider.generate({
+    messages,
+    temperature: 0.3,
+    maxTokens: 2048,
+    meta: { label: agent.id },
+  });
+  const markdown = stripFences(raw);
+  if (!markdown)
+    throw new Error("Reply transformer produced no output, please retry");
+
+  if (agent.outputMode === "coach") {
+    await createTurnAnnotation({
+      turnId: input.turnId,
+      agentId: customId(agent),
+      title: agent.name,
+      bodyMd: markdown,
+    });
+    return {};
+  }
+  return { markdown };
+}
+
+// Exported as a test seam (the routing-by-output-mode logic is the core new behavior); also used by reloadCustomRuntimeAgents.
+export function replyTransformerFromAgent(
+  agent: LearningAgentMeta,
+): ReplyTransformer {
+  const writes =
+    agent.outputMode === "coach"
+      ? "Writes a Coach-panel note on this turn"
+      : agent.outputMode === "memory"
+        ? "Proposes learning-data writes (requires your confirmation)"
+        : "Shows a transformed view of the reply (not saved)";
+  return {
+    id: customId(agent),
+    kind: "transformer",
+    icon: agent.icon,
+    outputMode: agent.outputMode,
+    autoRun: agent.autoRun === 1,
+    card: {
+      title: agent.name,
+      description: agent.description,
+      entry: "reply_action",
+      timing: agent.autoRun
+        ? "Auto-runs on each new reply · custom reply button"
+        : "User clicks the button on a reply",
+      reads: "This AI reply · authorized learning data",
+      writes,
+      canDisable: true,
+    },
+    run: (input) => runCustomReplyTransformer(agent, input),
+  };
+}
+
 function actionFromAgent(agent: LearningAgentMeta): ActionAgent {
   return {
     id: customId(agent),
@@ -245,5 +381,8 @@ export async function reloadCustomRuntimeAgents(): Promise<void> {
       .filter((a) => a.kind === "observer")
       .map(observerFromAgent),
     actions: agents.filter((a) => a.kind === "action").map(actionFromAgent),
+    replyTransformers: agents
+      .filter((a) => a.kind === "reply_transformer")
+      .map(replyTransformerFromAgent),
   });
 }

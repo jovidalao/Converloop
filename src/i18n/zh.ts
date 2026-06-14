@@ -767,7 +767,6 @@ export const zh: Messages = {
     emptyModelId: "未填写模型 ID",
     inputPlaceholderLesson: "问老师、回答练习，母语/目标语言都可以…",
     inputPlaceholderPractice: "写一句自然回复，或输入 / 选择命令",
-    hintTabHint: "按 Tab 填入输入框",
     replySuggestionTruncated:
       "推荐回复因输出长度限制被截断（{provider}:{raw}）。可以重试，反馈问题时请在括号里附上原因。",
     generateReplySuggestion: "生成推荐回复",
@@ -997,6 +996,21 @@ export const zh: Messages = {
     observerPromptPlaceholder:
       "描述每轮观察什么、如何给出反馈，以及何时提议 memory_proposals。",
     actionPromptPlaceholder: "描述如何根据当前对话生成新的对话情境。",
+    replyTransformerTitle: "回复转换 Agent",
+    replyTransformerDesc:
+      "在每条 AI 回复上加一个按钮，点击（或自动）就对这条回复运行。",
+    replyTransformerPromptPlaceholder:
+      "描述如何转换这条 AI 回复——例如简化它、改得更正式，或提取关键词汇。",
+    iconLabel: "按钮图标",
+    autoRunLabel: "每条新回复自动运行",
+    autoRunHint: "否则只在你点击按钮时运行。",
+    outputModeLabel: "输出方式",
+    outputModePanel: "在回复下方展开面板",
+    outputModeReplace: "就地替换这条回复",
+    outputModeCoach: "写入 Coach 面板",
+    outputModeMemory: "提议更新学习记忆",
+    outputPreviewReplyTransformer:
+      "输出 → 取决于上面选择的方式（面板／替换／Coach 笔记／记忆提议）。",
     createAndEnable: "创建并启用",
     saveChanges: "保存修改",
     custom: "自定义",

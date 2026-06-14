@@ -1,4 +1,5 @@
-// Bilingual reading: convert translated text from ⟦…⟧ markers into mdast emphasis nodes, reusing the em → .bi-tr style at render time.
+// Bilingual reading: convert translated text from ⟦…⟧ markers into span.bi-tr nodes (via mdast hName/hProperties),
+// so translations carry the translation style on their own — without colliding with source italics (*…*), which keep rendering as <em>.
 //
 // Why not use Markdown's *single asterisk* to mark translations: CommonMark's emphasis flanking
 // rules are very fragile next to CJK characters/punctuation — if the translated text carries over **bold** from the source, or
@@ -10,7 +11,12 @@ const OPEN = "⟦"; // ⟦
 const CLOSE = "⟧"; // ⟧
 const SPAN = /⟦([^⟦⟧]*)⟧/g;
 
-type MdNode = { type: string; value?: string; children?: MdNode[] };
+type MdNode = {
+  type: string;
+  value?: string;
+  children?: MdNode[];
+  data?: { hName?: string; hProperties?: Record<string, unknown> };
+};
 
 // Strip unpaired marker characters so they do not appear bare in the UI.
 function pushText(out: MdNode[], raw: string): void {
@@ -26,7 +32,11 @@ function splitTranslations(value: string): MdNode[] | null {
   SPAN.lastIndex = 0;
   for (let m = SPAN.exec(value); m !== null; m = SPAN.exec(value)) {
     if (m.index > last) pushText(out, value.slice(last, m.index));
-    out.push({ type: "emphasis", children: [{ type: "text", value: m[1] }] });
+    out.push({
+      type: "emphasis",
+      data: { hName: "span", hProperties: { className: ["bi-tr"] } },
+      children: [{ type: "text", value: m[1] }],
+    });
     last = SPAN.lastIndex;
   }
   if (last < value.length) pushText(out, value.slice(last));

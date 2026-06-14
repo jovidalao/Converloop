@@ -3,17 +3,11 @@ import { describe, expect, it } from "vitest";
 import { Markdown } from "../components/Markdown";
 import { remarkBilingual } from "../components/remark-bilingual";
 
-// Render bilingual Markdown exactly like ChatView does: ⟦…⟧ → emphasis (via the
-// remark plugin) → em → .bi-tr span.
+// Render bilingual Markdown exactly like ChatView does: ⟦…⟧ → span.bi-tr (via the
+// remark plugin's hName/hProperties). Source italics (*…*) stay <em> — no override.
 function render(md: string): string {
   return renderToStaticMarkup(
-    <Markdown
-      className="bilingual"
-      remarkPlugins={[remarkBilingual]}
-      components={{
-        em: ({ children }) => <span className="bi-tr">{children}</span>,
-      }}
-    >
+    <Markdown className="bilingual" remarkPlugins={[remarkBilingual]}>
       {md}
     </Markdown>,
   );
@@ -71,6 +65,14 @@ describe("bilingual ⟦…⟧ rendering is CJK-safe", () => {
     const html = render('Yes, **"Stay"** is great.⟦确实,很棒。⟧');
     expect(html).toContain("<strong>");
     expect(html).toContain('<span class="bi-tr">确实,很棒。</span>');
+  });
+
+  // Regression (screenshot bug): source italics must render as <em>, not pick up
+  // the translation style. Translations and source emphasis no longer share <em>.
+  it("keeps source italics as <em>, not translation style", () => {
+    const html = render("the cleanup *that is* much easier.⟦清理工作要容易得多。⟧");
+    expect(html).toContain("<em>that is</em>");
+    expect(translated(html)).toBe("清理工作要容易得多。");
   });
 
   it("preserves list structure", () => {

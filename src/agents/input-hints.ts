@@ -88,9 +88,9 @@ export function sanitizeHint(text: string): string {
 }
 
 // A stored hint line is "native-language cue → target-language opener" (see the
-// prompt below). Consumers that let the learner borrow the hint (Tab in the chat
-// input, the coach panel's "use" button) must insert ONLY the opener — inserting
-// the whole line would put both languages in the composer.
+// prompt below). Consumers that let the learner borrow the hint (the coach
+// panel's "use" button) must insert ONLY the opener — inserting the whole line
+// would put both languages in the composer.
 export function splitHintParts(hint: string): {
   cue: string | null;
   opener: string;

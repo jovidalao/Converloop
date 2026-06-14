@@ -28,6 +28,9 @@ import {
   type Observer,
   type PracticeContext,
   type ReplyProducer,
+  type ReplyTransformer,
+  type ReplyTransformerInput,
+  type ReplyTransformerResult,
   type TransformerInfo,
 } from "./types";
 import { isAgentHidden } from "./visibility";
@@ -36,6 +39,7 @@ const replyProducers = new Map<ConversationKind, ReplyProducer>();
 const observers: Observer[] = [];
 const actions: ActionAgent[] = [];
 const transformers: TransformerInfo[] = [];
+const replyTransformers: ReplyTransformer[] = [];
 
 // Idempotent registration: re-registering an id replaces the existing entry instead of appending.
 // builtins.ts registers via module-level side effects; under Vite/React-Fast-Refresh that module
@@ -96,6 +100,7 @@ function withActionOverride(a: ActionAgent): ActionAgent {
 export function replaceCustomRuntimeAgents(input: {
   observers: Observer[];
   actions: ActionAgent[];
+  replyTransformers: ReplyTransformer[];
 }): void {
   for (let i = observers.length - 1; i >= 0; i--) {
     if (observers[i]?.id.startsWith("custom:")) observers.splice(i, 1);
@@ -103,8 +108,13 @@ export function replaceCustomRuntimeAgents(input: {
   for (let i = actions.length - 1; i >= 0; i--) {
     if (actions[i]?.id.startsWith("custom:")) actions.splice(i, 1);
   }
+  for (let i = replyTransformers.length - 1; i >= 0; i--) {
+    if (replyTransformers[i]?.id.startsWith("custom:"))
+      replyTransformers.splice(i, 1);
+  }
   observers.push(...input.observers);
   actions.push(...input.actions);
+  replyTransformers.push(...input.replyTransformers);
 }
 
 export function getReplyProducer(
@@ -127,6 +137,13 @@ export function getActions(scope?: ActionScope): readonly ActionAgent[] {
 
 export function getTransformers(): readonly TransformerInfo[] {
   return transformers;
+}
+
+// Reply transformers shown as per-reply buttons: hidden (deleted) and disabled ones drop out, like the builtin *Hidden flags.
+export function getReplyTransformers(): readonly ReplyTransformer[] {
+  return replyTransformers.filter(
+    (t) => !isAgentHidden(t.id) && isAgentEnabled(t.id),
+  );
 }
 
 // Agent library catalog: all registered agents (with current enabled state), for UI display and toggling.
@@ -159,6 +176,13 @@ export function listAgentCatalog(): AgentCatalogEntry[] {
       id: t.id,
       kind: "transformer",
       enabled: true,
+      card: applyCardOverride(t.id, t.card),
+    });
+  for (const t of replyTransformers)
+    entries.push({
+      id: t.id,
+      kind: "transformer",
+      enabled: isAgentEnabled(t.id),
       card: applyCardOverride(t.id, t.card),
     });
   // Hidden (permanently deleted) capabilities do not appear in the library and cannot be restored.
@@ -353,5 +377,28 @@ export async function runTransformer<T>(
       summarize,
     },
     fn,
+  );
+}
+
+// Run a custom reply transformer (user-click or auto-run on a reply). Logged under turn.reply_transform; the agent's run() self-assembles provider/config.
+export async function runReplyTransformer(
+  id: string,
+  input: ReplyTransformerInput,
+): Promise<ReplyTransformerResult> {
+  const transformer = replyTransformers.find((t) => t.id === id);
+  if (!transformer)
+    throw new Error(`No reply transformer registered with id=${id}`);
+  if (isAgentHidden(id)) throw new Error(`Capability ${id} has been deleted`);
+  return runLogged(
+    {
+      agentId: transformer.id,
+      hook: HOOKS.turnReplyTransform,
+      turnId: input.turnId,
+      summarize: (r: ReplyTransformerResult) => ({
+        mode: transformer.outputMode,
+        chars: r.markdown?.length ?? 0,
+      }),
+    },
+    () => transformer.run(input),
   );
 }

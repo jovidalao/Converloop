@@ -5,12 +5,15 @@ import {
   getActions,
   getObservers,
   getReplyProducer,
+  getReplyTransformers,
   getTransformers,
   registerAction,
   registerObserver,
   registerReplyProducer,
   registerTransformer,
+  replaceCustomRuntimeAgents,
   runAction,
+  runReplyTransformer,
   runTransformer,
 } from "./registry";
 import type {
@@ -18,6 +21,7 @@ import type {
   Observer,
   PracticeContext,
   ReplyProducer,
+  ReplyTransformer,
   TransformerInfo,
 } from "./types";
 import { HOOKS } from "./types";
@@ -161,5 +165,49 @@ describe("agent runtime registry", () => {
       (text) => ({ chars: text.length }),
     );
     expect(result).toBe("done");
+  });
+
+  it("custom reply transformer registers, dispatches via runReplyTransformer, and is removed on hide", async () => {
+    let ranReplyText: string | null = null;
+    const tr: ReplyTransformer = {
+      id: "custom:rt-test",
+      kind: "transformer",
+      icon: "star",
+      outputMode: "panel",
+      autoRun: false,
+      card: {
+        title: "test reply transformer",
+        description: "for testing",
+        entry: "reply_action",
+        timing: "on click",
+        reads: "this reply",
+        writes: "none",
+        canDisable: true,
+      },
+      run: async (input) => {
+        ranReplyText = input.replyText;
+        return { markdown: "transformed" };
+      },
+    };
+    replaceCustomRuntimeAgents({
+      observers: [],
+      actions: [],
+      replyTransformers: [tr],
+    });
+    expect(getReplyTransformers().some((t) => t.id === "custom:rt-test")).toBe(
+      true,
+    );
+
+    const result = await runReplyTransformer("custom:rt-test", {
+      turnId: "t1",
+      replyText: "hello",
+    });
+    expect(result.markdown).toBe("transformed");
+    expect(ranReplyText).toBe("hello");
+
+    hideAgent("custom:rt-test");
+    expect(getReplyTransformers().some((t) => t.id === "custom:rt-test")).toBe(
+      false,
+    );
   });
 });

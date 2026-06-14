@@ -311,6 +311,11 @@ function itemFromAgent(agent: LearningAgentMeta): SharePackageItem {
   if (agent.kind === "lesson") {
     return { ...base, type: "lesson" };
   }
+  // The package format predates reply transformers and has no slot for their icon / output mode / auto-run,
+  // so sharing one would silently drop that config. Refuse rather than export a half-configured agent.
+  if (agent.kind === "reply_transformer") {
+    throw new Error("Sharing reply transformers is not supported yet");
+  }
   return {
     ...base,
     type: "skill",

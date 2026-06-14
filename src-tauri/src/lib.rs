@@ -171,6 +171,14 @@ const DELETE_LEGACY_DICTATION_MASTERY: &str =
 const ADD_LEARNING_AGENT_SOURCE_MD: &str =
     "ALTER TABLE learning_agent ADD COLUMN source_md TEXT;";
 
+// kind="reply_transformer" 行:回复按钮的图标名、是否每条回复自动触发、产出去向(panel/replace/coach/memory)。
+const ADD_LEARNING_AGENT_ICON: &str =
+    "ALTER TABLE learning_agent ADD COLUMN icon TEXT;";
+const ADD_LEARNING_AGENT_AUTO_RUN: &str =
+    "ALTER TABLE learning_agent ADD COLUMN auto_run INTEGER NOT NULL DEFAULT 0;";
+const ADD_LEARNING_AGENT_OUTPUT_MODE: &str =
+    "ALTER TABLE learning_agent ADD COLUMN output_mode TEXT;";
+
 const CREATE_AGENT_JOB: &str = "\
 CREATE TABLE IF NOT EXISTS agent_job (
     id          TEXT PRIMARY KEY NOT NULL,
@@ -584,6 +592,24 @@ pub fn run() {
             version: 40,
             description: "add_learning_agent_source_md",
             sql: ADD_LEARNING_AGENT_SOURCE_MD,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 41,
+            description: "add_learning_agent_icon",
+            sql: ADD_LEARNING_AGENT_ICON,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 42,
+            description: "add_learning_agent_auto_run",
+            sql: ADD_LEARNING_AGENT_AUTO_RUN,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 43,
+            description: "add_learning_agent_output_mode",
+            sql: ADD_LEARNING_AGENT_OUTPUT_MODE,
             kind: MigrationKind::Up,
         },
     ];

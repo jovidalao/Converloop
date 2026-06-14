@@ -810,7 +810,6 @@ export const en = {
     inputPlaceholderLesson:
       "Ask the teacher, answer exercises — native or target language…",
     inputPlaceholderPractice: "Write a natural reply, or type / for commands",
-    hintTabHint: "Press Tab to insert",
     replySuggestionTruncated:
       "Reply suggestion truncated due to output length limit ({provider}:{raw}). You can retry; include the reason in parentheses when reporting the issue.",
     generateReplySuggestion: "Generate reply suggestion",
@@ -1049,6 +1048,21 @@ export const en = {
       "Describe what to observe each turn, how to give feedback, and when to propose memory_proposals.",
     actionPromptPlaceholder:
       "Describe how to generate a new conversation context based on the current conversation.",
+    replyTransformerTitle: "Reply Transformer Agent",
+    replyTransformerDesc:
+      "Adds a button to each AI reply; runs on that reply when clicked (or automatically).",
+    replyTransformerPromptPlaceholder:
+      "Describe how to transform the AI reply — e.g. simplify it, make it more formal, or extract key vocabulary.",
+    iconLabel: "Button icon",
+    autoRunLabel: "Run automatically on each new reply",
+    autoRunHint: "Otherwise it runs only when you click the button.",
+    outputModeLabel: "Output",
+    outputModePanel: "Panel below the reply",
+    outputModeReplace: "Replace the reply in place",
+    outputModeCoach: "Note in the Coach panel",
+    outputModeMemory: "Propose a learning-memory update",
+    outputPreviewReplyTransformer:
+      "Output → depends on the mode you pick above (panel / replace / Coach note / memory proposal).",
     createAndEnable: "Create and enable",
     saveChanges: "Save changes",
     custom: "Custom",

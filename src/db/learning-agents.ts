@@ -19,9 +19,24 @@ export const LEARNING_AGENT_KIND_VALUES = [
   "lesson",
   "observer",
   "action",
+  "reply_transformer",
 ] as const;
 
 export type LearningAgentKind = (typeof LEARNING_AGENT_KIND_VALUES)[number];
+
+// reply_transformer rows only: where the transformer's output goes.
+export const LEARNING_AGENT_OUTPUT_MODE_VALUES = [
+  "panel", // drop-below Markdown panel under the reply
+  "replace", // replace the reply bubble in place (toggle)
+  "coach", // write a Coach-panel note for this turn
+  "memory", // propose a learning-memory write for review
+] as const;
+
+export type LearningAgentOutputMode =
+  (typeof LEARNING_AGENT_OUTPUT_MODE_VALUES)[number];
+
+export const DEFAULT_LEARNING_AGENT_OUTPUT_MODE: LearningAgentOutputMode =
+  "panel";
 
 export const RUNTIME_AGENT_HOOK_VALUES = [
   "conversation.observe",
@@ -55,6 +70,9 @@ export interface LearningAgentDraft {
   writebackPolicy?: LearningAgentWritebackPolicy;
   outputSchema?: Record<string, unknown> | null;
   packageMeta?: LearningAgentPackageMeta | null;
+  icon?: string | null;
+  autoRun?: boolean;
+  outputMode?: LearningAgentOutputMode;
 }
 
 export interface LearningAgentPackageMeta {
@@ -76,6 +94,7 @@ export interface LearningAgentMeta extends LearningAgent {
   writebackPolicy: LearningAgentWritebackPolicy;
   outputSchema: Record<string, unknown> | null;
   packageMeta: LearningAgentPackageMeta | null;
+  outputMode: LearningAgentOutputMode;
 }
 
 export const DATA_SCOPE_LABELS: Record<LearningDataScope, string> = {
@@ -374,6 +393,16 @@ function normalizeWritebackPolicy(
     : DEFAULT_LEARNING_AGENT_WRITEBACK_POLICY;
 }
 
+function normalizeOutputMode(
+  mode: string | null | undefined,
+): LearningAgentOutputMode {
+  return LEARNING_AGENT_OUTPUT_MODE_VALUES.includes(
+    mode as LearningAgentOutputMode,
+  )
+    ? (mode as LearningAgentOutputMode)
+    : DEFAULT_LEARNING_AGENT_OUTPUT_MODE;
+}
+
 function parseOutputSchema(
   json: string | null,
 ): Record<string, unknown> | null {
@@ -445,6 +474,7 @@ function hydrate(row: LearningAgent): LearningAgentMeta {
     writebackPolicy: normalizeWritebackPolicy(row.writebackPolicy),
     outputSchema: parseOutputSchema(row.outputSchemaJson),
     packageMeta: parsePackageMeta(row.packageMetaJson),
+    outputMode: normalizeOutputMode(row.outputMode),
   };
 }
 
@@ -560,6 +590,9 @@ export async function createLearningAgent(
     writebackPolicy: normalizeWritebackPolicy(draft.writebackPolicy),
     outputSchemaJson: serializeOutputSchema(draft.outputSchema),
     packageMetaJson: serializePackageMeta(draft.packageMeta),
+    icon: draft.icon ?? null,
+    autoRun: draft.autoRun ? 1 : 0,
+    outputMode: draft.outputMode ?? null,
     builtIn: 0,
     createdAt: now,
     updatedAt: now,
@@ -597,6 +630,9 @@ export async function updateLearningAgent(
     updates.outputSchemaJson = serializeOutputSchema(patch.outputSchema);
   if (patch.packageMeta !== undefined)
     updates.packageMetaJson = serializePackageMeta(patch.packageMeta);
+  if (patch.icon !== undefined) updates.icon = patch.icon;
+  if (patch.autoRun !== undefined) updates.autoRun = patch.autoRun ? 1 : 0;
+  if (patch.outputMode !== undefined) updates.outputMode = patch.outputMode;
 
   await db.update(learningAgent).set(updates).where(eq(learningAgent.id, id));
 }
@@ -617,7 +653,12 @@ export async function listRuntimeLearningAgents(): Promise<
     .orderBy(asc(learningAgent.createdAt));
   return rows
     .map(hydrate)
-    .filter((a) => a.kind === "observer" || a.kind === "action");
+    .filter(
+      (a) =>
+        a.kind === "observer" ||
+        a.kind === "action" ||
+        a.kind === "reply_transformer",
+    );
 }
 
 export async function setLearningAgentEnabled(

@@ -7,7 +7,6 @@ import {
   XIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { splitHintParts } from "../agents/input-hints";
 import {
   matchSlashCommands,
   parseSlashInput,
@@ -1859,22 +1858,6 @@ export function ChatView({
                       enterNextDictation();
                       return;
                     }
-                    if (
-                      hintsActive &&
-                      e.key === "Tab" &&
-                      !e.nativeEvent.isComposing
-                    ) {
-                      const hint = inputHints?.[0]?.trim();
-                      // Insert only the target-language opener, never the native cue.
-                      const opener = hint ? splitHintParts(hint).opener : "";
-                      if (opener) {
-                        e.preventDefault();
-                        setInput(opener);
-                        setInputHints(null);
-                        requestAnimationFrame(() => inputRef.current?.focus());
-                        return;
-                      }
-                    }
                     // Intercept navigation keys when the menu is open (not during IME composition); don't let them bubble to send.
                     if (slashOpen && !e.nativeEvent.isComposing) {
                       if (e.key === "ArrowDown") {
@@ -1962,12 +1945,6 @@ export function ChatView({
                       className="animate-hint-in line-clamp-3 pr-7 text-muted-foreground"
                     >
                       {inputHints?.[0]}
-                      <kbd
-                        title={t("chat.hintTabHint")}
-                        className="ml-1.5 inline-flex translate-y-px items-center rounded border border-border/70 bg-muted px-1 py-px align-middle font-sans text-ui-caption text-ui-muted"
-                      >
-                        Tab
-                      </kbd>
                     </span>
                     <button
                       type="button"

@@ -9,6 +9,7 @@ import type {
   BranchKind,
   NewConversationContext,
 } from "../db/conversations";
+import type { LearningAgentOutputMode } from "../db/learning-agents";
 import type { ComfortableItem, ReviewItem } from "../db/mastery";
 import type { ResolvedDrill } from "../drills/types";
 import type { ProficiencySnapshot } from "../lib/proficiency";
@@ -25,6 +26,7 @@ export const HOOKS = {
   turnBilingual: "turn.bilingual",
   turnTranslate: "turn.translate",
   turnReplySuggestion: "turn.reply_suggestion",
+  turnReplyTransform: "turn.reply_transform",
 } as const;
 
 export type HookName = (typeof HOOKS)[keyof typeof HOOKS];
@@ -218,4 +220,26 @@ export interface ActionAgent {
 export interface TransformerInfo {
   id: string;
   card: AgentCard;
+}
+
+// Custom reply transformers (user-created, kind="reply_transformer"): a runnable transformer triggered by a per-reply
+// button. Unlike builtin TransformerInfo (metadata-only), these carry run() and the button's icon / output mode / auto-run flag.
+export interface ReplyTransformerInput {
+  turnId: string;
+  replyText: string;
+}
+
+// panel/replace return Markdown for the chat to render; coach/memory persist a side artifact and return nothing.
+export interface ReplyTransformerResult {
+  markdown?: string;
+}
+
+export interface ReplyTransformer {
+  id: string;
+  kind: "transformer";
+  card: AgentCard;
+  icon: string | null;
+  outputMode: LearningAgentOutputMode;
+  autoRun: boolean;
+  run: (input: ReplyTransformerInput) => Promise<ReplyTransformerResult>;
 }
