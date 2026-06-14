@@ -711,6 +711,7 @@
   display: none;
 }
 .codex-shell[data-compact="true"] .codex-main {
+  grid-row: 1 / -1;
   margin: 0;
   border: none;
   border-radius: 0;
@@ -718,6 +719,58 @@
 }
 .codex-shell[data-compact="true"] [data-compact-label] {
   display: none;
+}
+/* Floating topbar: a translucent frosted strip over the chat instead of a
+   solid 46px row, so the chat reclaims the full window height. The blur +
+   top-down gradient lives in ::before so the controls (⤢, the native traffic
+   lights) stay opaque and clickable above it. */
+.codex-shell[data-compact="true"] .codex-topbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  background: transparent;
+}
+.codex-shell[data-compact="true"] .codex-topbar::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: calc(var(--codex-topbar-h) + 4px);
+  z-index: -1;
+  backdrop-filter: blur(12px) saturate(150%);
+  -webkit-backdrop-filter: blur(12px) saturate(150%);
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--codex-main-bg) 55%, transparent),
+    transparent
+  );
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    black 0,
+    black 12px,
+    transparent 46px
+  );
+  mask-image: linear-gradient(to bottom, black 0, black 12px, transparent 46px);
+  pointer-events: none;
+}
+/* Inset the first message below the floating bar; content scrolls under it.
+   Drop the scroll-mask's top fade here — the frosted bar supersedes it. */
+.codex-shell[data-compact="true"] .chat-scroll-mask {
+  padding-top: calc(var(--codex-topbar-h) + 4px);
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    black 0,
+    black calc(100% - var(--chat-fade)),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    black 0,
+    black calc(100% - var(--chat-fade)),
+    transparent 100%
+  );
 }
 .codex-shell[data-sidebar-resizing="true"],
 .codex-shell[data-coach-resizing="true"] {

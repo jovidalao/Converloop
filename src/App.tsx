@@ -1084,7 +1084,6 @@ function App() {
             }
             compact={smallWindow}
             externalDraft={coachDraft}
-            onExitCompact={() => setSmallWindow(false)}
           />
         </div>
         {!smallWindow && secondaryView && (

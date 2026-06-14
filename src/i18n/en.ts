@@ -824,8 +824,6 @@ export const en = {
     recordMastery: "Record this lesson answer as mastery evidence",
     masteryPreviewTitle: "Mastery evidence preview",
     masteryPreviewApply: "Write evidence",
-    compactFeedback: "{n} feedback item(s) ready in full view.",
-    compactOpenFull: "View",
     regenerateReply: "Regenerate reply",
     jumpToLatest: "Jump to latest",
     stopGenerating: "Stop generating",

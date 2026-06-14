@@ -88,7 +88,6 @@ import {
 } from "./chat/model-brand";
 import {
   DerivedContextBanner,
-  hasLearningFeedback,
   PartnerReply,
   TurnCard,
   UserTurn,
@@ -147,8 +146,6 @@ interface ChatViewProps {
   compact?: boolean;
   /** Text requested by another panel (currently Coach hints) to draft into the composer. */
   externalDraft?: { text: string; nonce: number } | null;
-  /** Small-window affordance: leave compact mode to inspect full feedback. */
-  onExitCompact?: () => void;
 }
 
 const INPUT_TEXTAREA_MIN_HEIGHT = 56;
@@ -171,7 +168,6 @@ export function ChatView({
   onOpenCommandSettings,
   compact = false,
   externalDraft = null,
-  onExitCompact,
 }: ChatViewProps) {
   const { t, locale } = useTranslation();
   const [turns, setTurns] = useState<ChatTurn[]>([]);
@@ -1545,9 +1541,6 @@ export function ChatView({
         tone: "muted",
       });
   }
-  const compactFeedbackCount = compact
-    ? turns.filter(hasLearningFeedback).length
-    : 0;
   const active = activeProvider(config);
   const currentPreset = PROVIDER_PRESETS[config.providerType];
   const currentModelOption = findModelOption(
@@ -1822,26 +1815,6 @@ export function ChatView({
           >
             <XIcon size={13} />
           </button>
-        </div>
-      )}
-      {compact && compactFeedbackCount > 0 && (
-        <div className="mx-3 mb-1 flex items-center gap-2 rounded-md border bg-card px-3 py-2 text-ui-caption text-ui-muted">
-          <span className="min-w-0 flex-1">
-            {t("chat.compactFeedback", {
-              n: String(compactFeedbackCount),
-            })}
-          </span>
-          {onExitCompact && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-7 shrink-0"
-              onClick={onExitCompact}
-            >
-              {t("chat.compactOpenFull")}
-            </Button>
-          )}
         </div>
       )}
       <div className="shrink-0 px-3 pb-3 pt-1.5">

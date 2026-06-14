@@ -779,8 +779,6 @@ export const zh: Messages = {
     recordMastery: "将这条课程回答记录为掌握度证据",
     masteryPreviewTitle: "掌握证据预览",
     masteryPreviewApply: "写入证据",
-    compactFeedback: "完整视图中有 {n} 条学习反馈可查看。",
-    compactOpenFull: "查看",
     regenerateReply: "重新生成回复",
     jumpToLatest: "回到最新",
     stopGenerating: "停止生成",
