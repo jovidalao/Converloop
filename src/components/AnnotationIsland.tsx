@@ -35,7 +35,7 @@ interface Pick {
 }
 
 type View = "actions" | "analysis";
-type Busy = "analysis" | "speak" | "save";
+type Busy = "analysis" | "save";
 type Status = { tone: "success" | "error"; text: string };
 
 const ISLAND_WIDTH = 320;
@@ -151,6 +151,8 @@ export function AnnotationIsland({
   const [result, setResult] = useState("");
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [busy, setBusy] = useState<Busy | null>(null);
+  // Read-aloud lives outside `busy` so it never locks analyze/add.
+  const [speaking, setSpeaking] = useState(false);
   const [status, setStatus] = useState<Status | null>(null);
   const [learningPreview, setLearningPreview] =
     useState<SelectionLearningItemPreview | null>(null);
@@ -170,6 +172,7 @@ export function AnnotationIsland({
     setStatus(null);
     setLearningPreview(null);
     setBusy(null);
+    setSpeaking(false);
     genRef.current++;
     // Clear leftover highlights, otherwise clicking blank space (mousedown
     // already closed it) lets the following mouseup treat it as a valid
@@ -214,10 +217,13 @@ export function AnnotationIsland({
     }
   }, [pick]);
 
+  // Audio is an orthogonal channel: speaking keeps its own state and never
+  // locks the analyze/add actions, so the explanation stays reachable while
+  // the selection is being read aloud.
   async function speakSelection() {
-    if (!pick || busy) return;
+    if (!pick || speaking) return;
     setStatus(null);
-    setBusy("speak");
+    setSpeaking(true);
     try {
       stopSpeech();
       const audio = await speakText(pick.selection);
@@ -225,7 +231,7 @@ export function AnnotationIsland({
     } catch (e) {
       setStatus({ tone: "error", text: errText(e) });
     } finally {
-      setBusy(null);
+      setSpeaking(false);
     }
   }
 
@@ -284,6 +290,7 @@ export function AnnotationIsland({
       setStatus(null);
       setLearningPreview(null);
       setBusy(null);
+      setSpeaking(false);
       genRef.current++;
     }
 
@@ -396,14 +403,14 @@ export function AnnotationIsland({
           )}
           <IslandButton
             icon={
-              busy === "speak" ? (
+              speaking ? (
                 <Spinner className="size-3" />
               ) : (
                 <Volume2Icon size={14} />
               )
             }
             label={t("annotationIsland.speak")}
-            disabled={busy !== null && busy !== "speak"}
+            disabled={speaking}
             onClick={() => void speakSelection()}
           />
           <IslandButton
