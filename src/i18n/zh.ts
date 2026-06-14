@@ -521,7 +521,12 @@ export const zh: Messages = {
     "focus-chat": "聚焦对话输入",
     "focus-coach": "聚焦教练面板",
     shortcuts: "显示快捷键",
+    "voice-input": "开始 / 停止语音输入",
+    "refresh-hints": "刷新回复推荐",
     "slash-command": "输入命令",
+    send: "发送消息",
+    "new-line": "换行",
+    "stop-generating": "停止生成",
     dismiss: "关闭菜单或弹窗",
   },
   shortcutsDialog: {

@@ -554,7 +554,12 @@ export const en = {
     "focus-chat": "Focus chat input",
     "focus-coach": "Focus coach panel",
     shortcuts: "Show shortcuts",
+    "voice-input": "Start / stop voice input",
+    "refresh-hints": "Refresh reply hint",
     "slash-command": "Type a command",
+    send: "Send message",
+    "new-line": "New line",
+    "stop-generating": "Stop generating",
     dismiss: "Close menu or dialog",
   },
   shortcutsDialog: {

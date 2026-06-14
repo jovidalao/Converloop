@@ -4,6 +4,8 @@ import {
   bindingKeyCaps,
   bindingMatchesEvent,
   bindingsEqual,
+  EDITABLE_ACTIONS,
+  type KeyBinding,
 } from "./app-actions";
 
 describe("bindingKeyCaps", () => {
@@ -96,5 +98,27 @@ describe("bindingHasModifier", () => {
     expect(bindingHasModifier({ key: "n", ctrl: true })).toBe(true);
     expect(bindingHasModifier({ key: "n", shift: true })).toBe(false);
     expect(bindingHasModifier({ key: "n" })).toBe(false);
+  });
+});
+
+describe("default keybindings", () => {
+  it("every editable default has a non-shift modifier so it can't fire while typing", () => {
+    for (const action of EDITABLE_ACTIONS) {
+      expect(
+        bindingHasModifier(action.defaultBinding),
+        `${action.id} default needs a ⌘/⌃/⌥ modifier`,
+      ).toBe(true);
+    }
+  });
+
+  it("no two editable defaults share a chord", () => {
+    const seen: KeyBinding[] = [];
+    for (const action of EDITABLE_ACTIONS) {
+      const dup = seen.find((b) => bindingsEqual(b, action.defaultBinding));
+      expect(dup, `${action.id} reuses an existing default chord`).toBe(
+        undefined,
+      );
+      seen.push(action.defaultBinding);
+    }
   });
 });

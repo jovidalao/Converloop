@@ -12,7 +12,12 @@ export type AppActionId =
   | "focus-chat"
   | "focus-coach"
   | "shortcuts"
+  | "voice-input"
+  | "refresh-hints"
   | "slash-command"
+  | "send"
+  | "new-line"
+  | "stop-generating"
   | "dismiss";
 
 // A key chord: the main key plus required modifier state. `key` is a single
@@ -45,7 +50,15 @@ export const APP_ACTIONS: AppAction[] = [
   { id: "focus-chat", defaultBinding: { key: "2", meta: true } },
   { id: "focus-coach", defaultBinding: { key: "3", meta: true } },
   { id: "shortcuts", defaultBinding: { key: "/", meta: true } },
+  { id: "voice-input", defaultBinding: { key: "v", meta: true, shift: true } },
+  {
+    id: "refresh-hints",
+    defaultBinding: { key: "h", meta: true, shift: true },
+  },
   { id: "slash-command", fixedKeys: ["/"] },
+  { id: "send", fixedKeys: ["↩"] },
+  { id: "new-line", fixedKeys: ["⇧", "↩"] },
+  { id: "stop-generating", fixedKeys: ["Esc"] },
   { id: "dismiss", fixedKeys: ["Esc"] },
 ];
 

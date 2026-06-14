@@ -2,6 +2,11 @@ import { MicIcon, SquareIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "@/i18n";
 import {
+  actionAriaKeyshortcuts,
+  actionShortcutLabel,
+  matchesActionShortcut,
+} from "@/lib/app-actions";
+import {
   loadSttConfig,
   MissingSttApiKeyError,
   MissingSttProviderError,
@@ -95,6 +100,24 @@ export function MicButton({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [state, onTranscript]);
 
+  // ⌘⇧V toggles recording from anywhere in the composer. Routed through a ref so the
+  // global listener subscribes once (not on every render); toggle() self-guards on
+  // disabled/transcribing, so the handler just forwards.
+  const toggleRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    toggleRef.current = () => void toggle();
+  });
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.isComposing || e.defaultPrevented) return;
+      if (!matchesActionShortcut(e, "voice-input")) return;
+      e.preventDefault();
+      toggleRef.current();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
   async function toggle() {
     if (disabled || state === "transcribing") return;
     if (state === "idle") {
@@ -180,8 +203,9 @@ export function MicButton({
       className={`size-8 rounded-full transition-transform active:scale-90${
         state === "recording" ? " animate-pulse" : ""
       }`}
-      title={label}
+      title={`${label} ${actionShortcutLabel("voice-input")}`}
       aria-label={label}
+      aria-keyshortcuts={actionAriaKeyshortcuts("voice-input")}
       aria-pressed={state === "recording"}
     >
       {state === "transcribing" ? (

@@ -52,6 +52,11 @@ import type {
   DrillSummary,
 } from "../drills/types";
 import { useTranslation } from "../i18n";
+import {
+  actionAriaKeyshortcuts,
+  actionShortcutLabel,
+  matchesActionShortcut,
+} from "../lib/app-actions";
 import { onAppEvent } from "../lib/app-events";
 import { type DisplayError, describeError } from "../lib/error-display";
 import { estimatePromptTokens } from "../lib/tokens";
@@ -1851,6 +1856,18 @@ export function ChatView({
                       enterNextDictation();
                       return;
                     }
+                    // ⌘⇧V / ⌘⇧H etc. fire while the input is focused (modifier chords don't
+                    // collide with typing). ⌘⇧H regenerates the reply hint — same as the refresh
+                    // button on the overlay; only acts when a hint is actually shown.
+                    if (
+                      matchesActionShortcut(e.nativeEvent, "refresh-hints") &&
+                      !e.nativeEvent.isComposing
+                    ) {
+                      e.preventDefault();
+                      if (hintsActive && !hintRegeneratingRef.current)
+                        regenerateInputHints();
+                      return;
+                    }
                     // Intercept navigation keys when the menu is open (not during IME composition); don't let them bubble to send.
                     if (slashOpen && !e.nativeEvent.isComposing) {
                       if (e.key === "ArrowDown") {
@@ -1885,6 +1902,18 @@ export function ChatView({
                         setSlashDismissed(true);
                         return;
                       }
+                    }
+                    // Esc stops an in-flight reply (the slash menu's own Esc is handled above and
+                    // stops propagation, so it wins while the menu is open).
+                    if (
+                      e.key === "Escape" &&
+                      !e.nativeEvent.isComposing &&
+                      replyBusy &&
+                      stoppable
+                    ) {
+                      e.preventDefault();
+                      stopGenerating();
+                      return;
                     }
                     if (
                       e.key === "Enter" &&
@@ -1943,8 +1972,11 @@ export function ChatView({
                       type="button"
                       onClick={regenerateInputHints}
                       disabled={hintRegenerating}
-                      title={t("coach.hints.regenerate")}
+                      title={`${t("coach.hints.regenerate")} ${actionShortcutLabel("refresh-hints")}`}
                       aria-label={t("coach.hints.regenerate")}
+                      aria-keyshortcuts={actionAriaKeyshortcuts(
+                        "refresh-hints",
+                      )}
                       className="pointer-events-auto absolute top-2.5 right-2 rounded p-1 text-ui-muted transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
                     >
                       <RefreshCwIcon
@@ -2087,7 +2119,7 @@ export function ChatView({
                     size="icon"
                     onClick={stopGenerating}
                     className="size-8 rounded-full transition-transform active:scale-90"
-                    title={t("chat.stopGenerating")}
+                    title={`${t("chat.stopGenerating")} ${actionShortcutLabel("stop-generating")}`}
                     aria-label={t("chat.stopGenerating")}
                   >
                     <SquareIcon className="size-3 fill-current" />
@@ -2104,7 +2136,7 @@ export function ChatView({
                       !input.trim() ||
                       (isSayDrill && dictationAwaitingEnter)
                     }
-                    title={t("chat.send")}
+                    title={`${t("chat.send")} ${actionShortcutLabel("send")}`}
                     aria-label={t("chat.send")}
                   >
                     {replyBusy ? (
