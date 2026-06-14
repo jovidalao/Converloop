@@ -168,13 +168,14 @@ describe("agent runtime registry", () => {
   });
 
   it("custom reply transformer registers, dispatches via runReplyTransformer, and is removed on hide", async () => {
-    let ranReplyText: string | null = null;
+    let ranText: string | null = null;
     const tr: ReplyTransformer = {
       id: "custom:rt-test",
       kind: "transformer",
       icon: "star",
       outputMode: "panel",
       autoRun: false,
+      stage: "ai_reply",
       card: {
         title: "test reply transformer",
         description: "for testing",
@@ -185,7 +186,7 @@ describe("agent runtime registry", () => {
         canDisable: true,
       },
       run: async (input) => {
-        ranReplyText = input.replyText;
+        ranText = input.text;
         return { markdown: "transformed" };
       },
     };
@@ -197,13 +198,22 @@ describe("agent runtime registry", () => {
     expect(getReplyTransformers().some((t) => t.id === "custom:rt-test")).toBe(
       true,
     );
+    // Stage filter: this ai_reply transformer is not returned when asking for user_message.
+    expect(
+      getReplyTransformers("user_message").some(
+        (t) => t.id === "custom:rt-test",
+      ),
+    ).toBe(false);
+    expect(
+      getReplyTransformers("ai_reply").some((t) => t.id === "custom:rt-test"),
+    ).toBe(true);
 
     const result = await runReplyTransformer("custom:rt-test", {
       turnId: "t1",
-      replyText: "hello",
+      text: "hello",
     });
     expect(result.markdown).toBe("transformed");
-    expect(ranReplyText).toBe("hello");
+    expect(ranText).toBe("hello");
 
     hideAgent("custom:rt-test");
     expect(getReplyTransformers().some((t) => t.id === "custom:rt-test")).toBe(

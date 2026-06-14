@@ -38,6 +38,16 @@ export type LearningAgentOutputMode =
 export const DEFAULT_LEARNING_AGENT_OUTPUT_MODE: LearningAgentOutputMode =
   "panel";
 
+// reply_transformer rows only: which stage the button attaches to.
+export const LEARNING_AGENT_STAGE_VALUES = [
+  "ai_reply", // a button under each AI reply, runs on that reply
+  "user_message", // a button under each user turn, runs on that message
+] as const;
+
+export type TransformerStage = (typeof LEARNING_AGENT_STAGE_VALUES)[number];
+
+export const DEFAULT_TRANSFORMER_STAGE: TransformerStage = "ai_reply";
+
 export const RUNTIME_AGENT_HOOK_VALUES = [
   "conversation.observe",
   "conversation.action",
@@ -73,6 +83,7 @@ export interface LearningAgentDraft {
   icon?: string | null;
   autoRun?: boolean;
   outputMode?: LearningAgentOutputMode;
+  transformerStage?: TransformerStage;
 }
 
 export interface LearningAgentPackageMeta {
@@ -95,6 +106,7 @@ export interface LearningAgentMeta extends LearningAgent {
   outputSchema: Record<string, unknown> | null;
   packageMeta: LearningAgentPackageMeta | null;
   outputMode: LearningAgentOutputMode;
+  transformerStage: TransformerStage;
 }
 
 export const DATA_SCOPE_LABELS: Record<LearningDataScope, string> = {
@@ -403,6 +415,12 @@ function normalizeOutputMode(
     : DEFAULT_LEARNING_AGENT_OUTPUT_MODE;
 }
 
+function normalizeStage(stage: string | null | undefined): TransformerStage {
+  return LEARNING_AGENT_STAGE_VALUES.includes(stage as TransformerStage)
+    ? (stage as TransformerStage)
+    : DEFAULT_TRANSFORMER_STAGE;
+}
+
 function parseOutputSchema(
   json: string | null,
 ): Record<string, unknown> | null {
@@ -475,6 +493,7 @@ function hydrate(row: LearningAgent): LearningAgentMeta {
     outputSchema: parseOutputSchema(row.outputSchemaJson),
     packageMeta: parsePackageMeta(row.packageMetaJson),
     outputMode: normalizeOutputMode(row.outputMode),
+    transformerStage: normalizeStage(row.transformerStage),
   };
 }
 
@@ -593,6 +612,7 @@ export async function createLearningAgent(
     icon: draft.icon ?? null,
     autoRun: draft.autoRun ? 1 : 0,
     outputMode: draft.outputMode ?? null,
+    transformerStage: draft.transformerStage ?? null,
     builtIn: 0,
     createdAt: now,
     updatedAt: now,
@@ -633,6 +653,8 @@ export async function updateLearningAgent(
   if (patch.icon !== undefined) updates.icon = patch.icon;
   if (patch.autoRun !== undefined) updates.autoRun = patch.autoRun ? 1 : 0;
   if (patch.outputMode !== undefined) updates.outputMode = patch.outputMode;
+  if (patch.transformerStage !== undefined)
+    updates.transformerStage = patch.transformerStage;
 
   await db.update(learningAgent).set(updates).where(eq(learningAgent.id, id));
 }

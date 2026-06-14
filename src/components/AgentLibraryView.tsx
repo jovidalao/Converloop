@@ -6,8 +6,9 @@ import {
   ScrollTextIcon,
   Trash2Icon,
   UploadIcon,
+  XIcon,
 } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { TFunction } from "@/i18n";
 import { useTranslation } from "@/i18n";
 import { cn } from "@/lib/utils";
@@ -24,9 +25,12 @@ import {
   getLearningAgent,
   LEARNING_DATA_SCOPES,
   type LearningAgentKind,
+  type LearningAgentMeta,
   type LearningAgentOutputMode,
   type LearningAgentWritebackPolicy,
   type LearningDataScope,
+  type RuntimeAgentHook,
+  type TransformerStage,
   updateLearningAgent,
 } from "../db/learning-agents";
 import {
@@ -61,24 +65,24 @@ import {
 import { Switch } from "./ui/switch";
 import { Textarea } from "./ui/textarea";
 
-// Capability library: displays registered capabilities grouped by entry point
-// (where/when they trigger), not by technical kind.
+// Capability library: a grouped list of every registered capability (built-in + custom),
+// organized by entry point (where/when it triggers). Create / edit / fine-tune happen in a
+// modal so the list stays scannable for quick add/edit/delete.
 
 const ENTRY_ORDER: AgentEntry[] = [
   "auto_turn",
   "selection",
   "reply_action",
+  "message_action",
   "derive",
   "lesson",
 ];
 
-// Returns the i18n scope-name (first word before ":" in DATA_SCOPE_LABELS is
-// the internal key; here we use the i18n label instead).
 function scopeName(scope: LearningDataScope, t: TFunction): string {
   return t(`scopeLabel.${scope}.name` as Parameters<TFunction>[0]);
 }
 
-function hookForKind(kind: LearningAgentKind) {
+function hookForKind(kind: LearningAgentKind): RuntimeAgentHook | null {
   if (kind === "observer") return "conversation.observe";
   if (kind === "action") return "conversation.action";
   return null;
@@ -88,8 +92,61 @@ function entryOf(entry: AgentCatalogEntry): AgentEntry {
   return entry.card?.entry ?? "auto_turn";
 }
 
+// Lightweight centered modal (no extra dependency): backdrop click + Escape close.
+// Mirrors confirm.tsx's visual language; the panel scrolls when the form is tall.
+function Modal({
+  title,
+  onClose,
+  children,
+}: {
+  title: string;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  const { t } = useTranslation();
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4">
+      {/* Focusable backdrop: keyboard-accessible click-to-dismiss without div onClick handlers. */}
+      <button
+        type="button"
+        aria-label={t("common.cancel")}
+        className="fixed inset-0 bg-black/40 animate-in fade-in-0"
+        onClick={onClose}
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        className="relative my-8 w-[min(40rem,calc(100vw-2rem))] rounded-2xl border bg-card p-5 shadow-lg animate-in zoom-in-95 fade-in-0"
+      >
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <h3 className="m-0 text-ui-title font-semibold">{title}</h3>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-8 text-ui-muted hover:text-foreground"
+            aria-label={t("common.cancel")}
+            onClick={onClose}
+          >
+            <XIcon size={16} />
+          </Button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
 // Built-in capability fine-tune editor: appends supplemental instructions after
-// the official base prompt (does not replace it).
+// the official base prompt (does not replace it). Rendered inside the editor modal.
 function BuiltinTuneEditor({
   entry,
   onDone,
@@ -122,7 +179,7 @@ function BuiltinTuneEditor({
   }
 
   return (
-    <div className="mt-1 flex flex-col gap-2 rounded-md border bg-background p-3">
+    <div className="flex flex-col gap-3">
       <div className="flex flex-col gap-1">
         <span className="text-ui-caption text-ui-muted">
           {t("agentLibrary.officialBase")}
@@ -171,166 +228,6 @@ function BuiltinTuneEditor({
           </Button>
         )}
       </div>
-    </div>
-  );
-}
-
-function AgentRow({
-  entry,
-  onToggle,
-  onTune,
-  tuning,
-  onTuneDone,
-  onTuneCancel,
-  onEditCustom,
-  onExport,
-  onDelete,
-}: {
-  entry: AgentCatalogEntry;
-  onToggle: (id: string, enabled: boolean) => void;
-  onTune: (id: string) => void;
-  tuning: boolean;
-  onTuneDone: (msg: string) => void;
-  onTuneCancel: () => void;
-  onEditCustom: (id: string) => void;
-  onExport: (id: string) => void;
-  onDelete: (entry: AgentCatalogEntry) => void;
-}) {
-  const { t } = useTranslation();
-  const card = entry.card;
-  const custom = entry.id.startsWith("custom:");
-  const isReplyProducer = entry.kind === "reply_producer";
-  // Main reply producers (conversation partner / lesson teacher) cannot be deleted;
-  // other built-ins can be permanently hidden; custom agents are truly deleted from DB.
-  const canDelete = custom || !isReplyProducer;
-  const io = card
-    ? t(`agentLibrary.entryIo.${card.entry}` as Parameters<TFunction>[0])
-    : null;
-
-  return (
-    <div className="flex flex-col gap-2.5 rounded-lg border bg-card p-3.5">
-      <div className="flex items-start gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="font-semibold">{card?.title ?? entry.id}</span>
-            {custom && (
-              <span className="rounded bg-primary/10 px-1.5 py-0.5 text-ui-caption text-primary">
-                {t("agentLibrary.custom")}
-              </span>
-            )}
-            {!entry.enabled && (
-              <span className="rounded bg-muted px-1.5 py-0.5 text-ui-caption text-ui-muted">
-                {t("agentLibrary.disabled")}
-              </span>
-            )}
-            {!card?.canDisable && !custom && (
-              <span className="text-ui-caption text-ui-muted">
-                {t("agentLibrary.alwaysOn")}
-              </span>
-            )}
-          </div>
-          {card?.description && (
-            <p className="mt-1 mb-0 text-ui-body leading-snug text-ui-muted">
-              {card.description}
-            </p>
-          )}
-        </div>
-        <div className="flex shrink-0 items-center gap-0.5">
-          {custom ? (
-            <>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="size-8 text-ui-muted hover:text-foreground"
-                title={t("agentLibrary.tuneTitle")}
-                aria-label={t("agentLibrary.tuneTitle")}
-                onClick={() => onEditCustom(entry.id)}
-              >
-                <PencilIcon size={15} />
-              </Button>
-              {entry.kind !== "transformer" && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="size-8 text-ui-muted hover:text-foreground"
-                  title={t("agentLibrary.exportTitle")}
-                  aria-label={t("agentLibrary.exportTitle")}
-                  onClick={() => onExport(entry.id)}
-                >
-                  <DownloadIcon size={15} />
-                </Button>
-              )}
-            </>
-          ) : (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className={cn(
-                "size-8",
-                tuning
-                  ? "bg-accent text-foreground"
-                  : "text-ui-muted hover:text-foreground",
-              )}
-              title={t("agentLibrary.tuneTitle")}
-              aria-label={t("agentLibrary.tuneTitle")}
-              onClick={() => onTune(entry.id)}
-            >
-              <PencilIcon size={15} />
-            </Button>
-          )}
-          {canDelete && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="size-8 text-ui-muted hover:text-destructive"
-              title={t("agentLibrary.deleteTitle")}
-              aria-label={t("agentLibrary.deleteTitle")}
-              onClick={() => onDelete(entry)}
-            >
-              <Trash2Icon size={15} />
-            </Button>
-          )}
-          {card?.canDisable && (
-            <Switch
-              checked={entry.enabled}
-              onCheckedChange={(v) => onToggle(entry.id, v)}
-              aria-label={
-                entry.enabled
-                  ? t("agentLibrary.disabled")
-                  : t("agentLibrary.alwaysOn")
-              }
-              className="ml-1"
-            />
-          )}
-        </div>
-      </div>
-      {card && (
-        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-ui-caption">
-          {io && (
-            <>
-              <dt className="text-ui-muted">{t("agentLibrary.inputOutput")}</dt>
-              <dd className="m-0 text-foreground">{io}</dd>
-            </>
-          )}
-          <dt className="text-ui-muted">{t("agentLibrary.timing")}</dt>
-          <dd className="m-0 text-foreground">{card.timing}</dd>
-          <dt className="text-ui-muted">{t("agentLibrary.reads")}</dt>
-          <dd className="m-0 text-foreground">{card.reads}</dd>
-          <dt className="text-ui-muted">{t("agentLibrary.writes")}</dt>
-          <dd className="m-0 text-foreground">{card.writes}</dd>
-        </dl>
-      )}
-      {!custom && tuning && (
-        <BuiltinTuneEditor
-          entry={entry}
-          onDone={onTuneDone}
-          onCancel={onTuneCancel}
-        />
-      )}
     </div>
   );
 }
@@ -388,47 +285,59 @@ function FormSection({
   );
 }
 
-export function AgentLibraryView({
-  onOpenView,
+// The create / edit form for a custom agent. Owns its own field + busy state, initialized
+// from `initial` (null = create). On success it reloads the runtime agents and calls onSaved.
+function CustomAgentForm({
+  initial,
+  onSaved,
+  onCancel,
+  openDataScopeGuide,
 }: {
-  onOpenView?: (view: MainView) => void;
+  initial: LearningAgentMeta | null;
+  onSaved: (msg: string) => void;
+  onCancel: () => void;
+  openDataScopeGuide: () => void;
 }) {
   const { t } = useTranslation();
-  const confirm = useConfirm();
-  const [catalog, setCatalog] = useState<AgentCatalogEntry[]>(() =>
-    listAgentCatalog(),
+  const editingId = initial?.id ?? null;
+  const [kind, setKind] = useState<LearningAgentKind>(
+    initial &&
+      (initial.kind === "action" || initial.kind === "reply_transformer")
+      ? initial.kind
+      : "observer",
   );
-  const [kind, setKind] = useState<LearningAgentKind>("observer");
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [prompt, setPrompt] = useState("");
-  const [scopes, setScopes] = useState<LearningDataScope[]>([
-    "profile",
-    "weak_all",
-  ]);
+  const [name, setName] = useState(initial?.name ?? "");
+  const [description, setDescription] = useState(initial?.description ?? "");
+  const [prompt, setPrompt] = useState(initial?.prompt ?? "");
+  const [scopes, setScopes] = useState<LearningDataScope[]>(
+    initial?.dataScopes.length ? initial.dataScopes : ["profile", "weak_all"],
+  );
   const [writebackPolicy, setWritebackPolicy] =
-    useState<LearningAgentWritebackPolicy>("none");
-  const [icon, setIcon] = useState<string>(DEFAULT_REPLY_TRANSFORMER_ICON);
-  const [autoRun, setAutoRun] = useState(false);
-  const [outputMode, setOutputMode] =
-    useState<LearningAgentOutputMode>("panel");
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [tuneId, setTuneId] = useState<string | null>(null);
-  const [advancedOpen, setAdvancedOpen] = useState(false);
-  const [packageText, setPackageText] = useState("");
+    useState<LearningAgentWritebackPolicy>(initial?.writebackPolicy ?? "none");
+  const [icon, setIcon] = useState<string>(
+    initial?.icon ?? DEFAULT_REPLY_TRANSFORMER_ICON,
+  );
+  const [autoRun, setAutoRun] = useState(initial?.autoRun === 1);
+  const [outputMode, setOutputMode] = useState<LearningAgentOutputMode>(
+    initial?.outputMode ?? "panel",
+  );
+  const [stage, setStage] = useState<TransformerStage>(
+    initial?.transformerStage ?? "ai_reply",
+  );
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const formRef = useRef<HTMLElement>(null);
 
-  function toggle(id: string, enabled: boolean) {
-    setAgentEnabled(id, enabled);
-    setCatalog(listAgentCatalog());
-  }
+  // "replace" only makes sense under the AI reply — the user bubble already hosts the
+  // correction + "more natural" rewrite, so it is dropped for the user_message stage.
+  const outputModes: LearningAgentOutputMode[] =
+    stage === "user_message"
+      ? ["panel", "coach", "memory"]
+      : ["panel", "replace", "coach", "memory"];
 
-  async function refreshCatalog() {
-    await reloadCustomRuntimeAgents();
-    setCatalog(listAgentCatalog());
+  function changeStage(next: TransformerStage) {
+    setStage(next);
+    if (next === "user_message" && outputMode === "replace")
+      setOutputMode("panel");
   }
 
   function toggleScope(scope: LearningDataScope) {
@@ -441,17 +350,432 @@ export function AgentLibraryView({
     );
   }
 
-  function resetForm() {
-    setEditingId(null);
-    setKind("observer");
-    setName("");
-    setDescription("");
-    setPrompt("");
-    setScopes(["profile", "weak_all"]);
-    setWritebackPolicy("none");
-    setIcon(DEFAULT_REPLY_TRANSFORMER_ICON);
-    setAutoRun(false);
-    setOutputMode("panel");
+  async function submit() {
+    if (!name.trim() || !prompt.trim() || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const fields = {
+        name,
+        description: description.trim() || name,
+        prompt,
+        kind,
+        hook: hookForKind(kind),
+        dataScopes: scopes,
+        writebackPolicy:
+          kind === "observer" ? writebackPolicy : ("none" as const),
+        outputSchema: defaultAgentOutputSchema(kind),
+        icon: kind === "reply_transformer" ? icon : null,
+        autoRun: kind === "reply_transformer" ? autoRun : false,
+        outputMode: kind === "reply_transformer" ? outputMode : undefined,
+        transformerStage: kind === "reply_transformer" ? stage : undefined,
+      };
+      if (editingId) {
+        await updateLearningAgent(editingId, fields);
+      } else {
+        await createLearningAgent({
+          ...fields,
+          allowedTools: ["read_learning_data"],
+          enabled: true,
+        });
+      }
+      await reloadCustomRuntimeAgents();
+      onSaved(
+        editingId
+          ? t("agentLibrary.customUpdated")
+          : t("agentLibrary.customCreated"),
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const typeOptions: { v: LearningAgentKind; title: string; desc: string }[] = [
+    {
+      v: "observer",
+      title: t("agentLibrary.observerTitle"),
+      desc: t("agentLibrary.observerDesc"),
+    },
+    {
+      v: "action",
+      title: t("agentLibrary.actionTitle"),
+      desc: t("agentLibrary.actionDesc"),
+    },
+    {
+      v: "reply_transformer",
+      title: t("agentLibrary.replyTransformerTitle"),
+      desc: t("agentLibrary.replyTransformerDesc"),
+    },
+  ];
+
+  return (
+    <div className="flex flex-col gap-4">
+      <FormSection title={t("agentLibrary.basicInfo")}>
+        <div className="grid gap-2 md:grid-cols-2">
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder={t("agentLibrary.namePlaceholder")}
+          />
+          <Input
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder={t("agentLibrary.descPlaceholder")}
+          />
+        </div>
+      </FormSection>
+
+      <FormSection title={t("agentLibrary.type")}>
+        <div className="grid gap-2 sm:grid-cols-3">
+          {typeOptions.map((opt) => (
+            <button
+              key={opt.v}
+              type="button"
+              onClick={() => setKind(opt.v)}
+              className={cn(
+                "flex flex-col gap-1 rounded-lg border p-3 text-left transition-colors",
+                kind === opt.v
+                  ? "border-primary bg-primary/5"
+                  : "bg-background hover:bg-accent",
+              )}
+            >
+              <span className="font-medium">{opt.title}</span>
+              <span className="text-ui-caption text-ui-muted">{opt.desc}</span>
+            </button>
+          ))}
+        </div>
+      </FormSection>
+
+      {kind === "reply_transformer" && (
+        <FormSection title={t("agentLibrary.stageLabel")}>
+          <Select
+            value={stage}
+            onValueChange={(v) => changeStage(v as TransformerStage)}
+          >
+            <SelectTrigger className="md:w-72">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ai_reply">
+                {t("agentLibrary.stageAiReply")}
+              </SelectItem>
+              <SelectItem value="user_message">
+                {t("agentLibrary.stageUserMessage")}
+              </SelectItem>
+            </SelectContent>
+          </Select>
+          <span className="text-ui-caption text-ui-muted">
+            {stage === "user_message"
+              ? t("agentLibrary.stageUserMessageHint")
+              : t("agentLibrary.stageAiReplyHint")}
+          </span>
+        </FormSection>
+      )}
+
+      <FormSection title={t("agentLibrary.readableData")}>
+        <div className="flex flex-wrap gap-1.5">
+          {LEARNING_DATA_SCOPES.map((scope) => (
+            <button
+              key={scope}
+              type="button"
+              className={cn(
+                "rounded-md border px-2 py-1 text-ui-caption",
+                scopes.includes(scope)
+                  ? "border-border bg-accent text-foreground"
+                  : "bg-background text-foreground-80",
+              )}
+              onClick={() => toggleScope(scope)}
+              title={DATA_SCOPE_LABELS[scope]}
+            >
+              {scopeName(scope, t)}
+            </button>
+          ))}
+        </div>
+        <button
+          type="button"
+          className="self-start text-ui-caption text-ui-muted hover:text-foreground"
+          onClick={openDataScopeGuide}
+        >
+          {t("agentLibrary.howToChooseScopes")}
+        </button>
+      </FormSection>
+
+      {kind === "observer" && (
+        <FormSection title={t("agentLibrary.writebackPolicy")}>
+          <Select
+            value={writebackPolicy}
+            onValueChange={(v) =>
+              setWritebackPolicy(v as LearningAgentWritebackPolicy)
+            }
+          >
+            <SelectTrigger className="md:w-72">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">
+                {t("agentLibrary.writebackNone")}
+              </SelectItem>
+              <SelectItem value="propose_review_signals">
+                {t("agentLibrary.writebackPropose")}
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </FormSection>
+      )}
+
+      {kind === "reply_transformer" && (
+        <>
+          <FormSection title={t("agentLibrary.iconLabel")}>
+            <div className="flex flex-wrap gap-1.5">
+              {REPLY_TRANSFORMER_ICON_NAMES.map((n) => {
+                const Icon = replyTransformerIcon(n);
+                return (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setIcon(n)}
+                    aria-pressed={icon === n}
+                    aria-label={n}
+                    className={cn(
+                      "flex size-9 items-center justify-center rounded-md border",
+                      icon === n
+                        ? "border-primary bg-primary/5 text-foreground"
+                        : "bg-background text-ui-muted hover:bg-accent",
+                    )}
+                  >
+                    <Icon size={16} />
+                  </button>
+                );
+              })}
+            </div>
+          </FormSection>
+          <FormSection title={t("agentLibrary.outputModeLabel")}>
+            <Select
+              value={outputMode}
+              onValueChange={(v) => setOutputMode(v as LearningAgentOutputMode)}
+            >
+              <SelectTrigger className="md:w-72">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {outputModes.map((m) => (
+                  <SelectItem key={m} value={m}>
+                    {t(
+                      `agentLibrary.outputMode${
+                        m.charAt(0).toUpperCase() + m.slice(1)
+                      }` as Parameters<TFunction>[0],
+                    )}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </FormSection>
+          <FormSection title={t("agentLibrary.autoRunLabel")}>
+            <div className="flex items-center gap-2">
+              <Switch checked={autoRun} onCheckedChange={setAutoRun} />
+              <span className="text-ui-caption text-ui-muted">
+                {t("agentLibrary.autoRunHint")}
+              </span>
+            </div>
+          </FormSection>
+        </>
+      )}
+
+      <FormSection title="Prompt">
+        <Textarea
+          value={prompt}
+          onChange={(e) => setPrompt(e.target.value)}
+          placeholder={
+            kind === "observer"
+              ? t("agentLibrary.observerPromptPlaceholder")
+              : kind === "reply_transformer"
+                ? t("agentLibrary.replyTransformerPromptPlaceholder")
+                : t("agentLibrary.actionPromptPlaceholder")
+          }
+          className="min-h-28 resize-y font-mono text-ui-caption leading-relaxed"
+        />
+        <OutputPreview kind={kind} />
+      </FormSection>
+
+      {error && (
+        <div className="rounded-md bg-destructive/15 px-3 py-2 text-ui-body text-destructive">
+          {error}
+        </div>
+      )}
+
+      <div className="flex gap-2">
+        <Button
+          type="button"
+          size="sm"
+          onClick={() => void submit()}
+          disabled={busy || !name.trim() || !prompt.trim()}
+        >
+          {editingId ? <PencilIcon size={14} /> : <PlusIcon size={14} />}
+          {editingId
+            ? t("agentLibrary.saveChanges")
+            : t("agentLibrary.createAndEnable")}
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={onCancel}
+          disabled={busy}
+        >
+          {t("common.cancel")}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// One compact divider row in the capability list.
+function AgentRow({
+  entry,
+  onToggle,
+  onEdit,
+  onExport,
+  onDelete,
+}: {
+  entry: AgentCatalogEntry;
+  onToggle: (id: string, enabled: boolean) => void;
+  onEdit: (entry: AgentCatalogEntry) => void;
+  onExport: (id: string) => void;
+  onDelete: (entry: AgentCatalogEntry) => void;
+}) {
+  const { t } = useTranslation();
+  const card = entry.card;
+  const custom = entry.id.startsWith("custom:");
+  const isTransformer = entry.kind === "transformer" && card?.canDisable;
+  const isReplyProducer = entry.kind === "reply_producer";
+  // Main reply producers can't be deleted; other built-ins can be permanently hidden; custom agents are truly deleted.
+  const canDelete = custom || !isReplyProducer;
+  const Glyph = isTransformer ? replyTransformerIcon(entry.icon) : null;
+
+  return (
+    <div className="flex items-start gap-3 border-b py-3 last:border-b-0">
+      {Glyph && (
+        <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md border bg-background text-ui-muted">
+          <Glyph size={15} />
+        </span>
+      )}
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-medium">{card?.title ?? entry.id}</span>
+          {custom && (
+            <span className="rounded bg-primary/10 px-1.5 py-0.5 text-ui-caption text-primary">
+              {t("agentLibrary.custom")}
+            </span>
+          )}
+          {!entry.enabled && (
+            <span className="rounded bg-muted px-1.5 py-0.5 text-ui-caption text-ui-muted">
+              {t("agentLibrary.disabled")}
+            </span>
+          )}
+          {!card?.canDisable && !custom && (
+            <span className="text-ui-caption text-ui-muted">
+              {t("agentLibrary.alwaysOn")}
+            </span>
+          )}
+        </div>
+        {card?.description && (
+          <p className="mt-0.5 mb-0 text-ui-caption leading-snug text-ui-muted">
+            {card.description}
+          </p>
+        )}
+        {card?.timing && (
+          <p className="mt-0.5 mb-0 text-ui-caption leading-snug text-ui-subtle">
+            {card.timing}
+          </p>
+        )}
+      </div>
+      <div className="flex shrink-0 items-center gap-0.5">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="size-8 text-ui-muted hover:text-foreground"
+          title={t("agentLibrary.tuneTitle")}
+          aria-label={t("agentLibrary.tuneTitle")}
+          onClick={() => onEdit(entry)}
+        >
+          <PencilIcon size={15} />
+        </Button>
+        {custom && entry.kind !== "transformer" && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-8 text-ui-muted hover:text-foreground"
+            title={t("agentLibrary.exportTitle")}
+            aria-label={t("agentLibrary.exportTitle")}
+            onClick={() => onExport(entry.id)}
+          >
+            <DownloadIcon size={15} />
+          </Button>
+        )}
+        {canDelete && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-8 text-ui-muted hover:text-destructive"
+            title={t("agentLibrary.deleteTitle")}
+            aria-label={t("agentLibrary.deleteTitle")}
+            onClick={() => onDelete(entry)}
+          >
+            <Trash2Icon size={15} />
+          </Button>
+        )}
+        {card?.canDisable && (
+          <Switch
+            checked={entry.enabled}
+            onCheckedChange={(v) => onToggle(entry.id, v)}
+            aria-label={
+              entry.enabled
+                ? t("agentLibrary.disabled")
+                : t("agentLibrary.alwaysOn")
+            }
+            className="ml-1"
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+type EditorState =
+  | { mode: "new" }
+  | { mode: "custom"; agent: LearningAgentMeta }
+  | { mode: "builtin"; entry: AgentCatalogEntry }
+  | null;
+
+export function AgentLibraryView({
+  onOpenView,
+}: {
+  onOpenView?: (view: MainView) => void;
+}) {
+  const { t } = useTranslation();
+  const confirm = useConfirm();
+  const [catalog, setCatalog] = useState<AgentCatalogEntry[]>(() =>
+    listAgentCatalog(),
+  );
+  const [editor, setEditor] = useState<EditorState>(null);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [packageText, setPackageText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  function toggle(id: string, enabled: boolean) {
+    setAgentEnabled(id, enabled);
+    setCatalog(listAgentCatalog());
+  }
+
+  function refreshList() {
+    setCatalog(listAgentCatalog());
   }
 
   function openDataScopeGuide() {
@@ -459,83 +783,29 @@ export function AgentLibraryView({
     onOpenView?.("design");
   }
 
-  async function startEdit(entryId: string) {
+  async function openEditor(entry: AgentCatalogEntry) {
     setError(null);
     setMessage(null);
+    if (!entry.id.startsWith("custom:")) {
+      setEditor({ mode: "builtin", entry });
+      return;
+    }
     try {
-      const agent = await getLearningAgent(entryId.replace(/^custom:/, ""));
+      const agent = await getLearningAgent(entry.id.replace(/^custom:/, ""));
       if (!agent) {
         setError(t("agentLibrary.agentNotFound"));
         return;
       }
-      setEditingId(agent.id);
-      setKind(
-        agent.kind === "action" || agent.kind === "reply_transformer"
-          ? agent.kind
-          : "observer",
-      );
-      setName(agent.name);
-      setDescription(agent.description);
-      setPrompt(agent.prompt);
-      setScopes(agent.dataScopes.length ? agent.dataScopes : ["weak_all"]);
-      setWritebackPolicy(agent.writebackPolicy);
-      setIcon(agent.icon ?? DEFAULT_REPLY_TRANSFORMER_ICON);
-      setAutoRun(agent.autoRun === 1);
-      setOutputMode(agent.outputMode);
-      formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      setEditor({ mode: "custom", agent });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
   }
 
-  async function submitCustomAgent() {
-    if (!name.trim() || !prompt.trim() || busy) return;
-    setBusy(true);
-    setError(null);
-    setMessage(null);
-    try {
-      if (editingId) {
-        await updateLearningAgent(editingId, {
-          name,
-          description: description.trim() || name,
-          prompt,
-          kind,
-          hook: hookForKind(kind),
-          dataScopes: scopes,
-          writebackPolicy: kind === "observer" ? writebackPolicy : "none",
-          outputSchema: defaultAgentOutputSchema(kind),
-          icon: kind === "reply_transformer" ? icon : null,
-          autoRun: kind === "reply_transformer" ? autoRun : false,
-          outputMode: kind === "reply_transformer" ? outputMode : undefined,
-        });
-        resetForm();
-        await refreshCatalog();
-        setMessage(t("agentLibrary.customUpdated"));
-      } else {
-        await createLearningAgent({
-          name,
-          description: description.trim() || name,
-          prompt,
-          kind,
-          hook: hookForKind(kind),
-          dataScopes: scopes,
-          allowedTools: ["read_learning_data"],
-          writebackPolicy: kind === "observer" ? writebackPolicy : "none",
-          outputSchema: defaultAgentOutputSchema(kind),
-          icon: kind === "reply_transformer" ? icon : null,
-          autoRun: kind === "reply_transformer" ? autoRun : false,
-          outputMode: kind === "reply_transformer" ? outputMode : undefined,
-          enabled: true,
-        });
-        resetForm();
-        await refreshCatalog();
-        setMessage(t("agentLibrary.customCreated"));
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
+  function onEditorSaved(msg: string) {
+    refreshList();
+    setMessage(msg);
+    setEditor(null);
   }
 
   async function deleteEntry(entry: AgentCatalogEntry) {
@@ -550,7 +820,8 @@ export function AgentLibraryView({
         return;
       try {
         await deleteLearningAgent(entry.id.replace(/^custom:/, ""));
-        await refreshCatalog();
+        await reloadCustomRuntimeAgents();
+        refreshList();
         setMessage(t("agentLibrary.deleted", { name: title }));
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
@@ -565,8 +836,7 @@ export function AgentLibraryView({
     )
       return;
     hideAgent(entry.id);
-    if (tuneId === entry.id) setTuneId(null);
-    setCatalog(listAgentCatalog());
+    refreshList();
     setMessage(t("agentLibrary.deleted", { name: title }));
   }
 
@@ -606,7 +876,7 @@ export function AgentLibraryView({
         enableRuntimeAgents: false,
         enableLessons: true,
       });
-      await refreshCatalog();
+      refreshList();
       setMessage(
         t("agentLibrary.importedPackage", {
           skills: String(result.runtimeSkillCount),
@@ -634,239 +904,36 @@ export function AgentLibraryView({
     items: catalog.filter((e) => entryOf(e) === entry),
   })).filter((g) => g.items.length > 0);
 
-  const typeOptions: { v: LearningAgentKind; title: string; desc: string }[] = [
-    {
-      v: "observer",
-      title: t("agentLibrary.observerTitle"),
-      desc: t("agentLibrary.observerDesc"),
-    },
-    {
-      v: "action",
-      title: t("agentLibrary.actionTitle"),
-      desc: t("agentLibrary.actionDesc"),
-    },
-    {
-      v: "reply_transformer",
-      title: t("agentLibrary.replyTransformerTitle"),
-      desc: t("agentLibrary.replyTransformerDesc"),
-    },
-  ];
-
   return (
     <div className="flex h-full max-w-5xl flex-col overflow-y-auto px-6 pt-14 pb-6">
-      <h2 className="mt-0 mb-1 text-ui-title font-semibold">
-        {t("agentLibrary.title")}
-      </h2>
-      <p className="mt-0 mb-5 text-ui-body text-ui-muted">
-        {t("agentLibrary.description")}
-      </p>
-
-      <section ref={formRef} className="mb-6 rounded-lg border bg-card p-4">
-        <h3 className="m-0 mb-3 text-ui-body font-semibold">
-          {editingId
-            ? t("agentLibrary.editCustom")
-            : t("agentLibrary.createCustom")}
-        </h3>
-        <div className="flex flex-col gap-4">
-          <FormSection title={t("agentLibrary.basicInfo")}>
-            <div className="grid gap-2 md:grid-cols-2">
-              <Input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder={t("agentLibrary.namePlaceholder")}
-              />
-              <Input
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder={t("agentLibrary.descPlaceholder")}
-              />
-            </div>
-          </FormSection>
-
-          <FormSection title={t("agentLibrary.type")}>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {typeOptions.map((opt) => (
-                <button
-                  key={opt.v}
-                  type="button"
-                  onClick={() => setKind(opt.v)}
-                  className={cn(
-                    "flex flex-col gap-1 rounded-lg border p-3 text-left transition-colors",
-                    kind === opt.v
-                      ? "border-primary bg-primary/5"
-                      : "bg-background hover:bg-accent",
-                  )}
-                >
-                  <span className="font-medium">{opt.title}</span>
-                  <span className="text-ui-caption text-ui-muted">
-                    {opt.desc}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </FormSection>
-
-          <FormSection title={t("agentLibrary.readableData")}>
-            <div className="flex flex-wrap gap-1.5">
-              {LEARNING_DATA_SCOPES.map((scope) => (
-                <button
-                  key={scope}
-                  type="button"
-                  className={cn(
-                    "rounded-md border px-2 py-1 text-ui-caption",
-                    scopes.includes(scope)
-                      ? "border-border bg-accent text-foreground"
-                      : "bg-background text-foreground-80",
-                  )}
-                  onClick={() => toggleScope(scope)}
-                  title={DATA_SCOPE_LABELS[scope]}
-                >
-                  {scopeName(scope, t)}
-                </button>
-              ))}
-            </div>
-            <button
-              type="button"
-              className="self-start text-ui-caption text-ui-muted hover:text-foreground"
-              onClick={openDataScopeGuide}
-            >
-              {t("agentLibrary.howToChooseScopes")}
-            </button>
-          </FormSection>
-
-          {kind === "observer" && (
-            <FormSection title={t("agentLibrary.writebackPolicy")}>
-              <Select
-                value={writebackPolicy}
-                onValueChange={(v) =>
-                  setWritebackPolicy(v as LearningAgentWritebackPolicy)
-                }
-              >
-                <SelectTrigger className="md:w-72">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">
-                    {t("agentLibrary.writebackNone")}
-                  </SelectItem>
-                  <SelectItem value="propose_review_signals">
-                    {t("agentLibrary.writebackPropose")}
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </FormSection>
-          )}
-
-          {kind === "reply_transformer" && (
-            <>
-              <FormSection title={t("agentLibrary.iconLabel")}>
-                <div className="flex flex-wrap gap-1.5">
-                  {REPLY_TRANSFORMER_ICON_NAMES.map((name) => {
-                    const Icon = replyTransformerIcon(name);
-                    return (
-                      <button
-                        key={name}
-                        type="button"
-                        onClick={() => setIcon(name)}
-                        aria-pressed={icon === name}
-                        aria-label={name}
-                        className={cn(
-                          "flex size-9 items-center justify-center rounded-md border",
-                          icon === name
-                            ? "border-primary bg-primary/5 text-foreground"
-                            : "bg-background text-ui-muted hover:bg-accent",
-                        )}
-                      >
-                        <Icon size={16} />
-                      </button>
-                    );
-                  })}
-                </div>
-              </FormSection>
-              <FormSection title={t("agentLibrary.outputModeLabel")}>
-                <Select
-                  value={outputMode}
-                  onValueChange={(v) =>
-                    setOutputMode(v as LearningAgentOutputMode)
-                  }
-                >
-                  <SelectTrigger className="md:w-72">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="panel">
-                      {t("agentLibrary.outputModePanel")}
-                    </SelectItem>
-                    <SelectItem value="replace">
-                      {t("agentLibrary.outputModeReplace")}
-                    </SelectItem>
-                    <SelectItem value="coach">
-                      {t("agentLibrary.outputModeCoach")}
-                    </SelectItem>
-                    <SelectItem value="memory">
-                      {t("agentLibrary.outputModeMemory")}
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </FormSection>
-              <FormSection title={t("agentLibrary.autoRunLabel")}>
-                <div className="flex items-center gap-2">
-                  <Switch checked={autoRun} onCheckedChange={setAutoRun} />
-                  <span className="text-ui-caption text-ui-muted">
-                    {t("agentLibrary.autoRunHint")}
-                  </span>
-                </div>
-              </FormSection>
-            </>
-          )}
-
-          <FormSection title="Prompt">
-            <Textarea
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              placeholder={
-                kind === "observer"
-                  ? t("agentLibrary.observerPromptPlaceholder")
-                  : kind === "reply_transformer"
-                    ? t("agentLibrary.replyTransformerPromptPlaceholder")
-                    : t("agentLibrary.actionPromptPlaceholder")
-              }
-              className="min-h-28 resize-y font-mono text-ui-caption leading-relaxed"
-            />
-            <OutputPreview kind={kind} />
-          </FormSection>
-
-          <div className="flex gap-2">
-            <Button
-              type="button"
-              size="sm"
-              onClick={() => void submitCustomAgent()}
-              disabled={busy || !name.trim() || !prompt.trim()}
-            >
-              {editingId ? <PencilIcon size={14} /> : <PlusIcon size={14} />}
-              {editingId
-                ? t("agentLibrary.saveChanges")
-                : t("agentLibrary.createAndEnable")}
-            </Button>
-            {editingId && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={resetForm}
-                disabled={busy}
-              >
-                {t("common.cancel")}
-              </Button>
-            )}
-          </div>
+      <div className="mb-5 flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <h2 className="mt-0 mb-1 text-ui-title font-semibold">
+            {t("agentLibrary.title")}
+          </h2>
+          <p className="m-0 text-ui-body text-ui-muted">
+            {t("agentLibrary.description")}
+          </p>
         </div>
-      </section>
+        <Button
+          type="button"
+          size="sm"
+          className="shrink-0"
+          onClick={() => {
+            setError(null);
+            setMessage(null);
+            setEditor({ mode: "new" });
+          }}
+        >
+          <PlusIcon size={14} />
+          {t("agentLibrary.newAgent")}
+        </Button>
+      </div>
 
       <div className="flex flex-col gap-6">
         {grouped.map((group) => (
-          <section key={group.entry} className="flex flex-col gap-2">
-            <div>
+          <section key={group.entry} className="flex flex-col">
+            <div className="mb-1">
               <h3 className="m-0 text-ui-caption font-semibold uppercase tracking-wide text-ui-muted">
                 {t(
                   `agentLibrary.entryMeta.${group.entry}.label` as Parameters<TFunction>[0],
@@ -878,24 +945,18 @@ export function AgentLibraryView({
                 )}
               </p>
             </div>
-            {group.items.map((entry) => (
-              <AgentRow
-                key={entry.id}
-                entry={entry}
-                onToggle={toggle}
-                onTune={(id) => setTuneId((cur) => (cur === id ? null : id))}
-                tuning={tuneId === entry.id}
-                onTuneDone={(msg) => {
-                  setTuneId(null);
-                  setCatalog(listAgentCatalog());
-                  setMessage(msg);
-                }}
-                onTuneCancel={() => setTuneId(null)}
-                onEditCustom={(id) => void startEdit(id)}
-                onExport={exportPackage}
-                onDelete={(e) => void deleteEntry(e)}
-              />
-            ))}
+            <div className="flex flex-col">
+              {group.items.map((entry) => (
+                <AgentRow
+                  key={entry.id}
+                  entry={entry}
+                  onToggle={toggle}
+                  onEdit={(e) => void openEditor(e)}
+                  onExport={exportPackage}
+                  onDelete={(e) => void deleteEntry(e)}
+                />
+              ))}
+            </div>
           </section>
         ))}
       </div>
@@ -990,6 +1051,35 @@ export function AgentLibraryView({
         <div className="mt-3 rounded-md bg-destructive/15 px-3 py-2 text-ui-body text-destructive">
           {error}
         </div>
+      )}
+
+      {editor && (
+        <Modal
+          title={
+            editor.mode === "builtin"
+              ? (editor.entry.card?.title ?? t("agentLibrary.tuneTitle"))
+              : editor.mode === "custom"
+                ? t("agentLibrary.editCustom")
+                : t("agentLibrary.createCustom")
+          }
+          onClose={() => setEditor(null)}
+        >
+          {editor.mode === "builtin" ? (
+            <BuiltinTuneEditor
+              entry={editor.entry}
+              onDone={onEditorSaved}
+              onCancel={() => setEditor(null)}
+            />
+          ) : (
+            <CustomAgentForm
+              key={editor.mode === "custom" ? editor.agent.id : "new"}
+              initial={editor.mode === "custom" ? editor.agent : null}
+              onSaved={onEditorSaved}
+              onCancel={() => setEditor(null)}
+              openDataScopeGuide={openDataScopeGuide}
+            />
+          )}
+        </Modal>
       )}
     </div>
   );

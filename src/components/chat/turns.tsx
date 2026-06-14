@@ -325,6 +325,7 @@ export const PartnerReply = memo(function PartnerReply({
   // Custom reply transformers: per-reply buttons. "replace" mode shares the bubble with bilingual, so activating
   // one closes the other (onReplaceActivate closes bilingual; bilingual's toggle clears replace).
   const replyTransformers = useReplyTransformers({
+    stage: "ai_reply",
     turnId,
     text,
     activePanelId,
@@ -672,6 +673,18 @@ export const UserTurn = memo(function UserTurn({
   });
   const correctionOpen = activePanelId === correctionPanelId;
   const [naturalOpen, setNaturalOpen] = useState(true);
+  // Custom transformers whose stage is the user's own message: per-turn buttons under this bubble.
+  // (replace mode is gated out for this stage in the editor, so replaceMarkdown is left unwired here.)
+  const userTransformers = useReplyTransformers({
+    stage: "user_message",
+    turnId: turn.id,
+    text: turn.userText,
+    // Off-record (/btw) and prompt-macro turns are directives, not learner output — no transformers there.
+    enabled: !turn.excludeFromContext && !turn.displayText,
+    activePanelId,
+    setActivePanelId,
+    onLayoutChange,
+  });
   // Off-record turn (/btw): dashed bubble + "not in context" label; no grading or correction/suggestion/branch actions.
   if (turn.excludeFromContext) {
     return (
@@ -728,7 +741,9 @@ export const UserTurn = memo(function UserTurn({
             onChanged={onLayoutChange}
           />
           <EditFromHereButton onClick={onEditFrom} disabled={editDisabled} />
+          <ReplyTransformerButtons items={userTransformers.items} />
         </div>
+        <ReplyTransformerPanels items={userTransformers.items} />
         <ReplySuggestionPanel suggestion={replySuggestion} />
       </div>
     );
@@ -769,32 +784,35 @@ export const UserTurn = memo(function UserTurn({
           grammar: grammarPanelId,
         }}
         leading={
-          <UserMessageActions
-            turn={turn}
-            suggestion={replySuggestion}
-            onEditFrom={onEditFrom}
-            onRedo={
-              drillActionAllowed(
+          <>
+            <UserMessageActions
+              turn={turn}
+              suggestion={replySuggestion}
+              onEditFrom={onEditFrom}
+              onRedo={
+                drillActionAllowed(
+                  allowedActions,
+                  "redo",
+                  variant !== "dictation",
+                )
+                  ? onRedo
+                  : undefined
+              }
+              onTurnAction={onTurnAction}
+              editDisabled={editDisabled}
+              showReplySuggestion={drillActionAllowed(
                 allowedActions,
-                "redo",
-                variant !== "dictation",
-              )
-                ? onRedo
-                : undefined
-            }
-            onTurnAction={onTurnAction}
-            editDisabled={editDisabled}
-            showReplySuggestion={drillActionAllowed(
-              allowedActions,
-              "suggestion",
-              variant !== "dictation" && variant !== "review_drill",
-            )}
-            showBranch={drillActionAllowed(
-              allowedActions,
-              "branch",
-              variant === undefined,
-            )}
-          />
+                "suggestion",
+                variant !== "dictation" && variant !== "review_drill",
+              )}
+              showBranch={drillActionAllowed(
+                allowedActions,
+                "branch",
+                variant === undefined,
+              )}
+            />
+            <ReplyTransformerButtons items={userTransformers.items} />
+          </>
         }
         correction={
           correctedSentence
@@ -817,6 +835,7 @@ export const UserTurn = memo(function UserTurn({
             : undefined
         }
       />
+      <ReplyTransformerPanels items={userTransformers.items} />
       {drillActionAllowed(
         allowedActions,
         "suggestion",

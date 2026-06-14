@@ -240,6 +240,12 @@ async function runCustomReplyTransformer(
 
   const config = loadConfig();
   const dataContext = await buildLearningDataContext(agent, config);
+  // The transformer runs either on the AI reply or on the learner's own message, depending on its stage.
+  const onUserMessage = agent.transformerStage === "user_message";
+  const subject = onUserMessage
+    ? "the learner's own message (their attempt in the target language)"
+    : "the AI reply";
+  const sourceHeader = onUserMessage ? "THE LEARNER'S MESSAGE" : "AI REPLY";
   const userContent = `=== LANGUAGES ===
 Native: ${config.nativeLanguage}
 Target: ${config.targetLanguage}
@@ -248,14 +254,14 @@ Level: ${config.level}
 === LEARNING DATA YOU MAY READ ===
 ${formatDataContext(dataContext)}
 
-=== AI REPLY ===
-${input.replyText}`;
+=== ${sourceHeader} ===
+${input.text}`;
 
   if (agent.outputMode === "memory") {
     const messages: ChatMessage[] = [
       {
         role: "system",
-        content: `You are a custom reply-transformer in a language-learning app. Inspect the AI reply below and, following the user's instructions, propose learning-memory updates.
+        content: `You are a custom reply-transformer in a language-learning app. Inspect ${subject} below and, following the user's instructions, propose learning-memory updates.
 
 Rules:
 - Return JSON only.
@@ -290,7 +296,7 @@ ${agent.prompt}`,
   const messages: ChatMessage[] = [
     {
       role: "system",
-      content: `You are a custom reply-transformer in a language-learning app. The learner is reading the AI reply below in their target language. Apply the user's instructions to THAT reply and output the result as Markdown for the learner to read.
+      content: `You are a custom reply-transformer in a language-learning app. The learner is working with ${subject} below. Apply the user's instructions to it and output the result as Markdown for the learner to read.
 
 Output Markdown only — no preamble, no commentary, no code fences. Use the learner's native language (${config.nativeLanguage}) for explanations unless the instructions say otherwise.
 
@@ -325,26 +331,33 @@ ${agent.prompt}`,
 export function replyTransformerFromAgent(
   agent: LearningAgentMeta,
 ): ReplyTransformer {
+  const onUserMessage = agent.transformerStage === "user_message";
   const writes =
     agent.outputMode === "coach"
       ? "Writes a Coach-panel note on this turn"
       : agent.outputMode === "memory"
         ? "Proposes learning-data writes (requires your confirmation)"
-        : "Shows a transformed view of the reply (not saved)";
+        : onUserMessage
+          ? "Shows a transformed view of your message (not saved)"
+          : "Shows a transformed view of the reply (not saved)";
+  const target = onUserMessage ? "message" : "reply";
   return {
     id: customId(agent),
     kind: "transformer",
     icon: agent.icon,
     outputMode: agent.outputMode,
     autoRun: agent.autoRun === 1,
+    stage: agent.transformerStage,
     card: {
       title: agent.name,
       description: agent.description,
-      entry: "reply_action",
+      entry: onUserMessage ? "message_action" : "reply_action",
       timing: agent.autoRun
-        ? "Auto-runs on each new reply · custom reply button"
-        : "User clicks the button on a reply",
-      reads: "This AI reply · authorized learning data",
+        ? `Auto-runs on each new ${target} · custom button`
+        : `User clicks the button on a ${target}`,
+      reads: onUserMessage
+        ? "Your message · authorized learning data"
+        : "This AI reply · authorized learning data",
       writes,
       canDisable: true,
     },

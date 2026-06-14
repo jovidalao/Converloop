@@ -14,6 +14,7 @@ import {
   getReplyTransformers,
   type ReplyTransformer,
   runReplyTransformer,
+  type TransformerStage,
 } from "../../runtime";
 import { Markdown } from "../Markdown";
 import { replyTransformerIcon } from "../reply-transformer-icons";
@@ -21,8 +22,9 @@ import { Button } from "../ui/button";
 import { Spinner } from "../ui/spinner";
 import type { ActivePanelId } from "./reply-suggestion";
 
-// Custom reply transformers (user-created, kind="reply_transformer") render as per-reply buttons.
-// Output by mode: panel = drop-below Markdown card; replace = swap the bubble (lifted to PartnerReply);
+// Custom transformers (user-created, kind="reply_transformer") render as per-turn buttons — under the AI
+// reply (stage="ai_reply") or under the learner's own message (stage="user_message"), selected via the `stage` arg.
+// Output by mode: panel = drop-below Markdown card; replace = swap the bubble (lifted to PartnerReply, ai_reply only);
 // coach/memory = persist a side artifact and show a brief ✓. See runtime/custom-agents.runCustomReplyTransformer.
 
 type Status = {
@@ -61,23 +63,32 @@ export interface ReplyTransformersControl {
 }
 
 export function useReplyTransformers({
+  stage,
   turnId,
   text,
+  enabled = true,
   activePanelId,
   setActivePanelId,
   onLayoutChange,
   onReplaceActivate,
 }: {
+  /** Which turn this hook is mounted on: ai_reply (under the AI reply) or user_message (under the learner's turn). */
+  stage: TransformerStage;
   turnId: string;
   text: string;
+  /** When false, no buttons render and auto-run transformers do not fire (e.g. off-record /btw or prompt-macro turns). */
+  enabled?: boolean;
   activePanelId: ActivePanelId;
   setActivePanelId: Dispatch<SetStateAction<ActivePanelId>>;
   onLayoutChange?: () => void;
   /** Activating a "replace" transformer should close any in-place bilingual view (both own the bubble). */
   onReplaceActivate?: () => void;
 }): ReplyTransformersControl {
-  // biome-ignore lint/correctness/useExhaustiveDependencies: re-read the enabled list per reply (turnId/text), not from values used in the body
-  const transformers = useMemo(() => getReplyTransformers(), [turnId, text]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: re-read the enabled list per turn (stage/turnId/text), not from values used in the body
+  const transformers = useMemo(
+    () => (enabled ? getReplyTransformers(stage) : []),
+    [enabled, stage, turnId, text],
+  );
   const [statuses, setStatuses] = useState<Record<string, Status>>({});
   const [replace, setReplace] = useState<{
     id: string;
@@ -110,7 +121,7 @@ export function useReplyTransformers({
       try {
         const result = await runReplyTransformer(tr.id, {
           turnId,
-          replyText: text,
+          text,
         });
         if (genRef.current !== gen) return null;
         update(tr.id, { loading: false });

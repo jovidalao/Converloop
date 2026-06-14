@@ -179,6 +179,10 @@ const ADD_LEARNING_AGENT_AUTO_RUN: &str =
 const ADD_LEARNING_AGENT_OUTPUT_MODE: &str =
     "ALTER TABLE learning_agent ADD COLUMN output_mode TEXT;";
 
+// kind="reply_transformer" 行:Agent 介入阶段(ai_reply=AI 回复上的按钮 / user_message=用户消息上的按钮)。NULL 视为 ai_reply。
+const ADD_LEARNING_AGENT_TRANSFORMER_STAGE: &str =
+    "ALTER TABLE learning_agent ADD COLUMN transformer_stage TEXT;";
+
 const CREATE_AGENT_JOB: &str = "\
 CREATE TABLE IF NOT EXISTS agent_job (
     id          TEXT PRIMARY KEY NOT NULL,
@@ -610,6 +614,12 @@ pub fn run() {
             version: 43,
             description: "add_learning_agent_output_mode",
             sql: ADD_LEARNING_AGENT_OUTPUT_MODE,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 44,
+            description: "add_learning_agent_transformer_stage",
+            sql: ADD_LEARNING_AGENT_TRANSFORMER_STAGE,
             kind: MigrationKind::Up,
         },
     ];

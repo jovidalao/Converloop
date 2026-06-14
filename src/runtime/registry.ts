@@ -32,6 +32,7 @@ import {
   type ReplyTransformerInput,
   type ReplyTransformerResult,
   type TransformerInfo,
+  type TransformerStage,
 } from "./types";
 import { isAgentHidden } from "./visibility";
 
@@ -139,10 +140,17 @@ export function getTransformers(): readonly TransformerInfo[] {
   return transformers;
 }
 
-// Reply transformers shown as per-reply buttons: hidden (deleted) and disabled ones drop out, like the builtin *Hidden flags.
-export function getReplyTransformers(): readonly ReplyTransformer[] {
+// Reply transformers shown as per-turn buttons: hidden (deleted) and disabled ones drop out, like the builtin *Hidden flags.
+// Pass a stage to get only the transformers that attach to that turn (ai_reply = under the AI reply,
+// user_message = under the learner's message); omit it to get all (used by tests).
+export function getReplyTransformers(
+  stage?: TransformerStage,
+): readonly ReplyTransformer[] {
   return replyTransformers.filter(
-    (t) => !isAgentHidden(t.id) && isAgentEnabled(t.id),
+    (t) =>
+      !isAgentHidden(t.id) &&
+      isAgentEnabled(t.id) &&
+      (stage === undefined || t.stage === stage),
   );
 }
 
@@ -184,6 +192,7 @@ export function listAgentCatalog(): AgentCatalogEntry[] {
       kind: "transformer",
       enabled: isAgentEnabled(t.id),
       card: applyCardOverride(t.id, t.card),
+      icon: t.icon,
     });
   // Hidden (permanently deleted) capabilities do not appear in the library and cannot be restored.
   return entries.filter((e) => !isAgentHidden(e.id));

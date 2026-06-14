@@ -9,7 +9,10 @@ import type {
   BranchKind,
   NewConversationContext,
 } from "../db/conversations";
-import type { LearningAgentOutputMode } from "../db/learning-agents";
+import type {
+  LearningAgentOutputMode,
+  TransformerStage,
+} from "../db/learning-agents";
 import type { ComfortableItem, ReviewItem } from "../db/mastery";
 import type { ResolvedDrill } from "../drills/types";
 import type { ProficiencySnapshot } from "../lib/proficiency";
@@ -43,8 +46,12 @@ export type AgentEntry =
   | "auto_turn" // automatic every turn (conversation partner / correction tutor / custom observer)
   | "selection" // when text is selected (selection explain/translate)
   | "reply_action" // reply action buttons (explain / bilingual / reply suggestion)
+  | "message_action" // user-message buttons (custom transformer on the user's own turn)
   | "derive" // derive a new conversation (conversation derivation action / custom action)
   | "lesson"; // focused lesson (lesson teacher)
+
+// Re-export so runtime consumers can `import { TransformerStage } from "../runtime"`.
+export type { TransformerStage } from "../db/learning-agents";
 
 // Metadata for agent library display (end users see "what this capability does / when it runs / what it reads/writes", not hooks/schema).
 export interface AgentCard {
@@ -64,6 +71,8 @@ export interface AgentCatalogEntry {
   enabled: boolean;
   scope?: ActionScope;
   card?: AgentCard;
+  /** reply_transformer entries: the chosen lucide icon name, for the list row glyph. */
+  icon?: string | null;
 }
 
 export type ConversationKind = "practice" | "learning_agent";
@@ -226,7 +235,8 @@ export interface TransformerInfo {
 // button. Unlike builtin TransformerInfo (metadata-only), these carry run() and the button's icon / output mode / auto-run flag.
 export interface ReplyTransformerInput {
   turnId: string;
-  replyText: string;
+  /** The text the transformer runs on: the AI reply (ai_reply stage) or the learner's message (user_message stage). */
+  text: string;
 }
 
 // panel/replace return Markdown for the chat to render; coach/memory persist a side artifact and return nothing.
@@ -241,5 +251,7 @@ export interface ReplyTransformer {
   icon: string | null;
   outputMode: LearningAgentOutputMode;
   autoRun: boolean;
+  /** Which turn the button attaches to: under the AI reply or under the learner's own message. */
+  stage: TransformerStage;
   run: (input: ReplyTransformerInput) => Promise<ReplyTransformerResult>;
 }

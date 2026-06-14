@@ -102,6 +102,11 @@ export const learningAgent = sqliteTable("learning_agent", {
   outputMode: text("output_mode", {
     enum: ["panel", "replace", "coach", "memory"],
   }),
+  // kind="reply_transformer" rows: which stage the button attaches to
+  // (ai_reply = under each AI reply; user_message = under each user turn). NULL = ai_reply.
+  transformerStage: text("transformer_stage", {
+    enum: ["ai_reply", "user_message"],
+  }),
   version: integer("version").notNull().default(1),
   allowedToolsJson: text("allowed_tools_json").notNull().default("[]"),
   writebackPolicy: text("writeback_policy", {

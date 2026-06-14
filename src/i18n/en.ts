@@ -1029,6 +1029,7 @@ export const en = {
       "All capabilities organized by entry point — each group shows where it triggers and when it appears. You can fine-tune (append supplemental instructions), enable/disable, or delete unused capabilities. Deleting built-in capabilities permanently hides them; deleting custom agents truly removes them; neither affects your learning data.",
     createCustom: "Create custom agent",
     editCustom: "Edit custom agent",
+    newAgent: "New agent",
     basicInfo: "Basic info",
     namePlaceholder: "Name, e.g. Interview expression observer",
     descPlaceholder: "One-sentence description of what it does",
@@ -1048,16 +1049,23 @@ export const en = {
       "Describe what to observe each turn, how to give feedback, and when to propose memory_proposals.",
     actionPromptPlaceholder:
       "Describe how to generate a new conversation context based on the current conversation.",
-    replyTransformerTitle: "Reply Transformer Agent",
+    replyTransformerTitle: "Transformer Agent",
     replyTransformerDesc:
-      "Adds a button to each AI reply; runs on that reply when clicked (or automatically).",
+      "Adds a button to each AI reply or to your own message; runs on that turn when clicked (or automatically).",
     replyTransformerPromptPlaceholder:
-      "Describe how to transform the AI reply — e.g. simplify it, make it more formal, or extract key vocabulary.",
+      "Describe how to transform the turn — e.g. simplify the reply, point out more natural phrasings in your message, or extract key vocabulary.",
+    stageLabel: "When it runs (stage)",
+    stageAiReply: "On each AI reply",
+    stageUserMessage: "On each message you send",
+    stageAiReplyHint:
+      "The button appears under the AI's reply and runs on that reply.",
+    stageUserMessageHint:
+      "The button appears under your own message and runs on what you wrote.",
     iconLabel: "Button icon",
-    autoRunLabel: "Run automatically on each new reply",
+    autoRunLabel: "Run automatically on each new turn",
     autoRunHint: "Otherwise it runs only when you click the button.",
     outputModeLabel: "Output",
-    outputModePanel: "Panel below the reply",
+    outputModePanel: "Panel below",
     outputModeReplace: "Replace the reply in place",
     outputModeCoach: "Note in the Coach panel",
     outputModeMemory: "Propose a learning-memory update",
@@ -1127,7 +1135,12 @@ export const en = {
       },
       reply_action: {
         label: "Reply action buttons",
-        intro: "Buttons below each reply — one tap to use.",
+        intro: "Buttons below each AI reply — one tap to use.",
+      },
+      message_action: {
+        label: "On your message",
+        intro:
+          "Buttons below each message you send — they run on what you just wrote.",
       },
       derive: {
         label: "Derive new conversation",
@@ -1144,6 +1157,7 @@ export const en = {
       selection: "Selected text + context → native-language analysis",
       reply_action:
         "Current reply → explanation / bilingual / suggested reply text",
+      message_action: "Your message → a transformed view / note / proposal",
       derive: "Current session → a brand-new conversation",
       lesson: "Your message → teacher-style lesson reply",
     },
