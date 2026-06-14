@@ -1161,6 +1161,73 @@ export const en = {
       derive: "Current session → a brand-new conversation",
       lesson: "Your message → teacher-style lesson reply",
     },
+    // Localized name + description for the built-in capabilities (registered in English in runtime/builtins.ts).
+    builtinCards: {
+      conversation: {
+        title: "Conversation Partner",
+        desc: "Replies naturally in the target language, continuing the conversation — correction is the tutor's job.",
+      },
+      lessonTeacher: {
+        title: "Focused Lesson Teacher",
+        desc: "Runs a teacher-style focused lesson using the course prompt and bounded learning data.",
+      },
+      tutor: {
+        title: "Correction Tutor",
+        desc: "Corrects in parallel per sentence — errors, natural alternatives, expression gaps — signals fed to code bookkeeping.",
+      },
+      drillObserver: {
+        title: "Drill observer",
+        desc: "Runs a training mode's own observer instructions after each answer in that drill — extra notes in the coach panel.",
+      },
+      explain: {
+        title: "Reply Explanation",
+        desc: "Explains on demand in your native language the structures, idioms, and usage that might trip you up.",
+      },
+      bilingual: {
+        title: "Bilingual Reading",
+        desc: "Rearranges a reply into interleaved target-language / native-language sentences for easier reading.",
+      },
+      translate: {
+        title: "Word/Phrase Lookup",
+        desc: "Explains selected words, phrases, or sentences in context.",
+      },
+      replySuggestion: {
+        title: "Reply Suggestion",
+        desc: "Generates native-sounding replies you can send, based on a message and its context.",
+      },
+      branchFrom: {
+        title: "Branch from here",
+        desc: "Open a new conversation continuing from the context before this turn.",
+      },
+      restart: {
+        title: "Restart",
+        desc: "Keep the core setup; open a blank new conversation for re-practice.",
+      },
+      harder: {
+        title: "Increase difficulty",
+        desc: "Generate a harder version of the same practice.",
+      },
+      easier: {
+        title: "Decrease difficulty",
+        desc: "Generate an easier version of the same practice.",
+      },
+      swapRoles: {
+        title: "Swap roles",
+        desc: "Generate a role-reversed version of the conversation.",
+      },
+      nextDay: {
+        title: "Continue next day",
+        desc: "Generate a new-day continuation following the current story.",
+      },
+      changeScene: {
+        title: "Change scene",
+        desc: "Keep the practice goal; switch to a more fitting scene.",
+      },
+      lessonFromConversation: {
+        title: "Turn into focused lesson",
+        desc: "Extract the issues and goals from this chat into a reusable focused lesson.",
+      },
+    },
   },
   design: {
     title: "Design notes",

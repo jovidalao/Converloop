@@ -1095,6 +1095,73 @@ export const zh: Messages = {
       derive: "当前会话 → 一段全新对话",
       lesson: "你的消息 → 教师风格的课程回复",
     },
+    // 内置能力的名称与介绍本地化（在 runtime/builtins.ts 中以英文注册）。
+    builtinCards: {
+      conversation: {
+        title: "对话伙伴",
+        desc: "用目标语言自然地接话、把对话继续下去——纠错交给批改老师。",
+      },
+      lessonTeacher: {
+        title: "专项课老师",
+        desc: "用课程 prompt 和受限的学习数据，以老师的方式上一节专项课。",
+      },
+      tutor: {
+        title: "批改老师",
+        desc: "与回复并行、逐句批改——错误、更自然的说法、表达缺口——信号交给代码记账。",
+      },
+      drillObserver: {
+        title: "训练观察者",
+        desc: "在训练中每次作答后，运行该训练模式自带的观察者指令——在教练面板补充笔记。",
+      },
+      explain: {
+        title: "回复讲解",
+        desc: "按需用母语讲解可能让你卡住的句式、习语和用法。",
+      },
+      bilingual: {
+        title: "双语对照",
+        desc: "把回复重排成目标语／母语逐句对照，方便阅读。",
+      },
+      translate: {
+        title: "词句查询",
+        desc: "结合上下文解释选中的单词、短语或句子。",
+      },
+      replySuggestion: {
+        title: "回复建议",
+        desc: "按需根据某条消息和上下文，生成你可以直接发出、地道自然的回复。",
+      },
+      branchFrom: {
+        title: "从这里分支",
+        desc: "从这一轮之前的上下文继续，开启一段新对话。",
+      },
+      restart: {
+        title: "重新开始",
+        desc: "保留核心设定，开一段空白新对话重新练习。",
+      },
+      harder: {
+        title: "提高难度",
+        desc: "生成同一练习的更难版本。",
+      },
+      easier: {
+        title: "降低难度",
+        desc: "生成同一练习的更简单版本。",
+      },
+      swapRoles: {
+        title: "角色互换",
+        desc: "生成角色互换版本的对话。",
+      },
+      nextDay: {
+        title: "续到第二天",
+        desc: "顺着当前剧情，生成第二天的续篇。",
+      },
+      changeScene: {
+        title: "更换场景",
+        desc: "保留练习目标，换到更合适的场景。",
+      },
+      lessonFromConversation: {
+        title: "变成专项课",
+        desc: "把这段对话里的问题和目标提炼成一节可复用的专项课。",
+      },
+    },
   },
   design: {
     title: "设计说明",

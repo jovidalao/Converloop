@@ -92,6 +92,96 @@ function entryOf(entry: AgentCatalogEntry): AgentEntry {
   return entry.card?.entry ?? "auto_turn";
 }
 
+// Built-in capability cards are registered with English title/description in runtime/builtins.ts.
+// Map each id to its i18n keys so the library shows localized name + description (custom agents keep
+// the user's own name/description; a user label/description override, if any, also wins over i18n).
+type MessageKey = Parameters<TFunction>[0];
+const BUILTIN_CARD_I18N: Record<
+  string,
+  { title: MessageKey; desc: MessageKey }
+> = {
+  "builtin:conversation": {
+    title: "agentLibrary.builtinCards.conversation.title",
+    desc: "agentLibrary.builtinCards.conversation.desc",
+  },
+  "builtin:learning": {
+    title: "agentLibrary.builtinCards.lessonTeacher.title",
+    desc: "agentLibrary.builtinCards.lessonTeacher.desc",
+  },
+  "builtin:tutor": {
+    title: "agentLibrary.builtinCards.tutor.title",
+    desc: "agentLibrary.builtinCards.tutor.desc",
+  },
+  "builtin:drill_observer": {
+    title: "agentLibrary.builtinCards.drillObserver.title",
+    desc: "agentLibrary.builtinCards.drillObserver.desc",
+  },
+  "builtin:transformer:explain": {
+    title: "agentLibrary.builtinCards.explain.title",
+    desc: "agentLibrary.builtinCards.explain.desc",
+  },
+  "builtin:transformer:bilingual": {
+    title: "agentLibrary.builtinCards.bilingual.title",
+    desc: "agentLibrary.builtinCards.bilingual.desc",
+  },
+  "builtin:transformer:translate": {
+    title: "agentLibrary.builtinCards.translate.title",
+    desc: "agentLibrary.builtinCards.translate.desc",
+  },
+  "builtin:transformer:reply_suggestion": {
+    title: "agentLibrary.builtinCards.replySuggestion.title",
+    desc: "agentLibrary.builtinCards.replySuggestion.desc",
+  },
+  "builtin:action:branch_from": {
+    title: "agentLibrary.builtinCards.branchFrom.title",
+    desc: "agentLibrary.builtinCards.branchFrom.desc",
+  },
+  "builtin:action:restart": {
+    title: "agentLibrary.builtinCards.restart.title",
+    desc: "agentLibrary.builtinCards.restart.desc",
+  },
+  "builtin:action:harder": {
+    title: "agentLibrary.builtinCards.harder.title",
+    desc: "agentLibrary.builtinCards.harder.desc",
+  },
+  "builtin:action:easier": {
+    title: "agentLibrary.builtinCards.easier.title",
+    desc: "agentLibrary.builtinCards.easier.desc",
+  },
+  "builtin:action:swap_roles": {
+    title: "agentLibrary.builtinCards.swapRoles.title",
+    desc: "agentLibrary.builtinCards.swapRoles.desc",
+  },
+  "builtin:action:next_day": {
+    title: "agentLibrary.builtinCards.nextDay.title",
+    desc: "agentLibrary.builtinCards.nextDay.desc",
+  },
+  "builtin:action:change_scene": {
+    title: "agentLibrary.builtinCards.changeScene.title",
+    desc: "agentLibrary.builtinCards.changeScene.desc",
+  },
+  "builtin:action:lesson_from_conversation": {
+    title: "agentLibrary.builtinCards.lessonFromConversation.title",
+    desc: "agentLibrary.builtinCards.lessonFromConversation.desc",
+  },
+};
+
+function cardTitle(entry: AgentCatalogEntry, t: TFunction): string {
+  const fallback = entry.card?.title ?? entry.id;
+  if (entry.id.startsWith("custom:")) return fallback;
+  if (getBuiltinAgentOverride(entry.id)?.label) return fallback;
+  const keys = BUILTIN_CARD_I18N[entry.id];
+  return keys ? t(keys.title) : fallback;
+}
+
+function cardDesc(entry: AgentCatalogEntry, t: TFunction): string | undefined {
+  const fallback = entry.card?.description;
+  if (entry.id.startsWith("custom:")) return fallback;
+  if (getBuiltinAgentOverride(entry.id)?.description) return fallback;
+  const keys = BUILTIN_CARD_I18N[entry.id];
+  return keys ? t(keys.desc) : fallback;
+}
+
 // Lightweight centered modal (no extra dependency): backdrop click + Escape close.
 // Mirrors confirm.tsx's visual language; the panel scrolls when the form is tall.
 function Modal({
@@ -185,7 +275,7 @@ function BuiltinTuneEditor({
           {t("agentLibrary.officialBase")}
         </span>
         <p className="m-0 text-ui-caption leading-relaxed text-foreground-80">
-          {entry.card?.description}
+          {cardDesc(entry, t)}
         </p>
         {actionDefault && (
           <pre className="mt-1 mb-0 max-h-32 overflow-y-auto whitespace-pre-wrap rounded bg-muted px-2 py-1.5 font-mono text-ui-caption leading-relaxed text-ui-muted">
@@ -653,6 +743,8 @@ function AgentRow({
   // Main reply producers can't be deleted; other built-ins can be permanently hidden; custom agents are truly deleted.
   const canDelete = custom || !isReplyProducer;
   const Glyph = isTransformer ? replyTransformerIcon(entry.icon) : null;
+  const title = cardTitle(entry, t);
+  const description = cardDesc(entry, t);
 
   return (
     <div className="flex items-start gap-3 border-b py-3 last:border-b-0">
@@ -663,7 +755,7 @@ function AgentRow({
       )}
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="font-medium">{card?.title ?? entry.id}</span>
+          <span className="font-medium">{title}</span>
           {custom && (
             <span className="rounded bg-primary/10 px-1.5 py-0.5 text-ui-caption text-primary">
               {t("agentLibrary.custom")}
@@ -680,14 +772,9 @@ function AgentRow({
             </span>
           )}
         </div>
-        {card?.description && (
+        {description && (
           <p className="mt-0.5 mb-0 text-ui-caption leading-snug text-ui-muted">
-            {card.description}
-          </p>
-        )}
-        {card?.timing && (
-          <p className="mt-0.5 mb-0 text-ui-caption leading-snug text-ui-subtle">
-            {card.timing}
+            {description}
           </p>
         )}
       </div>
@@ -1057,7 +1144,7 @@ export function AgentLibraryView({
         <Modal
           title={
             editor.mode === "builtin"
-              ? (editor.entry.card?.title ?? t("agentLibrary.tuneTitle"))
+              ? cardTitle(editor.entry, t)
               : editor.mode === "custom"
                 ? t("agentLibrary.editCustom")
                 : t("agentLibrary.createCustom")
