@@ -28,7 +28,6 @@ export const zh: Messages = {
     agentNotFound: "未找到学习 Agent",
     lessonTurnNotFound: "未找到这条专项课消息",
     regenerateTurnNotFound: "未找到要重新生成的回复",
-    suggestionTurnNotFound: "未找到要推荐回复的消息",
     lessonNotLearnerOutput: "这一轮不是学习者的产出，没有写入任何内容。",
     lessonNoWriteback: "没有可回写的学习项。",
     maintainerNoKey: "尚未配置 API key",
@@ -767,11 +766,6 @@ export const zh: Messages = {
     emptyModelId: "未填写模型 ID",
     inputPlaceholderLesson: "问老师、回答练习，母语/目标语言都可以…",
     inputPlaceholderPractice: "写一句自然回复，或输入 / 选择命令",
-    replySuggestionTruncated:
-      "推荐回复因输出长度限制被截断（{provider}:{raw}）。可以重试，反馈问题时请在括号里附上原因。",
-    generateReplySuggestion: "生成推荐回复",
-    replySuggestion: "推荐回复",
-    generatingReplySuggestion: "正在生成推荐回复…",
     editFromHereGrading: "批改中，完成后可以重新编辑",
     editFromHere: "从这里重新编辑：修改这条消息，丢弃后续内容",
     masteryWritten: "已写入 {n} 条掌握程度记录。",
@@ -1090,7 +1084,7 @@ export const zh: Messages = {
     entryIo: {
       auto_turn: "你的句子 → 教练面板的纠错 / 笔记",
       selection: "选中文本 + 上下文 → 母语分析",
-      reply_action: "当前回复 → 解释 / 双语 / 推荐回复文本",
+      reply_action: "当前回复 → 解释 / 双语阅读",
       message_action: "你的消息 → 转换视图 / 笔记 / 提议",
       derive: "当前会话 → 一段全新对话",
       lesson: "你的消息 → 教师风格的课程回复",
@@ -1124,10 +1118,6 @@ export const zh: Messages = {
       translate: {
         title: "词句查询",
         desc: "结合上下文解释选中的单词、短语或句子。",
-      },
-      replySuggestion: {
-        title: "回复建议",
-        desc: "按需根据某条消息和上下文，生成你可以直接发出、地道自然的回复。",
       },
       branchFrom: {
         title: "从这里分支",
@@ -1217,7 +1207,7 @@ export const zh: Messages = {
       explain: {
         timing: "用户点击按钮时",
         reads: "点击的消息 + 上下文 + MD 档案切片",
-        output: "解释 / 双语 / 推荐回复",
+        output: "解释 / 双语阅读",
         writes: "轮次按需结果",
       },
     },

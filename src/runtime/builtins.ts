@@ -247,6 +247,7 @@ const tutorObserver: Observer = {
         weakList: ctx.weakList,
         keyHints: ctx.keyHints,
         history: ctx.tutorHistory,
+        previousPartnerReply: ctx.previousPartnerReply,
         userInput: ctx.userInput,
         standardAnswer: ctx.dictationStandardAnswer,
         standardAnswerMode: ctx.standardAnswerMode,
@@ -374,20 +375,6 @@ const transformers: TransformerInfo[] = [
       timing: "User selects text",
       reads: "Selected text · surrounding context · reading preferences",
       writes: "None (analysis text only)",
-      canDisable: false,
-    },
-  },
-  {
-    id: "builtin:transformer:reply_suggestion",
-    card: {
-      title: "Reply Suggestion",
-      description:
-        "Generates on-demand native-sounding replies the learner can send, based on a message and context.",
-      entry: "reply_action",
-      timing: "User clicks Suggest Reply",
-      reads:
-        "Current message · conversation context · MD profile slice · expression preferences",
-      writes: "None (suggestion text only)",
       canDisable: false,
     },
   },

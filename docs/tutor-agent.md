@@ -18,11 +18,12 @@
 2. 最近 mastery key hints:最近见过的 key / label / type / status,含已掌握项,
    用来减少语义重复 key
 3. 最近几轮对话(理解语境)
-4. 用户本轮输入
-5. config:native / target / level
+4. 上一句 AI 回复(专门用于生成 `natural`)
+5. 用户本轮输入
+6. config:native / target / level
 ```
 
-它**不看**对话 agent 的回复——只分析用户输入,所以可完全并行。
+它**不看本轮对话 agent 新生成的回复**——所以仍可与对话 agent 并行。为了让 `natural` 更地道、更贴合语境,它会额外读取**用户当前句子之前的上一句 AI 回复**;该字段只用于理解用户想回应什么,不用于 mastery 记账。
 
 ## 输出 schema(Zod)
 
@@ -123,10 +124,13 @@ FEEDBACK
 - Before inventing a new mastery_key, check recent mastery key hints. If one is
   the same underlying problem, use that exact key.
 - If the message is fully correct: is_correct=true, issues=[].
-- "natural" = a more idiomatic rendering (may equal "corrected"). When a more
-  idiomatic or context-fitting alternative exists, make "natural" a distinct
-  alternative; copy "corrected" only when it is already the most natural
-  phrasing.
+- "natural" = a more idiomatic rendering (may equal "corrected"). Generate it
+  with the same context policy as the input-box reply hint: use PARTNER'S LATEST
+  MESSAGE to infer what the learner is trying to answer, then make "natural"
+  flow as a natural response to that specific AI line — not just a sentence
+  fixed in isolation. When a more idiomatic or context-fitting alternative
+  exists, make "natural" a distinct alternative; copy "corrected" only when it
+  is already the most natural phrasing.
 
 BOOKKEEPING (mastery_updates)
 - Do NOT list the user's errors here — those come from issues.
@@ -157,6 +161,9 @@ User message:
 ```text
 === RECENT CONVERSATION ===
 {history}
+
+=== PARTNER'S LATEST MESSAGE (context for "natural") ===
+{previous_partner_reply}
 
 === USER MESSAGE TO ANALYZE ===
 {user_input}

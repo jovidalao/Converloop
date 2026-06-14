@@ -30,7 +30,6 @@ export const en = {
     agentNotFound: "Learning agent not found",
     lessonTurnNotFound: "Focused-lesson turn not found",
     regenerateTurnNotFound: "Reply to regenerate not found",
-    suggestionTurnNotFound: "Message for reply suggestion not found",
     lessonNotLearnerOutput:
       "This turn is not learner output; nothing was written.",
     lessonNoWriteback: "No learning items to write back.",
@@ -810,11 +809,6 @@ export const en = {
     inputPlaceholderLesson:
       "Ask the teacher, answer exercises — native or target language…",
     inputPlaceholderPractice: "Write a natural reply, or type / for commands",
-    replySuggestionTruncated:
-      "Reply suggestion truncated due to output length limit ({provider}:{raw}). You can retry; include the reason in parentheses when reporting the issue.",
-    generateReplySuggestion: "Generate reply suggestion",
-    replySuggestion: "Reply suggestion",
-    generatingReplySuggestion: "Generating reply suggestion…",
     editFromHereGrading:
       "Grading in progress — you can re-edit after it finishes",
     editFromHere:
@@ -1155,8 +1149,7 @@ export const en = {
     entryIo: {
       auto_turn: "Your sentence → corrections / notes in the coach panel",
       selection: "Selected text + context → native-language analysis",
-      reply_action:
-        "Current reply → explanation / bilingual / suggested reply text",
+      reply_action: "Current reply → explanation / bilingual reading",
       message_action: "Your message → a transformed view / note / proposal",
       derive: "Current session → a brand-new conversation",
       lesson: "Your message → teacher-style lesson reply",
@@ -1190,10 +1183,6 @@ export const en = {
       translate: {
         title: "Word/Phrase Lookup",
         desc: "Explains selected words, phrases, or sentences in context.",
-      },
-      replySuggestion: {
-        title: "Reply Suggestion",
-        desc: "Generates native-sounding replies you can send, based on a message and its context.",
       },
       branchFrom: {
         title: "Branch from here",
@@ -1283,7 +1272,7 @@ export const en = {
       explain: {
         timing: "When user taps the button",
         reads: "Clicked message + context + MD profile slice",
-        output: "Explanation / bilingual / suggested reply",
+        output: "Explanation / bilingual reading",
         writes: "Turn on-demand results",
       },
     },

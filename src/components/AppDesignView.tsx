@@ -136,7 +136,7 @@ export function AppDesignView() {
       writes: "learning_project / learning_agent / turn",
     },
     {
-      name: "Explain / Reply Suggestion",
+      name: "Explain / Reading",
       timing: t("design.agentRow.explain.timing"),
       reads: t("design.agentRow.explain.reads"),
       output: t("design.agentRow.explain.output"),

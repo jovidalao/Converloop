@@ -28,7 +28,6 @@ export const HOOKS = {
   turnExplain: "turn.explain",
   turnBilingual: "turn.bilingual",
   turnTranslate: "turn.translate",
-  turnReplySuggestion: "turn.reply_suggestion",
   turnReplyTransform: "turn.reply_transform",
 } as const;
 
@@ -45,7 +44,7 @@ export type AgentKind =
 export type AgentEntry =
   | "auto_turn" // automatic every turn (conversation partner / correction tutor / custom observer)
   | "selection" // when text is selected (selection explain/translate)
-  | "reply_action" // reply action buttons (explain / bilingual / reply suggestion)
+  | "reply_action" // reply action buttons (explain / bilingual / custom reply transformers)
   | "message_action" // user-message buttons (custom transformer on the user's own turn)
   | "derive" // derive a new conversation (conversation derivation action / custom action)
   | "lesson"; // focused lesson (lesson teacher)
@@ -131,6 +130,8 @@ export interface PracticeContext extends BaseContext {
   tutorFlags: CorrectionPreferenceFlags;
   /** Tutor only sees the most recent few turns; conversation sees all verbatim turns after the watermark. */
   tutorHistory: string;
+  /** Latest AI reply before this user message, used only to make the tutor's "natural" rewrite context-aware. */
+  previousPartnerReply?: string;
   weakList: WeakItem[];
   keyHints: MasteryKeyHint[];
   comfortableItems: ComfortableItem[];

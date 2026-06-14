@@ -20,11 +20,6 @@ import {
 } from "./agents/lesson-writeback";
 import { classifyProfilePreferenceInstruction } from "./agents/profile-preferences";
 import { generateQuickfireTopics } from "./agents/quickfire-topics";
-import {
-  type ReplySuggestionResult,
-  type ReplySuggestionSource,
-  suggestReplyText,
-} from "./agents/reply-suggestion";
 import type { TutorAnalysis } from "./agents/schema";
 import {
   fallbackSelectionLearningItem,
@@ -135,7 +130,6 @@ export interface TurnResult {
 
 // The tutor only needs enough context to disambiguate the latest utterance; supply this many recent turns. All verbatim turns after the watermark go to the conversation agent.
 const TUTOR_HISTORY_TURNS = 8;
-const SUGGESTION_CONTEXT_CHARS = 12000;
 // Explanation needs the immediate thread (what references resolve to), not the whole chat.
 const EXPLAIN_CONTEXT_CHARS = 6000;
 
@@ -854,6 +848,8 @@ export async function runTurn(
   const historyTurns = toHistoryTurns(verbatimTurns);
   // The tutor only needs the most recent turns; do not feed all verbatim turns after the watermark into the structured analysis (saves tokens, shortens input).
   const tutorHistory = formatTurns(verbatimTurns.slice(-TUTOR_HISTORY_TURNS));
+  const previousPartnerReply =
+    [...verbatimTurns].reverse().find((turn) => turn.reply.trim())?.reply ?? "";
   const weakList = rankMasteryItemsForInput(
     weakListRaw,
     userInput,
@@ -957,6 +953,7 @@ export async function runTurn(
     summary: summaryData.summary ?? "",
     historyTurns,
     tutorHistory,
+    previousPartnerReply,
     weakList: weakListWithDrill,
     keyHints,
     comfortableItems,
@@ -1495,67 +1492,6 @@ export async function bilingualReply(reply: string): Promise<string> {
         )?.instructions,
       }),
     (text) => ({ chars: text.length }),
-  );
-}
-
-// Suggested reply: under a user message = rewrite the sent meaning into idiomatic target language; under an AI reply = generate the next sentence based on context.
-// On-demand transformer; not on the hot path, not persisted, does not update learning counts.
-export async function suggestReply(
-  conversationId: string,
-  turnId: string,
-  source: ReplySuggestionSource,
-  onDelta: (delta: string) => void,
-): Promise<ReplySuggestionResult> {
-  const provider = await getProvider();
-  if (!provider) throw new MissingApiKeyError();
-
-  const config = loadConfig();
-  const [profileMd, turns] = await Promise.all([
-    readProfile(config),
-    getTurnsAfterId(conversationId, null),
-  ]);
-  const idx = turns.findIndex((t) => t.id === turnId);
-  if (idx < 0) throw new Error(staticT("errors.suggestionTurnNotFound"));
-
-  const target = turns[idx];
-  const contextTurns =
-    source === "user_message" ? turns.slice(0, idx) : turns.slice(0, idx + 1);
-  const history = formatTurns(
-    tailTurnsByChars(contextTurns, SUGGESTION_CONTEXT_CHARS),
-  );
-  const profileSlice = profileSliceForConversation(profileMd);
-  const experiencePreferences = formatExperiencePreferences(
-    profileMd,
-    "conversation",
-  );
-
-  return runTransformer(
-    "builtin:transformer:reply_suggestion",
-    HOOKS.turnReplySuggestion,
-    () =>
-      suggestReplyText(
-        provider,
-        {
-          nativeLanguage: config.nativeLanguage,
-          targetLanguage: config.targetLanguage,
-          level: config.level,
-          experiencePreferences,
-          profileSlice,
-          history,
-          source,
-          userMessage: source === "user_message" ? target.userInput : undefined,
-          partnerReply: source === "partner_reply" ? target.reply : undefined,
-          customInstructions: getBuiltinAgentOverride(
-            "builtin:transformer:reply_suggestion",
-          )?.instructions,
-        },
-        onDelta,
-      ),
-    (result) => ({
-      chars: result.text.length,
-      finishReason: result.finishReason?.raw,
-      source,
-    }),
   );
 }
 

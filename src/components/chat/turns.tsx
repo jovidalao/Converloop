@@ -37,12 +37,6 @@ import { Button } from "../ui/button";
 import { Spinner } from "../ui/spinner";
 import {
   type ActivePanelId,
-  ReplySuggestionButton,
-  type ReplySuggestionControl,
-  ReplySuggestionPanel,
-  useReplySuggestion,
-} from "./reply-suggestion";
-import {
   ReplyTransformerButtons,
   ReplyTransformerPanels,
   useReplyTransformers,
@@ -253,20 +247,15 @@ function LessonMasteryButton({
 
 // One AI reply: bubble (original / bilingual toggle) + action row (copy / speak / explain / bilingual).
 // Bilingual view is generated on demand and replaces the original; clicking again restores it.
-// Generated bilingual/suggestion/explanation content is local; expanded state is coordinated by ChatView.
+// Generated bilingual/explanation content is local; expanded state is coordinated by ChatView.
 // Key invariant: TTS always reads the original (target-language) text; SpeakButton always receives the raw text.
 type PartnerReplyProps = {
   conversationId: string;
   turnId: string;
   text: string;
   autoOpen?: boolean;
-  // Rapid-fire / weak-spot-drill model answers are not part of a thread, so the "reply suggestion" (next-sentence)
-  // action is hidden for both.
-  variant?: "quickfire" | "review_drill";
   /** Drill turnActions allow-list: restricts (never re-enables) the variant preset's reply actions. */
   allowedActions?: readonly string[];
-  /** /btw off-record reply: hide "Reply suggestion" (it looks up context by turnId; off-record turns are excluded and would error). */
-  offRecord?: boolean;
   /** Fired once on the user's first manual open of explain/bilingual (signals comprehension difficulty; auto-open doesn't count). */
   onFirstExplain?: () => void;
   onFirstBilingual?: () => void;
@@ -280,7 +269,7 @@ type PartnerReplyProps = {
 // or the list contains it). Listing can only restrict — it never re-enables a preset-hidden action.
 function drillActionAllowed(
   allowed: readonly string[] | undefined,
-  action: "explain" | "bilingual" | "suggestion" | "redo" | "branch",
+  action: "explain" | "bilingual" | "redo" | "branch",
   presetDefault: boolean,
 ): boolean {
   return presetDefault && (allowed === undefined || allowed.includes(action));
@@ -291,9 +280,7 @@ export const PartnerReply = memo(function PartnerReply({
   turnId,
   text,
   autoOpen = false,
-  variant,
   allowedActions,
-  offRecord = false,
   onFirstExplain,
   onFirstBilingual,
   onLayoutChange,
@@ -302,8 +289,8 @@ export const PartnerReply = memo(function PartnerReply({
 }: PartnerReplyProps) {
   const { t } = useTranslation();
   const { actionLabels } = useConfig();
-  // One open drop-below popup at a time within this reply (explanation / reply
-  // suggestion). Bilingual reading replaces the bubble text in place rather than
+  // One open drop-below popup at a time within this reply (explanation /
+  // custom transformer panels). Bilingual reading replaces the bubble text in place rather than
   // dropping below, so it is independent and not part of this coordination.
   const [activePanelId, setActivePanelId] = useState<ActivePanelId>(null);
   const [loading, setLoading] = useState(false);
@@ -312,16 +299,6 @@ export const PartnerReply = memo(function PartnerReply({
   const [error, setError] = useState<string | null>(null);
   const didAutoOpen = useRef(false);
   const prevTextRef = useRef(text);
-  const replySuggestion = useReplySuggestion({
-    conversationId,
-    turnId,
-    source: "partner_reply",
-    panelId: `${turnId}:partner:suggestion`,
-    activePanelId,
-    setActivePanelId,
-    resetKey: `${turnId}:${text}`,
-    onLayoutChange,
-  });
   // Custom reply transformers: per-reply buttons. "replace" mode shares the bubble with bilingual, so activating
   // one closes the other (onReplaceActivate closes bilingual; bilingual's toggle clears replace).
   const replyTransformers = useReplyTransformers({
@@ -337,13 +314,6 @@ export const PartnerReply = memo(function PartnerReply({
   const bilingualHidden =
     isAgentHidden("builtin:transformer:bilingual") ||
     !drillActionAllowed(allowedActions, "bilingual", true);
-  const suggestionHidden =
-    isAgentHidden("builtin:transformer:reply_suggestion") ||
-    !drillActionAllowed(
-      allowedActions,
-      "suggestion",
-      variant !== "quickfire" && variant !== "review_drill",
-    );
   const explainHidden = !drillActionAllowed(allowedActions, "explain", true);
 
   // When a reply is replaced by "Regenerate", the old bilingual view no longer corresponds to it
@@ -467,20 +437,10 @@ export const PartnerReply = memo(function PartnerReply({
                 {regenerating ? <Spinner /> : <RefreshCwIcon size={16} />}
               </Button>
             )}
-            {!offRecord && !suggestionHidden && (
-              <ReplySuggestionButton suggestion={replySuggestion} />
-            )}
             <ReplyTransformerButtons items={replyTransformers.items} />
           </>
         }
-        extraPanels={
-          <>
-            {!offRecord && !suggestionHidden && (
-              <ReplySuggestionPanel suggestion={replySuggestion} />
-            )}
-            <ReplyTransformerPanels items={replyTransformers.items} />
-          </>
-        }
+        extraPanels={<ReplyTransformerPanels items={replyTransformers.items} />}
         trailingActions={
           bilingualHidden ? null : (
             <Button
@@ -541,16 +501,13 @@ export function hasLearningFeedback(turn: ChatTurn): boolean {
 // (expression_gap) have no target-language sentence to read, so speak is hidden.
 function UserMessageActions({
   turn,
-  suggestion,
   onEditFrom,
   onRedo,
   onTurnAction,
   editDisabled = false,
-  showReplySuggestion = true,
   showBranch = true,
 }: {
   turn: ChatTurn;
-  suggestion: ReplySuggestionControl;
   onEditFrom: () => void;
   /** "Say it again": invite the learner to re-produce the corrected meaning from memory as a fresh graded turn —
    *  the absorption step after a correction. Shown only when this turn actually got feedback. */
@@ -559,9 +516,8 @@ function UserMessageActions({
   onTurnAction: (actionId: string) => void;
   // "Edit from here" is disabled while any turn is being graded — truncation would discard in-flight analysis.
   editDisabled?: boolean;
-  // Drill modes hide actions that don't apply: dictation has no "reply suggestion" (you transcribe, not reply),
-  // and neither dictation nor rapid-fire benefit from "branch from here" (deriving a conversation off a drill turn).
-  showReplySuggestion?: boolean;
+  // Drill modes hide actions that don't apply: neither dictation nor rapid-fire benefit
+  // from "branch from here" (deriving a conversation off a drill turn).
   showBranch?: boolean;
 }) {
   const { t } = useTranslation();
@@ -585,7 +541,6 @@ function UserMessageActions({
           <RotateCcwIcon size={16} />
         </Button>
       )}
-      {showReplySuggestion && <ReplySuggestionButton suggestion={suggestion} />}
       <EditFromHereButton onClick={onEditFrom} disabled={editDisabled} />
       {showBranch &&
         getActions("turn")
@@ -614,9 +569,8 @@ type UserTurnProps = {
   conversationId: string;
   nativeLanguage: string;
   learningMode: boolean;
-  // Practice sub-mode driving which actions apply: dictation hides reply-suggestion / "more natural" / branch
-  // (you transcribe a known sentence); quickfire hides only branch; review_drill hides branch AND reply-suggestion
-  // (a generated suggestion IS the retrieval answer — one click would fake a clean correct signal on the target key).
+  // Practice sub-mode driving which actions apply: dictation hides "more natural" / branch
+  // (you transcribe a known sentence); quickfire and review_drill hide branch.
   // undefined = ordinary practice (all actions).
   variant?: "quickfire" | "dictation" | "review_drill";
   /** Drill turnActions allow-list: restricts (never re-enables) the variant preset's reply actions. */
@@ -643,15 +597,14 @@ export const UserTurn = memo(function UserTurn({
   editDisabled = false,
 }: UserTurnProps) {
   const { t } = useTranslation();
-  // One open drop-below popup at a time within this message (reply suggestion /
-  // corrected sentence / expression-gap explanation / grammar details). The
+  // One open drop-below popup at a time within this message (corrected sentence /
+  // expression-gap explanation / grammar details / custom transformer panels). The
   // "more natural" rewrite renders inside the bubble rather than dropping below,
   // so it is independent and not part of this coordination.
   const [activePanelId, setActivePanelId] = useState<ActivePanelId>(null);
   // Dictation transcribes a fixed target sentence: there is no "more natural" rendering of the learner's attempt.
   const idiomatic =
     variant === "dictation" ? null : idiomaticText(turn.analysis);
-  const suggestionPanelId = `${turn.id}:user:suggestion`;
   const correctionPanelId = `${turn.id}:user:correction`;
   const gapPanelId = `${turn.id}:user:gap`;
   const grammarPanelId = `${turn.id}:user:grammar`;
@@ -661,16 +614,6 @@ export const UserTurn = memo(function UserTurn({
   )
     ? turn.analysis!.corrected.trim()
     : null;
-  const replySuggestion = useReplySuggestion({
-    conversationId,
-    turnId: turn.id,
-    source: "user_message",
-    panelId: suggestionPanelId,
-    activePanelId,
-    setActivePanelId,
-    resetKey: `${turn.id}:${turn.userText}`,
-    onLayoutChange,
-  });
   const correctionOpen = activePanelId === correctionPanelId;
   const [naturalOpen, setNaturalOpen] = useState(true);
   // Custom transformers whose stage is the user's own message: per-turn buttons under this bubble.
@@ -685,7 +628,7 @@ export const UserTurn = memo(function UserTurn({
     setActivePanelId,
     onLayoutChange,
   });
-  // Off-record turn (/btw): dashed bubble + "not in context" label; no grading or correction/suggestion/branch actions.
+  // Off-record turn (/btw): dashed bubble + "not in context" label; no grading or correction/branch actions.
   if (turn.excludeFromContext) {
     return (
       <div className="flex max-w-[min(88%,520px)] flex-col items-end gap-1 self-end">
@@ -705,7 +648,7 @@ export const UserTurn = memo(function UserTurn({
     );
   }
   // Prompt-macro turn (/topic, /learn, /surprise): show the verbatim command (not the expanded prompt fed to the
-  // agent), with no grading / "more natural" / reply-suggestion / branch actions — it's a directive, not learner output.
+  // agent), with no grading / "more natural" / branch actions — it's a directive, not learner output.
   if (turn.displayText) {
     return (
       <div className="flex max-w-[min(88%,520px)] flex-col items-end gap-1.5 self-end">
@@ -733,7 +676,6 @@ export const UserTurn = memo(function UserTurn({
         </div>
         <div className="-mr-1 flex items-center gap-0.5">
           <CopyButton text={turn.userText} />
-          <ReplySuggestionButton suggestion={replySuggestion} />
           <LessonMasteryButton
             conversationId={conversationId}
             turnId={turn.id}
@@ -744,7 +686,6 @@ export const UserTurn = memo(function UserTurn({
           <ReplyTransformerButtons items={userTransformers.items} />
         </div>
         <ReplyTransformerPanels items={userTransformers.items} />
-        <ReplySuggestionPanel suggestion={replySuggestion} />
       </div>
     );
   }
@@ -787,7 +728,6 @@ export const UserTurn = memo(function UserTurn({
           <>
             <UserMessageActions
               turn={turn}
-              suggestion={replySuggestion}
               onEditFrom={onEditFrom}
               onRedo={
                 drillActionAllowed(
@@ -800,11 +740,6 @@ export const UserTurn = memo(function UserTurn({
               }
               onTurnAction={onTurnAction}
               editDisabled={editDisabled}
-              showReplySuggestion={drillActionAllowed(
-                allowedActions,
-                "suggestion",
-                variant !== "dictation" && variant !== "review_drill",
-              )}
               showBranch={drillActionAllowed(
                 allowedActions,
                 "branch",
@@ -836,11 +771,6 @@ export const UserTurn = memo(function UserTurn({
         }
       />
       <ReplyTransformerPanels items={userTransformers.items} />
-      {drillActionAllowed(
-        allowedActions,
-        "suggestion",
-        variant !== "dictation" && variant !== "review_drill",
-      ) && <ReplySuggestionPanel suggestion={replySuggestion} />}
     </div>
   );
 }, areUserTurnPropsEqual);
@@ -978,8 +908,6 @@ function arePartnerReplyPropsEqual(
     prev.turnId === next.turnId &&
     prev.text === next.text &&
     prev.autoOpen === next.autoOpen &&
-    prev.variant === next.variant &&
-    prev.offRecord === next.offRecord &&
     prev.regenerating === next.regenerating &&
     Boolean(prev.onRegenerate) === Boolean(next.onRegenerate)
   );

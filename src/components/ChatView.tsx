@@ -141,7 +141,7 @@ interface ChatViewProps {
   onNavigateConversation?: (id: string) => void;
   /** Opens the slash-command settings page (the "Customize commands…" footer in the slash menu). */
   onOpenCommandSettings?: () => void;
-  /** Small-window mode: strip to bare chat — message bubbles + copy + composer; hide explain/speak/suggestions/corrections/badges/slash menu. */
+  /** Small-window mode: strip to bare chat — message bubbles + copy + composer; hide explain/speak/corrections/badges/slash menu. */
   compact?: boolean;
   /** Text requested by another panel (currently Coach hints) to draft into the composer. */
   externalDraft?: { text: string; nonce: number } | null;
@@ -316,11 +316,10 @@ export function ChatView({
   const isShadowing = drillDef?.interaction === "say-visible";
   // Either sentence drill: shares the [[SAY]] parsing, the gated "next question" flow, and replay counting.
   const isSayDrill = isDictation || isShadowing;
-  // Drills targeting snapshotted review items: extra progress badge + no reply suggestion (a generated
-  // suggestion would hand over the retrieval answer and fake a clean correct signal on the target key).
+  // Drills targeting snapshotted review items: extra progress badge.
   const isReviewDrill = drillDef?.setup === "review-items";
   // Practice sub-mode for the turn renderers: each drill family trims actions that don't apply.
-  // Say drills reuse the dictation variant (fixed target sentence → no "more natural" / reply suggestion).
+  // Say drills reuse the dictation variant (fixed target sentence → no "more natural").
   const practiceVariant:
     | "quickfire"
     | "dictation"
@@ -1694,13 +1693,7 @@ export function ChatView({
                     conversationId={conversationId}
                     turnId={turn.id}
                     text={turn.partnerText}
-                    variant={
-                      practiceVariant === "dictation"
-                        ? undefined
-                        : practiceVariant
-                    }
                     allowedActions={drillDef?.turnActions}
-                    offRecord={turn.excludeFromContext}
                     autoOpen={
                       !learningMode &&
                       autoBilingual &&

@@ -64,6 +64,32 @@ const validAnalysis = JSON.stringify({
 });
 
 describe("analyze", () => {
+  it("passes the previous partner reply as explicit context for natural rewrites", async () => {
+    let firstCall: GenerateOptions | undefined;
+    const provider = stubProvider((opts) => {
+      firstCall ??= opts;
+      return validAnalysis;
+    });
+
+    await analyze(provider, {
+      ...ctx,
+      history: "Partner: What part of the interview worries you most?",
+      previousPartnerReply:
+        "What part of the interview worries you most: technical questions or explaining past projects?",
+      userInput: "Explain past projects is hard.",
+    });
+
+    const userPrompt = firstCall?.messages.find(
+      (m) => m.role === "user",
+    )?.content;
+    expect(userPrompt).toContain(
+      '=== PARTNER\'S LATEST MESSAGE (context for "natural") ===',
+    );
+    expect(userPrompt).toContain(
+      "technical questions or explaining past projects?",
+    );
+  });
+
   it("keeps correct signals for tracked keys and drops invented ones", async () => {
     const withCorrects = JSON.stringify({
       is_correct: true,

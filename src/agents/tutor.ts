@@ -41,6 +41,7 @@ export interface TutorContext {
   weakList: WeakItem[];
   keyHints?: MasteryKeyHint[];
   history: string; // last few conversation turns, plain text
+  previousPartnerReply?: string; // the AI line the user's latest message is responding to, when available
   userInput: string;
   customInstructions?: string; // additional instructions appended by the user in the agent library
   /** Dictation/shadowing drill: the exact target sentence. When set, grading is a comparison to this standard answer
@@ -215,13 +216,13 @@ ERRORS — the user produced ${ctx.targetLanguage}; correct only real errors.`
   wording is different.
 - If the message is fully correct: is_correct=true, issues=[].
 - "natural" = a more idiomatic rendering of the user's message (may equal
-  "corrected"). The user's message is a reply in the conversation above, so read
-  the partner's most recent line in RECENT CONVERSATION and make "natural" flow
-  as a natural response to it (right register, connectives, and references to
-  what the partner just said) — not just a sentence fixed in isolation. When a
-  more idiomatic or context-fitting alternative exists, make "natural" a
-  distinct alternative; copy "corrected" only when it is already the most natural
-  phrasing.${
+  "corrected"). Generate it with the same context policy as the input-box reply
+  hint: use PARTNER'S LATEST MESSAGE to infer what the learner is trying to
+  answer, then make "natural" flow as a natural response to that specific AI
+  line (right register, connectives, and references to what the partner just
+  said) — not just a sentence fixed in isolation. When a more idiomatic or
+  context-fitting alternative exists, make "natural" a distinct alternative;
+  copy "corrected" only when it is already the most natural phrasing.${
     includeGap
       ? `
 
@@ -334,6 +335,9 @@ ${ctx.userInput}`;
   }
   return `=== RECENT CONVERSATION ===
 ${ctx.history || "(none)"}
+
+=== PARTNER'S LATEST MESSAGE (context for "natural") ===
+${ctx.previousPartnerReply?.trim() || "(none)"}
 
 === USER MESSAGE TO ANALYZE ===
 ${ctx.userInput}`;
@@ -796,6 +800,9 @@ ${ctx.standardAnswer}
 ${ctx.userInput}`
     : `=== RECENT CONVERSATION ===
 ${ctx.history || "(none)"}
+
+=== PARTNER'S LATEST MESSAGE (context for "natural") ===
+${ctx.previousPartnerReply?.trim() || "(none)"}
 
 === USER MESSAGE TO ANALYZE ===
 ${ctx.userInput}`

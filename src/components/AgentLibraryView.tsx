@@ -128,10 +128,6 @@ const BUILTIN_CARD_I18N: Record<
     title: "agentLibrary.builtinCards.translate.title",
     desc: "agentLibrary.builtinCards.translate.desc",
   },
-  "builtin:transformer:reply_suggestion": {
-    title: "agentLibrary.builtinCards.replySuggestion.title",
-    desc: "agentLibrary.builtinCards.replySuggestion.desc",
-  },
   "builtin:action:branch_from": {
     title: "agentLibrary.builtinCards.branchFrom.title",
     desc: "agentLibrary.builtinCards.branchFrom.desc",

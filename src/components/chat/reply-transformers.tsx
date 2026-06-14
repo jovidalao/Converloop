@@ -20,7 +20,9 @@ import { Markdown } from "../Markdown";
 import { replyTransformerIcon } from "../reply-transformer-icons";
 import { Button } from "../ui/button";
 import { Spinner } from "../ui/spinner";
-import type { ActivePanelId } from "./reply-suggestion";
+
+/** One open drop-below popup at a time within a message; null = all closed. */
+export type ActivePanelId = string | null;
 
 // Custom transformers (user-created, kind="reply_transformer") render as per-turn buttons — under the AI
 // reply (stage="ai_reply") or under the learner's own message (stage="user_message"), selected via the `stage` arg.

@@ -69,7 +69,7 @@ const AppConfigSchema = z.object({
   level: z.string(),
   /** Automatically expand bilingual reading for new AI replies. */
   autoBilingual: z.boolean(),
-  /** Show text labels next to chat action buttons (reply suggestion / bilingual). Off = icon only. */
+  /** Show text labels next to chat action buttons (bilingual / custom transformers). Off = icon only. */
   actionLabels: z.boolean(),
   /** Auto-generate reply coaching hints after each turn (one extra model call per turn).
    *  Off = hints are only generated on demand via the coach panel's regenerate button. */
