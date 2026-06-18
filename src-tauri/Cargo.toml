@@ -1,9 +1,10 @@
 [package]
-name = "lang-agent"
+name = "converloop"
 version = "0.1.0"
-description = "AI 语言学习 agent 桌面端"
+description = "Converloop 语言学习桌面端"
 authors = ["you"]
 edition = "2021"
+license = "AGPL-3.0-or-later"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -11,52 +12,48 @@ edition = "2021"
 # The `_lib` suffix may seem redundant but it is necessary
 # to make the lib name unique and wouldn't conflict with the bin name.
 # This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
-name = "lang_agent_lib"
+name = "converloop_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-# macos-private-api: 透明窗口 + NSVisualEffect 毛玻璃(原生质感)的前置条件。
-# 注意:用到 macOS 私有 API 会让应用无法上架 Mac App Store——本项目是开源 BYOK 桌面端,
-# 不走商店分发,可以接受这一取舍。
+# macos-private-api: required for transparent windows + NSVisualEffect vibrancy.
+# macOS private API prevents Mac App Store distribution. This open-source BYOK
+# desktop app is not store-distributed, so that tradeoff is acceptable.
 tauri = { version = "2", features = ["macos-private-api"] }
 tauri-plugin-opener = "2"
 tauri-plugin-sql = { version = "2", features = ["sqlite"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-# BYOK key:应用自管的设备绑定加密存储(见 src/secrets.rs)。无主密码 → 混淆级。
+# BYOK keys: app-managed device-bound encrypted storage; see src/secrets.rs.
+# No master password means obfuscation-grade protection.
 chacha20poly1305 = "0.10"
 sha2 = "0.10"
 rand = "0.8"
 base64 = "0.22"
 machine-uid = "0.5"
-# LLM HTTP:走 Rust 发请求,绕过 webview CORS;reqwest 的 bytes_stream 做真流式。
-# multipart 给语音转写(stt.rs)上传音频用。
+# LLM HTTP: Rust sends requests to bypass webview CORS; reqwest bytes_stream
+# provides real streaming. multipart uploads audio for STT in stt.rs.
 reqwest = { version = "0.12", features = ["json", "stream", "multipart"] }
-# Soniox 异步转写要轮询等待;tokio 本就在依赖树里(tauri/tokio-tungstenite),这里只是显式声明。
-# rt:Parakeet 本地推理是 CPU 密集,走 spawn_blocking 不堵 async 运行时。
+# tokio backs async HTTP/WebSocket work and local STT spawn_blocking tasks.
+# rt: local Parakeet/Qwen3 inference is CPU-heavy and must not block the async runtime.
 tokio = { version = "1", features = ["time", "rt"] }
 futures-util = "0.3"
-# 本地 STT(Parakeet TDT 0.6B V3):封装 sherpa-onnx C API 做离线识别。
-# build script 编译时从 GitHub releases 拉预编译静态库(含 onnxruntime),默认静态链接,
-# 产物二进制增大约 30–50MB;离线/CI 构建需预设 SHERPA_ONNX_LIB_DIR。模型(~640MB ONNX)
-# 不打包,运行时按需下载到 app 数据目录(见 src/stt_local.rs)。
+# Local STT: wraps the sherpa-onnx C API for offline recognition.
+# The build script fetches prebuilt static libs (including onnxruntime) from
+# GitHub releases and links statically by default, adding about 30-50MB to the
+# binary. Offline/CI builds need SHERPA_ONNX_LIB_DIR. Models are not bundled;
+# they are downloaded on demand into app data; see src/stt_local.rs.
 sherpa-onnx = "1.13.2"
-# 免费 Edge TTS 走 WebSocket(webview 无法改写 Origin 头,必须在 Rust 连);
-# native-tls 复用 reqwest 已引入的同一 TLS 栈,macOS 上即系统 Security 框架,无新系统依赖。
+# Free Edge TTS uses WebSocket. The webview cannot rewrite Origin, so Rust must
+# connect. native-tls reuses the same TLS stack reqwest already brings in; on macOS
+# that is the system Security framework, with no new system dependency.
 tokio-tungstenite = { version = "0.24", features = ["native-tls"] }
 
-# macOS: 红绿灯纯 AppKit 几何定位(NSButton/NSView frame),并在原生 resize 通知里
-# 同步重定位(绘制前),消除复位闪烁。不再依赖 decorum(其 cocoa→block 依赖链被
-# future-incompat 标记,且 inset 语义不透明、靠魔数)。
+# Native vibrancy (NSVisualEffectView). Translucent sidebar/titlebar let the
+# desktop and windows behind show through, avoiding a solid web-wrapper feel.
+# macOS only.
 [target.'cfg(target_os = "macos")'.dependencies]
-objc2 = "0.6"
-objc2-foundation = { version = "0.3", features = ["NSNotification", "NSString", "NSOperation", "NSGeometry"] }
-objc2-app-kit = { version = "0.3", features = ["NSWindow", "NSView", "NSButton", "NSControl", "NSResponder"] }
-block2 = "0.6"
-# 原生毛玻璃(NSVisualEffectView)。半透明侧栏/标题栏让窗口透出桌面与背后窗口,
-# 摆脱「网页套壳」的实心填充观感。仅 macOS。
 window-vibrancy = "0.6"
-

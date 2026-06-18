@@ -68,11 +68,29 @@ export function stopSpeech(): void {
   emit();
 }
 
+// True pause/resume/seek over the current line's audio element — unlike stopSpeech these keep the
+// element and its position, so the pending playSpeech promise stays unresolved and resumes in place.
+export function pauseSpeech(): void {
+  if (currentAudio && !currentAudio.paused) currentAudio.pause();
+}
+
+export function resumeSpeech(): void {
+  if (currentAudio?.paused) void currentAudio.play().catch(() => {});
+}
+
+/** Seek the current line to `fraction` (0–1) of its duration. No-op when nothing is loaded. */
+export function seekSpeech(fraction: number): void {
+  const audio = currentAudio;
+  if (audio && audio.duration > 0)
+    audio.currentTime = Math.max(0, Math.min(1, fraction)) * audio.duration;
+}
+
 // Play the full audio buffer, resolving when playback ends (or is interrupted by stop).
 function playBuffer(
   audioBytes: ArrayBuffer,
   token: number,
   rate = 1,
+  onProgress?: (fraction: number) => void,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     if (token !== playToken) {
@@ -91,7 +109,15 @@ function playBuffer(
     emit();
 
     const audio = currentAudio;
+    if (onProgress) {
+      // timeupdate fires a few times a second while playing — enough to drive a smooth fill bar.
+      audio.ontimeupdate = () => {
+        if (audio.duration > 0)
+          onProgress(Math.min(1, audio.currentTime / audio.duration));
+      };
+    }
     audio.onended = () => {
+      onProgress?.(1);
       currentSettle = null;
       resolve();
     };
@@ -111,7 +137,7 @@ function playBuffer(
 export async function playSpeech(
   audioBytes: ArrayBuffer,
   key?: string,
-  opts: { rate?: number } = {},
+  opts: { rate?: number; onProgress?: (fraction: number) => void } = {},
 ): Promise<void> {
   stopSpeech();
   playToken += 1;
@@ -119,7 +145,7 @@ export async function playSpeech(
   currentPhase = currentKey ? "loading" : null;
   const token = playToken;
   try {
-    await playBuffer(audioBytes, token, opts.rate ?? 1);
+    await playBuffer(audioBytes, token, opts.rate ?? 1, opts.onProgress);
   } finally {
     if (token === playToken) {
       cleanup();

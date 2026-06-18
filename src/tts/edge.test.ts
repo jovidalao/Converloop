@@ -25,6 +25,8 @@ vi.mock("./config", () => ({
   loadTtsConfig: mocks.loadTtsConfig,
   getMimoTtsApiKey: mocks.getMimoTtsApiKey,
   MissingTtsApiKeyError: class MissingTtsApiKeyError extends Error {},
+  EDGE_AUTO_VOICE: "auto",
+  defaultEdgeVoiceForLanguage: () => "en-US-EmmaMultilingualNeural",
 }));
 
 import { synthesizeEdge } from "./edge";
@@ -43,6 +45,8 @@ const edgeConfig: TtsConfig = {
   edgeRate: "+0%",
   edgePitch: "+0Hz",
   autoSpeak: true,
+  autoSpeakNatural: false,
+  autoSpeakIntervalSeconds: 3,
 };
 
 beforeEach(() => {

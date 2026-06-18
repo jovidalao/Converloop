@@ -12,6 +12,8 @@ const cfg: TtsConfig = {
   edgeRate: "+0%",
   edgePitch: "+0Hz",
   autoSpeak: true,
+  autoSpeakNatural: false,
+  autoSpeakIntervalSeconds: 3,
 };
 
 describe("buildTtsCacheKey", () => {

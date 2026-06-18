@@ -6,12 +6,14 @@ import {
   MissingSttApiKeyError,
 } from "./config";
 
-// Soniox 实时流式转写:WebSocket 直连(WS 无 CORS,CSP connect-src 已放行),
-// 不走 Rust。音频经 AudioWorklet(public/pcm-worklet.js)采成 s16le PCM 推流,
-// token 边到边回调 onPartial;停止后服务端 flush 余下 token 再给最终文本。
-// 语言提示同批量路径:母语 + 目标语,混说仍开自动语言识别。
+// Soniox real-time transcription: the webview connects directly over WebSocket
+// (no CORS for WS, CSP connect-src already allows it), without Rust. Audio is
+// captured as s16le PCM by the AudioWorklet in public/pcm-worklet.js and pushed
+// upstream. Tokens stream into onPartial; after stop, the server flushes the
+// remaining tokens into the final transcript. Language hints match the batch
+// path: native + target language, with automatic language identification still on.
 const SONIOX_WS_URL = "wss://stt-rt.soniox.com/transcribe-websocket";
-/** 发送结束帧后等服务端吐完尾部 token 的上限。 */
+/** Max wait after the end frame for the server to flush trailing tokens. */
 const FINALIZE_TIMEOUT_MS = 10_000;
 
 interface SonioxToken {
@@ -27,16 +29,16 @@ interface SonioxMessage {
 }
 
 export interface StreamingSession {
-  /** 停止采音,等服务端 flush 后给出最终文本。 */
+  /** Stop capture and resolve with the final transcript after server flush. */
   stop(): Promise<string>;
-  /** 停止并丢弃(Esc / 卸载时)。 */
+  /** Stop and discard (Esc / unmount). */
   cancel(): void;
 }
 
 export async function startSonioxStream(handlers: {
-  /** 截至目前的完整转写(已定 + 暂定 token),随流式更新反复触发。 */
+  /** Full transcript so far (final + tentative tokens), called repeatedly. */
   onPartial: (text: string) => void;
-  /** 录音途中的失败(连接断开、服务端报错);触发后会话已自行清理。 */
+  /** Capture-time failure; the session has already cleaned itself up. */
   onError: (error: Error) => void;
 }): Promise<StreamingSession> {
   const sttConfig = loadSttConfig();
@@ -51,7 +53,7 @@ export async function startSonioxStream(handlers: {
   };
 
   const ctx = new AudioContext();
-  // stop → teardown 会经过两次 close,第二次在已关闭的 ctx 上 reject,吞掉。
+  // stop -> teardown can close twice; ignore the second rejection on a closed ctx.
   const closeCtx = () => {
     ctx.close().catch(() => {});
   };
@@ -64,7 +66,8 @@ export async function startSonioxStream(handlers: {
   }
   const source = ctx.createMediaStreamSource(stream);
   const capture = new AudioWorkletNode(ctx, "pcm-capture");
-  // 旧 WebKit 对悬空节点可能不跑图:经 0 增益接到输出兜底,不会外放。
+  // Older WebKit may not run detached nodes. Route through a zero-gain output as
+  // a fallback without playing audio.
   const mute = ctx.createGain();
   mute.gain.value = 0;
   source.connect(capture);
@@ -79,7 +82,7 @@ export async function startSonioxStream(handlers: {
   let finishResolve: ((text: string) => void) | null = null;
   let finishReject: ((error: Error) => void) | null = null;
   let finalizeTimer: ReturnType<typeof setTimeout> | null = null;
-  // worklet 起得比 WS 握手快,先攒着,open 后补发。
+  // The worklet can start before the WS handshake; queue frames until open.
   const preOpenQueue: ArrayBuffer[] = [];
   let wsReady = false;
 
@@ -110,7 +113,8 @@ export async function startSonioxStream(handlers: {
     resolve?.(text);
   };
 
-  // 录音途中报 onError;stop() 等待期间改为 reject 它的 promise,免得调用方挂死。
+  // During recording, report via onError; while stop() is waiting, reject its
+  // promise so callers do not hang.
   const fail = (error: Error) => {
     if (settled) return;
     const reject = finishReject;
@@ -160,7 +164,7 @@ export async function startSonioxStream(handlers: {
     if (msg.tokens && msg.tokens.length > 0) {
       let tentative = "";
       for (const token of msg.tokens) {
-        // <end>/<fin> 等控制 token 不进文本。
+        // Control tokens such as <end>/<fin> are not transcript text.
         if (token.text.startsWith("<")) continue;
         if (token.is_final) finalText += token.text;
         else tentative += token.text;
@@ -174,8 +178,8 @@ export async function startSonioxStream(handlers: {
   ws.onerror = () => fail(new Error("Soniox connection failed"));
   ws.onclose = () => {
     if (settled) return;
-    // 停止流程里服务端发完 finished 就关连接;没收到 finished 的提前断开按
-    // 已有文本兜底,录音途中断开则报错。
+    // During stop, the server closes after sending finished. If it closes early,
+    // fall back to the text we have; during recording, treat it as an error.
     if (stopping) finish();
     else fail(new Error("Soniox connection closed"));
   };
@@ -193,7 +197,7 @@ export async function startSonioxStream(handlers: {
         releaseMic();
         closeCtx();
         if (ws.readyState === WebSocket.OPEN) {
-          ws.send(""); // 结束帧:让服务端 flush 并回 finished
+          ws.send(""); // End frame: ask the server to flush and send finished.
         } else if (ws.readyState !== WebSocket.CONNECTING) {
           finish();
           return;

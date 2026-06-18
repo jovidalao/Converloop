@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "lang-agent",
+  "productName": "Converloop",
   "version": "0.1.0",
   "identifier": "com.langagent.app",
   "build": {
@@ -12,12 +12,16 @@
   "app": {
     "windows": [
       {
-        "title": "lang-agent",
+        "title": "Converloop",
         "width": 1040,
         "height": 720,
         "minWidth": 720,
         "minHeight": 520,
         "titleBarStyle": "Overlay",
+        "trafficLightPosition": {
+          "x": 21,
+          "y": 24
+        },
         "hiddenTitle": true,
         "transparent": true
       }

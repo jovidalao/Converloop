@@ -1,5 +1,6 @@
-//! learner-profile.md 读写。原子写入(临时文件 + rename),避免对话 agent 读到半截。
-//! 文件落在 app_config_dir,与 sqlite 同目录。
+//! learner-profile.md read/write. Atomic writes (temp file + rename) prevent the
+//! conversation agent from reading a partial file. The file lives in app_config_dir
+//! beside SQLite.
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
@@ -42,7 +43,7 @@ pub fn write_profile(app: tauri::AppHandle, content: String) -> Result<(), Strin
     Ok(())
 }
 
-/// AI 刷新前的快照:把当前档案拷到 .bak。无现有档案则无操作。
+/// Snapshot before AI refresh: copy the current profile to .bak. No-op if missing.
 #[tauri::command]
 pub fn snapshot_profile(app: tauri::AppHandle) -> Result<(), String> {
     let path = profile_path(&app)?;
@@ -54,7 +55,7 @@ pub fn snapshot_profile(app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-/// 从 .bak 恢复(撤销上次 AI 刷新)。返回恢复后的内容;无备份则返回 None。
+/// Restore from .bak to undo the last AI refresh. Returns restored content, or None if missing.
 #[tauri::command]
 pub fn restore_profile(app: tauri::AppHandle) -> Result<Option<String>, String> {
     let bak = backup_path(&app)?;

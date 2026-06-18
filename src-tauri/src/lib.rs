@@ -9,7 +9,7 @@ mod stt_local;
 
 use tauri_plugin_sql::{Migration, MigrationKind};
 
-// Schema 见 docs/architecture.md#sqlitemastery_item。计数/状态归代码管,LLM 不碰。
+// Schema: see docs/design.md. Counts/state belong to code, not LLMs.
 const CREATE_MASTERY_ITEM: &str = "\
 CREATE TABLE IF NOT EXISTS mastery_item (
     id           TEXT PRIMARY KEY NOT NULL,
@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS mastery_item (
     notes        TEXT
 );";
 
-// 每轮持久化(输入 / 回复 / 导师分析 JSON)。
+// Per-turn persistence: input, reply, and tutor analysis JSON.
 const CREATE_TURN: &str = "\
 CREATE TABLE IF NOT EXISTS turn (
     id            TEXT PRIMARY KEY NOT NULL,
@@ -34,9 +34,10 @@ CREATE TABLE IF NOT EXISTS turn (
     analysis_json TEXT
 );";
 
-// 会话(ChatGPT/Claude 式左侧对话列表)。每轮归属一个会话;对话/导师 agent 的历史
-// 上下文按 conversation_id 隔离(掌握/维护仍全局)。旧 turn 的 conversation_id 为 NULL,
-// 启动时由 TS 侧 ensureActiveConversation 归档到默认会话。
+// Conversations for the ChatGPT/Claude-style sidebar. Each turn belongs to one
+// conversation; conversation/tutor agent history is isolated by conversation_id
+// while mastery/maintenance remain global. Legacy turns have NULL conversation_id
+// and are archived into the default conversation by TS ensureActiveConversation.
 const CREATE_CONVERSATION: &str = "\
 CREATE TABLE IF NOT EXISTS conversation (
     id         TEXT PRIMARY KEY NOT NULL,
@@ -48,15 +49,17 @@ CREATE TABLE IF NOT EXISTS conversation (
 const ADD_TURN_CONVERSATION_ID: &str =
     "ALTER TABLE turn ADD COLUMN conversation_id TEXT;";
 
-// 理解信号:用户在某条回复上点「讲解」/「双语阅读」的次数。高频 = 这条输入超出当前
-// 水平(代码记账、LLM 不碰)。SQLite 每条 ALTER 只能加一列,故拆成两个 migration。
+// Comprehension signals: how often the user clicks Explain / Bilingual Reading on
+// a reply. High frequency means that input exceeded the current level. Code records
+// it, LLMs do not. SQLite can only add one column per ALTER, so this is split.
 const ADD_TURN_EXPLAIN_COUNT: &str =
     "ALTER TABLE turn ADD COLUMN explain_count INTEGER NOT NULL DEFAULT 0;";
 
 const ADD_TURN_BILINGUAL_COUNT: &str =
     "ALTER TABLE turn ADD COLUMN bilingual_count INTEGER NOT NULL DEFAULT 0;";
 
-// 每条导师观察信号的事件日志。mastery_item 是可查询快照;event 是可追溯证据。
+// Event log for each tutor observation signal. mastery_item is the queryable
+// snapshot; events are traceable evidence.
 const CREATE_MASTERY_EVENT: &str = "\
 CREATE TABLE IF NOT EXISTS mastery_event (
     id           TEXT PRIMARY KEY NOT NULL,
@@ -78,7 +81,7 @@ const CREATE_MASTERY_EVENT_KEY_INDEX: &str =
 const CREATE_MASTERY_EVENT_TURN_INDEX: &str =
     "CREATE INDEX IF NOT EXISTS mastery_event_turn_idx ON mastery_event (turn_id);";
 
-// 应用内部连续性标记。不是用户偏好,需要随数据库备份/迁移。
+// Internal app continuity markers. Not user preferences, but they must migrate with backups.
 const CREATE_APP_STATE: &str = "\
 CREATE TABLE IF NOT EXISTS app_state (
     key        TEXT PRIMARY KEY NOT NULL,
@@ -86,8 +89,9 @@ CREATE TABLE IF NOT EXISTS app_state (
     updated_at INTEGER NOT NULL
 );";
 
-// 定制化学习 Agent。内置 Agent 也落库,这样用户可以微调 prompt;启动时 TS 侧只补缺,
-// 不覆盖用户已经改过的内置 prompt。
+// Customized learning agents. Built-ins are stored in the DB too so users can
+// fine-tune prompts; startup TS only fills missing rows and does not overwrite
+// built-ins the user has edited.
 const CREATE_LEARNING_AGENT: &str = "\
 CREATE TABLE IF NOT EXISTS learning_agent (
     id              TEXT PRIMARY KEY NOT NULL,
@@ -106,9 +110,11 @@ const ADD_CONVERSATION_KIND: &str =
 const ADD_CONVERSATION_LEARNING_AGENT_ID: &str =
     "ALTER TABLE conversation ADD COLUMN learning_agent_id TEXT;";
 
-// 滚动摘要(自动压缩):summary 是该会话「老内容」的目标语摘要,summary_through_id 是
-// 已折叠进摘要的最后一个 turn.id(水位)。代码维护,LLM 只产出摘要文本。NULL = 尚未压缩,
-// 退化为纯原文回放。SQLite 每条 ALTER 只能加一列,故拆成两个 migration。
+// Rolling summary (automatic compression): summary is the target-language recap of
+// older content in this conversation, and summary_through_id is the last folded
+// turn.id watermark. Code maintains the fields; the LLM only writes summary text.
+// NULL means not compressed yet and falls back to raw history replay. SQLite can
+// only add one column per ALTER, so this is split.
 const ADD_CONVERSATION_SUMMARY: &str =
     "ALTER TABLE conversation ADD COLUMN summary TEXT;";
 
@@ -139,39 +145,44 @@ const ADD_LEARNING_AGENT_ENABLED: &str =
 const ADD_LEARNING_AGENT_PACKAGE_META_JSON: &str =
     "ALTER TABLE learning_agent ADD COLUMN package_meta_json TEXT;";
 
-// 提示词宏轮次(/topic、/learn、/surprise):气泡里显示用户原样输入的指令文本,
-// 而 user_input 落库的是展开后的英文提示词(喂给对话 agent、并计入后续上下文)。
-// display_text 仅供 UI 渲染气泡;普通轮次为 NULL(气泡照常显示 user_input)。
+// Prompt-macro turns (/topic, /learn, /surprise): bubbles show the user's original
+// command text, while user_input stores the expanded English prompt sent to the
+// conversation agent and included in later context. display_text is UI-only;
+// normal turns keep it NULL and render user_input.
 const ADD_TURN_DISPLAY_TEXT: &str = "ALTER TABLE turn ADD COLUMN display_text TEXT;";
 
-// 会话上下文加载(loadChatHistory / getTurnsAfterId)按 conversation_id 过滤再按时间排序;
-// 没有索引时每次都是全表扫,轮次累积到几千条后会拖慢每一轮的热路径。
+// Conversation context loading (loadChatHistory / getTurnsAfterId) filters by
+// conversation_id and sorts by time. Without an index, every load scans the whole
+// turn table and slows the hot path once turns reach the thousands.
 const CREATE_TURN_CONVERSATION_INDEX: &str =
     "CREATE INDEX IF NOT EXISTS turn_conversation_created_idx ON turn (conversation_id, created_at);";
 
-// 侧边栏置顶:置顶会话排在列表最前,不随 updated_at 下沉。0 = 未置顶。
+// Sidebar pinning: pinned conversations stay first and do not sink by updated_at. 0 = unpinned.
 const ADD_CONVERSATION_PINNED: &str =
     "ALTER TABLE conversation ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;";
 
-// 学习项目 ↔ 专项课关联:lesson_agent_ids_json 记录该项目生成的课程 id 列表,
-// completed_lesson_ids_json 记录用户标记完成的课程 id —— 项目进度由两者推导。
+// Learning project <-> lesson relation: lesson_agent_ids_json records generated
+// lesson ids, and completed_lesson_ids_json records the ids the user marked done.
+// Project progress is derived from both.
 const ADD_LEARNING_PROJECT_LESSON_IDS: &str =
     "ALTER TABLE learning_project ADD COLUMN lesson_agent_ids_json TEXT NOT NULL DEFAULT '[]';";
 const ADD_LEARNING_PROJECT_COMPLETED_LESSON_IDS: &str =
     "ALTER TABLE learning_project ADD COLUMN completed_lesson_ids_json TEXT NOT NULL DEFAULT '[]';";
 
-// 清理旧听写聚合项:历史版本把所有听写错误记到唯一的 dictation:transcription 上,
-// 它只积累 error、永不积累 correct(错误率恒 100%),会永久霸占弱项表第一位。
-// mastery_event 证据保留;听写记忆改用隔离的 listening:<word> 维度。
+// Clean up the legacy dictation aggregate item. Older builds recorded every
+// dictation error under dictation:transcription, which only accumulated errors
+// and never corrects, so it stayed at a permanent 100% error rate. mastery_event
+// evidence is preserved; listening memory now uses isolated listening:<word> keys.
 const DELETE_LEGACY_DICTATION_MASTERY: &str =
     "DELETE FROM mastery_item WHERE key LIKE 'dictation:%';";
 
-// 训练模式(drill)落在 learning_agent 表(kind="drill"):source_md 存 drill@1 Markdown 原文,
-// 是唯一事实来源;name/description/prompt 列只是它的解析缓存。
+// Drill mode rows live in learning_agent with kind="drill". source_md stores the
+// drill@1 Markdown source of truth; name/description/prompt are parsed caches.
 const ADD_LEARNING_AGENT_SOURCE_MD: &str =
     "ALTER TABLE learning_agent ADD COLUMN source_md TEXT;";
 
-// kind="reply_transformer" 行:回复按钮的图标名、是否每条回复自动触发、产出去向(panel/replace/coach/memory)。
+// kind="reply_transformer" rows: button icon, whether each reply auto-runs, and
+// output destination (panel/replace/coach/memory).
 const ADD_LEARNING_AGENT_ICON: &str =
     "ALTER TABLE learning_agent ADD COLUMN icon TEXT;";
 const ADD_LEARNING_AGENT_AUTO_RUN: &str =
@@ -179,7 +190,8 @@ const ADD_LEARNING_AGENT_AUTO_RUN: &str =
 const ADD_LEARNING_AGENT_OUTPUT_MODE: &str =
     "ALTER TABLE learning_agent ADD COLUMN output_mode TEXT;";
 
-// kind="reply_transformer" 行:Agent 介入阶段(ai_reply=AI 回复上的按钮 / user_message=用户消息上的按钮)。NULL 视为 ai_reply。
+// kind="reply_transformer" rows: intervention stage (ai_reply button vs
+// user_message button). NULL is treated as ai_reply.
 const ADD_LEARNING_AGENT_TRANSFORMER_STAGE: &str =
     "ALTER TABLE learning_agent ADD COLUMN transformer_stage TEXT;";
 
@@ -248,111 +260,21 @@ CREATE TABLE IF NOT EXISTS memory_proposal (
     result_json     TEXT
 );";
 
-// 离档轮次(/btw「顺便问一句」):仍落库、仍显示在记录里,但构建上下文时跳过它,
-// 也不喂给维护 agent。代码记账,LLM 不碰。旧数据默认 0(=照常计入)。
+// Off-profile /btw turns: still persisted and shown in history, but skipped when
+// building context and not fed to the maintainer agent. Code records this; LLMs do
+// not. Legacy rows default to 0, meaning normal inclusion.
 const ADD_TURN_EXCLUDE_FROM_CONTEXT: &str =
     "ALTER TABLE turn ADD COLUMN exclude_from_context INTEGER NOT NULL DEFAULT 0;";
 
-// 红绿灯沿用 macOS 原生按钮,位置参照 Codex 顶栏:左侧 21pt,垂直居中于 46pt chrome。
-// 纯 AppKit 几何定位(不经 decorum):titlebar 容器撑到 chrome 高、顶边贴窗顶,
-// 按钮放容器纵向正中——正中对称,与视图是否翻转无关,无需标定魔数。
-#[cfg(target_os = "macos")]
-const TRAFFIC_LIGHTS_X: f64 = 21.0;
-#[cfg(target_os = "macos")]
-const TRAFFIC_LIGHTS_CHROME_H: f64 = 46.0;
-
-#[cfg(target_os = "macos")]
-fn apply_traffic_lights_inset(win: &tauri::WebviewWindow) {
-    use objc2_app_kit::{NSWindow, NSWindowButton};
-    use objc2_foundation::NSPoint;
-
-    let Ok(raw) = win.ns_window() else { return };
-    let ns_window: &NSWindow = unsafe { &*raw.cast() };
-
-    let buttons: Vec<_> = [
-        NSWindowButton::CloseButton,
-        NSWindowButton::MiniaturizeButton,
-        NSWindowButton::ZoomButton,
-    ]
-    .into_iter()
-    .filter_map(|kind| ns_window.standardWindowButton(kind))
-    .collect();
-    let [close, mini, ..] = buttons.as_slice() else {
-        return;
-    };
-
-    // 相邻按钮间距:首次取系统原生值,此后保持我们设置的恒定差值。
-    let delta = mini.frame().origin.x - close.frame().origin.x;
-    let spacing = if delta > 0.0 { delta } else { 20.0 };
-
-    // titlebar 容器(close.superview().superview())撑到 chrome 高、顶边贴窗顶
-    // (NSWindow 坐标原点在左下,故 origin.y = 窗高 − chrome 高)。
-    // SAFETY: superview 仅在主线程访问已存在的视图层级;Tauri 的窗口 API 在主线程调用本函数。
-    if let Some(container) = unsafe { close.superview().and_then(|v| v.superview()) } {
-        let mut rect = container.frame();
-        rect.size.height = TRAFFIC_LIGHTS_CHROME_H;
-        rect.origin.y = ns_window.frame().size.height - TRAFFIC_LIGHTS_CHROME_H;
-        container.setFrame(rect);
-    }
-
-    for (i, button) in buttons.iter().enumerate() {
-        let height = button.frame().size.height;
-        button.setFrameOrigin(NSPoint {
-            x: TRAFFIC_LIGHTS_X + i as f64 * spacing,
-            y: (TRAFFIC_LIGHTS_CHROME_H - height) / 2.0,
-        });
-    }
-}
-
-/// 给整个窗口铺一层原生毛玻璃(Sidebar 材质)。窗口透明 + 前端只让侧栏/标题栏/教练栏
-/// 透出(主对话区保持不透明、保证文字可读),于是只在这些 chrome 区域看到桌面/背后窗口的
-/// 模糊——和 Mail/Notes/Finder 的半透明侧栏一致。state=None → 跟随窗口激活态自动明暗,
-/// 这是 AppKit 的原生行为;材质会跟随 setTheme 设置的窗口外观切换明暗,无需手动重铺。
+/// Apply native vibrancy to the whole window using the Sidebar material. The
+/// window is transparent, while the frontend only lets the sidebar/titlebar/coach
+/// chrome show through; the main chat remains opaque for text readability. That
+/// matches Mail/Notes/Finder-style translucent sidebars. state=None follows the
+/// active window state, and the material follows setTheme appearance changes.
 #[cfg(target_os = "macos")]
 fn apply_window_vibrancy(win: &tauri::WebviewWindow) {
     use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
     let _ = apply_vibrancy(win, NSVisualEffectMaterial::Sidebar, None, None);
-}
-
-/// 重新钉一次交通灯位置。改动 NSWindow 外观(window.setTheme)会让 AppKit 把
-/// 标准窗口按钮重排回默认位,而 inset 只在启动 + resize 时重定位;前端切换主题后
-/// 调一次本命令把灯重新钉回居中。非 macOS 为空操作。
-#[tauri::command]
-fn reapply_traffic_lights(window: tauri::WebviewWindow) {
-    #[cfg(target_os = "macos")]
-    apply_traffic_lights_inset(&window);
-    #[cfg(not(target_os = "macos"))]
-    let _ = window;
-}
-
-/// 把交通灯钉在自定义位置。关键是「绘制前」重定位:监听 AppKit 原生的
-/// NSWindowDidResizeNotification(主线程、同步、绘制前派发),在回调里重设 inset。
-/// 不用 Tauri 的 on_window_event(它在绘制后才触发,会看到灯先跳回默认位再跳回来)。
-#[cfg(target_os = "macos")]
-fn setup_traffic_lights(win: tauri::WebviewWindow) {
-    use block2::RcBlock;
-    use core::ptr::NonNull;
-    use objc2_app_kit::NSWindowDidResizeNotification;
-    use objc2_foundation::{NSNotification, NSNotificationCenter};
-
-    // 启动时定位一次。
-    apply_traffic_lights_inset(&win);
-
-    let win_cb = win.clone();
-    let block = RcBlock::new(move |_n: NonNull<NSNotification>| {
-        apply_traffic_lights_inset(&win_cb);
-    });
-    unsafe {
-        let observer = NSNotificationCenter::defaultCenter()
-            .addObserverForName_object_queue_usingBlock(
-                Some(NSWindowDidResizeNotification),
-                None,
-                None,
-                &block,
-            );
-        // observer 要活到进程结束;单窗口应用,直接泄漏即可。
-        core::mem::forget(observer);
-    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -637,7 +559,6 @@ pub fn run() {
                 use tauri::Manager;
                 if let Some(win) = app.get_webview_window("main") {
                     apply_window_vibrancy(&win);
-                    setup_traffic_lights(win);
                 }
             }
             Ok(())
@@ -660,7 +581,6 @@ pub fn run() {
             stt_local::local_asr_model_status,
             stt_local::local_asr_download_model,
             stt_local::stt_transcribe_local,
-            reapply_traffic_lights,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

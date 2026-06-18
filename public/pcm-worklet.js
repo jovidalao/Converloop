@@ -1,7 +1,8 @@
-// AudioWorklet:把麦克风的 Float32 单声道帧攒成 ~85ms(4096 样本)的
-// s16le PCM 块发回主线程(供 Soniox 实时 WS 推流)。跑在音频线程,
-// 主线程被 React 渲染占住也不丢音频。CSP script-src 'self' 禁 blob: 模块,
-// 所以放 public/ 以静态文件加载。
+// AudioWorklet: buffers microphone Float32 mono frames into ~85ms (4096 sample)
+// s16le PCM chunks and posts them to the main thread for Soniox real-time WS
+// streaming and local STT. It runs on the audio thread, so React work on the main
+// thread does not drop audio. CSP script-src 'self' forbids blob: modules, so this
+// lives in public/ and loads as a static file.
 const CHUNK_SAMPLES = 4096;
 
 class PcmCaptureProcessor extends AudioWorkletProcessor {

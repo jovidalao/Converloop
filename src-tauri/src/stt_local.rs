@@ -1,14 +1,17 @@
-//! 本地语音转写(sherpa-onnx 离线推理),两个引擎:
-//!  - parakeet: NVIDIA Parakeet TDT 0.6B V3(transducer)。25 种欧洲语言,无 CJK。
-//!  - qwen3: Qwen3-ASR 0.6B int8(LLM 解码)。30+ 语言含中文/粤语,补上 CJK 缺口。
-//! 与 stt.rs 的云端引擎不同——模型跑在本机、无需 key、无需联网(下载后)。
+//! Local speech-to-text via sherpa-onnx offline inference, with two engines:
+//!  - parakeet: NVIDIA Parakeet TDT 0.6B V3 (transducer). 25 European languages, no CJK.
+//!  - qwen3: Qwen3-ASR 0.6B int8 (LLM decoding). 30+ languages including Chinese/Cantonese.
 //!
-//! 两个模型都不支持流式,只做批量:前端 AudioWorklet 采集整段 s16le PCM(base64 传入)
-//! → 解码为 f32 →(必要时)线性重采样到 16k → OfflineRecognizer 一次出文本。
+//! Unlike the cloud engines in stt.rs, models run locally: no key and no network after download.
 //!
-//! 模型不打包进应用,运行时按需从 HuggingFace 下载到
-//! app_config_dir/models/<engine-dir>/(与 sqlite/档案同目录)。
-//! recognizer 懒加载并全局缓存;同一时刻只常驻一个引擎(两个同驻 >2GB 内存)。
+//! Both models are batch-only: the frontend AudioWorklet captures the whole utterance
+//! as s16le PCM (base64 input), this module decodes to f32, resamples to 16k if
+//! needed, then runs one OfflineRecognizer pass.
+//!
+//! Models are not bundled. They are downloaded on demand from HuggingFace into
+//! app_config_dir/models/<engine-dir>/, beside SQLite/profile data. Recognizers
+//! are lazy-loaded and globally cached; only one engine stays resident at a time
+//! because keeping both loaded exceeds 2GB.
 use base64::Engine;
 use futures_util::StreamExt;
 use serde::Serialize;
@@ -18,9 +21,10 @@ use std::sync::{Mutex, OnceLock};
 use tauri::ipc::Channel;
 use tauri::Manager;
 
-/// 一个本地引擎的模型来源:HF 仓库基址 + 逐文件下载清单(免去 tar.bz2 解压依赖)。
+/// Model source for one local engine: HF base URL plus per-file download list,
+/// avoiding a tar.bz2 extraction dependency.
 struct LocalModelSpec {
-    /// app_config_dir 下的模型目录。
+    /// Model directory under app_config_dir.
     dir: &'static str,
     hf_base: &'static str,
     files: &'static [&'static str],
@@ -71,7 +75,7 @@ fn files_present(dir: &Path, spec: &LocalModelSpec) -> bool {
     spec.files.iter().all(|f| dir.join(f).is_file())
 }
 
-/// 模型文件是否齐全(前端据此决定 UI 状态 + 是否允许切到该本地引擎)。
+/// Whether model files are complete; the frontend uses this for UI state and activation gating.
 #[tauri::command]
 pub fn local_asr_model_status(app: tauri::AppHandle, engine: String) -> Result<bool, String> {
     let spec = spec_for(&engine)?;
@@ -81,18 +85,19 @@ pub fn local_asr_model_status(app: tauri::AppHandle, engine: String) -> Result<b
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DownloadProgress {
-    /// 当前正在下载的文件名。
+    /// File currently being downloaded.
     file: String,
-    /// 正在下第几个 / 共几个文件。
+    /// 1-based file index and total file count.
     file_index: usize,
     file_count: usize,
-    /// 当前文件已下字节 / 总字节(总字节未知时为 0)。
+    /// Bytes received for this file, and total bytes when known (0 if unknown).
     received: u64,
     total: u64,
 }
 
-/// 逐个文件下载模型,进度经 Channel 实时推给前端。原子写:先写 .part 再 rename。
-/// 已存在的文件跳过(支持断点续传式重试——整文件粒度)。
+/// Download model files one by one, sending progress to the frontend over a Channel.
+/// Writes are atomic (.part then rename). Existing files are skipped, which gives
+/// whole-file resume behavior on retry.
 #[tauri::command]
 pub async fn local_asr_download_model(
     app: tauri::AppHandle,
@@ -109,7 +114,7 @@ pub async fn local_asr_download_model(
         if dest.is_file() {
             continue;
         }
-        // 清单里可能带子目录(如 qwen3 的 tokenizer/)。
+        // The file list may contain subdirectories, such as qwen3's tokenizer/.
         if let Some(parent) = dest.parent() {
             std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         }
@@ -125,11 +130,11 @@ pub async fn local_asr_download_model(
         let total = resp.content_length().unwrap_or(0);
 
         let tmp = dest.with_extension("part");
-        // 网络是瓶颈;块写之间穿插在 await 点之间,同步 std::fs 足够。
+        // Network is the bottleneck; synchronous std::fs writes between await points are enough.
         let mut file = std::fs::File::create(&tmp).map_err(|e| e.to_string())?;
         let mut received: u64 = 0;
         let mut stream = resp.bytes_stream();
-        // 节流进度上报:每 ~1MB 推一次,避免刷爆 IPC。
+        // Throttle progress events to about every 1MB to avoid flooding IPC.
         let mut since_emit: u64 = 0;
         while let Some(chunk) = stream.next().await {
             let chunk = chunk.map_err(|e| format!("下载 {name} 中断: {e}"))?;
@@ -162,9 +167,10 @@ pub async fn local_asr_download_model(
     Ok(())
 }
 
-/// 懒加载的全局 recognizer,带引擎标记:切换引擎时先 drop 旧实例再建新的
-/// (Parakeet ~0.7GB + Qwen3 ~1.5GB,不允许同时常驻)。Mutex 保证同一时刻只
-/// 一段在解码(批量短句,串行足够)。
+/// Lazy global recognizer tagged with its engine. Switching engines drops the old
+/// instance before loading the new one (Parakeet ~0.7GB + Qwen3 ~1.5GB, so they
+/// cannot both stay resident). The Mutex also serializes decoding; batch snippets
+/// are short, so that is enough.
 static RECOGNIZER: OnceLock<Mutex<Option<(String, OfflineRecognizer)>>> = OnceLock::new();
 
 fn build_recognizer(engine: &str, dir: &Path) -> Result<OfflineRecognizer, String> {
@@ -172,14 +178,14 @@ fn build_recognizer(engine: &str, dir: &Path) -> Result<OfflineRecognizer, Strin
     let mut config = OfflineRecognizerConfig::default();
     match engine {
         "qwen3" => {
-            // LLM 解码引擎:tokenizer 传目录(含 vocab.json/merges.txt);
-            // 特征维度 128(默认 80 是 transducer 的)。
+            // LLM decoding engine: tokenizer points at the directory containing
+            // vocab.json/merges.txt; feature_dim is 128 instead of transducer's default 80.
             config.feat_config.feature_dim = 128;
             config.model_config.qwen3_asr.conv_frontend = Some(path("conv_frontend.onnx"));
             config.model_config.qwen3_asr.encoder = Some(path("encoder.int8.onnx"));
             config.model_config.qwen3_asr.decoder = Some(path("decoder.int8.onnx"));
             config.model_config.qwen3_asr.tokenizer = Some(path("tokenizer"));
-            // 默认 128 token 会截断较长录音的转写。
+            // The 128-token default truncates longer recordings.
             config.model_config.qwen3_asr.max_new_tokens = 256;
         }
         _ => {
@@ -193,8 +199,9 @@ fn build_recognizer(engine: &str, dir: &Path) -> Result<OfflineRecognizer, Strin
         .ok_or_else(|| "本地模型加载失败(文件损坏?可重新下载)".to_string())
 }
 
-/// 简单线性重采样到 16k。前端已尽量按 16k 采集;此处仅作兜底(WebKit 可能忽略
-/// AudioContext 的 sampleRate 选项)。ASR 对线性插值的轻微失真不敏感。
+/// Simple linear resampling to 16k. The frontend already asks for 16k capture;
+/// this is only a fallback for WebKit ignoring AudioContext.sampleRate. ASR is
+/// not very sensitive to the slight distortion from linear interpolation.
 fn resample_to_16k(samples: &[f32], from_rate: i32) -> Vec<f32> {
     if from_rate == TARGET_SAMPLE_RATE || samples.is_empty() {
         return samples.to_vec();
@@ -229,9 +236,9 @@ pub async fn stt_transcribe_local(
         .decode(pcm_s16le_b64)
         .map_err(|e| format!("invalid audio payload: {e}"))?;
 
-    // 推理是 CPU 密集且 sherpa-onnx 调用是阻塞的,放到 blocking 线程。
+    // Inference is CPU-heavy and sherpa-onnx is blocking, so run it on a blocking thread.
     tokio::task::spawn_blocking(move || {
-        // s16le 字节 → f32([-1, 1])
+        // s16le bytes -> f32([-1, 1])
         let samples: Vec<f32> = bytes
             .chunks_exact(2)
             .map(|c| i16::from_le_bytes([c[0], c[1]]) as f32 / 32768.0)
@@ -241,7 +248,7 @@ pub async fn stt_transcribe_local(
         let lock = RECOGNIZER.get_or_init(|| Mutex::new(None));
         let mut guard = lock.lock().map_err(|_| "recognizer 锁中毒".to_string())?;
         if guard.as_ref().map(|(e, _)| e.as_str()) != Some(engine.as_str()) {
-            *guard = None; // 先释放旧引擎再加载,避免两份模型同驻内存
+            *guard = None; // Release the old engine first to avoid two resident models.
             *guard = Some((engine.clone(), build_recognizer(&engine, &dir)?));
         }
         let recognizer = &guard.as_ref().unwrap().1;

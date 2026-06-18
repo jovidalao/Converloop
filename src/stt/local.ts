@@ -1,18 +1,18 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 
-// 本地 STT(parakeet = NVIDIA Parakeet TDT 0.6B V3,qwen3 = Qwen3-ASR 0.6B int8)。
-// 模型跑在 Rust 侧 sherpa-onnx,前端只负责:
-//  1. 采集整段 s16le PCM(复用 public/pcm-worklet.js,与 Soniox 流式同一 worklet);
-//  2. 录音结束后一次性把 PCM 交给 Rust 转写(无流式)。
-// 录音会话接口刻意贴近 stt/record.ts 的批量语义,但 stop() 直接返回文本
-// (本地推理就在 stop 时同步发生),省掉中间的 Blob。
+// Local STT (parakeet = NVIDIA Parakeet TDT 0.6B V3, qwen3 = Qwen3-ASR 0.6B int8).
+// The model runs in Rust via sherpa-onnx; the frontend only:
+//  1. Captures the whole utterance as s16le PCM (same public/pcm-worklet.js as Soniox streaming).
+//  2. Sends the PCM to Rust once recording stops (no streaming).
+// The recording-session shape intentionally stays close to stt/record.ts batch
+// semantics, but stop() returns text directly because local inference happens there.
 
 export type LocalSttEngine = "parakeet" | "qwen3";
 
 export interface LocalCapture {
-  /** 停止采集,把整段音频交给本地模型转写,返回最终文本。 */
+  /** Stop capture, send the full audio to the local model, and return the final transcript. */
   stop(): Promise<string>;
-  /** 停止并丢弃(Esc / 卸载时)。 */
+  /** Stop and discard (Esc / unmount). */
   cancel(): void;
 }
 
@@ -24,12 +24,12 @@ export interface LocalDownloadProgress {
   total: number;
 }
 
-/** 该引擎的模型文件是否齐全。 */
+/** Whether this engine's model files are complete. */
 export function localAsrModelStatus(engine: LocalSttEngine): Promise<boolean> {
   return invoke<boolean>("local_asr_model_status", { engine });
 }
 
-/** 下载模型(parakeet ~640MB / qwen3 ~1GB),进度经 Channel 实时回调。 */
+/** Download a model (parakeet ~640MB / qwen3 ~1GB), with progress over a Channel. */
 export function downloadLocalAsrModel(
   engine: LocalSttEngine,
   onProgress: (p: LocalDownloadProgress) => void,
@@ -43,7 +43,7 @@ export function downloadLocalAsrModel(
 }
 
 function bytesToBase64(bytes: Uint8Array): string {
-  // 分块 btoa:整块展开进单次调用会撑爆参数上限(同 transcribe.ts)。
+  // Chunked btoa: spreading the whole buffer into one call overflows the arg limit.
   let binary = "";
   for (let i = 0; i < bytes.length; i += 0x8000) {
     binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
@@ -59,8 +59,8 @@ export async function startLocalCapture(
     for (const track of stream.getTracks()) track.stop();
   };
 
-  // 尽量让浏览器直接按 16k 采集(模型采样率);WebKit 可能忽略此选项,
-  // 故把实际 sampleRate 一并传给 Rust 兜底重采样。
+  // Prefer direct 16k capture (the model sample rate). WebKit may ignore this, so
+  // pass the actual sampleRate to Rust as a resampling fallback.
   const ctx = new AudioContext({ sampleRate: 16_000 });
   const closeCtx = () => {
     ctx.close().catch(() => {});
@@ -74,7 +74,8 @@ export async function startLocalCapture(
   }
   const source = ctx.createMediaStreamSource(stream);
   const capture = new AudioWorkletNode(ctx, "pcm-capture");
-  // 旧 WebKit 对悬空节点可能不跑图:经 0 增益接到输出兜底,不会外放。
+  // Older WebKit may not run detached nodes. Route through a zero-gain output as
+  // a fallback without playing audio.
   const mute = ctx.createGain();
   mute.gain.value = 0;
   source.connect(capture);

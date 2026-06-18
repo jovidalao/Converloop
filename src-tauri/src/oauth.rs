@@ -1,9 +1,11 @@
-//! OAuth 回调:订阅登录(Claude Pro/Max、ChatGPT Codex)的浏览器授权码,
-//! 重定向到 http://localhost:<port><path>。webview 起不了监听 socket,所以这里在
-//! Rust 侧开一次性 loopback HTTP 服务,捕获 ?code=&state=,回一张「可关闭」页面后返回。
+//! OAuth callback capture for subscription login (Claude Pro/Max, ChatGPT Codex):
+//! the browser redirects to http://localhost:<port><path>. The webview cannot
+//! listen on a socket, so Rust starts a one-shot loopback HTTP server, captures
+//! ?code=&state=, returns a "you can close this" page, then resolves.
 //!
-//! 只用 std::net + spawn_blocking(不引入 tokio 直接依赖)。整个 OAuth 流程(PKCE、
-//! 打开浏览器、token 交换/刷新)在 TS 侧;token 交换复用 llm_request 这条通用 POST。
+//! Uses only std::net + spawn_blocking, without adding a direct tokio dependency.
+//! The full OAuth flow (PKCE, opening the browser, token exchange/refresh) stays
+//! in TS; token exchange reuses the generic llm_request POST path.
 
 use std::collections::HashMap;
 use std::io::{Read, Write};
@@ -24,7 +26,7 @@ justify-content:center;height:100vh;margin:0;background:#1c1c1e;color:#f2f2f7\">
 <div style=\"text-align:center\"><h2 style=\"font-weight:600\">✓ 登录完成</h2>\
 <p style=\"opacity:.7\">已捕获授权码,可以关闭此页面回到 app。</p></div>";
 
-/// detail 可能来自回调 query 的 error 参数(攻击者可经浏览器注入),插入 HTML 前转义。
+/// detail may come from a callback query error parameter, so escape before HTML insertion.
 fn html_escape(s: &str) -> String {
     s.replace('&', "&amp;")
         .replace('<', "&lt;")
@@ -52,8 +54,8 @@ fn hex_val(b: u8) -> Option<u8> {
     }
 }
 
-/// 最小 URL 解码:%XX → 字节,+ → 空格。query 值里的 code/state 一般是 URL-safe,
-/// 但做一遍解码更稳(state 含 padding、code 偶有特殊字符时不至于错位)。
+/// Minimal URL decode: %XX -> byte, + -> space. code/state are usually URL-safe,
+/// but decoding handles padding or occasional special chars without misalignment.
 fn percent_decode(s: &str) -> String {
     let bytes = s.as_bytes();
     let mut out = Vec::with_capacity(bytes.len());
@@ -95,7 +97,7 @@ fn parse_query(query: &str) -> HashMap<String, String> {
     map
 }
 
-/// 从请求行 "GET /callback?a=b HTTP/1.1" 取 (path, query)。
+/// Extract (path, query) from a request line like "GET /callback?a=b HTTP/1.1".
 fn parse_target(line: &str) -> Option<(String, String)> {
     let mut parts = line.split_whitespace();
     let _method = parts.next()?;
@@ -106,7 +108,7 @@ fn parse_target(line: &str) -> Option<(String, String)> {
     })
 }
 
-/// 读到第一条 CRLF 为止,返回请求行(浏览器回调只看第一行就够)。
+/// Read until the first CRLF and return the request line; browser callbacks only need that line.
 fn read_request_line(stream: &mut TcpStream) -> Option<String> {
     stream
         .set_read_timeout(Some(Duration::from_secs(5)))
@@ -149,8 +151,9 @@ Content-Length: {}\r\nConnection: close\r\n\r\n{body}",
     let _ = stream.flush();
 }
 
-/// 绑 127.0.0.1:port,非阻塞轮询 accept 直到拿到匹配 path 的回调或超时。
-/// 非匹配路径(favicon 等)回 404 继续等;带 error 参数则返回 Err。
+/// Bind 127.0.0.1:port and poll nonblocking accept until a matching path arrives
+/// or the timeout expires. Non-matching paths (favicon, etc.) get 404 and keep waiting;
+/// an error query parameter returns Err.
 fn listen_once(port: u16, path: &str, timeout_secs: u64) -> Result<CallbackResult, String> {
     let addr = format!("127.0.0.1:{port}");
     let listener = std::net::TcpListener::bind(&addr)
@@ -202,8 +205,9 @@ fn listen_once(port: u16, path: &str, timeout_secs: u64) -> Result<CallbackResul
     }
 }
 
-/// 一次性等待 OAuth 浏览器回调。前端在打开授权 URL 前先调用本命令开始监听,
-/// 用户在浏览器登录后被重定向回 127.0.0.1:<port><path>,这里捕获 code/state 返回。
+/// Wait once for an OAuth browser callback. The frontend starts this listener
+/// before opening the auth URL; after browser login redirects to
+/// 127.0.0.1:<port><path>, this captures code/state.
 #[tauri::command]
 pub async fn oauth_listen(
     port: u16,
@@ -215,9 +219,9 @@ pub async fn oauth_listen(
         .map_err(|e| e.to_string())?
 }
 
-/// OAuth token endpoint 的 application/x-www-form-urlencoded POST。
-/// OpenAI(auth.openai.com)要求表单编码,llm_request 那条是 JSON,故单列。
-/// 成功返回响应体文本,失败 "HTTP <code>: <body>"(含错误体便于排查)。
+/// application/x-www-form-urlencoded POST for OAuth token endpoints.
+/// OpenAI (auth.openai.com) requires form encoding, while llm_request is JSON.
+/// Success returns the response body; failure returns "HTTP <code>: <body>" for debugging.
 #[tauri::command]
 pub async fn oauth_token_post(
     url: String,

@@ -1,9 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
 import { getSttApiKey, loadSttConfig, MissingSttApiKeyError } from "./config";
 
-// OpenAI 兼容引擎的批量转写(录完整段再上传)。HTTP 走 Rust(multipart,
-// 绕 webview CORS),与 LLM 调用同理;不固定 language,靠端点自检——母语/
-// 混说输入是核心链路。Soniox 走实时流式,见 realtime.ts。
+// Batch transcription for OpenAI-compatible engines (record the whole utterance,
+// then upload). HTTP goes through Rust multipart to bypass webview CORS, like LLM
+// calls. Do not pin a language; native/mixed-language input is core, so let the
+// endpoint detect it. Soniox uses real-time streaming; see realtime.ts.
 export async function transcribeAudio(
   blob: Blob,
   mime: string,

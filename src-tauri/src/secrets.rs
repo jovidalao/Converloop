@@ -1,13 +1,15 @@
-//! BYOK 密钥:应用自管的设备绑定加密存储(取代 OS keychain)。
+//! BYOK secrets: app-managed device-bound encrypted storage, replacing OS keychain use.
 //!
-//! 无主密码 → 混淆级:加密密钥由【本地随机 keyfile】+【机器标识】派生(SHA-256),
-//! 密文(XChaCha20-Poly1305)存 secrets.json,与 sqlite/档案同目录。
-//! - 拷走 secrets.json 到别的机器解不开(机器标识不同)→ 设备绑定。
-//! - 挡得住:误传 git / 同步盘、随手翻看明文。
-//! - 挡不住:能读你磁盘(keyfile + 机器标识都在本机)的攻击者 —— 这是"免密码"的物理上限。
-//!   要真加密需主密码,见 docs/architecture.md。
+//! No master password means obfuscation-grade protection: the encryption key is
+//! derived with SHA-256 from a local random keyfile plus a machine identifier.
+//! Ciphertext (XChaCha20-Poly1305) lives in secrets.json beside SQLite/profile data.
+//! - Copying secrets.json to another machine will not decrypt because the machine id differs.
+//! - This protects against accidental git/cloud sync leaks and casual plaintext browsing.
+//! - It does not protect against an attacker who can read this disk; the keyfile
+//!   and machine id both live here. Real encryption needs a master password.
+//!   See docs/design.md.
 //!
-//! Tauri 命令名沿用 set/get/delete_secret,前端无需改动。
+//! Tauri command names stay set/get/delete_secret so the frontend API is unchanged.
 
 use std::collections::HashMap;
 use std::fs;
@@ -21,7 +23,7 @@ use rand::{rngs::OsRng, RngCore};
 use sha2::{Digest, Sha256};
 use tauri::Manager;
 
-const KEY_FILE: &str = "secret.key"; // 32 字节随机,0600
+const KEY_FILE: &str = "secret.key"; // 32 random bytes, 0600
 const STORE_FILE: &str = "secrets.json"; // account -> base64(nonce[24] || ciphertext)
 const NONCE_LEN: usize = 24;
 
@@ -31,9 +33,9 @@ fn config_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     Ok(dir)
 }
 
-/// 写文件并(unix 下)收紧到 0600,避免同机其他用户读取。
-/// 新文件直接以 0600 创建(而不是创建后再 chmod,避免短暂的 0644 窗口);
-/// set_permissions 仍保留,用于收紧旧版本以默认权限创建的存量文件。
+/// Write a file and tighten it to 0600 on Unix to avoid reads by other local users.
+/// New files are created directly as 0600 instead of chmod-after-create to avoid a
+/// brief 0644 window; set_permissions remains to tighten files created by older builds.
 fn write_private(path: &Path, bytes: &[u8]) -> Result<(), String> {
     let mut opts = fs::OpenOptions::new();
     opts.write(true).create(true).truncate(true);
@@ -54,7 +56,7 @@ fn write_private(path: &Path, bytes: &[u8]) -> Result<(), String> {
     Ok(())
 }
 
-/// 读现有 keyfile;没有就生成 32 字节随机并写入。
+/// Read the existing keyfile, or create a fresh 32-byte random keyfile.
 fn load_or_create_keyfile(app: &tauri::AppHandle) -> Result<[u8; 32], String> {
     let path = config_dir(app)?.join(KEY_FILE);
     if let Ok(bytes) = fs::read(&path) {
@@ -70,8 +72,9 @@ fn load_or_create_keyfile(app: &tauri::AppHandle) -> Result<[u8; 32], String> {
     Ok(k)
 }
 
-/// 派生 cipher:key = SHA-256(keyfile || machine_id || domain)。
-/// machine_id 取不到时降级为空串(仍可用,只是少了设备绑定)。
+/// Derive cipher key = SHA-256(keyfile || machine_id || domain).
+/// If machine_id is unavailable, fall back to an empty string; it still works,
+/// just without device binding.
 fn cipher(app: &tauri::AppHandle) -> Result<XChaCha20Poly1305, String> {
     let keyfile = load_or_create_keyfile(app)?;
     let machine = machine_uid::get().unwrap_or_default();

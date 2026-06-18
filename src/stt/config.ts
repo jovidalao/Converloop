@@ -1,5 +1,6 @@
 import { staticT } from "../i18n";
 import { getSecret } from "../keychain";
+import { languageToBcp47 } from "../lib/language";
 
 // Voice input (speech-to-text). BYOK, same trust model as the LLM providers.
 // Four engines:
@@ -11,13 +12,15 @@ import { getSecret } from "../keychain";
 //    (no key, no network after download). Batch only — no streaming. 25 European
 //    languages, NO Chinese/Japanese/Korean. See stt/local.ts + src-tauri/stt_local.rs.
 //  - qwen3: Qwen3-ASR 0.6B int8, same on-device sherpa-onnx path as parakeet.
-//    Batch only. 30+ languages including Chinese/Cantonese — the local CJK pick.
+//    Batch only. Good local pick for Chinese/Cantonese; Japanese/Korean coverage is
+//    not claimed until verified with downloaded model tests.
 // The key-based engines each have their own encrypted key account so switching
 // never loses keys; the local engines have no key. sttProvider can also be null:
 // voice input then stays disabled until the user chooses one of these engines.
 export const STT_PROVIDERS = ["soniox", "openai", "parakeet", "qwen3"] as const;
 export type SttProvider = (typeof STT_PROVIDERS)[number];
 export type CloudSttProvider = Extract<SttProvider, "soniox" | "openai">;
+export type SttLanguageSupport = "supported" | "unsupported" | "unverified";
 
 export const SONIOX_STT_KEY_ACCOUNT = "soniox_stt_api_key";
 export const OPENAI_STT_KEY_ACCOUNT = "stt_api_key";
@@ -25,6 +28,29 @@ export const STT_CONFIG_CHANGED_EVENT = "lang-agent:stt-config-changed";
 
 function isSttProvider(value: unknown): value is SttProvider {
   return STT_PROVIDERS.includes(value as SttProvider);
+}
+
+// Cloud engines auto-detect any language; parakeet is European-only with no Chinese/Japanese/Korean;
+// qwen3 is not yet verified for Japanese/Korean. Unknown custom languages return supported so we don't nag
+// about something we can't judge.
+export function sttLanguageSupport(
+  provider: SttProvider,
+  targetLanguage: string,
+): SttLanguageSupport {
+  const tag = languageToBcp47(targetLanguage);
+  if (!tag) return "supported";
+  if (provider === "parakeet")
+    return ["zh", "ja", "ko"].includes(tag) ? "unsupported" : "supported";
+  if (provider === "qwen3")
+    return ["ja", "ko"].includes(tag) ? "unverified" : "supported";
+  return "supported";
+}
+
+export function sttSupportsLanguage(
+  provider: SttProvider,
+  targetLanguage: string,
+): boolean {
+  return sttLanguageSupport(provider, targetLanguage) === "supported";
 }
 
 export function sttKeyAccount(provider: CloudSttProvider): string {
@@ -35,10 +61,10 @@ export function sttKeyAccount(provider: CloudSttProvider): string {
 
 export interface SttConfig {
   sttProvider: SttProvider | null;
-  // —— Soniox ——
+  // Soniox
   /** Soniox real-time (streaming) STT model. */
   sonioxModel: string;
-  // —— OpenAI-compatible ——
+  // OpenAI-compatible
   baseUrl: string;
   model: string;
 }
@@ -57,7 +83,8 @@ export function loadSttConfig(): SttConfig {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return { ...DEFAULT_STT_CONFIG };
     const stored = JSON.parse(raw) as Partial<SttConfig>;
-    // 迁移:旧版本存的是异步模型(stt-async-*),流式接口只接受 rt 模型。
+    // Migration: old builds stored async models (stt-async-*), while the
+    // streaming API only accepts rt models.
     if (stored.sonioxModel?.startsWith("stt-async")) delete stored.sonioxModel;
     const next = { ...DEFAULT_STT_CONFIG, ...stored };
     if (!isSttProvider(next.sttProvider)) next.sttProvider = null;
@@ -85,28 +112,10 @@ export class MissingSttProviderError extends Error {
   }
 }
 
-// ISO-639-1 hints for Soniox language_hints, derived from the study-language
-// names in app config (the learner speaks either the target or their native
-// language — hinting both keeps mixed input accurate).
-const LANGUAGE_HINTS: Record<string, string> = {
-  Chinese: "zh",
-  English: "en",
-  Japanese: "ja",
-  Korean: "ko",
-  Spanish: "es",
-  French: "fr",
-  German: "de",
-  Portuguese: "pt",
-  Russian: "ru",
-  Italian: "it",
-};
-
 export function languageHintsFor(languages: string[]): string[] {
   return [
     ...new Set(
-      languages
-        .map((name) => LANGUAGE_HINTS[name])
-        .filter((code): code is string => !!code),
+      languages.map(languageToBcp47).filter((code): code is string => !!code),
     ),
   ];
 }

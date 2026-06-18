@@ -1,13 +1,16 @@
-//! 免费微软 Edge「朗读」TTS。Edge 的 read-aloud 是 WebSocket 服务(edge-tts 逆向出的协议),
-//! 不是 HTTP——所以走独立命令,而不是 llm.rs 的 POST。
+//! Free Microsoft Edge Read Aloud TTS. Edge read-aloud is a WebSocket service
+//! reverse-engineered by edge-tts, not HTTP, so it uses a dedicated command
+//! instead of llm.rs POST.
 //!
-//! 为什么必须在 Rust 而不是 webview 里连:服务用 `Origin` 头校验来源(必须是固定的
-//! chrome-extension origin),浏览器禁止 JS 改写 WebSocket 的 Origin,从 webview 连会被拒。
-//! Rust 侧可以自由设头,且与「网络走 Rust」的架构一致。
+//! This must connect from Rust, not the webview: the service validates the Origin
+//! header against a fixed chrome-extension origin, and browsers forbid JS from
+//! rewriting WebSocket Origin. Rust can set it, matching the "network through Rust"
+//! architecture.
 //!
-//! 无需 API key。输出用 MP3(`audio-24khz-48kbitrate-mono-mp3`)——这是 edge-tts 唯一在用、
-//! readaloud 端点确认接受的格式(RIFF/WAV 会被该端点拒绝、返回 0 音频)。前端播放按内容
-//! 嗅探 MIME(playback.ts),mp3/wav 都能放。
+//! No API key. Output uses MP3 (`audio-24khz-48kbitrate-mono-mp3`), the format
+//! used by edge-tts and accepted by the readaloud endpoint. RIFF/WAV is rejected
+//! by that endpoint and returns empty audio. Frontend playback sniffs MIME in
+//! playback.ts, so mp3/wav both work.
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -20,26 +23,27 @@ use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::http::HeaderValue;
 use tokio_tungstenite::tungstenite::Message;
 
-// edge-tts 校验过的常量(constants.py)。SEC_MS_GEC_VERSION / UA 跟随近期 Edge 版本。
+// Constants verified by edge-tts (constants.py). SEC_MS_GEC_VERSION / UA track a recent Edge build.
 const WSS_URL: &str = "wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1?TrustedClientToken=6A5AA1D4EAFF4E9FB37E23D68491D6F4";
 const TRUSTED_CLIENT_TOKEN: &str = "6A5AA1D4EAFF4E9FB37E23D68491D6F4";
 const SEC_MS_GEC_VERSION: &str = "1-143.0.3650.75";
 const ORIGIN: &str = "chrome-extension://jdiccldimpdaibmpdkjnbmckianbfold";
 const USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0";
-// MP3 输出:edge-tts 在用、readaloud 端点确认接受的格式。
+// MP3 output: the format edge-tts uses and the readaloud endpoint accepts.
 const OUTPUT_FORMAT: &str = "audio-24khz-48kbitrate-mono-mp3";
 
-/// Sec-MS-GEC:Edge 的 DRM 令牌,缺了会 403。逐位复刻 edge-tts(含其 f64 运算),
-/// 这样 hash 与服务端一致。ticks 取「当前 unix 秒 + 1601~1970 偏移」,向下取整到 5 分钟,
-/// 再换成 100ns 单位(* 1e9/100 = 1e7),拼 trusted token 后 SHA-256 取大写 hex。
+/// Sec-MS-GEC: Edge DRM token; missing it yields 403. Mirrors edge-tts exactly,
+/// including f64 math, so the hash matches the service. ticks = current Unix
+/// seconds + 1601-to-1970 offset, floored to 5 minutes, converted to 100ns units
+/// (* 1e9 / 100 = 1e7), then SHA-256(trusted token) as uppercase hex.
 fn sec_ms_gec() -> String {
     let unix = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs() as f64;
-    let mut ticks = unix + 11_644_473_600.0; // → Windows 纪元(1601)
-    ticks -= ticks % 300.0; // 向下取整到 5 分钟
-    ticks *= 1e7; // 100ns 单位(f64,与 Python 同样有损但确定)
+    let mut ticks = unix + 11_644_473_600.0; // Windows epoch (1601)
+    ticks -= ticks % 300.0; // Floor to 5 minutes.
+    ticks *= 1e7; // 100ns units (f64, lossy like Python but deterministic).
     let to_hash = format!("{:.0}{}", ticks, TRUSTED_CLIENT_TOKEN);
     let digest = Sha256::digest(to_hash.as_bytes());
     let mut out = String::with_capacity(64);
@@ -49,7 +53,7 @@ fn sec_ms_gec() -> String {
     out
 }
 
-/// 32 位十六进制(uuid4().hex 等价物),用于 ConnectionId / X-RequestId。
+/// 32 hex chars, equivalent to uuid4().hex, for ConnectionId / X-RequestId.
 fn rand_hex() -> String {
     let mut b = [0u8; 16];
     OsRng.fill_bytes(&mut b);
@@ -68,8 +72,9 @@ fn xml_escape(s: &str) -> String {
         .replace('\'', "&apos;")
 }
 
-/// JS `Date().toString()` 形态的时间戳;edge-tts 在 speech.config / ssml 头里带它。
-/// 服务端不严格校验内容,但要存在。用 Hinnant civil-from-days 自算,免引日期库、且不写死过期值。
+/// JS `Date().toString()`-style timestamp; edge-tts sends it in speech.config / SSML headers.
+/// The server does not strictly validate the value, but it must exist. Hinnant
+/// civil-from-days avoids a date crate and avoids hardcoded stale values.
 fn date_to_string() -> String {
     let secs = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -89,7 +94,7 @@ fn date_to_string() -> String {
     let d = doy - (153 * mp + 2) / 5 + 1; // [1, 31]
     let m = if mp < 10 { mp + 3 } else { mp - 9 }; // [1, 12]
     let year = if m <= 2 { y + 1 } else { y };
-    let wd = (days.rem_euclid(7) + 4) % 7; // 1970-01-01 = 周四(4)
+    let wd = (days.rem_euclid(7) + 4) % 7; // 1970-01-01 = Thu (4)
 
     const WD: [&str; 7] = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
     const MO: [&str; 12] = [
@@ -118,10 +123,22 @@ fn speech_config_message(ts: &str) -> String {
     )
 }
 
+// The locale for xml:lang is the first two segments of the voice name (e.g. "es-ES-ElviraNeural" -> "es-ES").
+// Edge keys synthesis off the voice name, but a matching xml:lang avoids any locale ambiguity for non-English voices.
+fn voice_locale(voice: &str) -> String {
+    let parts: Vec<&str> = voice.splitn(3, '-').collect();
+    if parts.len() >= 2 {
+        format!("{}-{}", parts[0], parts[1])
+    } else {
+        "en-US".to_string()
+    }
+}
+
 fn ssml(text: &str, voice: &str, rate: &str, pitch: &str) -> String {
     format!(
-        "<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='en-US'>\
+        "<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='{}'>\
          <voice name='{}'><prosody pitch='{}' rate='{}' volume='+0%'>{}</prosody></voice></speak>",
+        voice_locale(voice),
         voice,
         pitch,
         rate,
@@ -143,8 +160,8 @@ fn contains_subslice(haystack: &[u8], needle: &[u8]) -> bool {
     needle.len() <= haystack.len() && haystack.windows(needle.len()).any(|w| w == needle)
 }
 
-/// 从一条二进制帧里抽音频:前 2 字节大端 = 头长度;头里含 `Path:audio` 才是音频帧,
-/// 负载是头之后的全部字节。
+/// Extract audio from a binary frame: first 2 bytes big-endian = header length.
+/// Frames with `Path:audio` in the header carry audio; payload is everything after the header.
 fn extract_audio(data: &[u8]) -> Option<&[u8]> {
     if data.len() < 2 {
         return None;
@@ -161,7 +178,8 @@ fn extract_audio(data: &[u8]) -> Option<&[u8]> {
     }
 }
 
-/// 合成整段语音并返回 base64(WAV)。一次性(TTS 本就一次合成整条回复),与 MiMo 路径同形。
+/// Synthesize the whole utterance and return base64 audio. One-shot by design,
+/// matching the MiMo path.
 #[tauri::command]
 pub async fn edge_tts_synthesize(
     text: String,
@@ -180,7 +198,8 @@ pub async fn edge_tts_synthesize(
         rand_hex()
     );
 
-    // into_client_request 已填好 Host / Upgrade / Sec-WebSocket-Key / Version;只补 Edge 要求的头。
+    // into_client_request already fills Host / Upgrade / Sec-WebSocket-Key / Version;
+    // only add Edge-specific headers.
     let mut request = url
         .into_client_request()
         .map_err(|e| format!("构造请求失败:{e}"))?;
@@ -209,7 +228,7 @@ pub async fn edge_tts_synthesize(
     .map_err(|e| format!("发送 SSML 失败:{e}"))?;
 
     let mut audio: Vec<u8> = Vec::new();
-    // 收集服务端文本/关闭帧,音频为空时回报真实原因(格式被拒 / 语音名无效等)。
+    // Collect server text/close frames so empty audio can report the real cause.
     let mut diagnostics: Vec<String> = Vec::new();
     while let Some(item) = ws.next().await {
         let msg = item.map_err(|e| format!("接收失败:{e}"))?;
@@ -220,7 +239,7 @@ pub async fn edge_tts_synthesize(
                 }
             }
             Message::Text(t) => {
-                // turn.start / response / audio.metadata 忽略;turn.end = 合成结束。
+                // Ignore turn.start / response / audio.metadata; turn.end means synthesis is done.
                 let s = t.to_string();
                 if s.contains("Path:turn.end") {
                     break;
@@ -277,6 +296,14 @@ mod tests {
         assert!(s.contains("name='en-US-EmmaMultilingualNeural'"));
         assert!(s.contains("rate='+0%'"));
         assert!(s.contains("Tom &amp; Jerry"));
+    }
+
+    #[test]
+    fn ssml_lang_follows_voice_locale() {
+        let s = ssml("Hola", "es-ES-ElviraNeural", "+0%", "+0Hz");
+        assert!(s.contains("xml:lang='es-ES'"));
+        assert_eq!(voice_locale("zh-CN-XiaoxiaoNeural"), "zh-CN");
+        assert_eq!(voice_locale("weird"), "en-US");
     }
 
     #[test]
