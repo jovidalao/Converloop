@@ -41,6 +41,8 @@ export const en = {
       "No speech-to-text key configured. Add one in Settings → Voice input.",
     ttsNoKey:
       "Please configure the MiMo API key in Settings → Text-to-Speech first.",
+    pronunciationNoKey:
+      "Pronunciation feedback needs a {provider} API key. Add one under Settings → Model providers.",
     requestAuth:
       "Provider authentication failed. Check the API key or sign in again.",
     requestQuota:
@@ -54,16 +56,20 @@ export const en = {
     play: "Read aloud",
     stop: "Stop reading",
   },
+  pronunciation: {
+    coachTitle: "Pronunciation",
+    coachClean: "Sounds clear — your pronunciation matched the target well.",
+  },
   stt: {
     startRecording: "Voice input (speak, then click again to finish)",
     stopRecording: "Finish voice input (Esc to cancel)",
     noProvider:
       "Voice input is disabled until you choose an STT provider in Settings → Voice input.",
     micDenied:
-      "Microphone unavailable — check the system microphone permission for lang-agent.",
+      "Microphone unavailable — check the system microphone permission for Converloop.",
   },
   onboarding: {
-    title: "Welcome to lang-agent",
+    title: "Welcome to Converloop",
     subtitleLanguages:
       "Tell the coach who's learning what — you can change any of this later in Settings.",
     subtitleProvider:
@@ -100,14 +106,13 @@ export const en = {
     how: "Ask how to say something in the target language",
     howHint: "<what you want to say>",
     recap: "Recap this conversation: takeaways and what to review",
-    harder:
-      "Increase difficulty: branch into a harder version of the current conversation",
-    easier: "Decrease difficulty: branch into an easier version",
-    swap: "Swap roles: branch into a role-reversed version",
+    harder: "Make it harder: start a harder version from this chat",
+    easier: "Make it easier: start a simpler version from this chat",
+    swap: "Swap roles: start a role-reversed version",
     scene: "Change scene: keep the practice goal, switch the setting",
-    restart: "Restart: keep the setup, open a blank branch for re-practice",
+    restart: "Practice it again: keep the setup, start fresh",
     nextDay:
-      "Continue next day: branch into a new-day continuation of the current story",
+      "Continue next day: start a new-day continuation of the current story",
   },
   turnActivity: {
     thinking: "Thinking…",
@@ -292,7 +297,7 @@ export const en = {
       "A share package only contains the prompt, permissions, and lesson structure — not your learning data, conversation history, or keys.",
     export: "Export",
     packagePlaceholder:
-      "Paste lang-agent.package JSON. Exported packages also appear here.",
+      "Paste converloop.package JSON. Old lang-agent.package files still import.",
     packageSummary: "{summary} · Reads: {reads} · Writes: {writes}",
     importing: "Importing…",
     importPackage: "Import package",
@@ -333,6 +338,15 @@ export const en = {
       "Active retrieval: micro-tasks that make you produce your due-for-review items",
     customLearning: "Practice Center",
     customLearningTooltip: "Start built-in drills or browse focused lessons",
+    pronunciationPractice: "Pronunciation scoring",
+    pronunciationPracticeTooltip:
+      "Start a read-aloud drill and get pronunciation feedback after speaking",
+    listening: "Listening practice",
+    listeningTooltip:
+      "Play the lines from your past conversations in order, on repeat — for ear training",
+    dictationReview: "Sentence dictation",
+    dictationReviewTooltip:
+      "Replay sentences from your past conversations and type what you hear — served from cache, offline",
     group: {
       pinned: "Pinned",
       today: "Today",
@@ -345,17 +359,19 @@ export const en = {
     settings: "Settings",
     settingsTooltip: "Settings {shortcut}",
     back: "Back",
-    deriveNewConversation: "Derive new conversation",
+    deriveNewConversation: "Start from this chat",
+    deriveMenuTitle: "Practice another way",
     resizeTooltip: "Drag to resize",
     sectionSettings: "Settings",
     sectionProfileDatabase: "Profile database",
     general: "General",
-    customization: "Customization",
+    customization: "AI Preferences",
     llmProviders: "LLM providers",
     sttProviders: "Voice input",
     ttsProviders: "TTS providers",
     slashCommands: "Slash commands",
     designNotes: "Design notes",
+    about: "About",
     data: "Data",
     capabilities: "Capabilities",
     logs: "Logs",
@@ -413,7 +429,7 @@ export const en = {
     copySpec: "Copy AI authoring guide",
     specCopied: "Copied",
     documentPlaceholder:
-      "Paste or write a lang-agent/drill@1 Markdown document…",
+      "Paste or write a converloop/drill@1 Markdown document…",
     errorsTitle: "The document failed validation",
     errorsHint:
       "Tip: paste these errors back to the AI that wrote the document and ask it to fix them.",
@@ -444,6 +460,10 @@ export const en = {
     sttOpenai: "OpenAI compatible",
     sttParakeet: "Parakeet V3",
     sttQwen3: "Qwen3-ASR",
+    ttsLangWarning:
+      "This voice can't speak {language}. Switch to Microsoft Edge in TTS settings.",
+    sttLangWarning:
+      "This engine can't transcribe {language}. Use a cloud engine (Soniox / OpenAI) or Qwen3.",
   },
   dictation: {
     startTitle: "Dictation",
@@ -488,23 +508,86 @@ export const en = {
     previewHint: "Review this lesson before starting a new session.",
     startLesson: "Start lesson",
   },
+  listening: {
+    title: "Listening practice",
+    settingsLabel: "Playback settings",
+    selectConversations: "Conversations",
+    selectAll: "All",
+    clear: "Clear",
+    sentenceCount: "{n} lines",
+    noSelection: "Pick conversations to start listening",
+    noItems: "The selected conversations have no playable lines yet.",
+    noSelectionHint:
+      "Their AI replies and the polished version of your own lines play in order.",
+    play: "Play",
+    pause: "Pause",
+    prev: "Previous",
+    next: "Next",
+    seek: "Seek within the current line",
+    repeatLabel: "Repeat",
+    repeatTimes: "{n}×",
+    speedLabel: "Speed",
+    gapLabel: "Gap",
+    gapOff: "None",
+    gapSeconds: "{n}s",
+    loopLabel: "Loop",
+    reveal: "Show text",
+    hide: "Hide text",
+    sideUser: "You",
+    sideAi: "Reply",
+    userVoice: "Your lines",
+    aiVoice: "AI lines",
+    voiceDefault: "Default (global)",
+    shortcutHint: "Space play/pause · ← → previous/next",
+  },
+  dictationReview: {
+    title: "Sentence dictation",
+    modeAudio: "By ear",
+    modeMeaning: "By meaning",
+    typeAi: "AI replies",
+    typeUser: "Your polished lines",
+    autoplay: "Autoplay",
+    noSelection: "Pick conversations to start dictation",
+    noSelectionHint:
+      "Their AI replies and the polished version of your own lines are replayed from cache — listen and type each one.",
+    noItems:
+      "No matching lines in the selected conversations — try enabling another type.",
+    settingsLabel: "Dictation settings",
+    contentLabel: "Lines to dictate",
+    inputPlaceholder: "Type what you hear…",
+    inputPlaceholderMeaning: "Write the original sentence…",
+    slow: "Slow",
+    check: "Check",
+    next: "Next",
+    prev: "Previous",
+    skip: "Skip",
+    correct: "All correct",
+    missedWords: "Missed {n} word(s)",
+    yourAnswer: "Your answer",
+    playPronunciation: "Play pronunciation",
+    submit: "Submit",
+    showAnswer: "Show answer",
+    translateNeedsLlm:
+      "Showing the meaning needs an LLM provider — set one up in settings.",
+    translateFailed: "Couldn't translate this line — try again.",
+  },
   practiceStats: {
-    overview: "Overview",
     trend: "Trend",
-    mastery: "Knowledge points",
-    sentencesToday: "Today",
+    activity: "Activity",
+    goalCaption: "Today's goal progress",
+    trendCaption: "Sentences/day · last {n} days",
+    activityCaption: "Practice · last {n} days",
     sentencesTotal: "Total sentences",
     activeDays: "Active days",
-    currentStreak: "Current streak",
-    mastered: "Mastered",
-    learning: "Learning",
-    struggling: "Struggling",
     days: "{n}d",
+    sentencesUnit: "{n} sentences",
     dayTooltip: "{count} sentences · {date}",
-    progressSoFar: "{n} sentences practiced today — keep it going.",
-    progressNone: "Nothing yet today. Ten focused minutes is plenty.",
-    trendEmpty: "No practice in the last 14 days.",
-    masteryEmpty: "No knowledge points tracked yet.",
+    goalMet: "Daily goal reached — anything more is a bonus.",
+    goalRemaining: "{n} more to reach today's goal.",
+    goalNone: "Nothing yet today — your goal of {goal} is waiting.",
+    streakBest: "Best {n}d",
+    streakAtRisk: "Practice today to keep your {n}-day streak.",
+    streakStart: "Start a streak today.",
   },
   lessonReview: {
     reviewButton: "Review session & record mastery",
@@ -533,15 +616,19 @@ export const en = {
     shadowing: "Read aloud",
     reviewDrill: "Weak-spot drill",
     search: "Search",
-    deriveNewConversation: "Derive new conversation",
+    deriveNewConversation: "Start from this chat",
     deriving: "Generating…",
-    deriveTooltip: "Generate a new conversation context from the current chat",
+    deriveTooltip: "Start a new conversation based on the current chat",
     showCoach: "Show coach panel",
     hideCoach: "Hide coach panel",
     deriveFailed: "Failed to derive conversation: {error}",
     customLearningFallback: "Practice Center",
     smallWindow: "Small window",
     exitSmallWindow: "Exit small window",
+    windowMinimize: "Minimize",
+    windowMaximize: "Maximize",
+    windowRestore: "Restore",
+    windowClose: "Close",
   },
   actions: {
     "new-chat": "New chat",
@@ -561,6 +648,8 @@ export const en = {
     "new-line": "New line",
     "stop-generating": "Stop generating",
     dismiss: "Close menu or dialog",
+    "dictation-play": "Dictation: play pronunciation",
+    "dictation-reveal": "Dictation: show answer",
   },
   shortcutsDialog: {
     ariaLabel: "Keyboard shortcuts",
@@ -573,17 +662,23 @@ export const en = {
     mastery: "Learning data",
     learning: "Create lesson",
     customLearning: "Practice Center",
+    listening: "Listening practice",
+    dictationReview: "Sentence dictation",
     design: "Design notes",
     agents: "Capabilities",
     logs: "Logs",
     general: "General settings",
-    customize: "Customization",
+    customize: "AI Preferences",
     llm: "LLM providers",
     stt: "Voice input",
     tts: "TTS providers",
     commands: "Slash commands",
   },
   settings: {
+    customize: {
+      toCapabilities:
+        "Want to add a button, background analyzer, or reply rewrite? Go to Capabilities →",
+    },
     general: {
       title: "General settings",
       description:
@@ -594,6 +689,7 @@ export const en = {
       nativeLanguage: "Native language",
       targetLanguage: "Target language",
       level: "Level",
+      dailyGoal: "Daily goal",
       autoBilingual:
         "Auto-open bilingual reading for AI replies (sentence by sentence)",
       actionLabels: "Show text labels on chat action buttons",
@@ -618,12 +714,12 @@ export const en = {
     shortcuts: {
       title: "Keyboard shortcuts",
       description:
-        "Click Edit, then press a new key combination. A modifier (⌘, ⌃, or ⌥) is required; Esc cancels.",
+        "Click Edit, then press a new key combination. A modifier key is required; Esc cancels.",
       edit: "Edit",
       recording: "Press keys…",
       reset: "Reset",
       resetAll: "Reset all",
-      needModifier: "Add a modifier key (⌘, ⌃, or ⌥).",
+      needModifier: "Add a modifier key (Cmd/Ctrl or Alt).",
       conflict: "Already used by “{action}”.",
     },
     themes: { light: "Light", dark: "Dark", system: "System" },
@@ -660,7 +756,7 @@ export const en = {
       saveKey: "Save key",
       clear: "Clear",
       testing: "Testing…",
-      testConnection: "Test connection (streaming + non-streaming)",
+      testConnection: "Test connection",
       restorePreset: "Restore preset",
       statusSignedIn: "Signed in · subscription token",
       statusSignedOut: "Not signed in · browser subscription login required",
@@ -673,8 +769,7 @@ export const en = {
       loggedOut: "Signed out; token cleared.",
       noSubscription: "This provider doesn't support subscription login yet.",
       testNoCredential: "No API key / not signed in yet.",
-      testOk:
-        '✓ Connection OK — non-streaming: "{sample}" | streaming received {count} chars',
+      testOk: '✓ Connection OK — model replied: "{sample}"',
       modelAdded: "“{model}” added to the model list.",
       testFailed: "✗ Failed: {error}",
       subscriptionLogin: "Subscription login {state}",
@@ -710,6 +805,12 @@ export const en = {
       noProviderSelected:
         "No STT provider is selected. The chat microphone button will explain how to set one up when clicked.",
       disableVoiceInput: "Disable voice input",
+      onlineGroup: "Online",
+      onlineGroupHint:
+        "Requires an API key and network — transcription runs in the cloud.",
+      localGroup: "On-device",
+      localGroupHint:
+        "Runs offline on this machine — no key, private, after a one-time model download.",
       sonioxTitle: "Soniox (multilingual · recommended)",
       sonioxDescription:
         "Uses Soniox real-time streaming transcription — words appear in the input box as you speak. Language hints come from your native and target languages, while mixed-language input can still be detected automatically.",
@@ -727,7 +828,7 @@ export const en = {
       parakeetDescription:
         "Runs fully on this device — no API key, no network once downloaded. Record-then-transcribe (no live streaming). Best for fast, private transcription when learning a European language.",
       parakeetLangNote:
-        "Supports 25 European languages only — no Chinese, Japanese, or Korean. For those, use Soniox.",
+        "Supports 25 European languages only — no Chinese, Japanese, or Korean. For Chinese, use Qwen3-ASR or a cloud STT provider; for Japanese/Korean, use Soniox or OpenAI-compatible STT.",
       parakeetModelLabel: "Model (~640 MB, downloaded once)",
       parakeetModelHint:
         "Downloaded from the official sherpa-onnx release to your app data folder. Kept across restarts; not included in backups.",
@@ -738,18 +839,38 @@ export const en = {
       parakeetNotDownloaded: "Not downloaded",
       qwen3Title: "Qwen3-ASR (on-device · no key)",
       qwen3Description:
-        "Runs fully on this device — no API key, no network once downloaded. Record-then-transcribe (no live streaming). Supports 30+ languages including Chinese, English, and Cantonese — the local pick for CJK.",
+        "Runs fully on this device — no API key, no network once downloaded. Record-then-transcribe (no live streaming). Good local pick for Chinese/Cantonese; Japanese/Korean coverage is not claimed until verified with downloaded model tests.",
       qwen3ModelLabel: "Model (~1 GB, downloaded once)",
       keySaved: "STT API key encrypted and saved locally.",
       keyCleared: "STT API key cleared from local storage.",
+      pronunciationGroup: "Pronunciation feedback",
+      pronunciationGroupHint:
+        "After a voice answer, an audio-native model grades how you said it — sounds, stress, intonation — and posts a note to the coach panel. Best with shadowing drills.",
+      pronunciationToggle: "AI pronunciation feedback on voice answers",
+      pronunciationProvider: "Assessment provider",
+      pronunciationModel: "Audio model",
+      pronunciationCustomModel: "Custom {label} model…",
+      pronunciationCustomModelId: "Custom audio model ID",
+      pronunciationModelId: "Model ID: {id}",
+      pronunciationModelHint:
+        "Choose a model that accepts audio input. Gemini 3.5 Flash is the recommended Gemini default; OpenAI audio models also work here.",
+      pronunciationKeyNote:
+        "Uses your {provider} key and base URL from Model providers — no separate key needed. Add it there first if you haven't.",
     },
     tts: {
       title: "TTS providers",
       description:
         "The little speaker next to AI replies, corrections, and more-natural sentences in chat triggers speech synthesis. Identical sentences cache their audio to avoid repeat requests.",
       cacheCount: " {n} item(s) currently cached.",
-      autoSpeak:
-        "Auto-read AI replies (you can still tap the speaker to read manually after turning this off)",
+      autoSpeak: "Auto-read AI replies",
+      autoSpeakHint:
+        "You can still tap the speaker to read manually after turning this off.",
+      autoSpeakNatural: "Auto-read the more natural version",
+      autoSpeakNaturalHint:
+        "After correction finishes, read the tutor's more natural version of your sentence.",
+      autoSpeakInterval: "Delay between auto-read items (seconds)",
+      autoSpeakIntervalHint:
+        "When both auto-read options are on, wait this long after the AI reply finishes.",
       mimoTitle: "MiMo (neural voice · API key required)",
       edgeTitle: "Microsoft Edge (free · no key needed)",
       edgeStatus: "Free to use · no API key needed",
@@ -825,10 +946,12 @@ export const en = {
     regenerateReply: "Regenerate reply",
     jumpToLatest: "Jump to latest",
     stopGenerating: "Stop generating",
+    readingGuideTitle: "Show pinyin / furigana above target text",
+    readingGuide: "Reading guide",
     bilingualTitle: "Target / native language sentence by sentence",
     bilingualReading: "Bilingual reading",
     btwLabel: "By the way · not in context",
-    derivedContextLabel: "Conversation context derived by Agent",
+    derivedContextLabel: "New conversation context prepared by Agent",
     context: {
       scenario: "Scenario",
       userRole: "Your role",
@@ -862,7 +985,9 @@ export const en = {
       "Say it again — express the same idea once more, using what the correction showed you. No peeking!",
     redoPlaceholder: "Say it again, the corrected way…",
     topicStartFailed: "Failed to start the conversation",
-    derivedBadge: "Derived",
+    derivedBadge: "New version",
+    deriveMenuButton: "Start from this chat",
+    deriveMenuTitle: "Practice another way",
     difficultyBadge: "Difficulty·{diff}",
     contextUsage: "~{used} / {limit} tokens · Context {pct}%",
     preparingLesson: "Preparing lesson…",
@@ -1029,6 +1154,8 @@ export const en = {
     createCustom: "Create custom agent",
     editCustom: "Edit custom agent",
     newAgent: "New agent",
+    toPreferences:
+      "Just want to adjust how the AI talks? Go to AI Preferences →",
     basicInfo: "Basic info",
     namePlaceholder: "Name, e.g. Interview expression observer",
     descPlaceholder: "One-sentence description of what it does",
@@ -1082,6 +1209,9 @@ export const en = {
     tuneTitle: "Fine-tune",
     exportTitle: "Export package",
     deleteTitle: "Delete",
+    advancedBadge: "Advanced",
+    tuneAdvancedHint:
+      "Advanced: append extra instructions to this one capability. For global talk-style tweaks, AI Preferences is simpler.",
     officialBase: "Official base settings (read-only)",
     supplemental:
       "Supplemental instructions (appended after official settings, does not replace base prompt)",
@@ -1107,7 +1237,7 @@ export const en = {
     agentNotFound: "This custom agent was not found.",
     advanced: "Advanced · Share package import/export",
     packagePlaceholder:
-      "Paste lang-agent.package JSON; old lang-agent.agent-package is also compatible. Exported packages appear here.",
+      "Paste converloop.package JSON; old lang-agent.package and lang-agent.agent-package files are also compatible. Exported packages appear here.",
     importPackage: "Import package",
     importConfirmTitle: 'Import "{name}"?',
     importConfirmDesc:
@@ -1116,7 +1246,6 @@ export const en = {
     importDisabled: "Imported disabled by default",
     importedPackage:
       "Package imported: {skills} skill(s), {lessons} lesson(s).",
-    logsLink: 'Run logs have moved to "Settings → Logs"',
     outputPreviewObserver:
       "Output → a note in the coach panel (memory_proposals require your confirmation before writing)",
     outputPreviewAction:
@@ -1177,6 +1306,10 @@ export const en = {
         title: "Drill observer",
         desc: "Runs a training mode's own observer instructions after each answer in that drill — extra notes in the coach panel.",
       },
+      pronunciation: {
+        title: "Pronunciation feedback",
+        desc: "Grades how you said a voice answer — sounds, stress, intonation — from the recording, and posts a note to the coach panel.",
+      },
       explain: {
         title: "Reply Explanation",
         desc: "Explains on demand in your native language the structures, idioms, and usage that might trip you up.",
@@ -1190,20 +1323,20 @@ export const en = {
         desc: "Explains selected words, phrases, or sentences in context.",
       },
       branchFrom: {
-        title: "Branch from here",
-        desc: "Open a new conversation continuing from the context before this turn.",
+        title: "Continue from here",
+        desc: "Open a new conversation from the context before this turn.",
       },
       restart: {
-        title: "Restart",
-        desc: "Keep the core setup; open a blank new conversation for re-practice.",
+        title: "Practice it again",
+        desc: "Keep the core setup and open a blank new conversation.",
       },
       harder: {
-        title: "Increase difficulty",
-        desc: "Generate a harder version of the same practice.",
+        title: "Make it harder",
+        desc: "Open a harder version of this practice.",
       },
       easier: {
-        title: "Decrease difficulty",
-        desc: "Generate an easier version of the same practice.",
+        title: "Make it easier",
+        desc: "Open an easier version of this practice.",
       },
       swapRoles: {
         title: "Swap roles",
@@ -1215,13 +1348,49 @@ export const en = {
       },
       changeScene: {
         title: "Change scene",
-        desc: "Keep the practice goal; switch to a more fitting scene.",
+        desc: "Keep the practice goal and switch to a new setting.",
       },
       lessonFromConversation: {
-        title: "Turn into focused lesson",
-        desc: "Extract the issues and goals from this chat into a reusable focused lesson.",
+        title: "Turn into a focused lesson",
+        desc: "Extract this chat's issues and goals into a reusable focused lesson.",
       },
     },
+  },
+  about: {
+    tagline:
+      "A local-first desktop coach for learning a language through real conversation.",
+    principlesTitle: "What Converloop believes",
+    principles: {
+      local: {
+        title: "Local-first and private",
+        body: "Your profile, conversations, and learning data live on this device. No cloud, no sync, no account — you bring your own model key.",
+      },
+      conversation: {
+        title: "You learn by talking",
+        body: "Every turn gets a natural reply, with quiet structured feedback in the background — so practice feels like a conversation, not a quiz.",
+      },
+      accounting: {
+        title: "The model observes, code keeps score",
+        body: "The AI only suggests observations. Counts, mastery, and your review schedule are computed deterministically in code, so your progress stays trustworthy.",
+      },
+      editable: {
+        title: "Your data, in the open",
+        body: "Your learner profile is plain Markdown and your progress is a local database — both readable and editable, never locked away.",
+      },
+    },
+    featuresTitle: "What's inside",
+    features: {
+      conversation: "Natural conversation — topics, role-play, and scenarios",
+      correction: "Real-time correction and more natural ways to say things",
+      lessons:
+        "Focused lessons and drills — scenarios, dictation, shadowing, quickfire",
+      listening: "Listening and dictation practice",
+      pronunciation: "Pronunciation feedback on what you say",
+      customize: "Customizable agents, observers, and slash commands",
+    },
+    meta: "Built with Tauri and a local SQLite database.",
+    websiteLink: "Website",
+    designLink: "How it's built — Design notes",
   },
   design: {
     title: "Design notes",
