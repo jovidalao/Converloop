@@ -82,3 +82,15 @@
   color: var(--muted-foreground);
   opacity: 0.85;
 }
+
+.markdown ruby.reading-ruby {
+  ruby-position: over;
+}
+
+.markdown ruby.reading-ruby rt {
+  color: var(--muted-foreground);
+  font-size: 0.58em;
+  font-weight: 500;
+  line-height: 1;
+  opacity: 0.88;
+}

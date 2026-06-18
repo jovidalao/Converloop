@@ -5,11 +5,12 @@ import {
   BotIcon,
   ChevronRightIcon,
   HeadphonesIcon,
+  InfoIcon,
   ListChecksIcon,
   MessageSquareIcon,
   MicIcon,
   PencilIcon,
-  PencilRulerIcon,
+  PencilLineIcon,
   PinIcon,
   PinOffIcon,
   ScrollTextIcon,
@@ -36,6 +37,7 @@ import { actionAriaKeyshortcuts, actionShortcutLabel } from "@/lib/app-actions";
 import { type ConversationMeta, conversationType } from "../db/conversations";
 import { getActions, isAgentEnabled } from "../runtime";
 import { useConfirm } from "./confirm";
+import { conversationActionDisplay } from "./conversation-action-display";
 import { EntityRow, EntityRowAction } from "./EntityRow";
 
 export type MainView =
@@ -44,7 +46,9 @@ export type MainView =
   | "mastery"
   | "learning"
   | "learning-gallery"
-  | "design"
+  | "listening"
+  | "dictation-review"
+  | "about"
   | "agents"
   | "settings-logs"
   | "settings-general"
@@ -132,6 +136,8 @@ interface SidebarProps {
   view: MainView;
   onSelect: (id: string) => void;
   onNewChat: () => void;
+  onOpenPronunciationPractice: () => void;
+  pronunciationPracticeActive: boolean;
   onDeriveConversation: (conversationId: string, actionId: string) => void;
   onRename: (id: string, title: string) => void;
   onDelete: (id: string) => void;
@@ -154,6 +160,8 @@ export function Sidebar({
   view,
   onSelect,
   onNewChat,
+  onOpenPronunciationPractice,
+  pronunciationPracticeActive,
   onDeriveConversation,
   onRename,
   onDelete,
@@ -332,6 +340,42 @@ export function Sidebar({
                 </span>
                 <span>{t("sidebar.customLearning")}</span>
               </button>
+              <button
+                type="button"
+                className="codex-sidebar-action"
+                data-active={pronunciationPracticeActive}
+                onClick={onOpenPronunciationPractice}
+                title={t("sidebar.pronunciationPracticeTooltip")}
+              >
+                <span className="codex-sidebar-leading-icon">
+                  <MicIcon className="size-4" />
+                </span>
+                <span>{t("sidebar.pronunciationPractice")}</span>
+              </button>
+              <button
+                type="button"
+                className="codex-sidebar-action"
+                data-active={view === "listening"}
+                onClick={() => onOpenView("listening")}
+                title={t("sidebar.listeningTooltip")}
+              >
+                <span className="codex-sidebar-leading-icon">
+                  <HeadphonesIcon className="size-4" />
+                </span>
+                <span>{t("sidebar.listening")}</span>
+              </button>
+              <button
+                type="button"
+                className="codex-sidebar-action"
+                data-active={view === "dictation-review"}
+                onClick={() => onOpenView("dictation-review")}
+                title={t("sidebar.dictationReviewTooltip")}
+              >
+                <span className="codex-sidebar-leading-icon">
+                  <PencilLineIcon className="size-4" />
+                </span>
+                <span>{t("sidebar.dictationReview")}</span>
+              </button>
             </div>
 
             <nav className="codex-sidebar-scroll">
@@ -507,11 +551,6 @@ export function Sidebar({
                 {t("sidebar.sectionProfileDatabase")}
               </div>
               {renderSettingsItem(
-                "design",
-                <PencilRulerIcon className="size-4" />,
-                t("sidebar.designNotes"),
-              )}
-              {renderSettingsItem(
                 "mastery",
                 <ListChecksIcon className="size-4" />,
                 t("sidebar.data"),
@@ -530,6 +569,11 @@ export function Sidebar({
                 "profile",
                 <UserRoundIcon className="size-4" />,
                 t("sidebar.profile"),
+              )}
+              {renderSettingsItem(
+                "about",
+                <InfoIcon className="size-4" />,
+                t("sidebar.about"),
               )}
             </nav>
 
@@ -569,33 +613,36 @@ export function Sidebar({
         >
           <div className="flex shrink-0 items-center gap-2 px-2 py-1.5 text-ui-caption font-medium text-ui-muted">
             <SparklesIcon size={13} />
-            {t("sidebar.deriveNewConversation")}
+            {t("sidebar.deriveMenuTitle")}
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto">
-            {derivationActions.map((action) => (
-              <button
-                key={action.id}
-                type="button"
-                role="menuitem"
-                className="flex w-full items-start gap-2.5 rounded-sm px-2 py-1.5 text-left text-ui-body outline-none hover:bg-accent hover:text-accent-foreground"
-                onClick={() => {
-                  onDeriveConversation(conversationMenu.conv.id, action.id);
-                  setConversationMenu(null);
-                }}
-              >
-                <SparklesIcon className="mt-0.5 size-3.5 shrink-0" />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate font-medium">
-                    {action.label}
-                  </span>
-                  {action.description && (
-                    <span className="block truncate text-ui-caption text-ui-muted">
-                      {action.description}
+            {derivationActions.map((action) => {
+              const display = conversationActionDisplay(action, t);
+              return (
+                <button
+                  key={action.id}
+                  type="button"
+                  role="menuitem"
+                  className="flex w-full items-start gap-2.5 rounded-sm px-2 py-1.5 text-left text-ui-body outline-none hover:bg-accent hover:text-accent-foreground"
+                  onClick={() => {
+                    onDeriveConversation(conversationMenu.conv.id, action.id);
+                    setConversationMenu(null);
+                  }}
+                >
+                  <SparklesIcon className="mt-0.5 size-3.5 shrink-0 text-primary" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-medium">
+                      {display.label}
                     </span>
-                  )}
-                </span>
-              </button>
-            ))}
+                    {display.description && (
+                      <span className="block truncate text-ui-caption text-ui-muted">
+                        {display.description}
+                      </span>
+                    )}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </div>
       )}

@@ -51,7 +51,7 @@ export default defineConfig(async () => ({
       // allows inline scripts in bundled HTML via generated hashes), and
       // worker-src blob: for the HMR client's ping worker.
       "Content-Security-Policy":
-        "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' blob:; worker-src blob:; connect-src 'self' ws://localhost:1420 ipc: http://ipc.localhost",
+        "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' blob:; worker-src blob:; connect-src 'self' ws://localhost:1420 ipc: http://ipc.localhost wss://stt-rt.soniox.com",
     },
     host: host || false,
     hmr: host

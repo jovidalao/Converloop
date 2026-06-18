@@ -1,4 +1,5 @@
 import {
+  BookOpenTextIcon,
   CheckCircle2Icon,
   CheckIcon,
   ChevronDownIcon,
@@ -12,18 +13,23 @@ import {
   SparklesIcon,
 } from "lucide-react";
 import { memo, type ReactNode, useEffect, useRef, useState } from "react";
+import type { Options } from "react-markdown";
 import type { TutorAnalysis } from "../../agents/schema";
 import { useConfig } from "../../config";
 import type { NewConversationContext } from "../../db/conversations";
 import type { ChatTurn } from "../../db/turns";
 import { useTranslation } from "../../i18n";
+import { type DisplayError, describeError } from "../../lib/error-display";
+import { languageToBcp47 } from "../../lib/language";
 import {
   applyLearningTurnMasteryPreview,
   bilingualReply,
   MissingApiKeyError,
   previewLearningTurnMastery,
 } from "../../orchestrator";
+import { supportsReadingGuide } from "../../reading-guide";
 import { getActions, isAgentEnabled, isAgentHidden } from "../../runtime";
+import { conversationActionDisplay } from "../conversation-action-display";
 import {
   hasCorrectedSentenceChange,
   InlineCorrection,
@@ -32,6 +38,7 @@ import {
 import { Markdown } from "../Markdown";
 import { ReplyExplanation } from "../ReplyExplanation";
 import { remarkBilingual } from "../remark-bilingual";
+import { remarkReadingGuide } from "../remark-reading-guide";
 import { SpeakButton } from "../SpeakButton";
 import { Button } from "../ui/button";
 import { Spinner } from "../ui/spinner";
@@ -288,7 +295,11 @@ export const PartnerReply = memo(function PartnerReply({
   regenerating = false,
 }: PartnerReplyProps) {
   const { t } = useTranslation();
-  const { actionLabels } = useConfig();
+  const { actionLabels, targetLanguage, nativeLanguage } = useConfig();
+  // BCP-47 tags so the reply renders with the right regional glyphs (Han unification: zh vs ja) and the
+  // bilingual gloss keeps the native language's glyphs. Empty (unknown language) → inherit the document.
+  const targetLang = languageToBcp47(targetLanguage) || undefined;
+  const nativeLang = languageToBcp47(nativeLanguage) || undefined;
   // One open drop-below popup at a time within this reply (explanation /
   // custom transformer panels). Bilingual reading replaces the bubble text in place rather than
   // dropping below, so it is independent and not part of this coordination.
@@ -296,7 +307,8 @@ export const PartnerReply = memo(function PartnerReply({
   const [loading, setLoading] = useState(false);
   const [view, setView] = useState<string | null>(null); // bilingual Markdown
   const [open, setOpen] = useState(false); // whether bilingual view is shown
-  const [error, setError] = useState<string | null>(null);
+  const [readingGuideOpen, setReadingGuideOpen] = useState(false);
+  const [error, setError] = useState<DisplayError | null>(null);
   const didAutoOpen = useRef(false);
   const prevTextRef = useRef(text);
   // Custom reply transformers: per-reply buttons. "replace" mode shares the bubble with bilingual, so activating
@@ -315,6 +327,17 @@ export const PartnerReply = memo(function PartnerReply({
     isAgentHidden("builtin:transformer:bilingual") ||
     !drillActionAllowed(allowedActions, "bilingual", true);
   const explainHidden = !drillActionAllowed(allowedActions, "explain", true);
+  const readingGuideAvailable = supportsReadingGuide(targetLanguage);
+  const showReadingGuide = readingGuideOpen && readingGuideAvailable;
+  const readingGuidePlugins: Options["remarkPlugins"] = showReadingGuide
+    ? [remarkReadingGuide(targetLanguage)]
+    : undefined;
+  const bilingualPlugins: Options["remarkPlugins"] = showReadingGuide
+    ? [
+        [remarkBilingual, { lang: nativeLang }],
+        remarkReadingGuide(targetLanguage),
+      ]
+    : [[remarkBilingual, { lang: nativeLang }]];
 
   // When a reply is replaced by "Regenerate", the old bilingual view no longer corresponds to it
   // — collapse and reset. Skip on first mount to avoid fighting with autoOpen.
@@ -322,9 +345,14 @@ export const PartnerReply = memo(function PartnerReply({
     if (prevTextRef.current === text) return;
     prevTextRef.current = text;
     setOpen(false);
+    setReadingGuideOpen(false);
     setView(null);
     setError(null);
   }, [text]);
+
+  useEffect(() => {
+    if (!readingGuideAvailable) setReadingGuideOpen(false);
+  }, [readingGuideAvailable]);
 
   async function generate() {
     setLoading(true);
@@ -333,13 +361,7 @@ export const PartnerReply = memo(function PartnerReply({
     try {
       setView(await bilingualReply(text));
     } catch (e) {
-      setError(
-        e instanceof MissingApiKeyError
-          ? e.message
-          : e instanceof Error
-            ? e.message
-            : String(e),
-      );
+      setError(describeError(e, t));
     } finally {
       setLoading(false);
     }
@@ -373,7 +395,8 @@ export const PartnerReply = memo(function PartnerReply({
     if (open || loading || view || error) onLayoutChange?.();
   }, [open, loading, view, error, onLayoutChange]);
 
-  const showBilingual = open && (view || error);
+  const showBilingual = open && !!view;
+  const showBilingualError = open && !!error;
 
   return (
     <div className="flex max-w-none flex-col items-start gap-1.5 self-stretch">
@@ -382,15 +405,40 @@ export const PartnerReply = memo(function PartnerReply({
         data-selectable-context
       >
         {replyTransformers.replaceMarkdown ? (
-          <Markdown>{replyTransformers.replaceMarkdown}</Markdown>
-        ) : showBilingual && error ? (
-          <div className="flex items-center gap-3">
-            <span
-              className="min-w-0 flex-1 text-ui-body leading-snug text-destructive"
-              role="alert"
-            >
-              {error}
-            </span>
+          <Markdown lang={targetLang} remarkPlugins={readingGuidePlugins}>
+            {replyTransformers.replaceMarkdown}
+          </Markdown>
+        ) : showBilingual && view ? (
+          <Markdown
+            className="bilingual"
+            lang={targetLang}
+            remarkPlugins={bilingualPlugins}
+          >
+            {view}
+          </Markdown>
+        ) : (
+          <Markdown lang={targetLang} remarkPlugins={readingGuidePlugins}>
+            {text}
+          </Markdown>
+        )}
+        {showBilingualError && (
+          <div
+            className="mt-2 flex items-start gap-3 rounded-md bg-destructive/10 px-2.5 py-2 text-destructive"
+            role="alert"
+          >
+            <div className="min-w-0 flex-1 text-ui-body leading-snug">
+              {error.summary}
+              {error.detail && (
+                <details className="mt-1 text-ui-caption text-destructive/80">
+                  <summary className="cursor-pointer">
+                    {t("common.details")}
+                  </summary>
+                  <pre className="mt-1 max-h-24 overflow-auto whitespace-pre-wrap rounded bg-background/60 p-2 font-mono text-ui-caption leading-snug">
+                    {error.detail}
+                  </pre>
+                </details>
+              )}
+            </div>
             <Button
               type="button"
               variant="outline"
@@ -403,12 +451,6 @@ export const PartnerReply = memo(function PartnerReply({
               {t("common.retry")}
             </Button>
           </div>
-        ) : showBilingual && view ? (
-          <Markdown className="bilingual" remarkPlugins={[remarkBilingual]}>
-            {view}
-          </Markdown>
-        ) : (
-          <Markdown>{text}</Markdown>
         )}
       </div>
       <ReplyExplanation
@@ -442,29 +484,47 @@ export const PartnerReply = memo(function PartnerReply({
         }
         extraPanels={<ReplyTransformerPanels items={replyTransformers.items} />}
         trailingActions={
-          bilingualHidden ? null : (
-            <Button
-              type="button"
-              variant="action"
-              size="action"
-              data-active={!!showBilingual}
-              onClick={toggle}
-              disabled={loading}
-              aria-pressed={!!showBilingual}
-              title={t("chat.bilingualTitle")}
-            >
-              <span className="inline-flex size-4 shrink-0 items-center justify-center">
-                {loading ? (
-                  <Spinner className="size-3.5 border-transparent border-t-current" />
-                ) : (
-                  <LanguagesIcon className="size-4" />
+          <>
+            {readingGuideAvailable && (
+              <Button
+                type="button"
+                variant="action"
+                size="action"
+                data-active={showReadingGuide}
+                onClick={() => setReadingGuideOpen((prev) => !prev)}
+                aria-pressed={showReadingGuide}
+                title={t("chat.readingGuideTitle")}
+              >
+                <BookOpenTextIcon className="size-4" />
+                {actionLabels && (
+                  <span data-compact-label>{t("chat.readingGuide")}</span>
                 )}
-              </span>
-              {actionLabels && (
-                <span data-compact-label>{t("chat.bilingualReading")}</span>
-              )}
-            </Button>
-          )
+              </Button>
+            )}
+            {!bilingualHidden && (
+              <Button
+                type="button"
+                variant="action"
+                size="action"
+                data-active={!!showBilingual || !!showBilingualError}
+                onClick={toggle}
+                disabled={loading}
+                aria-pressed={!!showBilingual || !!showBilingualError}
+                title={t("chat.bilingualTitle")}
+              >
+                <span className="inline-flex size-4 shrink-0 items-center justify-center">
+                  {loading ? (
+                    <Spinner className="size-3.5 border-transparent border-t-current" />
+                  ) : (
+                    <LanguagesIcon className="size-4" />
+                  )}
+                </span>
+                {actionLabels && (
+                  <span data-compact-label>{t("chat.bilingualReading")}</span>
+                )}
+              </Button>
+            )}
+          </>
         }
       />
     </div>
@@ -545,19 +605,22 @@ function UserMessageActions({
       {showBranch &&
         getActions("turn")
           .filter((a) => isAgentEnabled(a.id))
-          .map((a) => (
-            <Button
-              key={a.id}
-              type="button"
-              variant="action"
-              size="action"
-              title={`${a.label}:${a.description ?? ""}`}
-              aria-label={a.label}
-              onClick={() => onTurnAction(a.id)}
-            >
-              <GitBranchIcon size={16} />
-            </Button>
-          ))}
+          .map((a) => {
+            const display = conversationActionDisplay(a, t);
+            return (
+              <Button
+                key={a.id}
+                type="button"
+                variant="action"
+                size="action"
+                title={`${display.label}:${display.description ?? ""}`}
+                aria-label={display.label}
+                onClick={() => onTurnAction(a.id)}
+              >
+                <GitBranchIcon size={16} />
+              </Button>
+            );
+          })}
     </>
   );
 }

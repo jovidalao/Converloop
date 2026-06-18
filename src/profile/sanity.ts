@@ -1,5 +1,5 @@
 // Lightweight sanity check for learner-profile.md (pure logic, testable).
-// Any failing check → discard the new result and keep the old MD. See docs/profile-maintainer-agent.md#output-handling.
+// Any failing check → discard the new result and keep the old MD.
 
 export const REQUIRED_SECTIONS = [
   "## About me",

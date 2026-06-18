@@ -13,8 +13,9 @@ import {
 } from "./db/learning-agents";
 import { createLearningProject } from "./db/learning-projects";
 
-const LEGACY_FORMAT = "lang-agent.agent-package";
-const PACKAGE_FORMAT = "lang-agent.package";
+const LEGACY_AGENT_PACKAGE_FORMAT = "lang-agent.agent-package";
+const LEGACY_PACKAGE_FORMAT = "lang-agent.package";
+const PACKAGE_FORMAT = "converloop.package";
 const FORMAT_VERSION = 1;
 const PACKAGE_SCHEMA_VERSION = 1;
 const PACKAGE_AGENT_KIND_VALUES = ["observer", "action"] as const;
@@ -22,7 +23,7 @@ const PACKAGE_AGENT_KIND_VALUES = ["observer", "action"] as const;
 const PackageId = z.string().min(1).max(160);
 
 const LegacyAgentPackageSchema = z.object({
-  format: z.literal(LEGACY_FORMAT),
+  format: z.literal(LEGACY_AGENT_PACKAGE_FORMAT),
   version: z.literal(FORMAT_VERSION),
   agent: z.object({
     name: z.string().min(1),
@@ -88,7 +89,10 @@ const SharePackageItemSchema = z.discriminatedUnion("type", [
 ]);
 
 const SharePackageSchema = z.object({
-  format: z.literal(PACKAGE_FORMAT),
+  format: z.union([
+    z.literal(PACKAGE_FORMAT),
+    z.literal(LEGACY_PACKAGE_FORMAT),
+  ]),
   version: z.literal(FORMAT_VERSION),
   package: z.object({
     id: PackageId,
@@ -444,7 +448,7 @@ export function reviewAgentPackage(raw: string): AgentPackageReview {
     json && typeof json === "object" && !Array.isArray(json)
       ? (json as Record<string, unknown>).format
       : null;
-  if (format === LEGACY_FORMAT) return reviewLegacy(raw);
+  if (format === LEGACY_AGENT_PACKAGE_FORMAT) return reviewLegacy(raw);
   return reviewShare(raw);
 }
 
@@ -521,7 +525,7 @@ async function importLegacyPackage(
       {
         enabled: opts.enableRuntimeAgents ?? false,
         packageMeta: packageMeta({
-          format: LEGACY_FORMAT,
+          format: LEGACY_AGENT_PACKAGE_FORMAT,
           packageId,
           packageVersion: String(parsed.version),
           packageItemId: "agent",
@@ -644,6 +648,7 @@ export async function importAgentPackage(
     json && typeof json === "object" && !Array.isArray(json)
       ? (json as Record<string, unknown>).format
       : null;
-  if (format === LEGACY_FORMAT) return importLegacyPackage(raw, opts);
+  if (format === LEGACY_AGENT_PACKAGE_FORMAT)
+    return importLegacyPackage(raw, opts);
   return importSharePackage(raw, opts);
 }

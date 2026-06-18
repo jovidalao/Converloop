@@ -14,6 +14,7 @@ const MIRRORED_KEYS = [
   "lang-agent.config", // provider connections, languages, level
   "lang-agent.tts", // TTS engine/voice settings
   "lang-agent.stt", // voice-input endpoint/model
+  "lang-agent.pronunciation", // pronunciation feedback on/off + model
   "lang-agent.keybindings",
   "lang-agent-locale",
   "lang-agent-theme",

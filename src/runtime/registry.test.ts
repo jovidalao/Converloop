@@ -29,12 +29,16 @@ import { hideAgent } from "./visibility";
 
 // This test only verifies the registry/dispatch mechanism, so it imports ./registry directly (not ./index, so built-in agents do not self-register).
 // Agent run log writes go to the DB and are swallowed by fire-and-forget .catch in vitest — they do not affect assertions.
-function fakePracticeCtx(turnId = "t1"): PracticeContext {
-  // Test stub: dispatch only reads turnId / turnPersisted; other fields are not constructed.
+function fakePracticeCtx(
+  turnId = "t1",
+  onAnalysis: PracticeContext["callbacks"]["onAnalysis"] = () => {},
+): PracticeContext {
+  // Test stub: dispatch only reads turnId / turnPersisted / callbacks.onAnalysis; other fields are not constructed.
   return {
     kind: "practice",
     turnId,
     turnPersisted: Promise.resolve(turnId),
+    callbacks: { onAnalysis },
   } as unknown as PracticeContext;
 }
 
@@ -59,6 +63,30 @@ describe("agent runtime registry", () => {
     dispatchObservers(fakePracticeCtx("turn-x"));
     await ran;
     expect(seenTurnId).toBe("turn-x");
+  });
+
+  it("clears analysis pending when active observers do not provide turn analysis", async () => {
+    let analysisCleared = 0;
+    let resolveRan!: () => void;
+    const ran = new Promise<void>((r) => {
+      resolveRan = r;
+    });
+    const observer: Observer = {
+      id: "test:annotation-only-observer",
+      kind: "observer",
+      run: async () => {
+        resolveRan();
+      },
+    };
+    registerObserver(observer);
+
+    dispatchObservers(
+      fakePracticeCtx("turn-annotation-only", () => {
+        analysisCleared += 1;
+      }),
+    );
+    await ran;
+    expect(analysisCleared).toBe(1);
   });
 
   it("dispatchReply gets the matching reply producer by kind and returns result and streaming deltas", async () => {

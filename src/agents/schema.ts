@@ -6,7 +6,7 @@ import {
 } from "../db/mastery-values";
 import { toJsonSchema } from "./json-schema";
 
-// See docs/tutor-agent.md#output-schemazod. LLM only observes, code does bookkeeping; this only validates observations.
+// LLM only observes; code does bookkeeping. This schema only validates observations.
 export const IssueCategory = z.enum([
   "grammar",
   "word_choice",
@@ -42,9 +42,8 @@ export const MasteryUpdate = z.object({
 });
 export type MasteryUpdate = z.infer<typeof MasteryUpdate>;
 
-// "Expression gap" produced by native-language/mixed input: no target-language original to diff against,
-// so we explain the sentence-building approach instead.
-// See docs/expression-gap.md.
+// "Expression gap" produced by native-language/mixed input: no target-language
+// original to diff against, so we explain the sentence-building approach instead.
 export const GapKeyItem = z.object({
   text: z.string(), // target-language word / collocation / sentence pattern
   gloss: z.string(), // native-language gloss

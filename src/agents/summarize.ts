@@ -2,7 +2,7 @@ import type { ChatMessage, ModelProvider } from "../providers/types";
 
 // Conversation rolling-summary agent. Merges the "old summary + a recent batch of verbatim turns to fold in"
 // into an updated summary, read by the conversation agent to remember earlier content that has scrolled
-// out of the verbatim window (see docs/conversation-agent.md#rolling-summary).
+// out of the verbatim window.
 // Plain text, incremental merge (not rewritten from scratch), written in the target language, length constrained by character budget.
 
 export interface SummarizeInput {
@@ -12,7 +12,6 @@ export interface SummarizeInput {
   charBudget: number; // character limit for the output summary (rough token budget proxy)
 }
 
-// See docs/conversation-agent.md#rolling-summary
 function systemPrompt(input: SummarizeInput): string {
   return `You maintain a running summary of an ongoing language-learning conversation,
 written in ${input.targetLanguage}. The summary is fed to a conversation partner so it

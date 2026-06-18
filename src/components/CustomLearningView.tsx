@@ -28,6 +28,7 @@ import { useConfirm } from "./confirm";
 import { DrillDocumentDialog } from "./DrillDocumentDialog";
 import { DrillIcon } from "./drill-icons";
 import { LearningAgentEditDialog } from "./LearningAgentEditDialog";
+import { type ProviderKind, ProviderStatus } from "./ProviderStatus";
 import { Button } from "./ui/button";
 
 interface CustomLearningViewProps {
@@ -39,6 +40,8 @@ interface CustomLearningViewProps {
   onStartDrill: (drill: DrillSummary) => void;
   /** Open the create / manage page (project generator, NL creation, import / export). */
   onOpenCreate: () => void;
+  /** Open the settings section for a provider summary item (LLM / TTS / STT). */
+  onOpenProviderSettings?: (kind: ProviderKind) => void;
   /** Refresh the app-level lesson list (command palette) after an edit / delete here. */
   onRefresh: () => Promise<void>;
   /** Refresh the app-level drill list after create / edit / duplicate / delete here. */
@@ -163,6 +166,7 @@ export function CustomLearningView({
   onStartLesson,
   onStartDrill,
   onOpenCreate,
+  onOpenProviderSettings,
   onRefresh,
   onRefreshDrills,
 }: CustomLearningViewProps) {
@@ -260,27 +264,31 @@ export function CustomLearningView({
   }
 
   return (
-    <div className="flex h-full flex-col overflow-y-auto px-6 pt-14 pb-6">
+    <div className="flex h-full flex-col overflow-y-auto px-6 pt-4 pb-6">
       <div className="mx-auto w-full max-w-5xl">
-        <div className="mb-4 flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h2 className="mt-0 mb-1 text-ui-title font-semibold tracking-tight">
-              {t("customLearning.title")}
-            </h2>
-            <p className="m-0 max-w-2xl text-ui-body leading-relaxed text-ui-muted">
-              {t("customLearning.description")}
-            </p>
+        <div className="mb-4 flex flex-col gap-4">
+          <ProviderStatus onOpen={onOpenProviderSettings} />
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h2 className="mt-0 mb-1 flex items-center gap-2.5 text-ui-title font-semibold">
+                <BookOpenCheckIcon className="size-6 shrink-0 text-primary" />
+                {t("customLearning.title")}
+              </h2>
+              <p className="m-0 max-w-2xl text-ui-body leading-relaxed text-ui-muted">
+                {t("customLearning.description")}
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="shrink-0"
+              onClick={onOpenCreate}
+            >
+              <PlusIcon size={15} />
+              {t("customLearning.manage")}
+            </Button>
           </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="shrink-0"
-            onClick={onOpenCreate}
-          >
-            <PlusIcon size={15} />
-            {t("customLearning.manage")}
-          </Button>
         </div>
 
         <div className="mb-2 flex items-center justify-between gap-2">

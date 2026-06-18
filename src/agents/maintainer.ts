@@ -23,7 +23,6 @@ function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-// See docs/profile-maintainer-agent.md#system-prompt
 function systemPrompt(input: MaintainerInput): string {
   return `You maintain a learner's profile document for a ${input.nativeLanguage} speaker
 learning ${input.targetLanguage}. The profile is read by a conversation agent to

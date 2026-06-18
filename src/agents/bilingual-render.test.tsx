@@ -70,7 +70,9 @@ describe("bilingual ⟦…⟧ rendering is CJK-safe", () => {
   // Regression (screenshot bug): source italics must render as <em>, not pick up
   // the translation style. Translations and source emphasis no longer share <em>.
   it("keeps source italics as <em>, not translation style", () => {
-    const html = render("the cleanup *that is* much easier.⟦清理工作要容易得多。⟧");
+    const html = render(
+      "the cleanup *that is* much easier.⟦清理工作要容易得多。⟧",
+    );
     expect(html).toContain("<em>that is</em>");
     expect(translated(html)).toBe("清理工作要容易得多。");
   });

@@ -4,7 +4,7 @@ import { buildDrillAuthoringSpec } from "./authoring-spec";
 import { localizeDrill, parseDrillDocument } from "./format";
 
 const VALID_DOC = `---
-format: lang-agent/drill@1
+format: converloop/drill@1
 name: Oral Translation
 description: Translate native-language sentences aloud.
 locales:
@@ -40,7 +40,7 @@ describe("parseDrillDocument", () => {
 
   it("applies defaults for omitted capability fields (compat rule #1)", () => {
     const minimal = `---
-format: lang-agent/drill@1
+format: converloop/drill@1
 name: Minimal
 description: Minimal drill.
 ---
@@ -83,8 +83,8 @@ Start now.
   it("hard-fails unknown required capabilities, but only warns on unknown optional keys (compat rule #2)", () => {
     const unknownRequire = parseDrillDocument(
       VALID_DOC.replace(
-        "format: lang-agent/drill@1",
-        "format: lang-agent/drill@1\nrequires: [time-machine]",
+        "format: converloop/drill@1",
+        "format: converloop/drill@1\nrequires: [time-machine]",
       ),
     );
     expect(unknownRequire.ok).toBe(false);
@@ -94,8 +94,8 @@ Start now.
 
     const unknownKey = parseDrillDocument(
       VALID_DOC.replace(
-        "format: lang-agent/drill@1",
-        "format: lang-agent/drill@1\nfutureKnob: 3",
+        "format: converloop/drill@1",
+        "format: converloop/drill@1\nfutureKnob: 3",
       ),
     );
     expect(unknownKey.ok).toBe(true);
@@ -106,7 +106,7 @@ Start now.
 
   it("rejects a future major format version (compat rule #3)", () => {
     const result = parseDrillDocument(
-      VALID_DOC.replace("lang-agent/drill@1", "lang-agent/drill@2"),
+      VALID_DOC.replace("converloop/drill@1", "converloop/drill@2"),
     );
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -126,6 +126,15 @@ Start now.
         .replace("grading: tutor", "grading: standard-answer")
         .replace("mastery: production", "mastery: listening"),
     );
+    expect(result.ok).toBe(true);
+  });
+
+  it("accepts legacy lang-agent drill documents", () => {
+    const legacy = VALID_DOC.replace(
+      "converloop/drill@1",
+      "lang-agent/drill@1",
+    );
+    const result = parseDrillDocument(legacy);
     expect(result.ok).toBe(true);
   });
 
@@ -157,7 +166,7 @@ describe("localizeDrill", () => {
 describe("buildDrillAuthoringSpec", () => {
   it("embeds the format id, every core enum, and the built-in examples", () => {
     const spec = buildDrillAuthoringSpec();
-    expect(spec).toContain("lang-agent/drill@1");
+    expect(spec).toContain("converloop/drill@1");
     for (const v of [
       "say-hidden",
       "say-visible",
@@ -175,14 +184,14 @@ describe("buildDrillAuthoringSpec", () => {
 
 describe("extractDrillDocument", () => {
   it("pulls the fenced markdown block out of an AI reply", () => {
-    const reply = `Here you go!\n\n\`\`\`markdown\n---\nformat: lang-agent/drill@1\n---\n\n# Task\n\nx\n\`\`\`\n\nEnjoy!`;
+    const reply = `Here you go!\n\n\`\`\`markdown\n---\nformat: converloop/drill@1\n---\n\n# Task\n\nx\n\`\`\`\n\nEnjoy!`;
     const md = extractDrillDocument(reply);
     expect(md.startsWith("---")).toBe(true);
     expect(md).not.toContain("Enjoy");
   });
 
   it("falls back to the raw reply when it already starts with frontmatter", () => {
-    const bare = "---\nformat: lang-agent/drill@1\n---\n\n# Task\n\nx";
+    const bare = "---\nformat: converloop/drill@1\n---\n\n# Task\n\nx";
     expect(extractDrillDocument(bare)).toBe(bare);
   });
 });
@@ -239,8 +248,8 @@ describe("custom say drills (render pipeline)", () => {
 
 describe("extension capabilities (observer / report / turnActions)", () => {
   const extendedDoc = `${VALID_DOC.replace(
-    "format: lang-agent/drill@1",
-    `format: lang-agent/drill@1
+    "format: converloop/drill@1",
+    `format: converloop/drill@1
 requires: [observer, report, turn-actions]
 observer:
   scopes: [weak_all, profile]

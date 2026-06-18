@@ -3,7 +3,7 @@ import { zodToJsonSchema } from "zod-to-json-schema";
 
 // Convert a Zod schema to a JSON schema for provider structured output: inline refs
 // ($refStrategy:"none"), strip $schema — so OpenAI-compatible endpoints can consume it directly.
-// See docs/architecture.md pitfall notes (zod pinned at v3). Shared by all agents.
+// zod-to-json-schema is designed for Zod v3; keep that dependency aligned.
 export function toJsonSchema(
   name: string,
   schema: ZodTypeAny,

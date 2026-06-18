@@ -13,6 +13,7 @@ import {
   PanelLeftIcon,
   PanelRightIcon,
   SearchIcon,
+  SparklesIcon,
   SquarePenIcon,
   XIcon,
 } from "lucide-react";
@@ -25,14 +26,17 @@ import {
   useRef,
   useState,
 } from "react";
+import { AboutView } from "./components/AboutView";
 import { AgentLibraryView } from "./components/AgentLibraryView";
-import { AppDesignView } from "./components/AppDesignView";
 import { ChatView } from "./components/ChatView";
 import { CoachPanel } from "./components/CoachPanel";
 import { CommandPalette } from "./components/CommandPalette";
 import { CustomLearningView } from "./components/CustomLearningView";
+import { conversationActionDisplay } from "./components/conversation-action-display";
+import { DictationReviewView } from "./components/DictationReviewView";
 import { KeyboardShortcutsDialog } from "./components/KeyboardShortcutsDialog";
 import { LearningAgentsView } from "./components/LearningAgentsView";
+import { ListeningView } from "./components/ListeningView";
 import { LogsView } from "./components/LogsView";
 import { MasteryView } from "./components/MasteryView";
 import { OnboardingWizard } from "./components/OnboardingWizard";
@@ -41,16 +45,24 @@ import { SettingsView } from "./components/SettingsView";
 import { type MainView, Sidebar } from "./components/Sidebar";
 import { Button } from "./components/ui/button";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "./components/ui/dropdown-menu";
+import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "./components/ui/tooltip";
+import { WindowControls } from "./components/WindowControls";
 import { pruneAgentJobs } from "./db/agent-jobs";
 import { getAppState, setAppState } from "./db/app-state";
 import {
   type ConversationMeta,
   clearActiveConversationId,
+  conversationType,
   createConversation,
   createDrillConversation,
   deleteConversation,
@@ -67,6 +79,7 @@ import {
   listLearningAgents,
 } from "./db/learning-agents";
 import type { ChatTurn } from "./db/turns";
+import { BUILTIN_DRILL_IDS } from "./drills/builtins";
 import { drillSummary, ensureBuiltInDrills, listDrills } from "./drills/store";
 import type { DrillParams, DrillSummary } from "./drills/types";
 import { useTranslation } from "./i18n";
@@ -75,9 +88,16 @@ import {
   matchesActionShortcut,
   useKeybindings,
 } from "./lib/app-actions";
+import { isWindows } from "./lib/platform";
 import { withViewTransition } from "./lib/view-transition";
 import { flushMaintainerSoon } from "./profile/maintainer-runner";
-import { beginAction, reloadCustomRuntimeAgents } from "./runtime";
+import {
+  type ActionAgent,
+  beginAction,
+  getActions,
+  isAgentEnabled,
+  reloadCustomRuntimeAgents,
+} from "./runtime";
 
 const SIDEBAR_MIN = 200;
 const SIDEBAR_MAX = 420;
@@ -101,6 +121,68 @@ type AppLocation = {
 
 type DraftKind = "chat" | "drill" | "learning_agent";
 
+function TopbarDeriveMenu({
+  actions,
+  busy,
+  onSelect,
+}: {
+  actions: readonly ActionAgent[];
+  busy: boolean;
+  onSelect: (actionId: string) => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="codex-chrome-button"
+          disabled={busy}
+          aria-label={t("app.deriveNewConversation")}
+          title={t("app.deriveTooltip")}
+        >
+          <SparklesIcon />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="end"
+        sideOffset={6}
+        className="w-72 max-w-[min(92vw,18rem)]"
+      >
+        <div className="flex items-center gap-2 px-2 py-1.5 text-ui-caption font-medium text-ui-muted">
+          <SparklesIcon size={13} />
+          {t("chat.deriveMenuTitle")}
+        </div>
+        {actions.map((action) => {
+          const display = conversationActionDisplay(action, t);
+          return (
+            <DropdownMenuItem
+              key={action.id}
+              disabled={busy}
+              className="items-start"
+              onSelect={() => onSelect(action.id)}
+            >
+              <SparklesIcon className="mt-0.5 size-3.5 text-primary" />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-medium">
+                  {display.label}
+                </span>
+                {display.description && (
+                  <span className="block truncate text-ui-caption text-ui-muted">
+                    {display.description}
+                  </span>
+                )}
+              </span>
+            </DropdownMenuItem>
+          );
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 // app_state flag: set after the first-run wizard finishes (or is skipped, or
 // the app starts with existing data). Travels with backups like other markers.
 const ONBOARDING_DONE_KEY = "lang-agent.onboardingDone";
@@ -120,7 +202,7 @@ const SETTINGS_VIEWS: ReadonlySet<MainView> = new Set<MainView>([
   "settings-stt",
   "settings-tts",
   "settings-commands",
-  "design",
+  "about",
   "mastery",
   "agents",
   "settings-logs",
@@ -375,6 +457,15 @@ function App() {
     },
     [navigateTo],
   );
+
+  const openPronunciationPractice = useCallback(() => {
+    const drill = drills.find((d) => d.id === BUILTIN_DRILL_IDS.shadowing);
+    if (!drill) {
+      setToast(t("chat.shadowingStartFailed"));
+      return;
+    }
+    openDrillDraft(drill);
+  }, [drills, openDrillDraft, t]);
 
   // Lesson drafts mirror Rapid Q&A: selecting a lesson opens a frontend-only start page. The conversation row is
   // created only after the learner presses Start.
@@ -716,6 +807,14 @@ function App() {
 
   const activeConversation = conversations.find((c) => c.id === activeId);
   const draftActive = view === "chat" && activeId === draftId;
+  const activeConversationType = activeConversation
+    ? conversationType(activeConversation)
+    : null;
+  const pronunciationPracticeActive =
+    (draftActive &&
+      draftKind === "drill" &&
+      draftDrill?.id === BUILTIN_DRILL_IDS.shadowing) ||
+    (view === "chat" && activeConversationType === "shadowing");
   // Small-window mode always shows the chat, regardless of the underlying view,
   // so the draft check can't rely on view === "chat".
   const chatIsDraft = smallWindow ? activeId === draftId : draftActive;
@@ -739,7 +838,8 @@ function App() {
     mastery: t("viewTitles.mastery"),
     learning: t("viewTitles.learning"),
     "learning-gallery": t("viewTitles.customLearning"),
-    design: t("viewTitles.design"),
+    listening: t("viewTitles.listening"),
+    "dictation-review": t("viewTitles.dictationReview"),
     agents: t("viewTitles.agents"),
     "settings-logs": t("viewTitles.logs"),
     "settings-general": t("viewTitles.general"),
@@ -759,6 +859,14 @@ function App() {
             : t("app.newChat")
         : (activeConversation?.title ?? "")
       : (TOPBAR_TITLES[view] ?? "");
+  const derivationActions = getActions("session").filter((a) =>
+    isAgentEnabled(a.id),
+  );
+  const showTopbarDerive =
+    view === "chat" &&
+    currentChatKind === "practice" &&
+    !chatIsDraft &&
+    derivationActions.length > 0;
 
   const secondaryView =
     view === "profile" ? (
@@ -776,11 +884,28 @@ function App() {
         onStartLesson={openLearningAgentDraft}
         onStartDrill={openDrillDraft}
         onOpenCreate={() => navigateTo({ view: "learning", activeId })}
+        onOpenProviderSettings={(kind) =>
+          navigateTo({ view: `settings-${kind}`, activeId })
+        }
         onRefresh={refreshLearningAgents}
         onRefreshDrills={refreshDrills}
       />
-    ) : view === "design" ? (
-      <AppDesignView />
+    ) : view === "listening" ? (
+      <ListeningView
+        conversations={conversations}
+        onOpenProviderSettings={(kind) =>
+          navigateTo({ view: `settings-${kind}`, activeId })
+        }
+      />
+    ) : view === "dictation-review" ? (
+      <DictationReviewView
+        conversations={conversations}
+        onOpenProviderSettings={(kind) =>
+          navigateTo({ view: `settings-${kind}`, activeId })
+        }
+      />
+    ) : view === "about" ? (
+      <AboutView />
     ) : view === "agents" ? (
       <AgentLibraryView onOpenView={(v) => navigateTo({ view: v, activeId })} />
     ) : view === "settings-logs" ? (
@@ -788,7 +913,10 @@ function App() {
     ) : view === "settings-general" ? (
       <SettingsView section="general" />
     ) : view === "settings-customize" ? (
-      <SettingsView section="customize" />
+      <SettingsView
+        section="customize"
+        onOpenView={(v) => navigateTo({ view: v, activeId })}
+      />
     ) : view === "settings-llm" ? (
       <SettingsView section="llm" />
     ) : view === "settings-stt" ? (
@@ -943,6 +1071,15 @@ function App() {
                     </TooltipContent>
                   </Tooltip>
                 )}
+                {showTopbarDerive && (
+                  <TopbarDeriveMenu
+                    actions={derivationActions}
+                    busy={derivationBusy}
+                    onSelect={(actionId) =>
+                      void deriveConversation(activeId, actionId)
+                    }
+                  />
+                )}
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
@@ -1029,6 +1166,7 @@ function App() {
             </div>
           </TooltipProvider>
         </div>
+        {isWindows() && <WindowControls />}
       </header>
 
       <div className="contents" data-focus-zone="sidebar">
@@ -1039,6 +1177,8 @@ function App() {
           view={view}
           onSelect={selectConversation}
           onNewChat={openDraftConversation}
+          onOpenPronunciationPractice={openPronunciationPractice}
+          pronunciationPracticeActive={pronunciationPracticeActive}
           onDeriveConversation={(id, actionId) =>
             void deriveConversation(id, actionId)
           }
@@ -1081,6 +1221,9 @@ function App() {
             onNavigateConversation={selectConversation}
             onOpenCommandSettings={() =>
               navigateTo({ view: "settings-commands", activeId })
+            }
+            onOpenProviderSettings={(kind) =>
+              navigateTo({ view: `settings-${kind}`, activeId })
             }
             compact={smallWindow}
             externalDraft={coachDraft}

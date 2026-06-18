@@ -6,6 +6,7 @@ import {
   actionShortcutLabel,
   matchesActionShortcut,
 } from "@/lib/app-actions";
+import { isPronunciationEnabled } from "../pronunciation/config";
 import {
   loadSttConfig,
   MissingSttApiKeyError,
@@ -19,14 +20,15 @@ import { transcribeAudio } from "../stt/transcribe";
 import { Button } from "./ui/button";
 import { Spinner } from "./ui/spinner";
 
-// Composer voice input,按 STT 引擎分三条路:
-//  - Soniox(stream):实时流式,说话时 onPartial 持续把「已定 + 暂定」文本推给输入框,
-//    停止后以 onTranscript(最终文本) 收尾;
-//  - OpenAI 兼容(batch):录完整段 → 上传转写 → onTranscript;
-//  - Parakeet / Qwen3(local):录完整段 → 本地 sherpa-onnx 转写 → onTranscript(无流式)。
-// 约定:流式会话一旦推过 onPartial,必以一次 onTranscript 收尾(取消/出错时
-// 传 ""),调用方据此回滚或落定文本。学习者发送前还要确认文本——这个确认
-// 本身就是学习环节的一部分。Esc 取消录音。
+// Composer voice input, split by STT engine:
+//  - Soniox (stream): real-time streaming; onPartial keeps pushing final + tentative text
+//    into the composer, then onTranscript settles the final text after stop.
+//  - OpenAI-compatible (batch): record the whole utterance -> upload -> onTranscript.
+//  - Parakeet / Qwen3 (local): record the whole utterance -> local sherpa-onnx -> onTranscript.
+// Contract: once a streaming session has emitted onPartial, it must end with one
+// onTranscript call ("" on cancel/error) so callers can roll back or settle the text.
+// The learner still confirms the transcript before sending; that confirmation is
+// part of the learning flow. Esc cancels recording.
 type LiveSession =
   | { kind: "stream"; session: StreamingSession }
   | { kind: "batch"; recording: ActiveRecording }
@@ -37,11 +39,14 @@ export function MicButton({
   onTranscript,
   onPartial,
   onError,
+  onAudio,
 }: {
   disabled?: boolean;
   onTranscript: (text: string) => void;
   onPartial: (text: string) => void;
   onError: (message: string) => void;
+  /** When pronunciation feedback is on, hands the parent the raw recording of this utterance for assessment. */
+  onAudio?: (audio: { blob: Blob; mime: string }) => void;
 }) {
   const { t } = useTranslation();
   const [state, setState] = useState<"idle" | "recording" | "transcribing">(
@@ -51,6 +56,9 @@ export function MicButton({
     () => loadSttConfig().sttProvider !== null,
   );
   const sessionRef = useRef<LiveSession | null>(null);
+  // Auxiliary raw recorder for pronunciation feedback on the streaming/local STT paths (which expose only
+  // text). The batch path already yields a blob, so it reuses that instead of starting one here.
+  const pronRecordingRef = useRef<ActiveRecording | null>(null);
 
   useEffect(() => {
     const syncProviderSelection = () => {
@@ -75,6 +83,8 @@ export function MicButton({
       if (live?.kind === "stream") live.session.cancel();
       else if (live?.kind === "batch") live.recording.cancel();
       else if (live?.kind === "local") live.capture.cancel();
+      pronRecordingRef.current?.cancel();
+      pronRecordingRef.current = null;
     };
   }, []);
 
@@ -87,12 +97,14 @@ export function MicButton({
         sessionRef.current = null;
         if (live?.kind === "stream") {
           live.session.cancel();
-          onTranscript(""); // 回滚已经流进输入框的暂定文本
+          onTranscript(""); // Roll back tentative text already streamed into the composer.
         } else if (live?.kind === "batch") {
           live.recording.cancel();
         } else if (live?.kind === "local") {
           live.capture.cancel();
         }
+        pronRecordingRef.current?.cancel();
+        pronRecordingRef.current = null;
         setState("idle");
       }
     }
@@ -125,12 +137,24 @@ export function MicButton({
         const provider = loadSttConfig().sttProvider;
         setProviderSelected(provider !== null);
         if (!provider) throw new MissingSttProviderError();
+        // Pronunciation feedback needs the raw audio. The batch path captures a blob anyway (reused at
+        // stop); the streaming/local paths expose only text, so record a parallel blob just for assessment.
+        // Best-effort — a failed aux capture must never block voice input.
+        if (onAudio && isPronunciationEnabled() && provider !== "openai") {
+          try {
+            pronRecordingRef.current = await startRecording();
+          } catch {
+            pronRecordingRef.current = null;
+          }
+        }
         if (provider === "soniox") {
           const session = await startSonioxStream({
             onPartial,
             onError: (e) => {
-              // 录音途中连接挂掉:会话已自清理,回滚暂定文本并复位。
+              // Recording-time connection failure: the session self-cleaned; roll back tentative text.
               sessionRef.current = null;
+              pronRecordingRef.current?.cancel();
+              pronRecordingRef.current = null;
               setState("idle");
               onTranscript("");
               onError(e.message);
@@ -150,6 +174,9 @@ export function MicButton({
         }
         setState("recording");
       } catch (e) {
+        // STT setup failed — release the aux pronunciation recorder if it managed to start.
+        pronRecordingRef.current?.cancel();
+        pronRecordingRef.current = null;
         onError(
           e instanceof MissingSttProviderError ||
             e instanceof MissingSttApiKeyError
@@ -165,6 +192,10 @@ export function MicButton({
       setState("idle");
       return;
     }
+    // The aux recorder (streaming/local paths) is stopped alongside the STT session; the batch path reuses
+    // its own recording instead. Read it out here so every exit path can settle it exactly once.
+    const pron = pronRecordingRef.current;
+    pronRecordingRef.current = null;
     setState("transcribing");
     try {
       let text: string;
@@ -174,10 +205,20 @@ export function MicButton({
         text = await live.capture.stop();
       } else {
         const { blob, mime } = await live.recording.stop();
+        if (onAudio && isPronunciationEnabled()) onAudio({ blob, mime });
         text = await transcribeAudio(blob, mime);
+      }
+      if (pron) {
+        try {
+          const { blob, mime } = await pron.stop();
+          if (onAudio && isPronunciationEnabled()) onAudio({ blob, mime });
+        } catch {
+          // Aux capture failed — voice input still succeeded; just no pronunciation this turn.
+        }
       }
       onTranscript(text);
     } catch (e) {
+      pron?.cancel();
       if (live.kind === "stream") onTranscript("");
       onError(e instanceof Error ? e.message : String(e));
     } finally {

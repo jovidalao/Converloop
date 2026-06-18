@@ -37,14 +37,21 @@ export const Markdown = memo(function Markdown({
   className,
   components,
   remarkPlugins,
+  lang,
 }: {
   children: string;
   className?: string;
   components?: Components;
   remarkPlugins?: Options["remarkPlugins"];
+  /** BCP-47 tag for the content's language. Set so the system font picks the right regional glyphs
+   *  (Han unification: zh vs ja kanji) and line-breaking rules. Omit to inherit the document language. */
+  lang?: string;
 }) {
   return (
-    <div className={className ? `markdown ${className}` : "markdown"}>
+    <div
+      className={className ? `markdown ${className}` : "markdown"}
+      lang={lang}
+    >
       <ReactMarkdown
         remarkPlugins={[remarkGfm, ...(remarkPlugins ?? [])]}
         components={{ a: ExternalLink, ...components }}

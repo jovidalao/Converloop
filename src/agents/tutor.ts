@@ -1,4 +1,5 @@
 import { normalizeKey } from "../db/mastery-logic";
+import { logDebug, logError } from "../lib/log";
 import { recordTutorOutcome } from "../lib/tutor-stats";
 import type {
   ChatMessage,
@@ -170,8 +171,8 @@ OUTPUT CONTRACT
 - Use [] for empty arrays and expression_gap:null. Do not include keys outside the schema.`;
 }
 
-// See docs/tutor-agent.md#system-prompt. includeGap toggles the expression-gap (native/mixed input)
-// half of the prompt; omit it for pure target-language turns so it matches the shallow core schema.
+// includeGap toggles the expression-gap (native/mixed input) half of the prompt;
+// omit it for pure target-language turns so it matches the shallow core schema.
 function tutorRulesPrompt(ctx: TutorContext, includeGap: boolean): string {
   return `You are a precise language tutor analyzing a single message from a
 ${ctx.nativeLanguage} speaker learning ${ctx.targetLanguage} at ${ctx.level} level. You give
@@ -523,7 +524,8 @@ function sanitizeExpressionGap(
     analysis.issues.length > 0 ||
     textDiffersAfterPreferences(nextCorrected, user, ctx);
 
-  console.warn(
+  logDebug(
+    "tutor",
     "Tutor emitted expression_gap for a message without native-language script; treating it as target-language correction",
   );
   return {
@@ -664,7 +666,8 @@ async function generateTutorRaw(
   };
   let raw = await run(TUTOR_MAX_OUTPUT_TOKENS);
   if (!raw.trim() && finish?.kind === "length") {
-    console.warn(
+    logDebug(
+      "tutor",
       "Tutor output truncated on reasoning (finish_reason length) with empty text; retrying with a larger token budget",
     );
     raw = await run(TUTOR_RETRY_MAX_OUTPUT_TOKENS);
@@ -709,13 +712,14 @@ async function requestStructuredTutorRaw(
       meta: { label: "tutor" },
     });
     if (result.raw.trim()) return result;
-    console.warn(
+    logDebug(
+      "tutor",
       "json_schema mode returned empty content, trying json_object fallback",
     );
   } catch (e) {
-    console.warn(
-      "json_schema mode request failed, trying json_object fallback:",
-      e,
+    logDebug(
+      "tutor",
+      `json_schema mode request failed, trying json_object fallback: ${e instanceof Error ? e.message : String(e)}`,
     );
   }
 
@@ -728,13 +732,14 @@ async function requestStructuredTutorRaw(
       meta: { label: "tutor_json_object" },
     });
     if (result.raw.trim()) return result;
-    console.warn(
+    logDebug(
+      "tutor",
       "json_object mode returned empty content, trying plain-text JSON fallback",
     );
   } catch (e) {
-    console.warn(
-      "json_object mode request failed, trying plain-text JSON fallback:",
-      e,
+    logDebug(
+      "tutor",
+      `json_object mode request failed, trying plain-text JSON fallback: ${e instanceof Error ? e.message : String(e)}`,
     );
   }
 
@@ -907,11 +912,9 @@ export async function analyze(
           raw: structuredResult.raw,
           finish: structuredResult.finish?.raw,
         });
-        console.warn(
-          "Tutor structured response violated contract, trying JSON repair:",
-          violation,
-          "raw:",
-          structuredResult.raw.slice(0, 400),
+        logDebug(
+          "tutor",
+          `Tutor structured response violated contract, trying JSON repair: ${violation} raw: ${structuredResult.raw.slice(0, 400)}`,
         );
         try {
           const repairedResult = await requestRepairedTutorRaw(
@@ -934,9 +937,9 @@ export async function analyze(
               raw: repairedResult.raw,
               finish: repairedResult.finish?.raw,
             });
-            console.warn(
-              "Tutor JSON repair still violated contract; returning correction without mastery updates:",
-              repairViolation,
+            logDebug(
+              "tutor",
+              `Tutor JSON repair still violated contract; returning correction without mastery updates: ${repairViolation}`,
             );
             recordTutorOutcome("structured");
             return {
@@ -957,9 +960,9 @@ export async function analyze(
               e instanceof Error ? e.message : String(e)
             }`,
           });
-          console.warn(
-            "Tutor JSON repair request failed after contract violation; returning correction without mastery updates:",
-            e,
+          logDebug(
+            "tutor",
+            `Tutor JSON repair request failed after contract violation; returning correction without mastery updates: ${e instanceof Error ? e.message : String(e)}`,
           );
         }
         recordTutorOutcome("structured");
@@ -978,11 +981,9 @@ export async function analyze(
       finish: structuredResult.finish?.raw,
     });
 
-    console.warn(
-      "Tutor structured parse failed, enabling plain-text fallback:",
-      parseFailureText(structured.error),
-      "raw:",
-      structuredResult.raw.slice(0, 400),
+    logDebug(
+      "tutor",
+      `Tutor structured parse failed, enabling plain-text fallback: ${parseFailureText(structured.error)} raw: ${structuredResult.raw.slice(0, 400)}`,
     );
 
     try {
@@ -1003,9 +1004,9 @@ export async function analyze(
             raw: repairedResult.raw,
             finish: repairedResult.finish?.raw,
           });
-          console.warn(
-            "Tutor JSON repair violated contract; returning correction without mastery updates:",
-            repairViolation,
+          logDebug(
+            "tutor",
+            `Tutor JSON repair violated contract; returning correction without mastery updates: ${repairViolation}`,
           );
           recordTutorOutcome("structured");
           return {
@@ -1022,20 +1023,18 @@ export async function analyze(
         raw: repairedResult.raw,
         finish: repairedResult.finish?.raw,
       });
-      console.warn(
-        "Tutor JSON repair still failed, enabling plain-text fallback:",
-        parseFailureText(repaired.error),
-        "raw:",
-        repairedResult.raw.slice(0, 400),
+      logDebug(
+        "tutor",
+        `Tutor JSON repair still failed, enabling plain-text fallback: ${parseFailureText(repaired.error)} raw: ${repairedResult.raw.slice(0, 400)}`,
       );
     } catch (e) {
       diagnosticAttempts.push({
         label: "repair json_schema",
         failure: `request_failed: ${e instanceof Error ? e.message : String(e)}`,
       });
-      console.warn(
-        "Tutor JSON repair request failed, enabling plain-text fallback:",
-        e,
+      logDebug(
+        "tutor",
+        `Tutor JSON repair request failed, enabling plain-text fallback: ${e instanceof Error ? e.message : String(e)}`,
       );
     }
 
@@ -1067,7 +1066,7 @@ export async function analyze(
     };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    console.error("Tutor request failed:", e);
+    logError("tutor", "Tutor request failed", e);
     recordTutorOutcome("failed");
     return { analysis: null, error: `API request failed: ${msg}` };
   }

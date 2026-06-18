@@ -1,5 +1,5 @@
 ---
-format: lang-agent/drill@1
+format: converloop/drill@1
 name: Weak-spot drill
 description: Turns your most due review items into short retrieval tasks for a quick production round.
 intro: I'll pick the items most worth reviewing right now and design micro-tasks that can only be completed by using them — recalling from memory is what makes review stick.

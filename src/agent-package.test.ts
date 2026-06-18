@@ -75,7 +75,7 @@ describe("agent package", () => {
 
   it("validates and summarizes store-ready packages", () => {
     const raw = JSON.stringify({
-      format: "lang-agent.package",
+      format: "converloop.package",
       version: 1,
       package: {
         id: "com.example.interview-b1",
@@ -133,6 +133,37 @@ describe("agent package", () => {
       kind: "package",
       itemSummary: "1 skill(s) · 2 lesson(s) · 1 course item(s)",
       writes: "Can propose learning data write-backs (requires confirmation)",
+    });
+  });
+
+  it("keeps old store-ready packages import-compatible", () => {
+    const raw = JSON.stringify({
+      format: "lang-agent.package",
+      version: 1,
+      package: {
+        id: "com.example.legacy",
+        version: "0.1.0",
+        name: "Legacy Pack",
+        description: "Uses the pre-rename format id.",
+      },
+      items: [
+        {
+          type: "lesson",
+          id: "legacy-lesson",
+          name: "Legacy lesson",
+          description: "Still imports.",
+          prompt: "Teach a short lesson.",
+          dataScopes: ["profile"],
+          allowedTools: ["read_learning_data"],
+          writebackPolicy: "none",
+        },
+      ],
+    });
+
+    expect(reviewAgentPackage(raw)).toMatchObject({
+      name: "Legacy Pack",
+      kind: "package",
+      lessonCount: 1,
     });
   });
 });

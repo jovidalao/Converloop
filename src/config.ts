@@ -74,6 +74,8 @@ const AppConfigSchema = z.object({
   /** Auto-generate reply coaching hints after each turn (one extra model call per turn).
    *  Off = hints are only generated on demand via the coach panel's regenerate button. */
   inputHintsAuto: z.boolean(),
+  /** Daily practice goal: target countable sentences/day, shown as the progress ring on the new-chat start page. */
+  dailyGoal: z.number().int().positive(),
 });
 
 export type AppConfig = z.infer<typeof AppConfigSchema>;
@@ -217,11 +219,14 @@ export const PROVIDER_PRESETS: Record<ProviderType, ProviderPreset> = {
     label: "Gemini (Native API)",
     shortLabel: "Gemini",
     baseUrl: "https://generativelanguage.googleapis.com/v1beta",
-    model: "gemini-2.0-flash",
+    model: "gemini-3.5-flash",
     models: [
-      { label: "Gemini 2.0 Flash", model: "gemini-2.0-flash" },
-      { label: "Gemini 1.5 Flash", model: "gemini-1.5-flash" },
-      { label: "Gemini 1.5 Pro", model: "gemini-1.5-pro" },
+      { label: "Gemini 3.5 Flash", model: "gemini-3.5-flash" },
+      { label: "Gemini 3.1 Pro Preview", model: "gemini-3.1-pro-preview" },
+      { label: "Gemini 3 Flash Preview", model: "gemini-3-flash-preview" },
+      { label: "Gemini 3.1 Flash-Lite", model: "gemini-3.1-flash-lite" },
+      { label: "Gemini 2.5 Pro", model: "gemini-2.5-pro" },
+      { label: "Gemini 2.5 Flash", model: "gemini-2.5-flash" },
     ],
   },
   anthropic: {
@@ -465,12 +470,13 @@ export function withActiveModel(
 const DEFAULT_CONFIG: AppConfig = {
   providerType: "openai",
   providers: defaultProviders(),
-  nativeLanguage: "Chinese",
+  nativeLanguage: "Simplified Chinese",
   targetLanguage: "English",
   level: "B1",
   autoBilingual: false,
   actionLabels: false,
   inputHintsAuto: true,
+  dailyGoal: 10,
 };
 
 function freshDefault(): AppConfig {
@@ -514,6 +520,11 @@ function migrateProviders(
   return providers;
 }
 
+function migrateNativeLanguage(value: unknown): unknown {
+  if (typeof value !== "string") return DEFAULT_CONFIG.nativeLanguage;
+  return value === "Chinese" ? "Simplified Chinese" : value;
+}
+
 function readFromStorage(): AppConfig {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -523,6 +534,7 @@ function readFromStorage(): AppConfig {
     const parsed = AppConfigSchema.safeParse({
       ...DEFAULT_CONFIG,
       ...obj,
+      nativeLanguage: migrateNativeLanguage(obj.nativeLanguage),
       providers: migrateProviders(obj),
     });
     return parsed.success ? parsed.data : freshDefault();

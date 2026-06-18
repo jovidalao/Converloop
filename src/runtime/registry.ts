@@ -262,10 +262,10 @@ export async function dispatchReply(
 // Each observer awaits ctx.turnPersisted before writing back, and manages its own UI callbacks and error display.
 export function dispatchObservers(ctx: PracticeContext): void {
   const active = getObservers().filter((o) => isAgentEnabled(o.id));
-  // No enabled observers (e.g. user turned off the tutor) → notify UI there is no correction this turn, clear the "analyzing" pending state.
-  if (active.length === 0) {
+  // If no enabled observer owns the correction panel, clear the "analyzing" pending state immediately.
+  // Other observers may still run and add annotations, but they should not leave ChatView waiting for Tutor output.
+  if (!active.some((o) => o.providesTurnAnalysis)) {
     ctx.callbacks.onAnalysis(null);
-    return;
   }
   for (const observer of active) {
     void runLogged(

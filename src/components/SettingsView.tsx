@@ -30,7 +30,12 @@ import {
   type PromptMacroDef,
   takenMacroNames,
 } from "@/commands";
-import { type Locale, type MessageKey, useTranslation } from "@/i18n";
+import {
+  type Locale,
+  type MessageKey,
+  UI_LOCALES,
+  useTranslation,
+} from "@/i18n";
 import {
   exportBackupToDownloads,
   importBackupBundle,
@@ -59,6 +64,7 @@ import {
   saveConfig,
 } from "../config";
 import { deleteSecret, getSecret, setSecret } from "../keychain";
+import { languageToBcp47 } from "../lib/language";
 import { loginAnthropic } from "../oauth/anthropic";
 import { loginOpenAICodex } from "../oauth/openai";
 import {
@@ -74,6 +80,14 @@ import {
   updateProfilePreference,
 } from "../profile/preferences";
 import { readProfile, writeProfile } from "../profile/profile";
+import {
+  loadPronunciationConfig,
+  PRONUNCIATION_PROVIDER_PRESETS,
+  PRONUNCIATION_PROVIDERS,
+  type PronunciationConfig,
+  type PronunciationProvider,
+  savePronunciationConfig,
+} from "../pronunciation/config";
 import {
   type CustomPromptMacro,
   clearPromptMacroOverride,
@@ -91,6 +105,7 @@ import {
   type SttProvider,
   saveSttConfig,
   sttKeyAccount,
+  sttSupportsLanguage,
 } from "../stt/config";
 import {
   downloadLocalAsrModel,
@@ -103,9 +118,12 @@ import {
   loadTtsConfig,
   MIMO_TTS_KEY_ACCOUNT,
   MIMO_VOICES,
+  normalizeAutoSpeakIntervalSeconds,
+  resolveEdgeVoice,
   saveTtsConfig,
   type TtsConfig,
   type TtsProvider,
+  ttsSupportsLanguage,
 } from "../tts/config";
 import { synthesizeEdge } from "../tts/edge";
 import { synthesizeMimo } from "../tts/mimo";
@@ -113,6 +131,7 @@ import { clearTtsCache, getTtsCacheCount } from "../tts/speak";
 import { useConfirm } from "./confirm";
 import { PreferencesPanel } from "./PreferencesPanel";
 import { ShortcutsEditor } from "./ShortcutsEditor";
+import type { MainView } from "./Sidebar";
 import { type Accent, type Theme, useTheme } from "./theme-provider";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -125,6 +144,8 @@ import {
 } from "./ui/select";
 import { Switch } from "./ui/switch";
 import { Textarea } from "./ui/textarea";
+
+const CUSTOM_PRONUNCIATION_MODEL_VALUE = "__custom_pronunciation_model__";
 
 // A form field: label + control. Inside a row, flex-1 makes fields share width.
 function Field({
@@ -165,6 +186,30 @@ function ToggleField({
   );
 }
 
+function PreferenceRow({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-5 border-b border-border/70 py-3 last:border-0">
+      <div className="min-w-0 space-y-1">
+        <div className="text-ui-body font-medium">{title}</div>
+        {description && (
+          <p className="m-0 max-w-xl text-ui-caption leading-snug text-ui-muted">
+            {description}
+          </p>
+        )}
+      </div>
+      <div className="flex shrink-0 items-center pt-0.5">{children}</div>
+    </div>
+  );
+}
+
 function SettingRow({
   label,
   children,
@@ -180,12 +225,16 @@ function SettingRow({
   );
 }
 
-// Voice input (speech-to-text): Soniox async STT first, plus an
-// OpenAI-compatible /audio/transcriptions fallback. Each provider has its own
-// key account so switching does not lose credentials.
-function SttSettings() {
+// Voice input (speech-to-text): Soniox real-time streaming, OpenAI-compatible
+// batch transcription, and local parakeet/qwen3 engines. Each cloud provider has
+// its own key account so switching does not lose credentials.
+function SttSettings({ targetLanguage }: { targetLanguage: string }) {
   const { t } = useTranslation();
   const [cfg, setCfg] = useState<SttConfig>(() => loadSttConfig());
+  const [pronCfg, setPronCfg] = useState<PronunciationConfig>(() =>
+    loadPronunciationConfig(),
+  );
+  const [customPronModel, setCustomPronModel] = useState(false);
   const [expandedStt, setExpandedStt] = useState<SttProvider | null>(
     () => loadSttConfig().sttProvider,
   );
@@ -199,7 +248,8 @@ function SttSettings() {
     provider: SttProvider;
     text: string;
   } | null>(null);
-  // 本地模型(parakeet / qwen3):下载状态(缺省=查询中)与下载进度(缺省=未在下载)。
+  // Local models (parakeet / qwen3): download status (default = checking) and
+  // download progress (default = not downloading).
   const [localReady, setLocalReady] = useState<
     Partial<Record<LocalSttEngine, boolean>>
   >({});
@@ -257,6 +307,36 @@ function SttSettings() {
     saveSttConfig(next);
   }
 
+  function updatePron<K extends keyof PronunciationConfig>(
+    key: K,
+    value: PronunciationConfig[K],
+  ) {
+    const next = { ...pronCfg, [key]: value };
+    setPronCfg(next);
+    savePronunciationConfig(next);
+  }
+
+  function setPronProvider(provider: PronunciationProvider | null) {
+    setCustomPronModel(false);
+    updatePron("provider", provider);
+  }
+
+  function updatePronModel(
+    provider: PronunciationProvider,
+    model: string,
+  ): void {
+    updatePron("models", { ...pronCfg.models, [provider]: model });
+  }
+
+  function selectPronModel(provider: PronunciationProvider, value: string) {
+    if (value === CUSTOM_PRONUNCIATION_MODEL_VALUE) {
+      setCustomPronModel(true);
+      return;
+    }
+    setCustomPronModel(false);
+    updatePronModel(provider, value);
+  }
+
   async function saveKey(provider: CloudSttProvider) {
     const value = (keyInputs[provider] ?? "").trim();
     if (!value) return;
@@ -274,6 +354,18 @@ function SttSettings() {
 
   const sonioxHasKey = !!keyStatus.soniox;
   const openAiHasKey = !!keyStatus.openai;
+  const pronProvider = pronCfg.provider;
+  const pronPreset = pronProvider
+    ? PRONUNCIATION_PROVIDER_PRESETS[pronProvider]
+    : null;
+  const pronModel = pronProvider ? pronCfg.models[pronProvider] : "";
+  const pronSelectedModel = pronPreset?.models.find(
+    (option) => option.model === pronModel,
+  );
+  const pronModelValue =
+    customPronModel || !pronSelectedModel
+      ? CUSTOM_PRONUNCIATION_MODEL_VALUE
+      : pronSelectedModel.model;
 
   return (
     <section className="space-y-6">
@@ -303,316 +395,440 @@ function SttSettings() {
         </div>
       </div>
 
-      <div className="flex flex-col">
-        <ProviderCard
-          title={t("settings.stt.sonioxTitle")}
-          statusText={
-            sonioxHasKey
-              ? t("settings.llm.statusKeySaved")
-              : t("settings.llm.statusKeyUnset")
-          }
-          configured={sonioxHasKey}
-          active={cfg.sttProvider === "soniox"}
-          expanded={expandedStt === "soniox"}
-          onToggle={() =>
-            setExpandedStt((prev) => (prev === "soniox" ? null : "soniox"))
-          }
-          onActivate={() => update("sttProvider", "soniox")}
-        >
-          <p className="text-ui-body leading-relaxed text-ui-muted">
-            {t("settings.stt.sonioxDescription")}
+      {cfg.sttProvider &&
+        !sttSupportsLanguage(cfg.sttProvider, targetLanguage) && (
+          <p className="m-0 rounded-md bg-warning/10 px-3 py-2 text-ui-caption leading-snug text-warning">
+            {t("newChat.sttLangWarning", { language: targetLanguage })}
           </p>
-          <Field
-            label={t("settings.stt.sonioxApiKeyLabel", {
-              state: sonioxHasKey
-                ? t("settings.llm.apiKeyStateSaved")
-                : t("settings.llm.apiKeyStateUnset"),
-            })}
+        )}
+
+      <div className="space-y-2">
+        <h3 className="text-ui-meta font-semibold uppercase tracking-wide text-ui-muted">
+          {t("settings.stt.onlineGroup")}
+        </h3>
+        <p className="m-0 text-ui-caption leading-snug text-ui-muted">
+          {t("settings.stt.onlineGroupHint")}
+        </p>
+        <div className="flex flex-col">
+          <ProviderCard
+            title={t("settings.stt.sonioxTitle")}
+            statusText={
+              sonioxHasKey
+                ? t("settings.llm.statusKeySaved")
+                : t("settings.llm.statusKeyUnset")
+            }
+            configured={sonioxHasKey}
+            active={cfg.sttProvider === "soniox"}
+            expanded={expandedStt === "soniox"}
+            onToggle={() =>
+              setExpandedStt((prev) => (prev === "soniox" ? null : "soniox"))
+            }
+            onActivate={() => update("sttProvider", "soniox")}
           >
-            <div className="flex flex-wrap items-end gap-2">
-              <Input
-                type="password"
-                className="flex-1"
-                value={keyInputs.soniox ?? ""}
-                onChange={(e) =>
-                  setKeyInputs((prev) => ({
-                    ...prev,
-                    soniox: e.target.value,
-                  }))
-                }
-                placeholder={sonioxHasKey ? "••••••••" : "soniox-…"}
-              />
-              <Button
-                onClick={() => void saveKey("soniox")}
-                disabled={!(keyInputs.soniox ?? "").trim()}
-              >
-                {t("settings.llm.saveKey")}
-              </Button>
-              {sonioxHasKey && (
+            <p className="text-ui-body leading-relaxed text-ui-muted">
+              {t("settings.stt.sonioxDescription")}
+            </p>
+            <Field
+              label={t("settings.stt.sonioxApiKeyLabel", {
+                state: sonioxHasKey
+                  ? t("settings.llm.apiKeyStateSaved")
+                  : t("settings.llm.apiKeyStateUnset"),
+              })}
+            >
+              <div className="flex flex-wrap items-end gap-2">
+                <Input
+                  type="password"
+                  className="flex-1"
+                  value={keyInputs.soniox ?? ""}
+                  onChange={(e) =>
+                    setKeyInputs((prev) => ({
+                      ...prev,
+                      soniox: e.target.value,
+                    }))
+                  }
+                  placeholder={sonioxHasKey ? "••••••••" : "soniox-…"}
+                />
                 <Button
-                  variant="secondary"
-                  onClick={() => void clearKey("soniox")}
+                  onClick={() => void saveKey("soniox")}
+                  disabled={!(keyInputs.soniox ?? "").trim()}
                 >
-                  {t("settings.llm.clear")}
+                  {t("settings.llm.saveKey")}
                 </Button>
-              )}
+                {sonioxHasKey && (
+                  <Button
+                    variant="secondary"
+                    onClick={() => void clearKey("soniox")}
+                  >
+                    {t("settings.llm.clear")}
+                  </Button>
+                )}
+              </div>
+              <p className="mt-1.5 text-ui-caption leading-snug text-ui-muted">
+                {t("settings.llm.keyStorageNote")}
+              </p>
+            </Field>
+
+            <Field label={t("settings.stt.sonioxModel")}>
+              <Input
+                value={cfg.sonioxModel}
+                onChange={(e) => update("sonioxModel", e.target.value)}
+                placeholder="stt-rt-v3"
+              />
+              <p className="mt-1.5 text-ui-caption leading-snug text-ui-muted">
+                {t("settings.stt.sonioxModelHint")}
+              </p>
+            </Field>
+
+            {status?.provider === "soniox" && (
+              <p className="m-0 break-words text-ui-body text-primary">
+                {status.text}
+              </p>
+            )}
+          </ProviderCard>
+
+          <ProviderCard
+            title={t("settings.stt.openaiTitle")}
+            statusText={
+              openAiHasKey
+                ? t("settings.llm.statusKeySaved")
+                : t("settings.llm.statusKeyUnset")
+            }
+            configured={openAiHasKey}
+            active={cfg.sttProvider === "openai"}
+            expanded={expandedStt === "openai"}
+            onToggle={() =>
+              setExpandedStt((prev) => (prev === "openai" ? null : "openai"))
+            }
+            onActivate={() => update("sttProvider", "openai")}
+          >
+            <p className="text-ui-body leading-relaxed text-ui-muted">
+              {t("settings.stt.openaiDescription")}
+            </p>
+            <div className="grid gap-4 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+              <Field label={t("settings.stt.baseUrl")}>
+                <Input
+                  value={cfg.baseUrl}
+                  onChange={(e) => update("baseUrl", e.target.value)}
+                  placeholder="https://api.openai.com/v1"
+                />
+              </Field>
+              <Field label={t("settings.stt.model")}>
+                <Input
+                  value={cfg.model}
+                  onChange={(e) => update("model", e.target.value)}
+                  placeholder="whisper-1"
+                />
+              </Field>
             </div>
-            <p className="mt-1.5 text-ui-caption leading-snug text-ui-muted">
-              {t("settings.llm.keyStorageNote")}
-            </p>
-          </Field>
-
-          <Field label={t("settings.stt.sonioxModel")}>
-            <Input
-              value={cfg.sonioxModel}
-              onChange={(e) => update("sonioxModel", e.target.value)}
-              placeholder="stt-rt-v3"
-            />
-            <p className="mt-1.5 text-ui-caption leading-snug text-ui-muted">
-              {t("settings.stt.sonioxModelHint")}
-            </p>
-          </Field>
-
-          {status?.provider === "soniox" && (
-            <p className="m-0 break-words text-ui-body text-primary">
-              {status.text}
-            </p>
-          )}
-        </ProviderCard>
-
-        <ProviderCard
-          title={t("settings.stt.openaiTitle")}
-          statusText={
-            openAiHasKey
-              ? t("settings.llm.statusKeySaved")
-              : t("settings.llm.statusKeyUnset")
-          }
-          configured={openAiHasKey}
-          active={cfg.sttProvider === "openai"}
-          expanded={expandedStt === "openai"}
-          onToggle={() =>
-            setExpandedStt((prev) => (prev === "openai" ? null : "openai"))
-          }
-          onActivate={() => update("sttProvider", "openai")}
-        >
-          <p className="text-ui-body leading-relaxed text-ui-muted">
-            {t("settings.stt.openaiDescription")}
-          </p>
-          <div className="grid gap-4 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-            <Field label={t("settings.stt.baseUrl")}>
-              <Input
-                value={cfg.baseUrl}
-                onChange={(e) => update("baseUrl", e.target.value)}
-                placeholder="https://api.openai.com/v1"
-              />
+            <Field
+              label={t("settings.stt.openaiApiKeyLabel", {
+                state: openAiHasKey
+                  ? t("settings.llm.apiKeyStateSaved")
+                  : t("settings.llm.apiKeyStateUnset"),
+              })}
+            >
+              <div className="flex flex-wrap items-end gap-2">
+                <Input
+                  type="password"
+                  className="flex-1"
+                  value={keyInputs.openai ?? ""}
+                  onChange={(e) =>
+                    setKeyInputs((prev) => ({
+                      ...prev,
+                      openai: e.target.value,
+                    }))
+                  }
+                  placeholder={openAiHasKey ? "••••••••" : "sk-…"}
+                />
+                <Button
+                  onClick={() => void saveKey("openai")}
+                  disabled={!(keyInputs.openai ?? "").trim()}
+                >
+                  {t("settings.llm.saveKey")}
+                </Button>
+                {openAiHasKey && (
+                  <Button
+                    variant="secondary"
+                    onClick={() => void clearKey("openai")}
+                  >
+                    {t("settings.llm.clear")}
+                  </Button>
+                )}
+              </div>
+              <p className="mt-1.5 text-ui-caption leading-snug text-ui-muted">
+                {t("settings.llm.keyStorageNote")}
+              </p>
             </Field>
-            <Field label={t("settings.stt.model")}>
-              <Input
-                value={cfg.model}
-                onChange={(e) => update("model", e.target.value)}
-                placeholder="whisper-1"
-              />
+
+            {status?.provider === "openai" && (
+              <p className="m-0 break-words text-ui-body text-primary">
+                {status.text}
+              </p>
+            )}
+          </ProviderCard>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <h3 className="text-ui-meta font-semibold uppercase tracking-wide text-ui-muted">
+          {t("settings.stt.localGroup")}
+        </h3>
+        <p className="m-0 text-ui-caption leading-snug text-ui-muted">
+          {t("settings.stt.localGroupHint")}
+        </p>
+        <div className="flex flex-col">
+          <ProviderCard
+            title={t("settings.stt.parakeetTitle")}
+            statusText={
+              localProgress.parakeet
+                ? t("settings.stt.parakeetDownloading", {
+                    index: localProgress.parakeet.fileIndex,
+                    count: localProgress.parakeet.fileCount,
+                  })
+                : localReady.parakeet
+                  ? t("settings.stt.parakeetDownloaded")
+                  : t("settings.stt.parakeetNotDownloaded")
+            }
+            configured={!!localReady.parakeet}
+            active={cfg.sttProvider === "parakeet"}
+            expanded={expandedStt === "parakeet"}
+            onToggle={() =>
+              setExpandedStt((prev) =>
+                prev === "parakeet" ? null : "parakeet",
+              )
+            }
+            // Do not activate a local engine before its model is downloaded.
+            onActivate={() => {
+              if (localReady.parakeet) update("sttProvider", "parakeet");
+            }}
+          >
+            <p className="text-ui-body leading-relaxed text-ui-muted">
+              {t("settings.stt.parakeetDescription")}
+            </p>
+            <p className="text-ui-caption leading-snug text-amber-600 dark:text-amber-500">
+              {t("settings.stt.parakeetLangNote")}
+            </p>
+            <Field label={t("settings.stt.parakeetModelLabel")}>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  onClick={() => void downloadLocal("parakeet", 4)}
+                  disabled={!!localProgress.parakeet}
+                >
+                  <DownloadIcon className="size-4" />
+                  {localProgress.parakeet
+                    ? t("settings.stt.parakeetDownloading", {
+                        index: localProgress.parakeet.fileIndex,
+                        count: localProgress.parakeet.fileCount,
+                      })
+                    : localReady.parakeet
+                      ? t("settings.stt.parakeetRedownload")
+                      : t("settings.stt.parakeetDownload")}
+                </Button>
+                {localReady.parakeet && !localProgress.parakeet && (
+                  <span className="flex items-center gap-1.5 text-ui-caption text-success">
+                    <CheckIcon className="size-3.5" />
+                    {t("settings.stt.parakeetDownloaded")}
+                  </span>
+                )}
+              </div>
+              {localProgress.parakeet && localProgress.parakeet.total > 0 && (
+                <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-foreground/10">
+                  <div
+                    className="h-full bg-success transition-[width]"
+                    style={{
+                      width: `${Math.round(
+                        (localProgress.parakeet.received /
+                          localProgress.parakeet.total) *
+                          100,
+                      )}%`,
+                    }}
+                  />
+                </div>
+              )}
+              <p className="mt-1.5 text-ui-caption leading-snug text-ui-muted">
+                {t("settings.stt.parakeetModelHint")}
+              </p>
             </Field>
+
+            {status?.provider === "parakeet" && (
+              <p className="m-0 break-words text-ui-body text-primary">
+                {status.text}
+              </p>
+            )}
+          </ProviderCard>
+
+          <ProviderCard
+            title={t("settings.stt.qwen3Title")}
+            statusText={
+              localProgress.qwen3
+                ? t("settings.stt.parakeetDownloading", {
+                    index: localProgress.qwen3.fileIndex,
+                    count: localProgress.qwen3.fileCount,
+                  })
+                : localReady.qwen3
+                  ? t("settings.stt.parakeetDownloaded")
+                  : t("settings.stt.parakeetNotDownloaded")
+            }
+            configured={!!localReady.qwen3}
+            active={cfg.sttProvider === "qwen3"}
+            expanded={expandedStt === "qwen3"}
+            onToggle={() =>
+              setExpandedStt((prev) => (prev === "qwen3" ? null : "qwen3"))
+            }
+            // Do not activate a local engine before its model is downloaded.
+            onActivate={() => {
+              if (localReady.qwen3) update("sttProvider", "qwen3");
+            }}
+          >
+            <p className="text-ui-body leading-relaxed text-ui-muted">
+              {t("settings.stt.qwen3Description")}
+            </p>
+            <Field label={t("settings.stt.qwen3ModelLabel")}>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  onClick={() => void downloadLocal("qwen3", 6)}
+                  disabled={!!localProgress.qwen3}
+                >
+                  <DownloadIcon className="size-4" />
+                  {localProgress.qwen3
+                    ? t("settings.stt.parakeetDownloading", {
+                        index: localProgress.qwen3.fileIndex,
+                        count: localProgress.qwen3.fileCount,
+                      })
+                    : localReady.qwen3
+                      ? t("settings.stt.parakeetRedownload")
+                      : t("settings.stt.parakeetDownload")}
+                </Button>
+                {localReady.qwen3 && !localProgress.qwen3 && (
+                  <span className="flex items-center gap-1.5 text-ui-caption text-success">
+                    <CheckIcon className="size-3.5" />
+                    {t("settings.stt.parakeetDownloaded")}
+                  </span>
+                )}
+              </div>
+              {localProgress.qwen3 && localProgress.qwen3.total > 0 && (
+                <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-foreground/10">
+                  <div
+                    className="h-full bg-success transition-[width]"
+                    style={{
+                      width: `${Math.round(
+                        (localProgress.qwen3.received /
+                          localProgress.qwen3.total) *
+                          100,
+                      )}%`,
+                    }}
+                  />
+                </div>
+              )}
+              <p className="mt-1.5 text-ui-caption leading-snug text-ui-muted">
+                {t("settings.stt.parakeetModelHint")}
+              </p>
+            </Field>
+
+            {status?.provider === "qwen3" && (
+              <p className="m-0 break-words text-ui-body text-primary">
+                {status.text}
+              </p>
+            )}
+          </ProviderCard>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <h3 className="text-ui-meta font-semibold uppercase tracking-wide text-ui-muted">
+          {t("settings.stt.pronunciationGroup")}
+        </h3>
+        <p className="m-0 text-ui-caption leading-snug text-ui-muted">
+          {t("settings.stt.pronunciationGroupHint")}
+        </p>
+        <ToggleField
+          label={t("settings.stt.pronunciationToggle")}
+          checked={pronProvider !== null}
+          onChange={(v) => setPronProvider(v ? "gemini" : null)}
+        />
+        {pronProvider && pronPreset && (
+          <div className="pt-1">
+            <SettingRow label={t("settings.stt.pronunciationProvider")}>
+              <Select
+                value={pronProvider}
+                onValueChange={(v) =>
+                  setPronProvider(v as PronunciationProvider)
+                }
+              >
+                <SelectTrigger className="w-72 max-w-[50vw]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PRONUNCIATION_PROVIDERS.map((provider) => {
+                    const preset = PRONUNCIATION_PROVIDER_PRESETS[provider];
+                    return (
+                      <SelectItem key={provider} value={provider}>
+                        <span className="inline-flex items-center gap-2">
+                          <ProviderBrandIcon type={provider} />
+                          {preset.label}
+                        </span>
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+            </SettingRow>
+
+            <SettingRow label={t("settings.stt.pronunciationModel")}>
+              <div className="min-w-0 space-y-1.5">
+                <Select
+                  value={pronModelValue}
+                  onValueChange={(v) => selectPronModel(pronProvider, v)}
+                >
+                  <SelectTrigger className="w-72 max-w-[50vw]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {pronPreset.models.map((option) => (
+                      <SelectItem key={option.model} value={option.model}>
+                        {`${pronPreset.shortLabel} · ${option.label}`}
+                      </SelectItem>
+                    ))}
+                    <SelectItem value={CUSTOM_PRONUNCIATION_MODEL_VALUE}>
+                      {t("settings.stt.pronunciationCustomModel", {
+                        label: pronPreset.shortLabel,
+                      })}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                {pronSelectedModel && !customPronModel && (
+                  <p className="m-0 text-right text-ui-caption leading-snug text-ui-muted">
+                    {t("settings.stt.pronunciationModelId", {
+                      id: pronSelectedModel.model,
+                    })}
+                  </p>
+                )}
+              </div>
+            </SettingRow>
+
+            {(customPronModel || !pronSelectedModel) && (
+              <SettingRow label={t("settings.stt.pronunciationCustomModelId")}>
+                <Input
+                  value={pronModel}
+                  onChange={(e) => {
+                    setCustomPronModel(true);
+                    updatePronModel(pronProvider, e.target.value);
+                  }}
+                  className="w-72 max-w-[50vw]"
+                  placeholder={pronPreset.model}
+                />
+              </SettingRow>
+            )}
+            <p className="m-0 text-ui-caption leading-snug text-ui-muted">
+              {t("settings.stt.pronunciationModelHint")}
+            </p>
+            <p className="m-0 text-ui-caption leading-snug text-ui-muted">
+              {t("settings.stt.pronunciationKeyNote", {
+                provider: pronPreset.shortLabel,
+              })}
+            </p>
           </div>
-          <Field
-            label={t("settings.stt.openaiApiKeyLabel", {
-              state: openAiHasKey
-                ? t("settings.llm.apiKeyStateSaved")
-                : t("settings.llm.apiKeyStateUnset"),
-            })}
-          >
-            <div className="flex flex-wrap items-end gap-2">
-              <Input
-                type="password"
-                className="flex-1"
-                value={keyInputs.openai ?? ""}
-                onChange={(e) =>
-                  setKeyInputs((prev) => ({
-                    ...prev,
-                    openai: e.target.value,
-                  }))
-                }
-                placeholder={openAiHasKey ? "••••••••" : "sk-…"}
-              />
-              <Button
-                onClick={() => void saveKey("openai")}
-                disabled={!(keyInputs.openai ?? "").trim()}
-              >
-                {t("settings.llm.saveKey")}
-              </Button>
-              {openAiHasKey && (
-                <Button
-                  variant="secondary"
-                  onClick={() => void clearKey("openai")}
-                >
-                  {t("settings.llm.clear")}
-                </Button>
-              )}
-            </div>
-            <p className="mt-1.5 text-ui-caption leading-snug text-ui-muted">
-              {t("settings.llm.keyStorageNote")}
-            </p>
-          </Field>
-
-          {status?.provider === "openai" && (
-            <p className="m-0 break-words text-ui-body text-primary">
-              {status.text}
-            </p>
-          )}
-        </ProviderCard>
-
-        <ProviderCard
-          title={t("settings.stt.parakeetTitle")}
-          statusText={
-            localProgress.parakeet
-              ? t("settings.stt.parakeetDownloading", {
-                  index: localProgress.parakeet.fileIndex,
-                  count: localProgress.parakeet.fileCount,
-                })
-              : localReady.parakeet
-                ? t("settings.stt.parakeetDownloaded")
-                : t("settings.stt.parakeetNotDownloaded")
-          }
-          configured={!!localReady.parakeet}
-          active={cfg.sttProvider === "parakeet"}
-          expanded={expandedStt === "parakeet"}
-          onToggle={() =>
-            setExpandedStt((prev) => (prev === "parakeet" ? null : "parakeet"))
-          }
-          // 未下载不允许切到本地引擎(否则录音转写必然失败)。
-          onActivate={() => {
-            if (localReady.parakeet) update("sttProvider", "parakeet");
-          }}
-        >
-          <p className="text-ui-body leading-relaxed text-ui-muted">
-            {t("settings.stt.parakeetDescription")}
-          </p>
-          <p className="text-ui-caption leading-snug text-amber-600 dark:text-amber-500">
-            {t("settings.stt.parakeetLangNote")}
-          </p>
-          <Field label={t("settings.stt.parakeetModelLabel")}>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                onClick={() => void downloadLocal("parakeet", 4)}
-                disabled={!!localProgress.parakeet}
-              >
-                <DownloadIcon className="size-4" />
-                {localProgress.parakeet
-                  ? t("settings.stt.parakeetDownloading", {
-                      index: localProgress.parakeet.fileIndex,
-                      count: localProgress.parakeet.fileCount,
-                    })
-                  : localReady.parakeet
-                    ? t("settings.stt.parakeetRedownload")
-                    : t("settings.stt.parakeetDownload")}
-              </Button>
-              {localReady.parakeet && !localProgress.parakeet && (
-                <span className="flex items-center gap-1.5 text-ui-caption text-success">
-                  <CheckIcon className="size-3.5" />
-                  {t("settings.stt.parakeetDownloaded")}
-                </span>
-              )}
-            </div>
-            {localProgress.parakeet && localProgress.parakeet.total > 0 && (
-              <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-foreground/10">
-                <div
-                  className="h-full bg-success transition-[width]"
-                  style={{
-                    width: `${Math.round(
-                      (localProgress.parakeet.received /
-                        localProgress.parakeet.total) *
-                        100,
-                    )}%`,
-                  }}
-                />
-              </div>
-            )}
-            <p className="mt-1.5 text-ui-caption leading-snug text-ui-muted">
-              {t("settings.stt.parakeetModelHint")}
-            </p>
-          </Field>
-
-          {status?.provider === "parakeet" && (
-            <p className="m-0 break-words text-ui-body text-primary">
-              {status.text}
-            </p>
-          )}
-        </ProviderCard>
-
-        <ProviderCard
-          title={t("settings.stt.qwen3Title")}
-          statusText={
-            localProgress.qwen3
-              ? t("settings.stt.parakeetDownloading", {
-                  index: localProgress.qwen3.fileIndex,
-                  count: localProgress.qwen3.fileCount,
-                })
-              : localReady.qwen3
-                ? t("settings.stt.parakeetDownloaded")
-                : t("settings.stt.parakeetNotDownloaded")
-          }
-          configured={!!localReady.qwen3}
-          active={cfg.sttProvider === "qwen3"}
-          expanded={expandedStt === "qwen3"}
-          onToggle={() =>
-            setExpandedStt((prev) => (prev === "qwen3" ? null : "qwen3"))
-          }
-          // 未下载不允许切到本地引擎(否则录音转写必然失败)。
-          onActivate={() => {
-            if (localReady.qwen3) update("sttProvider", "qwen3");
-          }}
-        >
-          <p className="text-ui-body leading-relaxed text-ui-muted">
-            {t("settings.stt.qwen3Description")}
-          </p>
-          <Field label={t("settings.stt.qwen3ModelLabel")}>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                onClick={() => void downloadLocal("qwen3", 6)}
-                disabled={!!localProgress.qwen3}
-              >
-                <DownloadIcon className="size-4" />
-                {localProgress.qwen3
-                  ? t("settings.stt.parakeetDownloading", {
-                      index: localProgress.qwen3.fileIndex,
-                      count: localProgress.qwen3.fileCount,
-                    })
-                  : localReady.qwen3
-                    ? t("settings.stt.parakeetRedownload")
-                    : t("settings.stt.parakeetDownload")}
-              </Button>
-              {localReady.qwen3 && !localProgress.qwen3 && (
-                <span className="flex items-center gap-1.5 text-ui-caption text-success">
-                  <CheckIcon className="size-3.5" />
-                  {t("settings.stt.parakeetDownloaded")}
-                </span>
-              )}
-            </div>
-            {localProgress.qwen3 && localProgress.qwen3.total > 0 && (
-              <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-foreground/10">
-                <div
-                  className="h-full bg-success transition-[width]"
-                  style={{
-                    width: `${Math.round(
-                      (localProgress.qwen3.received /
-                        localProgress.qwen3.total) *
-                        100,
-                    )}%`,
-                  }}
-                />
-              </div>
-            )}
-            <p className="mt-1.5 text-ui-caption leading-snug text-ui-muted">
-              {t("settings.stt.parakeetModelHint")}
-            </p>
-          </Field>
-
-          {status?.provider === "qwen3" && (
-            <p className="m-0 break-words text-ui-body text-primary">
-              {status.text}
-            </p>
-          )}
-        </ProviderCard>
+        )}
       </div>
     </section>
   );
@@ -757,24 +973,54 @@ const ACCENTS: { value: Accent; labelKey: MessageKey; swatch: string }[] = [
     swatch: "oklch(0.6171 0.1375 39.0427)",
   },
 ];
-const LOCALES: { value: Locale; labelKey: MessageKey }[] = [
-  { value: "en", labelKey: "settings.languages.en" },
-  { value: "zh", labelKey: "settings.languages.zh" },
-];
-
 type BiLabel = { en: string; zh: string };
-// Shared with the first-run onboarding wizard.
-export const STUDY_LANGUAGES: { value: string; label: BiLabel }[] = [
-  { value: "Chinese", label: { en: "Chinese", zh: "中文" } },
+type LanguageOption = { value: string; label: BiLabel };
+
+export function biLabel(label: BiLabel, locale: Locale): string {
+  return label[locale.startsWith("zh") ? "zh" : "en"];
+}
+
+// Languages the app is designed to teach directly.
+export const TARGET_LANGUAGES: LanguageOption[] = [
   { value: "English", label: { en: "English", zh: "英语" } },
-  { value: "Japanese", label: { en: "Japanese", zh: "日语" } },
-  { value: "Korean", label: { en: "Korean", zh: "韩语" } },
   { value: "Spanish", label: { en: "Spanish", zh: "西班牙语" } },
   { value: "French", label: { en: "French", zh: "法语" } },
+  { value: "Japanese", label: { en: "Japanese", zh: "日语" } },
   { value: "German", label: { en: "German", zh: "德语" } },
-  { value: "Portuguese", label: { en: "Portuguese", zh: "葡萄牙语" } },
-  { value: "Russian", label: { en: "Russian", zh: "俄语" } },
+  { value: "Korean", label: { en: "Korean", zh: "韩语" } },
   { value: "Italian", label: { en: "Italian", zh: "意大利语" } },
+  { value: "Chinese", label: { en: "Chinese", zh: "中文" } },
+  { value: "Portuguese", label: { en: "Portuguese", zh: "葡萄牙语" } },
+];
+
+// Languages the tutor can use for explanations, prompts, and teaching content.
+export const NATIVE_LANGUAGES: LanguageOption[] = [
+  { value: "English", label: { en: "English", zh: "英语" } },
+  { value: "Spanish", label: { en: "Spanish", zh: "西班牙语" } },
+  { value: "Portuguese", label: { en: "Portuguese", zh: "葡萄牙语" } },
+  {
+    value: "Simplified Chinese",
+    label: { en: "Simplified Chinese", zh: "简体中文" },
+  },
+  {
+    value: "Traditional Chinese",
+    label: { en: "Traditional Chinese", zh: "繁体中文" },
+  },
+  { value: "Arabic", label: { en: "Arabic", zh: "阿拉伯语" } },
+  { value: "Hindi", label: { en: "Hindi", zh: "印地语" } },
+  { value: "Russian", label: { en: "Russian", zh: "俄语" } },
+  { value: "French", label: { en: "French", zh: "法语" } },
+  { value: "Turkish", label: { en: "Turkish", zh: "土耳其语" } },
+  { value: "Vietnamese", label: { en: "Vietnamese", zh: "越南语" } },
+  { value: "Indonesian", label: { en: "Indonesian", zh: "印尼语" } },
+  { value: "Japanese", label: { en: "Japanese", zh: "日语" } },
+  { value: "German", label: { en: "German", zh: "德语" } },
+  { value: "Bengali", label: { en: "Bengali", zh: "孟加拉语" } },
+  { value: "Polish", label: { en: "Polish", zh: "波兰语" } },
+  { value: "Italian", label: { en: "Italian", zh: "意大利语" } },
+  { value: "Korean", label: { en: "Korean", zh: "韩语" } },
+  { value: "Thai", label: { en: "Thai", zh: "泰语" } },
+  { value: "Ukrainian", label: { en: "Ukrainian", zh: "乌克兰语" } },
 ];
 export const LEVELS: { value: string; label: BiLabel }[] = [
   { value: "A1", label: { en: "A1 · Beginner", zh: "A1 · 入门" } },
@@ -784,6 +1030,66 @@ export const LEVELS: { value: string; label: BiLabel }[] = [
   { value: "C1", label: { en: "C1 · Advanced", zh: "C1 · 高级" } },
   { value: "C2", label: { en: "C2 · Mastery", zh: "C2 · 精通" } },
 ];
+
+// Learners of Chinese/Japanese/Korean think in HSK/JLPT/TOPIK, not CEFR. The level is a free string passed
+// to the LLM as context, so any scale works; these just give natural presets. Index 2 is the intermediate
+// default used when switching scales (see setTargetLanguage).
+const HSK_LEVELS: { value: string; label: BiLabel }[] = [
+  { value: "HSK 1", label: { en: "HSK 1 · Beginner", zh: "HSK 1 · 入门" } },
+  { value: "HSK 2", label: { en: "HSK 2 · Elementary", zh: "HSK 2 · 初级" } },
+  { value: "HSK 3", label: { en: "HSK 3 · Intermediate", zh: "HSK 3 · 中级" } },
+  { value: "HSK 4", label: { en: "HSK 4 · Upper-Int.", zh: "HSK 4 · 中高级" } },
+  { value: "HSK 5", label: { en: "HSK 5 · Advanced", zh: "HSK 5 · 高级" } },
+  { value: "HSK 6", label: { en: "HSK 6 · Mastery", zh: "HSK 6 · 精通" } },
+];
+const JLPT_LEVELS: { value: string; label: BiLabel }[] = [
+  { value: "JLPT N5", label: { en: "N5 · Beginner", zh: "N5 · 入门" } },
+  { value: "JLPT N4", label: { en: "N4 · Elementary", zh: "N4 · 初级" } },
+  { value: "JLPT N3", label: { en: "N3 · Intermediate", zh: "N3 · 中级" } },
+  { value: "JLPT N2", label: { en: "N2 · Upper-Int.", zh: "N2 · 中高级" } },
+  { value: "JLPT N1", label: { en: "N1 · Advanced", zh: "N1 · 高级" } },
+];
+const TOPIK_LEVELS: { value: string; label: BiLabel }[] = [
+  {
+    value: "TOPIK 1",
+    label: { en: "TOPIK 1 · Beginner", zh: "TOPIK 1 · 入门" },
+  },
+  {
+    value: "TOPIK 2",
+    label: { en: "TOPIK 2 · Elementary", zh: "TOPIK 2 · 初级" },
+  },
+  {
+    value: "TOPIK 3",
+    label: { en: "TOPIK 3 · Intermediate", zh: "TOPIK 3 · 中级" },
+  },
+  {
+    value: "TOPIK 4",
+    label: { en: "TOPIK 4 · Upper-Int.", zh: "TOPIK 4 · 中高级" },
+  },
+  {
+    value: "TOPIK 5",
+    label: { en: "TOPIK 5 · Advanced", zh: "TOPIK 5 · 高级" },
+  },
+  {
+    value: "TOPIK 6",
+    label: { en: "TOPIK 6 · Mastery", zh: "TOPIK 6 · 精通" },
+  },
+];
+
+export function levelsForLanguage(
+  targetLanguage: string,
+): { value: string; label: BiLabel }[] {
+  switch (languageToBcp47(targetLanguage)) {
+    case "zh":
+      return HSK_LEVELS;
+    case "ja":
+      return JLPT_LEVELS;
+    case "ko":
+      return TOPIK_LEVELS;
+    default:
+      return LEVELS;
+  }
+}
 
 const CUSTOM_MODEL_VALUE = "__custom_model__";
 export type SettingsSection =
@@ -795,6 +1101,24 @@ export type SettingsSection =
   | "customize";
 
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
+const LLM_TEST_TIMEOUT_MS = 20_000;
+
+function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  label: string,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`${label} timed out after ${ms / 1000}s`)),
+      ms,
+    );
+  });
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
+}
 
 // Each provider's brand icon (local SVG asset); colors follow ChatView's ModelLogo.
 const PROVIDER_BRAND: Record<ProviderType, { svg: string; className: string }> =
@@ -909,9 +1233,7 @@ function ProviderCard({
         </button>
       </div>
 
-      {expanded && (
-        <div className="space-y-5 pt-1 pb-6">{children}</div>
-      )}
+      {expanded && <div className="space-y-5 pt-1 pb-6">{children}</div>}
     </div>
   );
 }
@@ -977,16 +1299,16 @@ function AccentSelect() {
 }
 
 function LanguageSelect() {
-  const { locale, setLocale, t } = useTranslation();
+  const { locale, setLocale } = useTranslation();
   return (
     <Select value={locale} onValueChange={(v) => setLocale(v as Locale)}>
       <SelectTrigger variant="ghost">
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
-        {LOCALES.map((opt) => (
+        {UI_LOCALES.map((opt) => (
           <SelectItem key={opt.value} value={opt.value}>
-            {t(opt.labelKey)}
+            {opt.label}
           </SelectItem>
         ))}
       </SelectContent>
@@ -1124,13 +1446,8 @@ function CommandsSettings() {
   const [custom, setCustom] = useState<CustomPromptMacro[]>(() =>
     getCustomPromptMacros().map((c) => ({ ...c })),
   );
-  // Only the first command is open by default; toggling one row closes the others. Custom commands
-  // are listed first, so prefer the first custom one and fall back to the first built-in.
-  const [expanded, setExpanded] = useState<string | null>(
-    custom[0]
-      ? `custom:${custom[0].id}`
-      : (BUILTIN_PROMPT_MACROS[0]?.name ?? null),
-  );
+  // All commands start collapsed; toggling one row closes the others.
+  const [expanded, setExpanded] = useState<string | null>(null);
   const toggle = (key: string) =>
     setExpanded((prev) => (prev === key ? null : key));
 
@@ -1360,7 +1677,11 @@ function CommandsSettings() {
 // Self-contained host for the free-form AI-customization panel, surfaced in
 // Settings (the same panel also lives in the Profile page). Loads the profile
 // MD, edits only its "AI preferences" section, and persists on blur / smart-apply.
-function AiCustomizeSettings() {
+function AiCustomizeSettings({
+  onOpenView,
+}: {
+  onOpenView?: (view: MainView) => void;
+}) {
   const { t } = useTranslation();
   const [md, setMd] = useState("");
   const [savedMd, setSavedMd] = useState("");
@@ -1458,11 +1779,24 @@ function AiCustomizeSettings() {
           {status}
         </p>
       )}
+      <button
+        type="button"
+        className="block w-fit text-ui-caption text-ui-muted hover:text-foreground"
+        onClick={() => onOpenView?.("agents")}
+      >
+        {t("settings.customize.toCapabilities")}
+      </button>
     </section>
   );
 }
 
-export function SettingsView({ section }: { section: SettingsSection }) {
+export function SettingsView({
+  section,
+  onOpenView,
+}: {
+  section: SettingsSection;
+  onOpenView?: (view: MainView) => void;
+}) {
   const { t, locale } = useTranslation();
   const [cfg, setCfg] = useState<AppConfig>(loadConfig);
   const [ttsCfg, setTtsCfg] = useState<TtsConfig>(loadTtsConfig());
@@ -1559,6 +1893,18 @@ export function SettingsView({ section }: { section: SettingsSection }) {
     saveConfig(next);
   }
 
+  // Switching target language may change the level scale (CEFR ↔ HSK/JLPT/TOPIK). Keep the current level if
+  // it's still valid in the new scale, otherwise reset to that scale's intermediate default.
+  function setTargetLanguage(v: string) {
+    const levels = levelsForLanguage(v);
+    const level = levels.some((l) => l.value === cfg.level)
+      ? cfg.level
+      : (levels[2] ?? levels[0]).value;
+    const next = { ...cfg, targetLanguage: v, level };
+    setCfg(next);
+    saveConfig(next);
+  }
+
   // Change one provider's connection config (without affecting the others, and
   // not necessarily the currently active one).
   function updateProvider(
@@ -1642,8 +1988,9 @@ export function SettingsView({ section }: { section: SettingsSection }) {
     setLlmStatus({ type, text: t("settings.llm.loggedOut") });
   }
 
-  // Run both generate (non-streaming) and stream (streaming) with the same key,
-  // for this card's provider.
+  // Keep the provider test deliberately short: it verifies credentials, base URL,
+  // model id, and the provider's JSON request shape without depending on a
+  // long-lived streaming connection.
   async function testConnection(type: ProviderType) {
     setTestingLlm(type);
     setLlmStatus(null);
@@ -1653,21 +2000,19 @@ export function SettingsView({ section }: { section: SettingsSection }) {
         setLlmStatus({ type, text: t("settings.llm.testNoCredential") });
         return;
       }
-      const gen = await provider.generate({
-        messages: [
-          { role: "user", content: "Reply with the single word: pong" },
-        ],
-      });
-      let streamed = "";
-      await provider.stream(
-        { messages: [{ role: "user", content: "Count from 1 to 5." }] },
-        (d) => {
-          streamed += d;
-        },
+      const gen = await withTimeout(
+        provider.generate({
+          messages: [
+            { role: "user", content: "Reply with the single word: pong" },
+          ],
+          temperature: 0,
+          maxTokens: 64,
+        }),
+        LLM_TEST_TIMEOUT_MS,
+        "Generate test",
       );
       let text = t("settings.llm.testOk", {
         sample: gen.trim().slice(0, 40),
-        count: streamed.length,
       });
       // A custom model id that just verified successfully gets saved to the list so it can be reselected later.
       const entry = cfg.providers[type];
@@ -1721,7 +2066,7 @@ export function SettingsView({ section }: { section: SettingsSection }) {
       if (provider === "edge") {
         audio = await synthesizeEdge({
           text: "Hello, this is a test.",
-          voice: ttsCfg.edgeVoice,
+          voice: resolveEdgeVoice(ttsCfg.edgeVoice, cfg.targetLanguage),
           rate: ttsCfg.edgeRate,
           pitch: ttsCfg.edgePitch,
         });
@@ -2015,9 +2360,9 @@ export function SettingsView({ section }: { section: SettingsSection }) {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {STUDY_LANGUAGES.map((l) => (
+                    {NATIVE_LANGUAGES.map((l) => (
                       <SelectItem key={l.value} value={l.value}>
-                        {l.label[locale]}
+                        {biLabel(l.label, locale)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -2026,15 +2371,15 @@ export function SettingsView({ section }: { section: SettingsSection }) {
               <SettingRow label={t("settings.general.targetLanguage")}>
                 <Select
                   value={cfg.targetLanguage}
-                  onValueChange={(v) => update("targetLanguage", v)}
+                  onValueChange={setTargetLanguage}
                 >
                   <SelectTrigger variant="ghost">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {STUDY_LANGUAGES.map((l) => (
+                    {TARGET_LANGUAGES.map((l) => (
                       <SelectItem key={l.value} value={l.value}>
-                        {l.label[locale]}
+                        {biLabel(l.label, locale)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -2049,9 +2394,26 @@ export function SettingsView({ section }: { section: SettingsSection }) {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {LEVELS.map((l) => (
+                    {levelsForLanguage(cfg.targetLanguage).map((l) => (
                       <SelectItem key={l.value} value={l.value}>
-                        {l.label[locale]}
+                        {biLabel(l.label, locale)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </SettingRow>
+              <SettingRow label={t("settings.general.dailyGoal")}>
+                <Select
+                  value={String(cfg.dailyGoal)}
+                  onValueChange={(v) => update("dailyGoal", Number(v))}
+                >
+                  <SelectTrigger variant="ghost">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[5, 10, 20, 30].map((n) => (
+                      <SelectItem key={n} value={String(n)}>
+                        {t("practiceStats.sentencesUnit", { n })}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -2097,7 +2459,9 @@ export function SettingsView({ section }: { section: SettingsSection }) {
           </section>
         )}
 
-        {section === "stt" && <SttSettings />}
+        {section === "stt" && (
+          <SttSettings targetLanguage={cfg.targetLanguage} />
+        )}
 
         {section === "tts" && (
           <section className="space-y-6">
@@ -2112,11 +2476,58 @@ export function SettingsView({ section }: { section: SettingsSection }) {
               </p>
             </div>
 
-            <ToggleField
-              label={t("settings.tts.autoSpeak")}
-              checked={ttsCfg.autoSpeak}
-              onChange={(v) => updateTts("autoSpeak", v)}
-            />
+            <div className="border-y border-border/70">
+              <PreferenceRow
+                title={t("settings.tts.autoSpeak")}
+                description={t("settings.tts.autoSpeakHint")}
+              >
+                <Switch
+                  checked={ttsCfg.autoSpeak}
+                  onCheckedChange={(v) => updateTts("autoSpeak", v)}
+                  className="shrink-0"
+                />
+              </PreferenceRow>
+              <PreferenceRow
+                title={t("settings.tts.autoSpeakNatural")}
+                description={t("settings.tts.autoSpeakNaturalHint")}
+              >
+                <Switch
+                  checked={ttsCfg.autoSpeakNatural}
+                  onCheckedChange={(v) => updateTts("autoSpeakNatural", v)}
+                  className="shrink-0"
+                />
+              </PreferenceRow>
+              {ttsCfg.autoSpeak && ttsCfg.autoSpeakNatural && (
+                <PreferenceRow
+                  title={t("settings.tts.autoSpeakInterval")}
+                  description={t("settings.tts.autoSpeakIntervalHint")}
+                >
+                  <Input
+                    type="number"
+                    min={0}
+                    max={60}
+                    step={0.5}
+                    className="w-28 text-right"
+                    value={ttsCfg.autoSpeakIntervalSeconds}
+                    onChange={(e) => {
+                      const raw = e.target.value.trim();
+                      updateTts(
+                        "autoSpeakIntervalSeconds",
+                        normalizeAutoSpeakIntervalSeconds(
+                          raw ? Number(raw) : undefined,
+                        ),
+                      );
+                    }}
+                  />
+                </PreferenceRow>
+              )}
+            </div>
+
+            {!ttsSupportsLanguage(ttsCfg.ttsProvider, cfg.targetLanguage) && (
+              <p className="m-0 rounded-md bg-warning/10 px-3 py-2 text-ui-caption leading-snug text-warning">
+                {t("newChat.ttsLangWarning", { language: cfg.targetLanguage })}
+              </p>
+            )}
 
             <div className="flex flex-col">
               <ProviderCard
@@ -2315,7 +2726,9 @@ export function SettingsView({ section }: { section: SettingsSection }) {
 
         {section === "commands" && <CommandsSettings />}
 
-        {section === "customize" && <AiCustomizeSettings />}
+        {section === "customize" && (
+          <AiCustomizeSettings onOpenView={onOpenView} />
+        )}
       </div>
     </div>
   );

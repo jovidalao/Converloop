@@ -19,10 +19,15 @@ import {
 } from "../db/conversations";
 import { createLearningAgent } from "../db/learning-agents";
 import { recordAnalysis, recordDictationAnalysis } from "../db/mastery";
+import { createTurnAnnotation } from "../db/turn-annotations";
 import { formatTurns, getTurnsAfterId, updateTurnAnalysis } from "../db/turns";
 import { renderDrillInstructions } from "../drills/render";
+import { staticT } from "../i18n";
 import { logError } from "../lib/log";
 import { maybeRunMaintainer } from "../profile/maintainer-runner";
+import { assessPronunciation } from "../pronunciation";
+import { isPronunciationEnabled } from "../pronunciation/config";
+import { formatPronunciationBody } from "../pronunciation/format";
 import { getBuiltinAgentOverride } from "./builtin-overrides";
 import { generateDerivedConversation } from "./derive-conversation";
 import { runDrillObserver } from "./drill-observer";
@@ -220,6 +225,7 @@ const learningReply: ReplyProducer = {
 const tutorObserver: Observer = {
   id: "builtin:tutor",
   kind: "observer",
+  providesTurnAnalysis: true,
   card: {
     title: "Correction Tutor",
     description:
@@ -283,6 +289,7 @@ const tutorObserver: Observer = {
             analysis,
             ctx.dictationStandardAnswer,
             turnId,
+            ctx.langs.targetLanguage,
           );
         }
         await updateTurnAnalysis(turnId, analysis);
@@ -334,10 +341,61 @@ const drillObserverHost: Observer = {
   },
 };
 
+// Pronunciation feedback observer: when the learner sent a voice turn AND pronunciation feedback is on,
+// grade the raw recording (audio is something a text-only LLM never sees) and post a Coach-panel note.
+// A no-op on typed turns and when the feature is off, so it costs nothing unless the user opted in.
+// The assessor lives behind the PronunciationAssessor interface, so swapping Gemini for a dedicated
+// phoneme API later is a new adapter, not a change here.
+const pronunciationObserver: Observer = {
+  id: "builtin:pronunciation",
+  kind: "observer",
+  card: {
+    title: "Pronunciation feedback",
+    description:
+      "Grades how you SAID a voice answer — sounds, stress, intonation — from the raw recording, and posts a note to the coach panel.",
+    entry: "auto_turn",
+    timing: "After a voice turn · only when pronunciation feedback is enabled",
+    reads: "Your recording · the target sentence · languages",
+    writes: "A coach-panel note (no learning-memory writes)",
+    canDisable: true,
+  },
+  run: async (ctx: PracticeContext) => {
+    const audio = ctx.pronunciationAudio;
+    if (!audio || !isPronunciationEnabled()) return;
+    let turnId: string;
+    try {
+      turnId = await ctx.turnPersisted;
+    } catch {
+      return;
+    }
+    // Shadowing turns carry the exact target sentence; free speech falls back to the learner's transcript.
+    const referenceText = (ctx.dictationStandardAnswer ?? ctx.userInput).trim();
+    if (!referenceText) return;
+    const assessment = await assessPronunciation({
+      audio: audio.blob,
+      mime: audio.mime,
+      referenceText,
+      language: ctx.langs.targetLanguage,
+      nativeLanguage: ctx.langs.nativeLanguage,
+    });
+    const body =
+      formatPronunciationBody(assessment) ||
+      staticT("pronunciation.coachClean");
+    await createTurnAnnotation({
+      turnId,
+      agentId: "builtin:pronunciation",
+      title: staticT("pronunciation.coachTitle"),
+      bodyMd: body,
+      payload: assessment,
+    });
+  },
+};
+
 registerReplyProducer(conversationReply);
 registerReplyProducer(learningReply);
 registerObserver(tutorObserver);
 registerObserver(drillObserverHost);
+registerObserver(pronunciationObserver);
 
 const transformers: TransformerInfo[] = [
   {

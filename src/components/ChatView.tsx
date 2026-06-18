@@ -7,6 +7,7 @@ import {
   XIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { TutorAnalysis } from "../agents/schema";
 import {
   matchSlashCommands,
   parseSlashInput,
@@ -77,10 +78,13 @@ import {
   startTopicConversation,
 } from "../orchestrator";
 import { beginAction } from "../runtime";
-import { loadTtsConfig } from "../tts/config";
+import {
+  loadTtsConfig,
+  normalizeAutoSpeakIntervalSeconds,
+} from "../tts/config";
 import { stopSpeech } from "../tts/playback";
 import { speakText } from "../tts/speak";
-import { createReplySpeaker } from "../tts/stream";
+import { createReplySpeaker, speakAndPlayText } from "../tts/stream";
 import { AnnotationIsland } from "./AnnotationIsland";
 import {
   CURRENT_MODEL_VALUE,
@@ -97,6 +101,7 @@ import {
   UserTurn,
 } from "./chat/turns";
 import { useConfirm } from "./confirm";
+import { conversationActionLabel } from "./conversation-action-display";
 import { DictationReply } from "./DictationReply";
 import { DrillSessionReport } from "./DrillSessionReport";
 import { DrillStartScreen } from "./DrillStartScreen";
@@ -105,6 +110,7 @@ import { LessonStartScreen } from "./LessonStartScreen";
 import { Markdown } from "./Markdown";
 import { MicButton } from "./MicButton";
 import { NewChatStartScreen } from "./NewChatStartScreen";
+import type { ProviderKind } from "./ProviderStatus";
 import { ReviewDrillStartScreen } from "./ReviewDrillStartScreen";
 import { SlashBodyHint, SlashMenu } from "./SlashMenu";
 import { ThinkingIndicator } from "./TurnActivity";
@@ -146,6 +152,8 @@ interface ChatViewProps {
   onNavigateConversation?: (id: string) => void;
   /** Opens the slash-command settings page (the "Customize commands…" footer in the slash menu). */
   onOpenCommandSettings?: () => void;
+  /** Opens the settings section for a provider summary item on the new-chat start page (LLM / TTS / STT). */
+  onOpenProviderSettings?: (kind: ProviderKind) => void;
   /** Small-window mode: strip to bare chat — message bubbles + copy + composer; hide explain/speak/corrections/badges/slash menu. */
   compact?: boolean;
   /** Text requested by another panel (currently Coach hints) to draft into the composer. */
@@ -154,6 +162,18 @@ interface ChatViewProps {
 
 const INPUT_TEXTAREA_MIN_HEIGHT = 56;
 const INPUT_TEXTAREA_MAX_HEIGHT = 104;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+function idiomaticAutoSpeakText(analysis: TutorAnalysis | null): string | null {
+  if (!analysis || analysis.expression_gap) return null;
+  const natural = analysis.natural?.trim();
+  if (!natural) return null;
+  const corrected = analysis.corrected?.trim();
+  return natural === corrected ? null : natural;
+}
 
 export function ChatView({
   conversationId,
@@ -170,6 +190,7 @@ export function ChatView({
   onTurnsChange,
   onNavigateConversation,
   onOpenCommandSettings,
+  onOpenProviderSettings,
   compact = false,
   externalDraft = null,
 }: ChatViewProps) {
@@ -196,7 +217,8 @@ export function ChatView({
   // Derived conversation context (shown in the collapsible header); null for regular conversations.
   const [derivedBanner, setDerivedBanner] = useState<{
     context: NewConversationContext;
-    label?: string;
+    actionId?: string;
+    fallbackLabel?: string;
   } | null>(null);
   // The drill behind this conversation (null for plain practice): definition snapshot + item count.
   // Drives the mode badge, the interaction mechanics (say masking / gates) and drill-flavored actions.
@@ -249,9 +271,12 @@ export function ChatView({
   const streamingFrameRef = useRef<number | null>(null);
   const streamingBufferRef = useRef("");
   const hintOverlayRef = useRef<HTMLDivElement>(null);
-  // 流式语音输入:记录开始说话前输入框里的底稿,partial 在它后面实时拼接,
-  // 取消/出错时(onTranscript(""))恢复底稿。
+  // Streaming voice input: remember the composer draft before speech starts.
+  // Partials append after it; onTranscript("") restores it on cancel/error.
   const sttBaseRef = useRef<string | null>(null);
+  // Raw recording of the latest voice input, kept for pronunciation feedback and consumed by the next send.
+  // Cleared on any manual edit (the audio no longer matches what's being sent).
+  const pendingAudioRef = useRef<{ blob: Blob; mime: string } | null>(null);
   const stickToBottomRef = useRef(true);
   const turnGenRef = useRef(0);
   const replyCommittedRef = useRef(false);
@@ -513,7 +538,8 @@ export function ChatView({
         if (mods.derivedContext)
           setDerivedBanner({
             context: mods.derivedContext,
-            label: mods.derivation?.actionLabel,
+            actionId: mods.derivation?.actionId,
+            fallbackLabel: mods.derivation?.actionLabel,
           });
         if (mods.drill) {
           setActiveDrill({
@@ -890,7 +916,8 @@ export function ChatView({
       if (mods.derivedContext)
         setDerivedBanner({
           context: mods.derivedContext,
-          label: mods.derivation?.actionLabel,
+          actionId: mods.derivation?.actionId,
+          fallbackLabel: mods.derivation?.actionLabel,
         });
       await touchConversation(conversationId);
       onActivity?.();
@@ -1152,6 +1179,10 @@ export function ChatView({
     const isRetry = opts?.text !== undefined;
     const text = (opts?.text ?? input).trim();
     if (!text || replyBusy) return;
+    // Voice send: hand this turn the kept recording for pronunciation feedback, then consume it (once).
+    // Retries reuse old text and carry no fresh audio.
+    const pronunciationAudio = isRetry ? null : pendingAudioRef.current;
+    pendingAudioRef.current = null;
     // Redo turn ("say it again"): captured before the banner state is consumed below, and carried through retries so
     // the conversation agent keeps treating the re-attempt as a redo, not a brand-new message.
     const redo = opts?.redo ?? redoActive;
@@ -1202,10 +1233,44 @@ export function ChatView({
     // Auto-speak: synthesizes and plays the full reply as a single TTS request once streaming completes.
     // Not created when "auto-speak" is off in settings (the speaker icon can still be used manually).
     // Dictation never auto-plays the next sentence here — it is gated behind the "next question" tap (see speakReply).
-    const speaker =
-      !learningMode && !isSayDrill && loadTtsConfig().autoSpeak
-        ? createReplySpeaker()
-        : null;
+    const ttsCfgAtSend = loadTtsConfig();
+    const autoSpeakReply =
+      !learningMode && !isSayDrill && ttsCfgAtSend.autoSpeak;
+    const autoSpeakNatural =
+      !learningMode &&
+      !isSayDrill &&
+      !offRecord &&
+      !isPromptMacro &&
+      ttsCfgAtSend.autoSpeakNatural;
+    const autoSpeakIntervalMs =
+      normalizeAutoSpeakIntervalSeconds(ttsCfgAtSend.autoSpeakIntervalSeconds) *
+      1000;
+    let autoSpeakCancelled = false;
+    let resolveReplyAutoSpeak: (() => void) | null = null;
+    const replyAutoSpeakDone =
+      autoSpeakReply && autoSpeakNatural
+        ? new Promise<void>((resolve) => {
+            resolveReplyAutoSpeak = resolve;
+          })
+        : Promise.resolve();
+    const finishReplyAutoSpeak = () => {
+      resolveReplyAutoSpeak?.();
+      resolveReplyAutoSpeak = null;
+    };
+    const speaker = autoSpeakReply ? createReplySpeaker() : null;
+    const speakNatural = (analysis: TutorAnalysis | null) => {
+      if (!autoSpeakNatural) return;
+      const natural = idiomaticAutoSpeakText(analysis);
+      if (!natural) return;
+      void (async () => {
+        if (autoSpeakReply) {
+          await replyAutoSpeakDone;
+          if (autoSpeakIntervalMs > 0) await sleep(autoSpeakIntervalMs);
+        }
+        if (autoSpeakCancelled || turnGenRef.current !== turnGen) return;
+        await speakAndPlayText(natural);
+      })();
+    };
     const speakReply = (reply: string) => {
       // Dictation/shadowing: pre-synthesize the next sentence (warms the TTS cache, no playback) so tapping "next
       // question" plays it instantly; the tap is what triggers the first playback. Never speak the feedback prose.
@@ -1213,7 +1278,8 @@ export function ChatView({
         void speakText(parseDictationReply(reply).sentence).catch(() => {});
         return;
       }
-      speaker?.finish(reply);
+      const done = speaker?.finish(reply) ?? Promise.resolve();
+      if (resolveReplyAutoSpeak) void done.finally(finishReplyAutoSpeak);
     };
     try {
       const result = await runTurn(
@@ -1242,6 +1308,7 @@ export function ChatView({
               analysisError: opts?.error ?? null,
               analysisDiagnostic: opts?.diagnostic ?? null,
             });
+            speakNatural(a);
           },
         },
         turnId,
@@ -1251,6 +1318,7 @@ export function ChatView({
           signal: controller.signal,
           replayCount,
           redo,
+          pronunciationAudio: pronunciationAudio ?? undefined,
         },
       );
       if (turnGenRef.current === turnGen && !replyCommittedRef.current) {
@@ -1279,6 +1347,8 @@ export function ChatView({
       // are not context, so they should not produce the next-reply hint.
       if (!offRecord) refreshInputHintsAfterReply(turnGen);
     } catch (e) {
+      autoSpeakCancelled = true;
+      finishReplyAutoSpeak();
       stopSpeech(); // stop any in-progress TTS on error
       speaker?.abort();
       patchTurn(turnId, {
@@ -1306,6 +1376,8 @@ export function ChatView({
         setStoppable(false);
         abortControllerRef.current = null;
       } else {
+        autoSpeakCancelled = true;
+        finishReplyAutoSpeak();
         speaker?.abort(); // turn superseded by a new message; stop synthesis (playback already handed off to new send's stopSpeech)
       }
     }
@@ -1532,9 +1604,18 @@ export function ChatView({
       tone: "muted",
     });
   }
+  const derivedBannerLabel = derivedBanner
+    ? derivedBanner.actionId
+      ? conversationActionLabel(
+          derivedBanner.actionId,
+          derivedBanner.fallbackLabel ?? t("chat.derivedBadge"),
+          t,
+        )
+      : (derivedBanner.fallbackLabel ?? t("chat.derivedBadge"))
+    : undefined;
   if (derivedBanner) {
     optionBadges.push({
-      label: derivedBanner.label ?? t("chat.derivedBadge"),
+      label: derivedBannerLabel ?? t("chat.derivedBadge"),
       tone: "info",
     });
     const diff = derivedBanner.context.difficulty?.trim();
@@ -1587,7 +1668,7 @@ export function ChatView({
             <DerivedContextBanner
               conversationId={conversationId}
               context={derivedBanner.context}
-              label={derivedBanner.label}
+              label={derivedBannerLabel}
             />
           )}
           {turns.length === 0 &&
@@ -1639,6 +1720,7 @@ export function ChatView({
                   newChatAvoidRef.current = newChatTopics ?? [];
                   setNewChatReloadTick((n) => n + 1);
                 }}
+                onOpenProviderSettings={onOpenProviderSettings}
               />
             ) : (
               <div className="m-auto text-center text-ui-body leading-relaxed text-ui-muted">
@@ -1843,7 +1925,11 @@ export function ChatView({
                 <textarea
                   ref={inputRef}
                   value={input}
-                  onChange={(e) => setInput(e.target.value)}
+                  onChange={(e) => {
+                    setInput(e.target.value);
+                    // Manual edit: the kept recording no longer reflects what's being sent — drop it.
+                    pendingAudioRef.current = null;
+                  }}
                   onKeyDown={(e) => {
                     if (
                       isSayDrill &&
@@ -2112,6 +2198,9 @@ export function ChatView({
                     requestAnimationFrame(() => inputRef.current?.focus());
                   }}
                   onError={showError}
+                  onAudio={(audio) => {
+                    pendingAudioRef.current = audio;
+                  }}
                 />
                 {replyBusy && stoppable ? (
                   <Button

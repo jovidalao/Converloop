@@ -1,9 +1,9 @@
+import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   ChevronDownIcon,
   DownloadIcon,
   PencilIcon,
   PlusIcon,
-  ScrollTextIcon,
   Trash2Icon,
   UploadIcon,
   XIcon,
@@ -33,6 +33,7 @@ import {
   type TransformerStage,
   updateLearningAgent,
 } from "../db/learning-agents";
+import { WEBSITE_DESIGN_URL } from "../lib/links";
 import {
   type AgentCatalogEntry,
   type AgentEntry,
@@ -45,7 +46,6 @@ import {
   setAgentEnabled,
   setBuiltinAgentOverride,
 } from "../runtime";
-import { APP_DESIGN_DATA_SCOPES_HASH } from "./AppDesignView";
 import { useConfirm } from "./confirm";
 import {
   DEFAULT_REPLY_TRANSFORMER_ICON,
@@ -115,6 +115,10 @@ const BUILTIN_CARD_I18N: Record<
   "builtin:drill_observer": {
     title: "agentLibrary.builtinCards.drillObserver.title",
     desc: "agentLibrary.builtinCards.drillObserver.desc",
+  },
+  "builtin:pronunciation": {
+    title: "agentLibrary.builtinCards.pronunciation.title",
+    desc: "agentLibrary.builtinCards.pronunciation.desc",
   },
   "builtin:transformer:explain": {
     title: "agentLibrary.builtinCards.explain.title",
@@ -266,6 +270,14 @@ function BuiltinTuneEditor({
 
   return (
     <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-1">
+        <span className="w-fit rounded bg-muted px-1.5 py-0.5 text-ui-caption text-ui-muted">
+          {t("agentLibrary.advancedBadge")}
+        </span>
+        <p className="m-0 text-ui-caption leading-relaxed text-ui-muted">
+          {t("agentLibrary.tuneAdvancedHint")}
+        </p>
+      </div>
       <div className="flex flex-col gap-1">
         <span className="text-ui-caption text-ui-muted">
           {t("agentLibrary.officialBase")}
@@ -862,8 +874,7 @@ export function AgentLibraryView({
   }
 
   function openDataScopeGuide() {
-    window.location.hash = APP_DESIGN_DATA_SCOPES_HASH;
-    onOpenView?.("design");
+    void openUrl(`${WEBSITE_DESIGN_URL}#data-scopes`);
   }
 
   async function openEditor(entry: AgentCatalogEntry) {
@@ -997,6 +1008,13 @@ export function AgentLibraryView({
           <p className="m-0 text-ui-body text-ui-muted">
             {t("agentLibrary.description")}
           </p>
+          <button
+            type="button"
+            className="mt-1.5 block text-ui-caption text-ui-muted hover:text-foreground"
+            onClick={() => onOpenView?.("settings-customize")}
+          >
+            {t("agentLibrary.toPreferences")}
+          </button>
         </div>
         <Button
           type="button"
@@ -1115,15 +1133,6 @@ export function AgentLibraryView({
           </div>
         )}
       </section>
-
-      <button
-        type="button"
-        className="mt-6 flex items-center gap-1.5 self-start text-ui-caption text-ui-muted hover:text-foreground"
-        onClick={() => onOpenView?.("settings-logs")}
-      >
-        <ScrollTextIcon size={13} />
-        {t("agentLibrary.logsLink")}
-      </button>
 
       {message && (
         <div className="mt-3 rounded-md bg-primary/10 px-3 py-2 text-ui-body text-primary">

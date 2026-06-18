@@ -1,5 +1,5 @@
 ---
-format: lang-agent/drill@1
+format: converloop/drill@1
 name: Scenario sprint
 description: One fresh micro-task per turn inside your chosen scenario — respond, describe, narrate, explain.
 intro: Give me a scenario and I'll throw concrete situations at you one by one — no rush; read the correction, get a model answer, then take the next one.

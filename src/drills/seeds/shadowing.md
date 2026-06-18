@@ -1,5 +1,5 @@
 ---
-format: lang-agent/drill@1
+format: converloop/drill@1
 name: Shadowing
 description: Hear a model sentence, read it aloud, and compare against the transcription.
 intro: Pick a theme and I'll show each sentence and read it aloud — you read it back, and I'll point out the words that didn't land.

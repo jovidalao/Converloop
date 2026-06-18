@@ -50,9 +50,9 @@ ${dictation.sourceMd.trim()}
 
 /** The full authoring guide as a single Markdown string. */
 export function buildDrillAuthoringSpec(): string {
-  return `# lang-agent — custom training mode (drill) authoring guide
+  return `# Converloop — custom training mode (drill) authoring guide
 
-You are writing a TRAINING MODE document for lang-agent, a language-learning desktop app. A training
+You are writing a TRAINING MODE document for Converloop, a language-learning desktop app. A training
 mode ("drill") reshapes the app's practice conversation into a repeatable exercise: every turn the
 conversation agent follows your # Task playbook (present one prompt/sentence/micro-task, react, move
 on), while the app's correction tutor, mastery bookkeeping and UI mechanics run around it according

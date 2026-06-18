@@ -797,6 +797,8 @@ export async function runTurn(
     replayCount?: number;
     /** "Say it again": this message re-produces the learner's previous sentence using the correction, from memory. */
     redo?: boolean;
+    /** Voice send with pronunciation feedback on: the raw recording, read by the pronunciation observer. */
+    pronunciationAudio?: { blob: Blob; mime: string };
   } = {},
 ): Promise<TurnResult> {
   // Off-record turn (/btw "by the way"): standalone helper answer, no correction, not counted in future context, no compression.
@@ -967,6 +969,7 @@ export async function runTurn(
     sayDrillReplayCount: opts.replayCount,
     redoTurn: opts.redo,
     includeHintTrailer: wantsInlineHint,
+    pronunciationAudio: opts.pronunciationAudio,
     callbacks: cb,
     turnPersisted,
   };

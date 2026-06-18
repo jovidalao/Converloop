@@ -474,7 +474,7 @@
     margin: 0;
     overflow: hidden;
     overscroll-behavior: none;
-    /* 透明到底,露出 NSVisualEffect 毛玻璃(实际填充由各面板自己负责;主区不透明)。 */
+    /* Transparent to expose NSVisualEffect vibrancy; panels own their fills and the main area stays opaque. */
     background: transparent;
   }
   html {
@@ -631,6 +631,7 @@
    tokens for main content; dark overrides both chrome and semantic tokens. */
 .codex-shell {
   --codex-topbar-h: 46px;
+  --win-control-w: 46px;
   --codex-sidebar-width-current: var(--sidebar-width);
   --codex-coach-width: var(--coach-width, 360px);
   --codex-coach-width-current: 0px;
@@ -822,6 +823,48 @@
    (see theme-provider) per the no-vibrancy decision. */
 :root[data-platform="windows"] .codex-topbar-left {
   left: 12px;
+}
+/* Frameless Windows window draws its own caption controls flush in the top-right
+   corner (full chrome height); shift the app's own right-side actions left to
+   clear them. Rendered only on Windows (see WindowControls.tsx). */
+:root[data-platform="windows"] .codex-topbar-right {
+  right: calc(3 * var(--win-control-w) + 8px);
+}
+.win-controls {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 2;
+  display: flex;
+  height: var(--codex-topbar-h);
+}
+.win-control {
+  display: flex;
+  width: var(--win-control-w);
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--codex-chrome-fg);
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
+}
+.win-control:hover {
+  background: var(--codex-chrome-hover-bg);
+}
+.win-control:active {
+  background: color-mix(in srgb, var(--foreground) 10%, transparent);
+}
+.win-control-close:hover {
+  background: #c42b1c;
+  color: #fff;
+}
+.win-control-close:active {
+  background: #b0271a;
+  color: #fff;
 }
 .codex-titlebar {
   grid-column: 1 / -1;
@@ -1219,12 +1262,12 @@
 }
 
 /* ============================================================
-   动画(Layer 2)。零依赖:CSS 关键帧 + 原生 View Transitions。
-   全部在「减弱动态效果」下降级为无动画。
+   Animation (Layer 2). Zero dependency: CSS keyframes + native View Transitions.
+   All of it degrades to no animation under reduced motion.
    ============================================================ */
 
-/* 聊天滚动区上下渐变遮罩:内容在边缘淡出,不硬切(craft 风格)。遮罩相对视口固定,
-   随内容滚动产生稳定的渐隐边。fade 高度可调。 */
+/* Chat scroll mask: fades content at the top/bottom edges instead of hard clipping.
+   The viewport-relative mask keeps stable fade edges while content scrolls. */
 .chat-scroll-mask {
   --chat-fade: 12px;
   -webkit-mask-image: linear-gradient(
@@ -1243,8 +1286,8 @@
   );
 }
 
-/* 新消息入场:上移淡入。只作用于本会话新发的轮次(ChatView 按 liveTurnIds 加类),
-   历史加载不动。 */
+/* New message entry: fade in while moving up. Applies only to freshly sent turns
+   in this session; historical loads remain still. */
 @keyframes message-in {
   from {
     transform: translateY(10px);
@@ -1264,7 +1307,7 @@
   }
 }
 
-/* 输入框提示轮换:新提示从下方上移淡入(配合 key 重挂载,每次切换重放)。 */
+/* Composer hint swap: new hint rises from below and fades in; key remounts replay it. */
 @keyframes hint-in {
   from {
     transform: translateY(0.6em);
@@ -1275,7 +1318,7 @@
   animation: hint-in 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-/* 聊天路由仍直切;设置/档案二级页只做轻微入场,配合侧栏 drill-down。 */
+/* Chat routes still switch directly; settings/profile subpages get a subtle drill-down entry. */
 
 @media (prefers-reduced-motion: reduce) {
   *,

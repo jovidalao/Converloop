@@ -8,7 +8,7 @@ import { estimateTokens } from "../lib/tokens";
 
 // Auto-compression: threshold-driven rolling summary for conversations. Runs in the background after each turn is persisted,
 // folding the oldest verbatim turns in conversations approaching the context limit into a summary to free up window space.
-// Never blocks the hot path; never throws (see docs/conversation-agent.md#rolling-summary).
+// Never blocks the hot path; never throws.
 
 // High/low water marks: compress when the estimated "conversation context (summary + verbatim)" tokens exceed 70% of the limit; compress down to ~50%
 // (the low water mark prevents recompressing every turn).

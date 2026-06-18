@@ -20,7 +20,8 @@ import { readProfileRaw, writeProfile } from "../profile/profile";
 // exported. Import is a full replace — restore semantics, confirmed by the UI.
 
 const BACKUP_VERSION = 1;
-const BACKUP_KIND = "lang-agent.backup";
+const LEGACY_BACKUP_KIND = "lang-agent.backup";
+const BACKUP_KIND = "converloop.backup";
 
 // Tables in the bundle, keyed by their SQL names. Insert order doesn't matter
 // (no FK constraints); rows round-trip through Drizzle's camelCase shape.
@@ -44,6 +45,7 @@ const SETTINGS_KEYS = [
   "lang-agent.config",
   "lang-agent.tts",
   "lang-agent.stt",
+  "lang-agent.pronunciation",
   "lang-agent.keybindings",
   "lang-agent-locale",
   "lang-agent-theme",
@@ -57,7 +59,7 @@ const SETTINGS_KEYS = [
 ] as const;
 
 interface BackupBundle {
-  kind: typeof BACKUP_KIND;
+  kind: typeof BACKUP_KIND | typeof LEGACY_BACKUP_KIND;
   version: number;
   exportedAt: number;
   tables: Record<string, Record<string, unknown>[]>;
@@ -118,7 +120,7 @@ export async function exportBackupToDownloads(): Promise<{
     .replace(":", "");
   const path = await invoke<string>("export_backup", {
     content: json,
-    fileName: `lang-agent-backup-${stamp}.json`,
+    fileName: `converloop-backup-${stamp}.json`,
   });
   return { path, summary };
 }
@@ -128,8 +130,11 @@ export function parseBackupBundle(raw: string): {
   summary: BackupSummary;
 } {
   const parsed = JSON.parse(raw) as Partial<BackupBundle>;
-  if (parsed.kind !== BACKUP_KIND || typeof parsed.version !== "number") {
-    throw new Error("Not a lang-agent backup file");
+  if (
+    (parsed.kind !== BACKUP_KIND && parsed.kind !== LEGACY_BACKUP_KIND) ||
+    typeof parsed.version !== "number"
+  ) {
+    throw new Error("Not a Converloop backup file");
   }
   if (parsed.version > BACKUP_VERSION) {
     throw new Error(

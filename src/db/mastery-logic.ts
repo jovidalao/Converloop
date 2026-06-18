@@ -104,7 +104,7 @@ export function dueReviewScore(
   return (1 - retention) * statusNeed + errorRate * 0.35;
 }
 
-// See docs/tutor-agent.md#accounting-in-code. Formulas can be tuned later; the key is that they live in code and are testable.
+// Formulas can be tuned later; the key is that they live in code and are testable.
 export function applySignal(
   prev: Pick<MasteryCounters, "seenCount" | "errorCount">,
   kind: SignalKind,

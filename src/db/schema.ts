@@ -6,7 +6,6 @@ import {
 } from "./mastery-values";
 
 // Mirrors src-tauri's migration (create_mastery_item). Both sides kept in sync manually.
-// Field semantics: see docs/architecture.md#sqlitemastery_item.
 export const masteryItem = sqliteTable("mastery_item", {
   id: text("id").primaryKey(),
   type: text("type", {

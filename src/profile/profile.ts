@@ -15,7 +15,6 @@ function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-// See docs/profile-maintainer-agent.md#learner-profilemd-template
 export function defaultProfile(config: AppConfig): string {
   return `# Learner Profile  ·  ${config.nativeLanguage} → ${config.targetLanguage} · ${config.level} · updated ${today()}
 

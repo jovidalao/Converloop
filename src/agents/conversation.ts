@@ -59,7 +59,6 @@ function formatComfortableItems(items: ComfortableItem[]): string {
     .join("\n");
 }
 
-// See docs/conversation-agent.md#system-prompt
 // The system prompt is split into three system messages ordered stable-first so providers can
 // prefix-cache it (the Anthropic adapter puts a cache breakpoint on every block except the last;
 // OpenAI-style providers re-join them, where automatic prefix caching also profits from this order):

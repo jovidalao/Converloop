@@ -1,5 +1,5 @@
 ---
-format: lang-agent/drill@1
+format: converloop/drill@1
 name: Dictation
 description: Listen to adaptive sentences and type exactly what you hear.
 intro: Pick a theme and I'll read sentences to you one by one — type what you hear and I'll mark it and explain what you missed.

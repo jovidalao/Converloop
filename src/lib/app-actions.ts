@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { z } from "zod";
+import { isMacOS } from "./platform";
 
 export type AppActionId =
   | "new-chat"
@@ -18,10 +19,18 @@ export type AppActionId =
   | "send"
   | "new-line"
   | "stop-generating"
-  | "dismiss";
+  | "dismiss"
+  | "dictation-play"
+  | "dictation-reveal";
 
 // A key chord: the main key plus required modifier state. `key` is a single
 // lowercased character (e.g. "n", "/") or a named key (e.g. "Escape").
+//
+// `meta` means the platform's *primary command modifier* — ⌘ on macOS, Ctrl on
+// Windows/Linux — so one default binding works everywhere. `ctrl` is the literal
+// Control key, a distinct modifier on macOS; on Windows/Linux it coincides with
+// the primary and is folded into it. Matching/display/recording all resolve
+// these per platform (see bindingMatchesEvent / bindingKeyCaps / ShortcutsEditor).
 export interface KeyBinding {
   key: string;
   meta?: boolean;
@@ -60,6 +69,8 @@ export const APP_ACTIONS: AppAction[] = [
   { id: "new-line", fixedKeys: ["⇧", "↩"] },
   { id: "stop-generating", fixedKeys: ["Esc"] },
   { id: "dismiss", fixedKeys: ["Esc"] },
+  { id: "dictation-play", defaultBinding: { key: "'", meta: true } },
+  { id: "dictation-reveal", defaultBinding: { key: ";", meta: true } },
 ];
 
 // Actions whose chord can be customized (everything with a default chord).
@@ -155,7 +166,8 @@ export function effectiveBinding(id: AppActionId): KeyBinding | undefined {
 
 // --- Display & matching -----------------------------------------------------
 
-const MOD_SYMBOLS: { flag: keyof KeyBinding; symbol: string }[] = [
+// Mac-ordered modifier glyphs: ⌃ ⌥ ⇧ ⌘. Windows uses text labels (see bindingKeyCaps).
+const MAC_MOD_SYMBOLS: { flag: keyof KeyBinding; symbol: string }[] = [
   { flag: "ctrl", symbol: "⌃" },
   { flag: "alt", symbol: "⌥" },
   { flag: "shift", symbol: "⇧" },
@@ -177,9 +189,19 @@ function keyCap(key: string): string {
   return NAMED_KEY_CAPS[key] ?? key;
 }
 
-// Mac-ordered key caps for a chord: ⌃ ⌥ ⇧ ⌘ then the key.
+// Key caps for a chord, per platform: macOS uses Mac glyphs in ⌃ ⌥ ⇧ ⌘ order;
+// Windows/Linux use text labels in Ctrl-first order. On Windows the primary
+// modifier (`meta`) and the literal `ctrl` both render as Ctrl, folded into one.
 export function bindingKeyCaps(binding: KeyBinding): string[] {
-  const caps = MOD_SYMBOLS.filter(({ flag }) => binding[flag]).map(
+  if (!isMacOS()) {
+    const caps: string[] = [];
+    if (binding.meta || binding.ctrl) caps.push("Ctrl");
+    if (binding.alt) caps.push("Alt");
+    if (binding.shift) caps.push("Shift");
+    caps.push(keyCap(binding.key));
+    return caps;
+  }
+  const caps = MAC_MOD_SYMBOLS.filter(({ flag }) => binding[flag]).map(
     (m) => m.symbol,
   );
   caps.push(keyCap(binding.key));
@@ -193,19 +215,22 @@ export function actionKeyCaps(id: AppActionId): string[] {
   return getAppAction(id).fixedKeys ?? [];
 }
 
+// Compact label: glyphs glued on macOS (⌘⇧N), text "+"-joined on Windows (Ctrl+Shift+N).
 export function actionShortcutLabel(id: AppActionId): string {
-  return actionKeyCaps(id).join("");
+  return actionKeyCaps(id).join(isMacOS() ? "" : "+");
 }
 
-// "Meta+Shift+N" form for the aria-keyshortcuts attribute.
+// "Meta+Shift+N" form for the aria-keyshortcuts attribute. The primary modifier
+// (`meta`) maps to "Meta" on macOS and "Control" on Windows/Linux for AT.
 export function actionAriaKeyshortcuts(id: AppActionId): string | undefined {
   const b = effectiveBinding(id);
   if (!b) return undefined;
+  const mac = isMacOS();
   const parts: string[] = [];
-  if (b.ctrl) parts.push("Control");
+  if (b.ctrl || (!mac && b.meta)) parts.push("Control");
   if (b.alt) parts.push("Alt");
   if (b.shift) parts.push("Shift");
-  if (b.meta) parts.push("Meta");
+  if (mac && b.meta) parts.push("Meta");
   parts.push(b.key.length === 1 ? b.key.toUpperCase() : b.key);
   return parts.join("+");
 }
@@ -218,16 +243,22 @@ interface EventLike {
   altKey: boolean;
 }
 
-// Whether a keyboard event exactly matches a chord (all four modifiers compared).
+// Whether a keyboard event matches a chord. The primary modifier (`meta`) is
+// satisfied by ⌘ on macOS and Ctrl on Windows/Linux; the Windows/Super key is
+// never used (OS-reserved). On non-mac, `meta` and literal `ctrl` both require
+// the Ctrl key. Shift/Alt are compared literally on every platform.
 export function bindingMatchesEvent(
   binding: KeyBinding,
   e: EventLike,
 ): boolean {
   const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  const mac = isMacOS();
+  const wantMeta = mac ? !!binding.meta : false;
+  const wantCtrl = mac ? !!binding.ctrl : !!binding.meta || !!binding.ctrl;
   return (
     key === binding.key &&
-    e.metaKey === !!binding.meta &&
-    e.ctrlKey === !!binding.ctrl &&
+    e.metaKey === wantMeta &&
+    e.ctrlKey === wantCtrl &&
     e.shiftKey === !!binding.shift &&
     e.altKey === !!binding.alt
   );

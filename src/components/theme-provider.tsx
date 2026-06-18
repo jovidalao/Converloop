@@ -1,4 +1,3 @@
-import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   createContext,
@@ -63,12 +62,6 @@ function applyTheme(theme: Theme) {
       if (theme === "system") {
         document.documentElement.classList.toggle("dark", systemPrefersDark());
       }
-      // Changing the NSWindow appearance makes AppKit re-lay-out the traffic
-      // lights back to their default position; decorum only re-pins on resize,
-      // so re-pin explicitly. Defer a frame so it lands after AppKit's relayout.
-      requestAnimationFrame(() => {
-        void invoke("reapply_traffic_lights").catch(() => {});
-      });
     })
     .catch(() => {});
 }

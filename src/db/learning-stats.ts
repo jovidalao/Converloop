@@ -1,6 +1,5 @@
-import { count } from "drizzle-orm";
 import { db } from "./client";
-import { masteryItem, turn } from "./schema";
+import { turn } from "./schema";
 
 // Read-only learning-achievements stats for the practice-stats card. Pure helpers
 // (localDayNumber / computeStreaks) are unit-tested; getLearningStats just wires
@@ -60,10 +59,7 @@ export interface LearningStats {
   totalSentences: number;
   activeDays: number;
   currentStreak: number;
-  mastered: number;
-  learning: number;
-  struggling: number;
-  totalKnowledge: number;
+  longestStreak: number;
   /** localDayNumber → sentences practiced that day. */
   dayCounts: Map<number, number>;
 }
@@ -86,29 +82,13 @@ export async function getLearningStats(): Promise<LearningStats> {
     const day = localDayNumber(row.createdAt);
     dayCounts.set(day, (dayCounts.get(day) ?? 0) + 1);
   }
-  const { current } = computeStreaks(dayCounts.keys(), today);
-
-  const statusRows = await db
-    .select({ status: masteryItem.status, n: count() })
-    .from(masteryItem)
-    .groupBy(masteryItem.status);
-  let mastered = 0;
-  let learning = 0;
-  let struggling = 0;
-  for (const row of statusRows) {
-    if (row.status === "known") mastered = row.n;
-    else if (row.status === "learning") learning = row.n;
-    else if (row.status === "struggling") struggling = row.n;
-  }
+  const { current, longest } = computeStreaks(dayCounts.keys(), today);
 
   return {
     totalSentences: turns.length,
     activeDays: dayCounts.size,
     currentStreak: current,
-    mastered,
-    learning,
-    struggling,
-    totalKnowledge: mastered + learning + struggling,
+    longestStreak: longest,
     dayCounts,
   };
 }

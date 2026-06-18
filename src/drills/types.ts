@@ -1,8 +1,8 @@
-// Drill format (lang-agent/drill@1) — type layer.
+// Drill format (converloop/drill@1) — type layer.
 // A "drill" (training mode) is a user-visible practice format defined by a single Markdown document
 // (YAML frontmatter = machine-enforced enums the runtime dispatches on; body sections = prompt prose).
 // The document is the unit of storage, editing, AI generation, import/export and (future) marketplace
-// distribution. See docs/drill-authoring.md for the authoring contract.
+// distribution.
 
 /** How the learner interacts each turn. This selects a UI mechanic preset — it is code, not prompt. */
 export type DrillInteraction = "chat" | "say-hidden" | "say-visible";

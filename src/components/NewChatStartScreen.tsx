@@ -2,7 +2,7 @@ import { SparklesIcon } from "lucide-react";
 
 import { useTranslation } from "@/i18n";
 import { PracticeStats } from "./PracticeStats";
-import { ProviderStatus } from "./ProviderStatus";
+import { type ProviderKind, ProviderStatus } from "./ProviderStatus";
 import { TopicStartScreen } from "./TopicStartScreen";
 
 // New-chat start page (shown on an empty practice draft): a Claude-style greeting hero (icon + a time-of-day
@@ -16,6 +16,7 @@ export function NewChatStartScreen({
   busy,
   onPick,
   onRefresh,
+  onOpenProviderSettings,
 }: {
   /** null = nothing to show yet; [] = none (silently degrade to type-your-own). */
   topics: string[] | null;
@@ -24,6 +25,8 @@ export function NewChatStartScreen({
   busy: boolean;
   onPick: (topic: string) => void;
   onRefresh: () => void;
+  /** Open the settings section for the clicked provider summary item (LLM / TTS / STT). */
+  onOpenProviderSettings?: (kind: ProviderKind) => void;
 }) {
   const { t } = useTranslation();
   const hour = new Date().getHours();
@@ -38,9 +41,12 @@ export function NewChatStartScreen({
   return (
     <TopicStartScreen
       header={
-        <div className="flex items-center gap-2.5 text-ui-title font-semibold text-foreground">
-          <SparklesIcon className="size-6 shrink-0 text-primary" />
-          {greeting}
+        <div className="flex flex-col gap-4">
+          <ProviderStatus onOpen={onOpenProviderSettings} />
+          <div className="flex items-center gap-2.5 text-ui-title font-semibold text-foreground">
+            <SparklesIcon className="size-6 shrink-0 text-primary" />
+            {greeting}
+          </div>
         </div>
       }
       recommendedLabel={t("newChat.recommendedTopics")}
@@ -50,7 +56,6 @@ export function NewChatStartScreen({
       busy={busy}
       onPick={onPick}
       onRefresh={onRefresh}
-      footer={<ProviderStatus />}
     >
       <PracticeStats />
     </TopicStartScreen>

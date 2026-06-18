@@ -2,16 +2,22 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "lang-agent",
+      "name": "converloop",
       "runtimeExecutable": "pnpm",
       "runtimeArgs": ["dev"],
       "port": 1420
     },
     {
-      "name": "lang-agent-preview",
+      "name": "converloop-preview",
       "runtimeExecutable": "pnpm",
       "runtimeArgs": ["dev", "--port", "1430"],
       "port": 1430
+    },
+    {
+      "name": "converloop-site",
+      "runtimeExecutable": "corepack",
+      "runtimeArgs": ["pnpm", "--dir", "/Users/jovi/CodeEx/converloop-site", "run", "dev", "--", "--port", "4321"],
+      "port": 4321
     }
   ]
 }

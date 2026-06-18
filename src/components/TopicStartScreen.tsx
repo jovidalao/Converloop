@@ -48,7 +48,7 @@ export function TopicStartScreen({
   const hasTopics = !!topics && topics.length > 0;
 
   return (
-    <div className="flex w-full max-w-2xl flex-col gap-5 pt-4 pb-2">
+    <div className="flex w-full max-w-2xl flex-col gap-5 pt-1 pb-2">
       {header ?? (
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-2 text-ui-title font-semibold text-foreground">

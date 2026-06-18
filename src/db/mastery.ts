@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, like, ne, notLike, sql } from "drizzle-orm";
 import type { TutorAnalysis } from "../agents/schema";
 import type { WeakItem } from "../agents/tutor";
+import { languageToBcp47, segmentWords } from "../lib/language";
 import { db } from "./client";
 import {
   applySignal,
@@ -184,10 +185,16 @@ export function recordSignals(
 }
 
 // Word tokens of a sentence, lowercased with punctuation stripped — the comparison unit for listening bookkeeping.
-function sentenceWords(sentence: string): Set<string> {
+// CJK has no spaces, so a regex split would treat a whole run of characters as one token and listening items
+// could never be matched word by word; for those scripts use dictionary segmentation (Intl.Segmenter) instead.
+function sentenceWords(sentence: string, targetLanguage?: string): Set<string> {
+  const lower = sentence.toLowerCase();
+  if (/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u.test(lower)) {
+    const seg = segmentWords(lower, languageToBcp47(targetLanguage ?? ""));
+    if (seg.length) return new Set(seg);
+  }
   return new Set(
-    sentence
-      .toLowerCase()
+    lower
       .split(/[^\p{L}\p{N}'’-]+/u)
       .map((w) => w.replace(/^['’-]+|['’-]+$/g, ""))
       .filter(Boolean),
@@ -203,6 +210,7 @@ export async function recordDictationAnalysis(
   analysis: TutorAnalysis,
   standardAnswer: string,
   turnId?: string,
+  targetLanguage?: string,
 ): Promise<void> {
   const errorSignals = deriveSignals(analysis).filter(
     (sig) => sig.kind === "error" && isListeningKey(sig.key),
@@ -213,7 +221,7 @@ export async function recordDictationAnalysis(
     .select({ key: masteryItem.key, label: masteryItem.label })
     .from(masteryItem)
     .where(like(masteryItem.key, `${LISTENING_KEY_PREFIX}%`));
-  const heardWords = sentenceWords(standardAnswer);
+  const heardWords = sentenceWords(standardAnswer, targetLanguage);
   const correctSignals: Signal[] = tracked
     .filter(
       (item) =>
@@ -269,7 +277,7 @@ export async function countListeningFocusWords(): Promise<number> {
   return rows[0]?.n ?? 0;
 }
 
-// Weak-items table for the tutor agent: prioritize struggling, high error rate, recently seen. See architecture.md#select-top-n.
+// Weak-items table for the tutor agent: prioritize struggling, high error rate, recently seen.
 export async function getWeakList(limit = 15): Promise<WeakItem[]> {
   const rows = await db
     .select({
@@ -621,7 +629,7 @@ export async function getComfortableList(
     .limit(limit);
 }
 
-// Aggregated input for the maintainer agent (queried by code and fed in; don't let the LLM compute it). See profile-maintainer-agent.md#input.
+// Aggregated input for the maintainer agent. Code queries and feeds this in; don't let the LLM compute it.
 export interface MaintainerData {
   weak: {
     label: string;

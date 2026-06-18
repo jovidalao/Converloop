@@ -1,5 +1,5 @@
 // Agent Runtime — type layer for hook dispatch seams.
-// See docs/architecture.md for current runtime state; this file only defines types and hook names, no runtime logic.
+// This file only defines types and hook names, no runtime logic.
 
 import type { HistoryTurn } from "../agents/history-messages";
 import type { TutorAnalysis } from "../agents/schema";
@@ -155,6 +155,9 @@ export interface PracticeContext extends BaseContext {
   redoTurn?: boolean;
   /** Ask the reply agent for a private [[HINT]] trailer (input-box coaching hint, stripped before display/TTS/history). */
   includeHintTrailer?: boolean;
+  /** Voice turns with pronunciation feedback enabled: the learner's raw recording, read by the pronunciation
+   *  observer to grade how they said it. Absent on typed turns and when the feature is off. */
+  pronunciationAudio?: { blob: Blob; mime: string };
 }
 
 export interface LearningContext extends BaseContext {
@@ -185,6 +188,8 @@ export interface ReplyProducer {
 export interface Observer {
   id: string;
   kind: "observer";
+  /** True when this observer is responsible for resolving ChatView's correction/analysis pending state. */
+  providesTurnAnalysis?: boolean;
   card?: AgentCard;
   run: (ctx: PracticeContext) => Promise<void>;
 }

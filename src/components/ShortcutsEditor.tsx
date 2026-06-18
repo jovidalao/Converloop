@@ -13,6 +13,7 @@ import {
   setKeybinding,
   useKeybindings,
 } from "@/lib/app-actions";
+import { isMacOS } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { Button } from "./ui/button";
 
@@ -53,10 +54,14 @@ export function ShortcutsEditor() {
         setError(null);
         return;
       }
+      // Store the primary modifier as `meta` on every platform (⌘ on macOS,
+      // Ctrl on Windows/Linux) so it round-trips with the defaults. Literal
+      // `ctrl` is kept only on macOS, where Control is a distinct modifier.
+      const mac = isMacOS();
       const binding: KeyBinding = {
         key: e.key.length === 1 ? e.key.toLowerCase() : e.key,
-        meta: e.metaKey || undefined,
-        ctrl: e.ctrlKey || undefined,
+        meta: (mac ? e.metaKey : e.ctrlKey) || undefined,
+        ctrl: (mac && e.ctrlKey) || undefined,
         shift: e.shiftKey || undefined,
         alt: e.altKey || undefined,
       };

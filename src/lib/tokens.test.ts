@@ -23,7 +23,7 @@ describe("estimateTokens", () => {
 
 describe("estimatePromptTokens", () => {
   it("each message has a fixed overhead that accumulates", () => {
-    // "你好" (2 tokens) + 4 overhead, two messages → (2+4)*2 = 12
+    // Two CJK chars (2 tokens) + 4 overhead, two messages -> (2+4)*2 = 12
     expect(estimatePromptTokens(["你好", "你好"])).toBe(12);
   });
 });

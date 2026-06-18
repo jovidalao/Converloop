@@ -1,6 +1,6 @@
 import { CheckCircle2Icon, GraduationCapIcon } from "lucide-react";
 import { useState } from "react";
-import { useTranslation } from "@/i18n";
+import { type Locale, UI_LOCALES, useTranslation } from "@/i18n";
 import {
   apiKeyAccount,
   getProviderFor,
@@ -16,7 +16,12 @@ import { setSecret } from "../keychain";
 import { loginAnthropic } from "../oauth/anthropic";
 import { loginOpenAICodex } from "../oauth/openai";
 import { setTokens } from "../oauth/store";
-import { LEVELS, STUDY_LANGUAGES } from "./SettingsView";
+import {
+  biLabel,
+  LEVELS,
+  NATIVE_LANGUAGES,
+  TARGET_LANGUAGES,
+} from "./SettingsView";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import {
@@ -140,14 +145,17 @@ export function OnboardingWizard({ onDone }: { onDone: () => void }) {
             <Row label={t("settings.general.interfaceLanguage")}>
               <Select
                 value={locale}
-                onValueChange={(v) => setLocale(v as "en" | "zh")}
+                onValueChange={(v) => setLocale(v as Locale)}
               >
                 <SelectTrigger variant="ghost">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="en">English</SelectItem>
-                  <SelectItem value="zh">中文</SelectItem>
+                  {UI_LOCALES.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </Row>
@@ -160,9 +168,9 @@ export function OnboardingWizard({ onDone }: { onDone: () => void }) {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {STUDY_LANGUAGES.map((l) => (
+                  {NATIVE_LANGUAGES.map((l) => (
                     <SelectItem key={l.value} value={l.value}>
-                      {l.label[locale]}
+                      {biLabel(l.label, locale)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -177,9 +185,9 @@ export function OnboardingWizard({ onDone }: { onDone: () => void }) {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {STUDY_LANGUAGES.map((l) => (
+                  {TARGET_LANGUAGES.map((l) => (
                     <SelectItem key={l.value} value={l.value}>
-                      {l.label[locale]}
+                      {biLabel(l.label, locale)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -196,7 +204,7 @@ export function OnboardingWizard({ onDone }: { onDone: () => void }) {
                 <SelectContent>
                   {LEVELS.map((l) => (
                     <SelectItem key={l.value} value={l.value}>
-                      {l.label[locale]}
+                      {biLabel(l.label, locale)}
                     </SelectItem>
                   ))}
                 </SelectContent>

@@ -12,9 +12,14 @@ import {
 import { DICTATION_SAY_CLOSE, DICTATION_SAY_OPEN } from "./say";
 import type { DrillDefinition } from "./types";
 
-export const DRILL_FORMAT_ID = "lang-agent/drill";
+export const LEGACY_DRILL_FORMAT_ID = "lang-agent/drill";
+export const DRILL_FORMAT_ID = "converloop/drill";
 export const DRILL_FORMAT_VERSION = 1;
 export const DRILL_FORMAT = `${DRILL_FORMAT_ID}@${DRILL_FORMAT_VERSION}`;
+const SUPPORTED_DRILL_FORMAT_IDS = new Set([
+  DRILL_FORMAT_ID,
+  LEGACY_DRILL_FORMAT_ID,
+]);
 
 const LocaleOverride = z
   .object({
@@ -157,7 +162,7 @@ export function parseDrillDocument(md: string): DrillParseResult {
 
   // Format id + major version gate (compat rule #3).
   const formatMatch = fm.data.format.match(/^([a-z-]+\/[a-z-]+)@(\d+)$/);
-  if (!formatMatch || formatMatch[1] !== DRILL_FORMAT_ID) {
+  if (!formatMatch || !SUPPORTED_DRILL_FORMAT_IDS.has(formatMatch[1])) {
     errors.push(
       `frontmatter.format: expected "${DRILL_FORMAT}", got "${fm.data.format}".`,
     );

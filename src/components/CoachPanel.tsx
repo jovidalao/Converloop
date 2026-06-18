@@ -549,7 +549,7 @@ export function CoachPanel({
 
   // Turns the learner actually produced. A derived conversation opens with a
   // partner-only turn (empty user input) so the partner can speak first; that's
-  // not a learner turn and must not show as a phantom "(空)" row in the review.
+  // not a learner turn and must not show as a phantom "(empty)" row in the review.
   const learnerTurns = useMemo(
     () => turns.filter((t) => (t.displayText ?? t.userText).trim().length > 0),
     [turns],

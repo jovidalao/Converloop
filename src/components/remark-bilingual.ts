@@ -25,7 +25,9 @@ function pushText(out: MdNode[], raw: string): void {
 }
 
 // Split a text node containing ⟦…⟧ into [text, emphasis(translation), text, …]. Returns null if no markers are present.
-function splitTranslations(value: string): MdNode[] | null {
+// `lang` (BCP-47) is stamped on each translation span so the native-language gloss keeps its own glyphs even when
+// the surrounding bubble is tagged with the target language (Han unification: a zh gloss under a ja bubble).
+function splitTranslations(value: string, lang?: string): MdNode[] | null {
   if (!value.includes(OPEN) && !value.includes(CLOSE)) return null;
   const out: MdNode[] = [];
   let last = 0;
@@ -34,7 +36,10 @@ function splitTranslations(value: string): MdNode[] | null {
     if (m.index > last) pushText(out, value.slice(last, m.index));
     out.push({
       type: "emphasis",
-      data: { hName: "span", hProperties: { className: ["bi-tr"] } },
+      data: {
+        hName: "span",
+        hProperties: { className: ["bi-tr"], ...(lang ? { lang } : {}) },
+      },
       children: [{ type: "text", value: m[1] }],
     });
     last = SPAN.lastIndex;
@@ -43,25 +48,26 @@ function splitTranslations(value: string): MdNode[] | null {
   return out;
 }
 
-function walk(node: MdNode): void {
+function walk(node: MdNode, lang?: string): void {
   if (!node.children) return;
   const next: MdNode[] = [];
   for (const child of node.children) {
     if (child.type === "text" && typeof child.value === "string") {
-      const parts = splitTranslations(child.value);
+      const parts = splitTranslations(child.value, lang);
       if (parts) {
         next.push(...parts);
         continue;
       }
     }
-    walk(child);
+    walk(child, lang);
     next.push(child);
   }
   node.children = next;
 }
 
 // remark transformer: mutates the mdast in place. Source Markdown (bold, lists, etc.) is parsed normally;
-// translations are replaced at the text-node level with emphasis nodes.
-export function remarkBilingual() {
-  return (tree: MdNode): void => walk(tree);
+// translations are replaced at the text-node level with emphasis nodes. Pass { lang } to tag gloss spans with
+// the learner's native language.
+export function remarkBilingual(options?: { lang?: string }) {
+  return (tree: MdNode): void => walk(tree, options?.lang);
 }
