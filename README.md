@@ -1,44 +1,151 @@
-# lang-agent
+# Converloop
 
-AI 语言学习 agent 的**开源桌面端**(v1)。
+English | [Simplified Chinese](README.zh-CN.md)
 
-用目标语言输入一句话 → 立刻得到①自然对话回复(流式秒回)②精准批改(纠错 / 更地道说法 / 母语讲解)。系统在本地精准记录你的掌握情况,并让它定向影响后续每一次回复。复习靠对话被动复用薄弱项(interleaving),不做抽认卡。
+Converloop is a local-first AI language-learning desktop app. It combines real conversation, instant correction, long-term learning memory, voice practice, and focused training in one Tauri app, using your own model API keys by default.
 
-> 状态:v1 核心链路已完成并可用(对话 + 批改 + 掌握记账 + MD 档案 + 多会话 + 朗读 + 按需讲解)。详见 [docs/architecture.md](docs/architecture.md#状态--路线图)。
+When a learner writes or speaks in the target language, Converloop returns a natural streaming reply and structured feedback in parallel. It records errors, correct usage, expression gaps, and review evidence, then uses that learning state in later conversations, focused lessons, and training drills.
 
-## 它是什么
+## Current Status
 
-- **桌面端 · BYOK**:自带 API key(OpenAI 兼容 / Anthropic / Gemini),数据全本地。
-- **多 agent 流水线**:每轮并行跑「对话 agent」(流式回复)和「导师 agent」(结构化批改)。
-- **两层存储**:SQLite 记掌握计数(代码维护),Markdown 档案记定性人设(LLM 维护)。
+The v1 learning loop is complete and usable for daily practice. The current product focuses on desktop, local data, BYOK model access, and customizable language-learning workflows.
 
-## 技术栈
+## Implemented Features
 
-Tauri v2 + React 19 + TypeScript + Vite · SQLite(`tauri-plugin-sql` + Drizzle sqlite-proxy)· Zod + `zod-to-json-schema` · 设备绑定加密的密钥存储(`src-tauri/src/secrets.rs`)· pnpm。
+### Conversation And Correction
 
-## 快速开始
+- Streaming target-language conversation replies, with the tutor agent running in parallel so correction does not block the first token.
+- Coach Panel for turn feedback, learning signals remembered by the system, due review items, and custom observer notes.
+- Structured correction: full corrected sentence, more natural alternative, error span, native-language explanation, severity, and traceable mastery key.
+- Expression gaps: native-language or mixed-language input opens a "how to say this" teaching panel instead of a normal red/green diff.
+- Multi-conversation sidebar with pinning, date grouping, and automatic conversation titles.
+- Rolling summaries for long conversations, context-usage hints, and `/btw` off-record side questions.
+- Conversation actions: branch from here, restart, make harder/easier, swap roles, continue tomorrow, and change scene.
+
+### Learning Memory And Review
+
+- Local SQLite mastery records with evidence timelines; error, correct, introduced, and gap events are all traceable.
+- Markdown learner profile for personal facts, interests, long-term preferences, active learning focus, known items, and user-written notes.
+- AI preferences can affect conversation, correction, lessons, and reading help separately.
+- Code selects due review items from weakness and retention signals, then weaves them into conversation and training.
+- Known items are reused as scaffolds for explanation and transfer, so the system does not only focus on mistakes.
+- Learning data view supports evidence inspection, manual edits, natural-language edit previews, and confirmed writeback.
+- Lesson review and drill writeback preview evidence before the learner confirms it into long-term memory.
+
+### Training Center And Focused Lessons
+
+- Built-in training modes: scenario practice, dictation, shadowing, and weak-item quick drills.
+- Dictation stores misheard words in a separate listening dimension and can adapt future sentences to revisit them.
+- Shadowing supports model reading, speech transcription comparison, and optional pronunciation feedback.
+- Weak-item quick drills turn due review items into short tasks that require active recall.
+- Custom training modes use `converloop/drill@1` Markdown documents: frontmatter defines mechanics, body sections define prompts.
+- Drills can include topic recommendations, drill observers, session reports, import, and export.
+- Focused lessons open teacher-style sessions around grammar, expression gaps, daily review, or a learner-defined goal.
+- Task Agent can turn broad goals such as interview prep, business email, or a recurring expression need into a learning project and up to three lesson drafts.
+- Practice stats card shows overview, trends, knowledge points, and recurring weak spots.
+
+### Capability Library And Custom Agents
+
+- Capability Library displays built-in capabilities by entry point: conversation, correction, lessons, drill observers, pronunciation feedback, reply explanation, bilingual view, selection analysis, conversation actions, and more.
+- Built-in capabilities can be enabled, disabled, hidden, or extended with extra instructions; runs are logged as agent jobs.
+- Users can create custom observers, actions, and reply transformers.
+- Observers can add Coach notes after each turn; memory writes must go through pending proposals.
+- Actions can derive new conversations from the current one or turn a conversation into a focused lesson.
+- Reply transformers can attach to AI replies or learner messages and output to a panel, replace text, Coach, or memory proposal.
+- `converloop.package` import/export supports sharing lessons and skills, with compatibility for older package formats.
+
+### Voice, Reading, And Models
+
+- LLM providers: OpenAI-compatible endpoints, Anthropic, Gemini, plus Claude / ChatGPT subscription OAuth login paths.
+- STT: Soniox real-time streaming, OpenAI-compatible batch transcription, local Parakeet, and local Qwen3-ASR.
+- TTS: free Edge Read Aloud and MiMo TTS, with auto-speak, manual speak, rate/pitch/voice settings, and audio caching.
+- Pronunciation feedback can use Gemini audio-capable models to assess pronunciation, stress, and intonation after spoken answers.
+- Bilingual reading, on-demand explanation, and selection translation/analysis are all registered as auditable capabilities.
+- Listening page can turn past conversation lines into playable listening material.
+
+### Local Data And Desktop Experience
+
+- First-run onboarding for UI language, native language, target language, level, and model provider.
+- API keys, OAuth tokens, STT keys, and TTS keys are stored locally through encrypted secret storage and are excluded from backups.
+- One-click readable JSON backup and restore for conversations, learning data, profile, and non-secret settings.
+- Settings mirror restores key provider, voice, theme, and shortcut settings if WebView data is cleared.
+- English and Chinese UI, command palette, editable shortcuts, themes, and accent settings.
+- macOS and Windows builds are validated in CI.
+
+## Tech Stack
+
+- Tauri v2, Rust, React 19, TypeScript, Vite
+- SQLite with `tauri-plugin-sql` and Drizzle sqlite-proxy
+- Zod plus `zod-to-json-schema` for structured model output schemas
+- Device-bound encrypted secret storage in `src-tauri/src/secrets.rs`
+- pnpm, Biome, Vitest, GitHub Actions
+
+## Quick Start
+
+Prerequisites:
+
+- Node.js 22
+- pnpm 11 via Corepack
+- Rust stable
+- Tauri v2 system dependencies for your OS
+
+Install dependencies and run the desktop app:
 
 ```bash
+corepack enable
 pnpm install
-pnpm tauri dev      # 开发(开桌面窗口 + HMR)
-pnpm test           # vitest
-pnpm tauri build    # 打包
+pnpm tauri dev
 ```
 
-启动后进**设置页**填 provider + API key(BYOK,加密存本地),即可在聊天页使用。
+After the app opens, configure a provider and API key in Settings. Secrets are stored locally through encrypted storage and are not included in backups.
 
-> ⚠️ 别随手 `cargo update`:`Cargo.lock` 把 `bitflags` 钉在 `2.9.1`,升级会触发 `dispatch2` 宏递归编译失败。其他踩坑见 [docs/architecture.md#踩坑记录](docs/architecture.md#踩坑记录).
+## Scripts
 
-## 文档
+| Command | Purpose |
+|---|---|
+| `pnpm tauri dev` | Start the Tauri desktop app with Vite HMR |
+| `pnpm build` | Type-check and build the frontend |
+| `pnpm test` | Run Vitest |
+| `pnpm check` | Run Biome and TypeScript checks |
+| `pnpm format` | Apply Biome formatting fixes |
+| `pnpm tauri build` | Build desktop packages |
 
-设计与契约都在 [docs/](docs/):
+Do not casually run `cargo update`: `Cargo.lock` intentionally pins `bitflags` to `2.9.1` because newer versions currently trigger a `dispatch2` macro-recursion build failure in this stack.
 
-- [docs/README.md](docs/README.md) — 设计总览与索引(先读这个)
-- [docs/architecture.md](docs/architecture.md) — 范围、数据流、存储、schema、状态/路线图
-- 三个核心 agent 契约:[conversation](docs/conversation-agent.md) · [tutor](docs/tutor-agent.md) · [profile-maintainer](docs/profile-maintainer-agent.md)
-- [docs/expression-gap.md](docs/expression-gap.md) — 母语/混说 → 表达缺口
+## Architecture
 
-## v1 范围(刻意收窄)
+The core rule is: conversation agent reads Markdown, tutor agent reads SQLite; code writes SQLite, profile maintainer writes Markdown. LLMs only observe and propose discrete signals; code owns counting, state transitions, persistence, and write safety.
 
-✅ Tauri 桌面端 · BYOK · 多 agent · 本地 SQLite · LLM 维护的 MD 档案 · 朗读(TTS)· 按需讲解
-❌ 云 / 同步 / 计费 / Web / 手机 / 托管模型 / 抽认卡 SRS
+See [docs/design.md](docs/design.md) for the current product shape, core design principles, and future development guidance. Implementation details live in code, types, and tests.
+
+## Documentation
+
+| Document | Contents |
+|---|---|
+| [docs/design.md](docs/design.md) | Current product shape, core design principles, and development guidance |
+| [AGENTS.md](AGENTS.md) | Working rules for AI coding agents in this repository |
+
+## Privacy And Security
+
+- Learning data, settings mirrors, and profile documents are stored locally.
+- API keys and OAuth tokens are excluded from backups and encrypted with a device-bound key.
+- The current secret store has no master password, so its security ceiling is accidental-disclosure protection rather than full disk-attacker protection.
+- Backups export app data and non-secret settings as readable JSON.
+
+## Development And Contributing
+
+Keep changes small and tied to the learning loop. Prompt, schema, migration, and provider details are governed by code and tests; update [docs/design.md](docs/design.md) only when a design principle or product boundary changes. Before opening a PR, run:
+
+```bash
+pnpm check
+pnpm test
+```
+
+## License
+
+Converloop is **dual-licensed**:
+
+- **Open source — [GNU AGPL-3.0-or-later](LICENSE).** You may use, modify, and self-host it freely. Note the AGPL's network clause: if you run a modified version as a service over a network, you must offer your modified source under the AGPL.
+- **Commercial license.** A separate proprietary license is available for anyone who cannot or does not want to comply with the AGPL (e.g. shipping closed-source builds, or running a hosted service without releasing changes). See [COMMERCIAL.md](COMMERCIAL.md).
+
+External contributions are accepted under the [Contributor License Agreement](CLA.md), which is what keeps the dual-licensing model possible.
