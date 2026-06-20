@@ -9,7 +9,7 @@ import {
 import { isWindows } from "../lib/platform";
 
 export type Theme = "light" | "dark" | "system";
-export type Accent = "gray" | "blue" | "purple" | "claude";
+export type Accent = "gray" | "blue" | "purple" | "claude" | "vercel";
 
 const STORAGE_KEY = "lang-agent-theme";
 const ACCENT_STORAGE_KEY = "lang-agent-accent";
@@ -36,6 +36,7 @@ function loadAccent(): Accent {
   if (stored === "blue") return "blue";
   if (stored === "purple") return "purple";
   if (stored === "claude") return "claude";
+  if (stored === "vercel") return "vercel";
   if (localStorage.getItem("lang-agent-palette") === "claude") return "claude";
   return "blue";
 }

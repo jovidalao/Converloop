@@ -728,6 +728,7 @@ export const en = {
       blue: "Blue",
       purple: "Purple",
       claude: "Claude orange",
+      vercel: "Vercel",
     },
     languages: { en: "English", zh: "中文" },
     card: {

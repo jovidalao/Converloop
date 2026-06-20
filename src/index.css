@@ -393,6 +393,96 @@
   --app-main-material: color-mix(in srgb, var(--app-main) 82%, transparent);
 }
 
+/* ============================================================
+   Vercel / Geist theme. A full theme (like Claude): swaps the
+   surface system to Geist's pure white/black backgrounds and
+   neutral gray scale. Its signature is a *monochrome* brand —
+   primary actions are near-black on light, near-white on dark —
+   with Geist's amber/green/red mapped onto info/success/destructive.
+   Values are the canonical Geist tokens (vercel.com/design).
+   ============================================================ */
+:root[data-accent="vercel"] {
+  --radius: 0.5rem;
+  --background: #ffffff; /* background-100 */
+  --foreground: #171717; /* gray-1000 */
+  --foreground-rgb: 23, 23, 23;
+  --brand: #171717; /* monochrome primary (gray-1000) */
+  --brand-foreground: #ffffff;
+  --brand-rgb: 23, 23, 23;
+  --info: #ffa600; /* amber-600 */
+  --info-rgb: 255, 166, 0;
+  --success: #28a948; /* green-700 */
+  --success-rgb: 40, 169, 72;
+  --destructive: #ea001d; /* red-800 */
+  --destructive-rgb: 234, 0, 29;
+  --card: #ffffff;
+  --card-foreground: #171717;
+  --popover: #ffffff;
+  --popover-foreground: #171717;
+  --secondary: #f2f2f2; /* gray-100 */
+  --secondary-foreground: #171717;
+  --muted: #fafafa; /* background-200 */
+  --muted-foreground: #8f8f8f; /* gray-700 */
+  --accent: #f2f2f2; /* gray-100 hover surface */
+  --accent-foreground: #171717;
+  --border: #ebebeb; /* gray-200 */
+  --input: #ebebeb;
+  --sidebar: #fafafa;
+  --sidebar-foreground: #171717;
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: #171717;
+  --sidebar-border: #ebebeb;
+  --sidebar-ring: var(--ring);
+  --radius-panel: 10px;
+  --app-shell: #fafafa;
+  --app-topbar: var(--app-shell);
+  --app-sidebar: var(--app-shell);
+  --app-main: #ffffff;
+  --app-main-material: color-mix(in srgb, var(--app-main) 92%, transparent);
+  --shadow-border-opacity: 0.06;
+  --shadow-blur-opacity: 0.05;
+}
+
+.dark[data-accent="vercel"] {
+  --background: #000000; /* background-100 */
+  --foreground: #ededed; /* gray-1000 */
+  --foreground-rgb: 237, 237, 237;
+  --brand: #ededed; /* monochrome primary (near-white) */
+  --brand-foreground: #000000;
+  --brand-rgb: 237, 237, 237;
+  --info: #ffae00; /* amber-700 */
+  --info-rgb: 255, 174, 0;
+  --success: #00ac3a; /* green-700 */
+  --success-rgb: 0, 172, 58;
+  --destructive: #f13242; /* red-700 */
+  --destructive-rgb: 241, 50, 66;
+  --card: #0a0a0a;
+  --card-foreground: #ededed;
+  --popover: #1a1a1a; /* gray-100 */
+  --popover-foreground: #ededed;
+  --secondary: #1a1a1a; /* gray-100 */
+  --secondary-foreground: #ededed;
+  --muted: #1a1a1a;
+  --muted-foreground: #a0a0a0; /* gray-900 */
+  --accent: #1f1f1f; /* gray-200 hover surface */
+  --accent-foreground: #ededed;
+  --border: #2e2e2e; /* gray-400 */
+  --input: #2e2e2e;
+  --sidebar: #000000;
+  --sidebar-foreground: #ededed;
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: #ededed;
+  --sidebar-border: #1f1f1f;
+  --sidebar-ring: var(--ring);
+  --app-shell: #000000;
+  --app-topbar: var(--app-shell);
+  --app-sidebar: var(--app-shell);
+  --app-main: #0a0a0a;
+  --app-main-material: color-mix(in srgb, var(--app-main) 90%, transparent);
+  --shadow-border-opacity: 0.12;
+  --shadow-blur-opacity: 0.1;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

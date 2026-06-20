@@ -687,6 +687,7 @@ export const zh: Messages = {
       blue: "蓝色",
       purple: "紫色",
       claude: "Claude 橙",
+      vercel: "Vercel",
     },
     languages: { en: "English", zh: "中文" },
     card: {

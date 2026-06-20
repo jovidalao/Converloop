@@ -972,6 +972,11 @@ const ACCENTS: { value: Accent; labelKey: MessageKey; swatch: string }[] = [
     labelKey: "settings.accents.claude",
     swatch: "oklch(0.6171 0.1375 39.0427)",
   },
+  {
+    value: "vercel",
+    labelKey: "settings.accents.vercel",
+    swatch: "#171717",
+  },
 ];
 type BiLabel = { en: string; zh: string };
 type LanguageOption = { value: string; label: BiLabel };
