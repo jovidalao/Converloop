@@ -78,6 +78,11 @@ export function resumeSpeech(): void {
   if (currentAudio?.paused) void currentAudio.play().catch(() => {});
 }
 
+/** Change the current line's speed without restarting it. Also applies while paused. */
+export function setSpeechRate(rate: number): void {
+  if (currentAudio) currentAudio.playbackRate = Math.max(0.25, rate);
+}
+
 /** Seek the current line to `fraction` (0–1) of its duration. No-op when nothing is loaded. */
 export function seekSpeech(fraction: number): void {
   const audio = currentAudio;

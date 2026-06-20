@@ -21,6 +21,7 @@ export type AppActionId =
   | "stop-generating"
   | "dismiss"
   | "dictation-play"
+  | "dictation-hint"
   | "dictation-reveal";
 
 // A key chord: the main key plus required modifier state. `key` is a single
@@ -70,6 +71,7 @@ export const APP_ACTIONS: AppAction[] = [
   { id: "stop-generating", fixedKeys: ["Esc"] },
   { id: "dismiss", fixedKeys: ["Esc"] },
   { id: "dictation-play", defaultBinding: { key: "'", meta: true } },
+  { id: "dictation-hint", defaultBinding: { key: "i", meta: true } },
   { id: "dictation-reveal", defaultBinding: { key: ";", meta: true } },
 ];
 

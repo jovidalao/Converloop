@@ -527,6 +527,9 @@ export const en = {
       "Their AI replies and the polished version of your own lines are replayed from cache — listen and type each one.",
     noItems:
       "No matching lines in the selected conversations — try enabling another type.",
+    allDone: "You have completed every matching line in this mode.",
+    allDoneHint:
+      "Switch modes or select another conversation to keep training.",
     settingsLabel: "Dictation settings",
     contentLabel: "Lines to dictate",
     inputPlaceholder: "Type what you hear…",
@@ -538,8 +541,14 @@ export const en = {
     skip: "Skip",
     correct: "All correct",
     missedWords: "Missed {n} word(s)",
+    translation: "Meaning",
     yourAnswer: "Your answer",
     playPronunciation: "Play pronunciation",
+    pausePronunciation: "Pause pronunciation",
+    resumePronunciation: "Resume pronunciation",
+    playbackSpeed: "Playback speed",
+    hint: "Hint",
+    tryAgain: "Try again",
     submit: "Submit",
     showAnswer: "Show answer",
     translateNeedsLlm:
@@ -623,6 +632,7 @@ export const en = {
     "stop-generating": "Stop generating",
     dismiss: "Close menu or dialog",
     "dictation-play": "Dictation: play pronunciation",
+    "dictation-hint": "Dictation: hint current word",
     "dictation-reveal": "Dictation: show answer",
   },
   shortcutsDialog: {

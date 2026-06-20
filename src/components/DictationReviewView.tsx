@@ -1,10 +1,15 @@
 import {
   CheckIcon,
+  EarIcon,
+  GaugeIcon,
+  LanguagesIcon,
+  LightbulbIcon,
   PencilLineIcon,
+  PlayIcon,
+  RotateCcwIcon,
   Settings2Icon,
   SkipBackIcon,
   SkipForwardIcon,
-  SnailIcon,
   Volume2Icon,
 } from "lucide-react";
 import {
@@ -17,11 +22,13 @@ import {
 } from "react";
 import { useTranslation } from "@/i18n";
 import {
+  actionAriaKeyshortcuts,
   actionKeyCaps,
   matchesActionShortcut,
   useKeybindings,
 } from "@/lib/app-actions";
 import { cn } from "@/lib/utils";
+import { getAppState, setAppState } from "../db/app-state";
 import type { ConversationMeta } from "../db/conversations";
 import { loadChatHistory } from "../db/turns";
 import {
@@ -29,30 +36,45 @@ import {
   type ListeningItem,
   type ListeningSide,
 } from "../tts/listening";
-import { playSpeech, stopSpeech } from "../tts/playback";
+import {
+  pauseSpeech,
+  playSpeech,
+  resumeSpeech,
+  setSpeechRate,
+  stopSpeech,
+} from "../tts/playback";
 import { speakText } from "../tts/speak";
 import { ConversationPickerPopover } from "./ConversationPicker";
 import { checkDictation, type DictationResult } from "./dictation-diff";
+import {
+  createEmptyDictationProgress,
+  DICTATION_PROGRESS_KEY,
+  type DictationPromptMode,
+  findNextUnmasteredItem,
+  getDictationCursor,
+  isDictationMastered,
+  parseDictationProgress,
+  recordDictationAttempt,
+  selectionKey,
+  setDictationCursor,
+} from "./dictation-progress";
+import { toDictationPlainText } from "./dictation-text";
 import { NO_PROVIDER, translateForPrompt } from "./dictation-translate";
 import { type ProviderKind, ProviderStatus } from "./ProviderStatus";
 import { SpeakButton } from "./SpeakButton";
 import { Spinner } from "./ui/spinner";
 import { Switch } from "./ui/switch";
-import { WordSlotsInput } from "./WordSlotsInput";
+import { applyDictationHint, WordSlotsInput } from "./WordSlotsInput";
 
 const STORAGE_KEY = "lang-agent.dictation-review";
 // How many recent conversations to pre-select the first time, so the page is usable on open.
 const DEFAULT_RECENT = 20;
 
-// Prompt modality: hear the sentence (by ear) or read its native-language meaning (by meaning). The
-// answer — typing the target sentence — and grading are identical; only the prompt differs.
-type PromptMode = "audio" | "meaning";
-
 interface PersistedState {
   selectedIds: string[];
   /** False until the learner edits the conversation selection — while false we default to recents. */
   customized: boolean;
-  mode: PromptMode;
+  mode: DictationPromptMode;
   /** Which line types are dictated. */
   includeAi: boolean;
   includeUser: boolean;
@@ -84,41 +106,155 @@ function loadPersisted(): PersistedState {
 // cache the chat filled (instant, offline). A generation guard drops state updates from a playback
 // that was superseded (rapid replay / advancing lines).
 function useDictationAudio() {
-  const [loading, setLoading] = useState<"normal" | "slow" | null>(null);
+  const [loading, setLoading] = useState(false);
   const [playing, setPlaying] = useState(false);
+  const [paused, setPaused] = useState(false);
+  const [rate, setRate] = useState<1 | 0.75>(1);
   const [error, setError] = useState<string | null>(null);
   const genRef = useRef(0);
+  const rateRef = useRef<1 | 0.75>(1);
 
-  const play = useCallback(async (text: string, kind: "normal" | "slow") => {
+  const play = useCallback(async (text: string) => {
     if (!text.trim()) return;
     const gen = ++genRef.current;
-    setLoading(kind);
+    setLoading(true);
+    setPlaying(false);
+    setPaused(false);
     setError(null);
     try {
       stopSpeech();
       const audio = await speakText(text);
       if (gen !== genRef.current) return;
-      setLoading(null);
+      setLoading(false);
       setPlaying(true);
-      await playSpeech(audio, text, { rate: kind === "slow" ? 0.7 : 1 });
+      await playSpeech(audio, text, { rate: rateRef.current });
       if (gen !== genRef.current) return;
       setPlaying(false);
+      setPaused(false);
     } catch (e) {
       if (gen !== genRef.current) return;
-      setLoading(null);
+      setLoading(false);
       setPlaying(false);
+      setPaused(false);
       setError(e instanceof Error ? e.message : String(e));
     }
   }, []);
 
+  const pause = useCallback(() => {
+    if (!playing) return;
+    pauseSpeech();
+    setPlaying(false);
+    setPaused(true);
+  }, [playing]);
+
+  const resume = useCallback(() => {
+    if (!paused) return;
+    resumeSpeech();
+    setPaused(false);
+    setPlaying(true);
+  }, [paused]);
+
+  const toggle = useCallback(
+    (text: string) => {
+      if (loading) return;
+      if (playing) {
+        pause();
+      } else if (paused) {
+        resume();
+      } else {
+        void play(text);
+      }
+    },
+    [loading, pause, paused, play, playing, resume],
+  );
+
   const stop = useCallback(() => {
     genRef.current++;
     stopSpeech();
-    setLoading(null);
+    setLoading(false);
     setPlaying(false);
+    setPaused(false);
   }, []);
 
-  return { play, stop, loading, playing, error };
+  const toggleRate = useCallback(() => {
+    setRate((current) => {
+      const next = current === 1 ? 0.75 : 1;
+      rateRef.current = next;
+      setSpeechRate(next);
+      return next;
+    });
+  }, []);
+
+  return {
+    play,
+    toggle,
+    toggleRate,
+    stop,
+    loading,
+    playing,
+    paused,
+    rate,
+    error,
+  };
+}
+
+function PlaybackGlyph({
+  loading,
+  playing,
+  paused,
+  large = false,
+}: {
+  loading: boolean;
+  playing: boolean;
+  paused: boolean;
+  large?: boolean;
+}) {
+  if (loading) return <Spinner className={large ? "size-7" : "size-3.5"} />;
+  if (playing)
+    return (
+      <span className={large ? "scale-150" : ""}>
+        <span className="speak-bars" aria-hidden>
+          <span />
+          <span />
+          <span />
+        </span>
+      </span>
+    );
+  if (paused)
+    return (
+      <PlayIcon
+        className={large ? "size-8 translate-x-0.5" : "size-4 translate-x-px"}
+      />
+    );
+  return <Volume2Icon className={large ? "size-8" : "size-4"} />;
+}
+
+function PlaybackSpeedButton({
+  rate,
+  onToggle,
+}: {
+  rate: 1 | 0.75;
+  onToggle: () => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-pressed={rate < 1}
+      aria-label={t("dictationReview.playbackSpeed")}
+      title={t("dictationReview.playbackSpeed")}
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-medium transition-colors",
+        rate < 1
+          ? "bg-primary/10 text-primary"
+          : "text-ui-muted hover:bg-accent hover:text-foreground",
+      )}
+    >
+      <GaugeIcon className="size-3.5" />
+      {rate === 1 ? "1×" : "0.75×"}
+    </button>
+  );
 }
 
 function Kbd({ children }: { children: ReactNode }) {
@@ -140,33 +276,6 @@ function ShortcutHint({ caps, label }: { caps: string[]; label: string }) {
       </span>
       {label}
     </span>
-  );
-}
-
-// Small pill for a replay action (normal / slow). The big play button in by-ear mode and these pills
-// all route through the same cached playback.
-function ReplayPill({
-  loading,
-  onClick,
-  label,
-  icon,
-}: {
-  loading: boolean;
-  onClick: () => void;
-  label: string;
-  icon: ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      title={label}
-      aria-label={label}
-      className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 transition-colors hover:bg-accent hover:text-foreground"
-    >
-      {loading ? <Spinner className="size-3" /> : icon}
-      {label}
-    </button>
   );
 }
 
@@ -196,7 +305,7 @@ function SettingsPopover({
   autoplay,
   setAutoplay,
 }: {
-  mode: PromptMode;
+  mode: DictationPromptMode;
   includeAi: boolean;
   setIncludeAi: (v: boolean) => void;
   includeUser: boolean;
@@ -273,7 +382,7 @@ export function DictationReviewView({
   const initial = useRef(loadPersisted()).current;
   const [selectedIds, setSelectedIds] = useState<string[]>(initial.selectedIds);
   const [customized, setCustomized] = useState(initial.customized);
-  const [mode, setMode] = useState<PromptMode>(initial.mode);
+  const [mode, setMode] = useState<DictationPromptMode>(initial.mode);
   const [includeAi, setIncludeAi] = useState(initial.includeAi);
   const [includeUser, setIncludeUser] = useState(initial.includeUser);
   const [autoplay, setAutoplay] = useState(initial.autoplay);
@@ -284,10 +393,15 @@ export function DictationReviewView({
   const [loadingIds, setLoadingIds] = useState<Set<string>>(new Set());
   const loadingRef = useRef(new Set<string>());
 
-  // Per-question state.
-  const [index, setIndex] = useState(0);
+  const [progress, setProgress] = useState(createEmptyDictationProgress);
+  const [progressReady, setProgressReady] = useState(false);
+
+  // Per-question state. The stable item id is the cursor; source-array indices can shift as
+  // conversations are filtered or already-mastered lines are removed from the training queue.
+  const [currentId, setCurrentId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [result, setResult] = useState<DictationResult | null>(null);
+  const [usedHint, setUsedHint] = useState(false);
   // By-meaning prompt (the native-language sentence the learner reproduces).
   const [promptText, setPromptText] = useState<string | null>(null);
   const [promptLoading, setPromptLoading] = useState(false);
@@ -295,11 +409,45 @@ export function DictationReviewView({
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const nextRef = useRef<HTMLButtonElement>(null);
 
-  const { play, stop, loading, playing, error } = useDictationAudio();
+  const {
+    play,
+    toggle: toggleAudio,
+    toggleRate,
+    stop,
+    loading,
+    playing,
+    paused,
+    rate,
+    error,
+  } = useDictationAudio();
   const autoplayRef = useRef(autoplay);
   autoplayRef.current = autoplay;
   const modeRef = useRef(mode);
   modeRef.current = mode;
+
+  // Attempt history and cursors are continuity data, so they live in SQLite app_state and travel
+  // with normal backups. Plain-browser development can run without the database.
+  useEffect(() => {
+    let cancelled = false;
+    getAppState(DICTATION_PROGRESS_KEY)
+      .then((raw) => {
+        if (!cancelled) setProgress(parseDictationProgress(raw));
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setProgressReady(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!progressReady) return;
+    void setAppState(DICTATION_PROGRESS_KEY, JSON.stringify(progress)).catch(
+      () => {},
+    );
+  }, [progress, progressReady]);
 
   // The most recently active conversations — the default selection until the learner picks their own.
   const recentIds = useMemo(
@@ -362,24 +510,85 @@ export function DictationReviewView({
     [includeAi, includeUser],
   );
 
-  // The dictation queue: selected conversations' lines, filtered to the enabled types, in order.
+  // The source queue: selected conversations' lines, filtered to the enabled types, in order.
   const items = useMemo(
     () =>
       selectedIds
         .flatMap((id) => itemsByConv[id] ?? [])
-        .filter((it) => includes(it.side)),
+        .filter((it) => includes(it.side))
+        .map((item) => ({
+          ...item,
+          text: toDictationPlainText(item.text),
+        }))
+        .filter((item) => item.text.length > 0),
     [selectedIds, itemsByConv, includes],
   );
 
-  const current = items[index];
+  const selectedKey = useMemo(() => selectionKey(selectedIds), [selectedIds]);
+  const cursorScope = `${selectedKey}:${mode}`;
+  const queueReady =
+    progressReady && selectedIds.every((id) => itemsByConv[id] !== undefined);
+  const current = currentId
+    ? items.find((item) => item.id === currentId)
+    : undefined;
   const answered = result !== null;
-  const currentRef = useRef(current);
-  currentRef.current = current;
+  const cursorScopeRef = useRef<string | null>(null);
 
-  // Keep the cursor in range when the queue shrinks (deselect / filter change).
+  // Restore the saved line once the complete selected queue has loaded. A changed conversation
+  // selection or prompt mode gets its own cursor; mastered lines are never restored in that mode.
   useEffect(() => {
-    if (index >= items.length && items.length > 0) setIndex(0);
-  }, [items.length, index]);
+    if (!queueReady) return;
+    const scopeChanged = cursorScopeRef.current !== cursorScope;
+    if (scopeChanged) {
+      cursorScopeRef.current = cursorScope;
+      stop();
+      setInput("");
+      setResult(null);
+      setUsedHint(false);
+    }
+
+    const active = currentId
+      ? items.find((item) => item.id === currentId)
+      : null;
+    if (
+      !scopeChanged &&
+      active &&
+      (answered || !isDictationMastered(progress, active.id, mode))
+    ) {
+      return;
+    }
+
+    const savedId = getDictationCursor(progress, selectedKey, mode);
+    const saved =
+      items.find((item) => item.id === savedId) &&
+      savedId &&
+      !isDictationMastered(progress, savedId, mode)
+        ? savedId
+        : null;
+    const fallback = findNextUnmasteredItem(items, null, progress, mode, 1);
+    const nextId = saved ?? fallback?.id ?? null;
+    setCurrentId(nextId);
+    if (
+      scopeChanged &&
+      nextId === currentId &&
+      mode === "audio" &&
+      autoplayRef.current
+    ) {
+      const next = items.find((item) => item.id === nextId);
+      if (next) void play(next.text);
+    }
+  }, [
+    answered,
+    currentId,
+    cursorScope,
+    items,
+    mode,
+    progress,
+    play,
+    queueReady,
+    selectedKey,
+    stop,
+  ]);
 
   // A new line came into focus (advance, jump, or filter shift): clear the answer; in by-ear mode
   // autoplay it (never in by-meaning mode — that would give the answer away).
@@ -387,26 +596,17 @@ export function DictationReviewView({
   useEffect(() => {
     setInput("");
     setResult(null);
+    setUsedHint(false);
     if (current && modeRef.current === "audio" && autoplayRef.current)
-      void play(current.text, "normal");
+      void play(current.text);
   }, [current?.id]);
 
-  // Switching prompt modality restarts the current line cleanly (and re-plays in by-ear mode).
-  // biome-ignore lint/correctness/useExhaustiveDependencies: keyed on mode; reads the latest line via ref.
+  // Resolve native-language text when it is the prompt, or after an audio answer so the reveal can
+  // include the meaning. Expression-gap lines already carry their native source; other lines are
+  // translated on demand and cached.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: keyed on mode + answer step + line id.
   useEffect(() => {
-    setInput("");
-    setResult(null);
-    stop();
-    const cur = currentRef.current;
-    if (mode === "audio" && cur && autoplayRef.current)
-      void play(cur.text, "normal");
-  }, [mode]);
-
-  // Resolve the by-meaning prompt for the current line: free for expression-gap lines (native source
-  // already on the item), translated on demand + cached otherwise. Cleared entirely in by-ear mode.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: keyed on mode + line id.
-  useEffect(() => {
-    if (mode !== "meaning" || !current) {
+    if ((mode !== "meaning" && !answered) || !current) {
       setPromptText(null);
       setPromptLoading(false);
       setPromptError(null);
@@ -440,7 +640,7 @@ export function DictationReviewView({
     return () => {
       cancelled = true;
     };
-  }, [mode, current?.id]);
+  }, [mode, answered, current?.id]);
 
   // Drive focus for the current step: the input while typing, the Next button once answered (so Enter
   // advances). Keyed on `answered` too, so it lands on the input only after the textarea re-renders.
@@ -453,22 +653,66 @@ export function DictationReviewView({
   function check() {
     if (!current || answered) return;
     stop();
-    setResult(checkDictation(current.text, input));
+    const nextResult = checkDictation(current.text, input);
+    setResult(nextResult);
+    if (!usedHint || !nextResult.correct) {
+      setProgress((previous) =>
+        recordDictationAttempt(previous, current.id, mode, nextResult.correct),
+      );
+    }
   }
 
-  function go(delta: number) {
-    const len = items.length;
-    if (len === 0) return;
+  function revealHint() {
+    if (!current || answered) return;
+    const nextInput = applyDictationHint(input, current.text);
+    if (nextInput === null) return;
+    setInput(nextInput);
+    setUsedHint(true);
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }
+
+  function retryCurrent() {
+    if (!current || result?.correct !== false) return;
     stop();
-    setIndex((i) => (i + delta + len) % len);
+    setInput("");
+    setResult(null);
+    setUsedHint(false);
+    if (mode === "audio") void play(current.text);
+  }
+
+  function go(delta: -1 | 1) {
+    if (!current) return;
+    stop();
+    const next = findNextUnmasteredItem(
+      items,
+      current.id,
+      progress,
+      mode,
+      delta,
+    );
+    setInput("");
+    setResult(null);
+    setUsedHint(false);
+    setCurrentId(next?.id ?? null);
+    setProgress((previous) =>
+      setDictationCursor(previous, selectedKey, mode, next?.id ?? null),
+    );
+    if (next?.id === current.id && mode === "audio" && autoplayRef.current) {
+      void play(next.text);
+    }
   }
 
   // Latest-state shortcut actions, read by the window listener (avoids stale closures over input).
-  const actionsRef = useRef({ check: () => {}, playCurrent: () => {} });
+  const actionsRef = useRef({
+    check: () => {},
+    hint: () => {},
+    playCurrent: () => {},
+  });
   actionsRef.current = {
     check,
+    hint: revealHint,
     playCurrent: () => {
-      if (current) void play(current.text, "normal");
+      if (current) toggleAudio(current.text);
     },
   };
 
@@ -480,6 +724,9 @@ export function DictationReviewView({
       if (matchesActionShortcut(e, "dictation-play")) {
         e.preventDefault();
         actionsRef.current.playCurrent();
+      } else if (matchesActionShortcut(e, "dictation-hint")) {
+        e.preventDefault();
+        actionsRef.current.hint();
       } else if (matchesActionShortcut(e, "dictation-reveal")) {
         e.preventDefault();
         actionsRef.current.check();
@@ -517,44 +764,83 @@ export function DictationReviewView({
     }
   }
 
-  const hasItems = items.length > 0;
+  const queueLoading = selectedIds.length > 0 && !queueReady;
+  const hasItems = current !== undefined;
+  // Progress is now measured by mastery (answered-correct lines), not cursor position: the queue keeps
+  // mastered lines but skips them, so a position counter would jump around and never complete.
+  const masteredCount = items.filter((item) =>
+    isDictationMastered(progress, item.id, mode),
+  ).length;
+  const allMastered =
+    queueReady && items.length > 0 && masteredCount === items.length;
   const missCount =
     result?.expectedTokens.filter((tk) => tk.status === "miss").length ?? 0;
+  const resultWordCount = result?.expectedTokens.length ?? 0;
+  const hintAvailable =
+    current && !answered
+      ? applyDictationHint(input, current.text) !== null
+      : false;
   const convTitle = current
     ? (conversations.find((c) => c.id === current.conversationId)?.title ?? "")
     : "";
-  const targetWordCount = current
-    ? current.text.trim().split(/\s+/).filter(Boolean).length
-    : 0;
+
+  const sourceBadge = current && (
+    <span
+      className={cn(
+        "shrink-0 rounded px-1.5 py-0.5 font-medium",
+        current.side === "user"
+          ? "bg-primary/10 text-primary"
+          : "bg-accent text-foreground",
+      )}
+    >
+      {sideLabel(current.side)}
+    </span>
+  );
 
   const sourceChip = current && (
     <span className="flex min-w-0 items-center gap-1.5">
-      <span
-        className={cn(
-          "shrink-0 rounded px-1.5 py-0.5 font-medium",
-          current.side === "user"
-            ? "bg-primary/10 text-primary"
-            : "bg-accent text-foreground",
-        )}
-      >
-        {sideLabel(current.side)}
-      </span>
+      {sourceBadge}
       <span className="max-w-40 truncate">{convTitle}</span>
     </span>
   );
 
+  const audioPromptSource = current && (
+    <span className="flex min-w-0 items-center">{sourceBadge}</span>
+  );
+
   return (
     <div className="flex h-full flex-col overflow-hidden px-6 pt-4 pb-6">
-      <div className="mx-auto flex min-h-0 w-full max-w-xl flex-1 flex-col">
-        {/* Header: title + source picker + settings, then the prompt-mode switch */}
-        <div className="flex shrink-0 flex-col gap-4">
+      <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col">
+        {/* Header: title, prompt mode, source picker and settings share one compact row. */}
+        <div className="flex shrink-0 flex-col gap-3">
           <ProviderStatus onOpen={onOpenProviderSettings} kinds={["tts"]} />
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="m-0 flex items-center gap-2.5 text-ui-title font-semibold">
-              <PencilLineIcon className="size-6 shrink-0 text-primary" />
-              {t("dictationReview.title")}
-            </h2>
-            <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex min-w-0 items-center gap-4">
+              <h2 className="m-0 flex shrink-0 items-center gap-2.5 text-ui-title font-semibold">
+                <PencilLineIcon className="size-6 shrink-0 text-primary" />
+                {t("dictationReview.title")}
+              </h2>
+              <div className="inline-flex shrink-0 rounded-md bg-muted p-0.5 text-ui-caption">
+                {(["audio", "meaning"] as const).map((m) => {
+                  const ModeIcon = m === "audio" ? EarIcon : LanguagesIcon;
+                  return (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => setMode(m)}
+                      data-active={mode === m}
+                      className="inline-flex items-center gap-1.5 rounded px-2.5 py-1.5 font-medium text-ui-muted transition-colors data-[active=true]:bg-background data-[active=true]:text-foreground data-[active=true]:shadow-minimal-flat"
+                    >
+                      <ModeIcon className="size-3.5" />
+                      {m === "audio"
+                        ? t("dictationReview.modeAudio")
+                        : t("dictationReview.modeMeaning")}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="ml-auto flex items-center gap-2">
               <ConversationPickerPopover
                 conversations={conversations}
                 selectedIds={selectedIds}
@@ -577,55 +863,37 @@ export function DictationReviewView({
               />
             </div>
           </div>
-          <div className="flex justify-center">
-            <div className="inline-flex rounded-lg border bg-card p-0.5 text-ui-caption">
-              {(["audio", "meaning"] as const).map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  onClick={() => setMode(m)}
-                  data-active={mode === m}
-                  className="rounded-md px-3.5 py-1.5 font-medium text-ui-muted transition-colors data-[active=true]:bg-primary data-[active=true]:text-primary-foreground"
-                >
-                  {m === "audio"
-                    ? t("dictationReview.modeAudio")
-                    : t("dictationReview.modeMeaning")}
-                </button>
-              ))}
-            </div>
-          </div>
         </div>
 
-        {!hasItems ? (
+        {queueLoading ? (
+          <div className="flex flex-1 items-center justify-center py-12">
+            <Spinner className="size-6" />
+          </div>
+        ) : !hasItems ? (
           <div className="flex flex-1 flex-col items-center justify-center px-6 py-12 text-center">
-            <PencilLineIcon className="mb-3 size-9 text-ui-muted" />
+            {allMastered ? (
+              <CheckIcon className="mb-3 size-9 text-success" />
+            ) : (
+              <PencilLineIcon className="mb-3 size-9 text-ui-muted" />
+            )}
             <p className="m-0 text-ui-body text-foreground">
               {selectedIds.length === 0
                 ? t("dictationReview.noSelection")
-                : t("dictationReview.noItems")}
+                : allMastered
+                  ? t("dictationReview.allDone")
+                  : t("dictationReview.noItems")}
             </p>
             <p className="m-0 mt-1 max-w-sm text-ui-caption text-ui-muted">
-              {t("dictationReview.noSelectionHint")}
+              {allMastered
+                ? t("dictationReview.allDoneHint")
+                : t("dictationReview.noSelectionHint")}
             </p>
           </div>
         ) : (
           <div className="flex min-h-0 flex-1 flex-col">
-            {/* Progress */}
-            <div className="mt-5 shrink-0">
-              <div className="h-1 w-full overflow-hidden rounded-full bg-muted">
-                <div
-                  className="h-full rounded-full bg-primary transition-[width] duration-300 ease-out"
-                  style={{ width: `${((index + 1) / items.length) * 100}%` }}
-                />
-              </div>
-              <div className="mt-2 flex items-center justify-center text-ui-caption tabular-nums text-ui-muted">
-                {index + 1} / {items.length}
-              </div>
-            </div>
-
             {/* Stage — the active question. Top-anchored (not centred) so the prompt stays put as the
                 answer grows across lines; the area scrolls if a long prompt + answer overflow. */}
-            <div className="flex min-h-0 flex-1 flex-col items-center gap-8 overflow-y-auto px-2 pt-10 pb-6">
+            <div className="flex min-h-0 flex-1 flex-col items-center gap-7 overflow-y-auto px-2 pt-9 pb-6">
               {!answered ? (
                 <>
                   {mode === "audio" ? (
@@ -633,32 +901,36 @@ export function DictationReviewView({
                     <div className="flex flex-col items-center gap-4">
                       <button
                         type="button"
-                        onClick={() =>
-                          current && void play(current.text, "normal")
+                        onClick={() => current && toggleAudio(current.text)}
+                        aria-label={
+                          playing
+                            ? t("dictationReview.pausePronunciation")
+                            : paused
+                              ? t("dictationReview.resumePronunciation")
+                              : t("dictationReview.playPronunciation")
                         }
-                        aria-label={t("dictationReview.playPronunciation")}
-                        title={t("dictationReview.playPronunciation")}
+                        title={
+                          playing
+                            ? t("dictationReview.pausePronunciation")
+                            : paused
+                              ? t("dictationReview.resumePronunciation")
+                              : t("dictationReview.playPronunciation")
+                        }
                         className="relative inline-flex size-20 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-minimal transition-transform hover:scale-105 active:scale-95"
                       >
-                        {loading === "normal" ? (
-                          <Spinner className="size-7" />
-                        ) : (
-                          <Volume2Icon className="size-8" />
-                        )}
-                        {playing && (
-                          <span className="pointer-events-none absolute inset-0 animate-ping rounded-full ring-2 ring-primary/50" />
-                        )}
+                        <PlaybackGlyph
+                          loading={loading}
+                          playing={playing}
+                          paused={paused}
+                          large
+                        />
                       </button>
                       <div className="flex items-center gap-3 text-ui-caption text-ui-muted">
-                        <ReplayPill
-                          loading={loading === "slow"}
-                          onClick={() =>
-                            current && void play(current.text, "slow")
-                          }
-                          label={t("dictationReview.slow")}
-                          icon={<SnailIcon className="size-3.5" />}
+                        <PlaybackSpeedButton
+                          rate={rate}
+                          onToggle={toggleRate}
                         />
-                        {sourceChip}
+                        {audioPromptSource}
                       </div>
                     </div>
                   ) : (
@@ -676,34 +948,47 @@ export function DictationReviewView({
                         </p>
                       )}
                       <div className="flex items-center gap-3 text-ui-caption text-ui-muted">
-                        <ReplayPill
-                          loading={loading === "normal"}
-                          onClick={() =>
-                            current && void play(current.text, "normal")
+                        <button
+                          type="button"
+                          onClick={() => current && toggleAudio(current.text)}
+                          aria-label={
+                            playing
+                              ? t("dictationReview.pausePronunciation")
+                              : paused
+                                ? t("dictationReview.resumePronunciation")
+                                : t("dictationReview.playPronunciation")
                           }
-                          label={t("dictationReview.playPronunciation")}
-                          icon={<Volume2Icon className="size-3.5" />}
-                        />
-                        <ReplayPill
-                          loading={loading === "slow"}
-                          onClick={() =>
-                            current && void play(current.text, "slow")
+                          title={
+                            playing
+                              ? t("dictationReview.pausePronunciation")
+                              : paused
+                                ? t("dictationReview.resumePronunciation")
+                                : t("dictationReview.playPronunciation")
                           }
-                          label={t("dictationReview.slow")}
-                          icon={<SnailIcon className="size-3.5" />}
+                          className="inline-flex size-8 items-center justify-center rounded-full text-primary transition-colors hover:bg-accent"
+                        >
+                          <PlaybackGlyph
+                            loading={loading}
+                            playing={playing}
+                            paused={paused}
+                          />
+                        </button>
+                        <PlaybackSpeedButton
+                          rate={rate}
+                          onToggle={toggleRate}
                         />
                         {sourceChip}
                       </div>
                     </div>
                   )}
 
-                  {/* Transcribe — one underline per target word (a word-count hint); typed words fill them */}
+                  {/* Transcribe — target-sized underlines hint at each word's length */}
                   <WordSlotsInput
                     ref={inputRef}
                     value={input}
                     onChange={setInput}
                     onKeyDown={onInputKeyDown}
-                    targetWordCount={targetWordCount}
+                    targetText={current.text}
                     ariaLabel={
                       mode === "meaning"
                         ? t("dictationReview.inputPlaceholderMeaning")
@@ -712,29 +997,40 @@ export function DictationReviewView({
                   />
                 </>
               ) : (
-                /* Reveal — feedback is now the focus */
-                <div className="flex w-full flex-col items-center gap-5">
-                  <span
+                /* Reveal — page content, not a nested card. */
+                <div className="flex w-full shrink-0 animate-in flex-col items-center gap-7 fade-in-0 slide-in-from-bottom-2 duration-300">
+                  <div className="flex w-full items-center justify-between gap-4">
+                    <span
+                      className={cn(
+                        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-ui-caption font-medium",
+                        result?.correct
+                          ? "bg-success/10 text-success"
+                          : "bg-destructive/10 text-destructive",
+                      )}
+                    >
+                      {result?.correct && <CheckIcon className="size-3.5" />}
+                      {result?.correct
+                        ? t("dictationReview.correct")
+                        : t("dictationReview.missedWords", { n: missCount })}
+                    </span>
+                    <div className="flex min-w-0 items-center gap-2 text-ui-caption text-ui-muted">
+                      {sourceChip}
+                      <SpeakButton text={current.text} variant="round" />
+                    </div>
+                  </div>
+
+                  <p
                     className={cn(
-                      "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-ui-caption font-medium",
-                      result?.correct
-                        ? "bg-success/10 text-success"
-                        : "bg-accent text-foreground",
+                      "m-0 max-w-3xl text-pretty text-center font-medium leading-relaxed text-foreground",
+                      resultWordCount > 18 ? "text-xl" : "text-2xl",
                     )}
                   >
-                    {result?.correct && <CheckIcon className="size-3.5" />}
-                    {result?.correct
-                      ? t("dictationReview.correct")
-                      : t("dictationReview.missedWords", { n: missCount })}
-                  </span>
-
-                  <p className="m-0 text-pretty text-center text-xl leading-relaxed text-foreground">
                     {result?.expectedTokens.map((tk, i) => (
                       <span
                         key={`${i}-${tk.text}`}
                         className={cn(
                           tk.status === "miss" &&
-                            "rounded bg-destructive/15 px-0.5 text-destructive",
+                            "rounded-md bg-destructive/12 px-1 py-0.5 text-destructive",
                         )}
                       >
                         {tk.text}
@@ -745,15 +1041,32 @@ export function DictationReviewView({
                     ))}
                   </p>
 
-                  {current && (
-                    <SpeakButton text={current.text} variant="round" />
-                  )}
-
-                  {input.trim() && (
-                    <p className="m-0 max-w-full text-center text-ui-caption text-ui-muted">
-                      {t("dictationReview.yourAnswer")}:{" "}
-                      <span className="text-foreground">{input}</span>
+                  {promptLoading ? (
+                    <Spinner className="size-4 text-ui-muted" />
+                  ) : promptText ? (
+                    <div className="flex max-w-xl flex-col items-center gap-1.5 text-center">
+                      <span className="text-ui-caption font-medium text-ui-muted">
+                        {t("dictationReview.translation")}
+                      </span>
+                      <p className="m-0 text-pretty text-ui-body leading-relaxed text-ui-muted">
+                        {promptText}
+                      </p>
+                    </div>
+                  ) : promptError ? (
+                    <p className="m-0 max-w-sm text-center text-ui-caption text-destructive">
+                      {promptError}
                     </p>
+                  ) : null}
+
+                  {!result?.correct && input.trim() && (
+                    <div className="w-full pt-1">
+                      <p className="m-0 text-ui-caption font-medium text-ui-muted">
+                        {t("dictationReview.yourAnswer")}
+                      </p>
+                      <p className="m-0 mt-1 break-words text-ui-body leading-relaxed text-foreground">
+                        {input}
+                      </p>
+                    </div>
                   )}
                 </div>
               )}
@@ -779,42 +1092,75 @@ export function DictationReviewView({
                 {t("dictationReview.prev")}
               </button>
               {!answered ? (
-                <button
-                  type="button"
-                  onClick={check}
-                  className="inline-flex h-9 items-center gap-1.5 justify-self-center rounded-md bg-primary px-5 text-ui-body font-medium text-primary-foreground shadow-minimal transition-colors hover:bg-primary/90"
-                >
-                  <CheckIcon className="size-4" />
-                  {t("dictationReview.check")}
-                </button>
+                <div className="flex items-center gap-2 justify-self-center">
+                  <button
+                    type="button"
+                    onClick={revealHint}
+                    disabled={!hintAvailable}
+                    aria-keyshortcuts={actionAriaKeyshortcuts("dictation-hint")}
+                    className="inline-flex h-9 items-center gap-1.5 rounded-md px-3 text-ui-body font-medium text-foreground transition-colors hover:bg-accent disabled:pointer-events-none disabled:opacity-40"
+                  >
+                    <LightbulbIcon className="size-4" />
+                    {t("dictationReview.hint")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={check}
+                    className="inline-flex h-9 items-center gap-1.5 rounded-md bg-primary px-5 text-ui-body font-medium text-primary-foreground shadow-minimal transition-colors hover:bg-primary/90"
+                  >
+                    <CheckIcon className="size-4" />
+                    {t("dictationReview.check")}
+                  </button>
+                </div>
               ) : (
-                <button
-                  ref={nextRef}
-                  type="button"
-                  onClick={() => go(1)}
-                  className="inline-flex h-9 items-center gap-1.5 justify-self-center rounded-md bg-primary px-5 text-ui-body font-medium text-primary-foreground shadow-minimal transition-colors hover:bg-primary/90"
-                >
-                  {t("dictationReview.next")}
-                  <SkipForwardIcon className="size-4" />
-                </button>
+                <div className="flex items-center gap-2 justify-self-center">
+                  {result?.correct === false && (
+                    <button
+                      type="button"
+                      onClick={retryCurrent}
+                      className="inline-flex h-9 items-center gap-1.5 rounded-md px-3 text-ui-body font-medium text-foreground transition-colors hover:bg-accent"
+                    >
+                      <RotateCcwIcon className="size-4" />
+                      {t("dictationReview.tryAgain")}
+                    </button>
+                  )}
+                  <button
+                    ref={nextRef}
+                    type="button"
+                    onClick={() => go(1)}
+                    className="inline-flex h-9 items-center gap-1.5 rounded-md bg-primary px-5 text-ui-body font-medium text-primary-foreground shadow-minimal transition-colors hover:bg-primary/90"
+                  >
+                    {t("dictationReview.next")}
+                    <SkipForwardIcon className="size-4" />
+                  </button>
+                </div>
               )}
-              {!answered ? (
-                <button
-                  type="button"
-                  onClick={() => go(1)}
-                  className="inline-flex h-9 items-center gap-1.5 justify-self-end rounded-md px-3 text-ui-body text-ui-muted transition-colors hover:bg-accent hover:text-foreground"
-                >
-                  {t("dictationReview.skip")}
-                  <SkipForwardIcon className="size-4" />
-                </button>
-              ) : (
-                <span />
-              )}
+              <div className="flex items-center gap-3 justify-self-end">
+                {hasItems && (
+                  <span className="shrink-0 text-ui-caption tabular-nums text-ui-muted">
+                    {masteredCount} / {items.length}
+                  </span>
+                )}
+                {!answered && (
+                  <button
+                    type="button"
+                    onClick={() => go(1)}
+                    className="inline-flex h-9 items-center gap-1.5 rounded-md px-3 text-ui-body text-ui-muted transition-colors hover:bg-accent hover:text-foreground"
+                  >
+                    {t("dictationReview.skip")}
+                    <SkipForwardIcon className="size-4" />
+                  </button>
+                )}
+              </div>
             </div>
             <div className="mt-3 flex shrink-0 flex-wrap items-center justify-center gap-x-4 gap-y-1 text-ui-caption text-ui-muted">
               <ShortcutHint
                 caps={actionKeyCaps("dictation-play")}
                 label={t("dictationReview.playPronunciation")}
+              />
+              <ShortcutHint
+                caps={actionKeyCaps("dictation-hint")}
+                label={t("dictationReview.hint")}
               />
               <ShortcutHint caps={["↩"]} label={t("dictationReview.submit")} />
               <ShortcutHint
