@@ -6,7 +6,6 @@ import {
   ListMusicIcon,
   ListXIcon,
   MessageSquareIcon,
-  MicIcon,
   TargetIcon,
   ZapIcon,
 } from "lucide-react";
@@ -28,8 +27,6 @@ export function convIcon(c: ConversationMeta): ReactNode {
       return <ZapIcon className="size-3.5 shrink-0" />;
     case "dictation":
       return <HeadphonesIcon className="size-3.5 shrink-0" />;
-    case "shadowing":
-      return <MicIcon className="size-3.5 shrink-0" />;
     case "review_drill":
       return <TargetIcon className="size-3.5 shrink-0" />;
     default:

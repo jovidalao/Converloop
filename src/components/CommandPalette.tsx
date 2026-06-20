@@ -3,7 +3,6 @@ import {
   GraduationCapIcon,
   HeadphonesIcon,
   MessageSquareIcon,
-  MicIcon,
   SearchIcon,
   SquarePenIcon,
   TargetIcon,
@@ -38,8 +37,6 @@ function conversationIcon(c: ConversationMeta) {
       return <ZapIcon className={cls} />;
     case "dictation":
       return <HeadphonesIcon className={cls} />;
-    case "shadowing":
-      return <MicIcon className={cls} />;
     case "review_drill":
       return <TargetIcon className={cls} />;
     default:

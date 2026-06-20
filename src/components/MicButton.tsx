@@ -6,7 +6,6 @@ import {
   actionShortcutLabel,
   matchesActionShortcut,
 } from "@/lib/app-actions";
-import { isPronunciationEnabled } from "../pronunciation/config";
 import {
   loadSttConfig,
   MissingSttApiKeyError,
@@ -39,14 +38,11 @@ export function MicButton({
   onTranscript,
   onPartial,
   onError,
-  onAudio,
 }: {
   disabled?: boolean;
   onTranscript: (text: string) => void;
   onPartial: (text: string) => void;
   onError: (message: string) => void;
-  /** When pronunciation feedback is on, hands the parent the raw recording of this utterance for assessment. */
-  onAudio?: (audio: { blob: Blob; mime: string }) => void;
 }) {
   const { t } = useTranslation();
   const [state, setState] = useState<"idle" | "recording" | "transcribing">(
@@ -56,9 +52,6 @@ export function MicButton({
     () => loadSttConfig().sttProvider !== null,
   );
   const sessionRef = useRef<LiveSession | null>(null);
-  // Auxiliary raw recorder for pronunciation feedback on the streaming/local STT paths (which expose only
-  // text). The batch path already yields a blob, so it reuses that instead of starting one here.
-  const pronRecordingRef = useRef<ActiveRecording | null>(null);
 
   useEffect(() => {
     const syncProviderSelection = () => {
@@ -83,8 +76,6 @@ export function MicButton({
       if (live?.kind === "stream") live.session.cancel();
       else if (live?.kind === "batch") live.recording.cancel();
       else if (live?.kind === "local") live.capture.cancel();
-      pronRecordingRef.current?.cancel();
-      pronRecordingRef.current = null;
     };
   }, []);
 
@@ -103,8 +94,6 @@ export function MicButton({
         } else if (live?.kind === "local") {
           live.capture.cancel();
         }
-        pronRecordingRef.current?.cancel();
-        pronRecordingRef.current = null;
         setState("idle");
       }
     }
@@ -137,24 +126,12 @@ export function MicButton({
         const provider = loadSttConfig().sttProvider;
         setProviderSelected(provider !== null);
         if (!provider) throw new MissingSttProviderError();
-        // Pronunciation feedback needs the raw audio. The batch path captures a blob anyway (reused at
-        // stop); the streaming/local paths expose only text, so record a parallel blob just for assessment.
-        // Best-effort — a failed aux capture must never block voice input.
-        if (onAudio && isPronunciationEnabled() && provider !== "openai") {
-          try {
-            pronRecordingRef.current = await startRecording();
-          } catch {
-            pronRecordingRef.current = null;
-          }
-        }
         if (provider === "soniox") {
           const session = await startSonioxStream({
             onPartial,
             onError: (e) => {
               // Recording-time connection failure: the session self-cleaned; roll back tentative text.
               sessionRef.current = null;
-              pronRecordingRef.current?.cancel();
-              pronRecordingRef.current = null;
               setState("idle");
               onTranscript("");
               onError(e.message);
@@ -174,9 +151,6 @@ export function MicButton({
         }
         setState("recording");
       } catch (e) {
-        // STT setup failed — release the aux pronunciation recorder if it managed to start.
-        pronRecordingRef.current?.cancel();
-        pronRecordingRef.current = null;
         onError(
           e instanceof MissingSttProviderError ||
             e instanceof MissingSttApiKeyError
@@ -192,10 +166,6 @@ export function MicButton({
       setState("idle");
       return;
     }
-    // The aux recorder (streaming/local paths) is stopped alongside the STT session; the batch path reuses
-    // its own recording instead. Read it out here so every exit path can settle it exactly once.
-    const pron = pronRecordingRef.current;
-    pronRecordingRef.current = null;
     setState("transcribing");
     try {
       let text: string;
@@ -205,20 +175,10 @@ export function MicButton({
         text = await live.capture.stop();
       } else {
         const { blob, mime } = await live.recording.stop();
-        if (onAudio && isPronunciationEnabled()) onAudio({ blob, mime });
         text = await transcribeAudio(blob, mime);
-      }
-      if (pron) {
-        try {
-          const { blob, mime } = await pron.stop();
-          if (onAudio && isPronunciationEnabled()) onAudio({ blob, mime });
-        } catch {
-          // Aux capture failed — voice input still succeeded; just no pronunciation this turn.
-        }
       }
       onTranscript(text);
     } catch (e) {
-      pron?.cancel();
       if (live.kind === "stream") onTranscript("");
       onError(e instanceof Error ? e.message : String(e));
     } finally {

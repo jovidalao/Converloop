@@ -129,6 +129,13 @@ Start now.
     expect(result.ok).toBe(true);
   });
 
+  it("rejects the retired say-visible interaction", () => {
+    const result = parseDrillDocument(
+      VALID_DOC.replace("interaction: chat", "interaction: say-visible"),
+    );
+    expect(result.ok).toBe(false);
+  });
+
   it("accepts legacy lang-agent drill documents", () => {
     const legacy = VALID_DOC.replace(
       "converloop/drill@1",
@@ -169,7 +176,6 @@ describe("buildDrillAuthoringSpec", () => {
     expect(spec).toContain("converloop/drill@1");
     for (const v of [
       "say-hidden",
-      "say-visible",
       "review-items",
       "standard-answer",
       "listening",

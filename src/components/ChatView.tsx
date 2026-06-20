@@ -274,9 +274,6 @@ export function ChatView({
   // Streaming voice input: remember the composer draft before speech starts.
   // Partials append after it; onTranscript("") restores it on cancel/error.
   const sttBaseRef = useRef<string | null>(null);
-  // Raw recording of the latest voice input, kept for pronunciation feedback and consumed by the next send.
-  // Cleared on any manual edit (the audio no longer matches what's being sent).
-  const pendingAudioRef = useRef<{ blob: Blob; mime: string } | null>(null);
   const stickToBottomRef = useRef(true);
   const turnGenRef = useRef(0);
   const replyCommittedRef = useRef(false);
@@ -284,7 +281,7 @@ export function ChatView({
   const derivationStartedRef = useRef(false);
   const drillStartedRef = useRef(false);
   const topicStartedRef = useRef(false);
-  // Replays of the sentence currently awaiting an answer (dictation/shadowing, slow replays included); sent with the
+  // Replays of the sentence currently awaiting an answer (including slow replays); sent with the
   // next answer as a live difficulty signal, then reset for the next sentence.
   const sayDrillReplayCountRef = useRef(0);
   const liveTurnIdsRef = useRef<Set<string>>(new Set()); // turns sent in this session; auto-bilingual only applies to these
@@ -342,10 +339,7 @@ export function ChatView({
   const drillDef = drillDraft?.def ?? activeDrill?.def ?? null;
   // say-hidden (dictation family): masked-sentence rendering; the learner answers by ear.
   const isDictation = drillDef?.interaction === "say-hidden";
-  // say-visible (shadowing family): same [[SAY]] mechanics, but the sentence is shown and read aloud.
-  const isShadowing = drillDef?.interaction === "say-visible";
-  // Either sentence drill: shares the [[SAY]] parsing, the gated "next question" flow, and replay counting.
-  const isSayDrill = isDictation || isShadowing;
+  const isSayDrill = isDictation;
   // Drills targeting snapshotted review items: extra progress badge.
   const isReviewDrill = drillDef?.setup === "review-items";
   // Practice sub-mode for the turn renderers: each drill family trims actions that don't apply.
@@ -955,7 +949,7 @@ export function ChatView({
   ) {
     if (learningMode || replyBusy || drillStartedRef.current) return;
     const def = defOverride ?? drillDef;
-    const sayDrill = def ? def.interaction !== "chat" : false;
+    const sayDrill = def?.interaction === "say-hidden";
     stopSpeech();
     drillStartedRef.current = true;
     const turnGen = ++turnGenRef.current;
@@ -1179,10 +1173,6 @@ export function ChatView({
     const isRetry = opts?.text !== undefined;
     const text = (opts?.text ?? input).trim();
     if (!text || replyBusy) return;
-    // Voice send: hand this turn the kept recording for pronunciation feedback, then consume it (once).
-    // Retries reuse old text and carry no fresh audio.
-    const pronunciationAudio = isRetry ? null : pendingAudioRef.current;
-    pendingAudioRef.current = null;
     // Redo turn ("say it again"): captured before the banner state is consumed below, and carried through retries so
     // the conversation agent keeps treating the re-attempt as a redo, not a brand-new message.
     const redo = opts?.redo ?? redoActive;
@@ -1221,7 +1211,7 @@ export function ChatView({
     setReplyBusy(true);
     setStreaming("");
     setRedoActive(false); // the redo invitation is consumed by this send
-    // Dictation/shadowing: hand the replay count of the answered sentence to the agent (live difficulty signal),
+    // Dictation: hand the replay count of the answered sentence to the agent (live difficulty signal),
     // then reset for the next sentence.
     const replayCount = isSayDrill ? sayDrillReplayCountRef.current : undefined;
     sayDrillReplayCountRef.current = 0;
@@ -1272,7 +1262,7 @@ export function ChatView({
       })();
     };
     const speakReply = (reply: string) => {
-      // Dictation/shadowing: pre-synthesize the next sentence (warms the TTS cache, no playback) so tapping "next
+      // Dictation: pre-synthesize the next sentence (warms the TTS cache, no playback) so tapping "next
       // question" plays it instantly; the tap is what triggers the first playback. Never speak the feedback prose.
       if (isSayDrill) {
         void speakText(parseDictationReply(reply).sentence).catch(() => {});
@@ -1318,14 +1308,13 @@ export function ChatView({
           signal: controller.signal,
           replayCount,
           redo,
-          pronunciationAudio: pronunciationAudio ?? undefined,
         },
       );
       if (turnGenRef.current === turnGen && !replyCommittedRef.current) {
         commitPartnerReply(turnId, result.reply);
         speakReply(result.reply);
       }
-      // Dictation/shadowing: the next sentence is now ready (and its audio prefetched). Gate it behind the "next
+      // Dictation: the next sentence is now ready (and its audio prefetched). Gate it behind the "next
       // question" tap so the learner reads the correction first; the tap plays the audio and re-enables input.
       if (turnGenRef.current === turnGen && isSayDrill) {
         setDictationAwaitingEnter(true);
@@ -1565,7 +1554,7 @@ export function ChatView({
   let lastReplyTurnId: string | undefined;
   for (const turn of turns) if (turn.partnerText) lastReplyTurnId = turn.id;
 
-  // Dictation/shadowing masking: the sentence still awaiting an answer is the one in the LAST turn's reply (no turn
+  // Dictation masking: the sentence still awaiting an answer is the one in the LAST turn's reply (no turn
   // follows it). All earlier sentences have been answered and are revealed. While a new reply is still streaming, the
   // last turn is the optimistic user turn (no partnerText), so nothing is masked and the previous sentence reveals.
   const dictationMaskedTurnId =
@@ -1765,7 +1754,6 @@ export function ChatView({
                   <DictationReply
                     text={turn.partnerText}
                     masked={turn.id === dictationMaskedTurnId}
-                    variant={isShadowing ? "shadowing" : "dictation"}
                     awaitingEnter={
                       turn.id === dictationMaskedTurnId &&
                       dictationAwaitingEnter
@@ -1927,8 +1915,6 @@ export function ChatView({
                   value={input}
                   onChange={(e) => {
                     setInput(e.target.value);
-                    // Manual edit: the kept recording no longer reflects what's being sent — drop it.
-                    pendingAudioRef.current = null;
                   }}
                   onKeyDown={(e) => {
                     if (
@@ -2025,17 +2011,11 @@ export function ChatView({
                             ? dictationAwaitingEnter
                               ? t("dictation.awaitingEnterPlaceholder")
                               : t("dictation.transcriptionPlaceholder")
-                            : isShadowing
-                              ? dictationAwaitingEnter
-                                ? t("dictation.awaitingEnterPlaceholder")
-                                : t("shadowing.attemptPlaceholder")
-                              : redoActive
-                                ? t("chat.redoPlaceholder")
-                                : !compact &&
-                                    inputHints &&
-                                    inputHints.length > 0
-                                  ? "" // hint shown via the animated overlay below
-                                  : t("chat.inputPlaceholderPractice")
+                            : redoActive
+                              ? t("chat.redoPlaceholder")
+                              : !compact && inputHints && inputHints.length > 0
+                                ? "" // hint shown via the animated overlay below
+                                : t("chat.inputPlaceholderPractice")
                   }
                   disabled={
                     lessonGateActive ||
@@ -2198,9 +2178,6 @@ export function ChatView({
                     requestAnimationFrame(() => inputRef.current?.focus());
                   }}
                   onError={showError}
-                  onAudio={(audio) => {
-                    pendingAudioRef.current = audio;
-                  }}
                 />
                 {replyBusy && stoppable ? (
                   <Button

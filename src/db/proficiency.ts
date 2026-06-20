@@ -24,7 +24,7 @@ async function statusCount(status: MasteryStatus): Promise<number> {
 
 // Aggregate evidence metrics from recent turns (global — proficiency is a global characteristic) + mastery table.
 // Gap turns (native-language fallback) are excluded from output length/accuracy metrics; they only count toward gapRate.
-// Dictation/shadowing turns are excluded entirely (see getRecentProductionTurns): one 10-sentence drill would
+// Dictation turns are excluded entirely (see getRecentProductionTurns): one 10-sentence drill would
 // otherwise fill the window and turn listening slips into "production errors", silently easing every conversation.
 export async function getProficiencyInput(
   limit = 20,

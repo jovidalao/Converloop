@@ -41,8 +41,6 @@ export const en = {
       "No speech-to-text key configured. Add one in Settings → Voice input.",
     ttsNoKey:
       "Please configure the MiMo API key in Settings → Text-to-Speech first.",
-    pronunciationNoKey:
-      "Pronunciation feedback needs a {provider} API key. Add one under Settings → Model providers.",
     requestAuth:
       "Provider authentication failed. Check the API key or sign in again.",
     requestQuota:
@@ -55,10 +53,6 @@ export const en = {
   speak: {
     play: "Read aloud",
     stop: "Stop reading",
-  },
-  pronunciation: {
-    coachTitle: "Pronunciation",
-    coachClean: "Sounds clear — your pronunciation matched the target well.",
   },
   stt: {
     startRecording: "Voice input (speak, then click again to finish)",
@@ -330,17 +324,11 @@ export const en = {
     dictation: "Dictation",
     dictationTooltip:
       "Dictation drill: listen to a sentence and type exactly what you hear",
-    shadowing: "Read aloud",
-    shadowingTooltip:
-      "Shadowing drill: listen to a model sentence and read it aloud",
     reviewDrill: "Weak-spot drill",
     reviewDrillTooltip:
       "Active retrieval: micro-tasks that make you produce your due-for-review items",
     customLearning: "Practice Center",
     customLearningTooltip: "Start built-in drills or browse focused lessons",
-    pronunciationPractice: "Pronunciation scoring",
-    pronunciationPracticeTooltip:
-      "Start a read-aloud drill and get pronunciation feedback after speaking",
     listening: "Listening practice",
     listeningTooltip:
       "Play the lines from your past conversations in order, on repeat — for ear training",
@@ -387,16 +375,6 @@ export const en = {
       "Give me a scenario and I'll throw concrete situations at you to handle — take your time, check your corrections, and a quick model answer comes before the next one.",
     recommendedTopics: "Recommended topics",
     scenarioPlaceholder: "Describe a scenario… or pick one above",
-    refresh: "Regenerate",
-  },
-  shadowing: {
-    startTitle: "Read aloud",
-    startDescription:
-      "Pick a theme and I'll show a sentence and read it to you — read it aloud yourself, and I'll point out the words that didn't come through.",
-    recommendedTopics: "Recommended themes",
-    themePlaceholder: "Describe a theme… or pick one above",
-    attemptPlaceholder: "Use the mic to read the sentence aloud…",
-    readPrompt: "Listen to the model, then read this sentence aloud",
     refresh: "Regenerate",
   },
   reviewDrill: {
@@ -497,9 +475,6 @@ export const en = {
     dictationTitle: "Dictation",
     dictationDesc:
       "Listen to adaptive sentences and type exactly what you hear.",
-    shadowingTitle: "Read aloud",
-    shadowingDesc:
-      "Hear a model sentence, read it aloud, and compare the transcript.",
     quickfireTitle: "Scenario drills",
     quickfireDesc:
       "Practice responding inside concrete situations that pull in review items.",
@@ -613,7 +588,6 @@ export const en = {
     newChat: "New chat",
     quickfire: "Scenario drills",
     dictation: "Dictation",
-    shadowing: "Read aloud",
     reviewDrill: "Weak-spot drill",
     search: "Search",
     deriveNewConversation: "Start from this chat",
@@ -844,19 +818,6 @@ export const en = {
       qwen3ModelLabel: "Model (~1 GB, downloaded once)",
       keySaved: "STT API key encrypted and saved locally.",
       keyCleared: "STT API key cleared from local storage.",
-      pronunciationGroup: "Pronunciation feedback",
-      pronunciationGroupHint:
-        "After a voice answer, an audio-native model grades how you said it — sounds, stress, intonation — and posts a note to the coach panel. Best with shadowing drills.",
-      pronunciationToggle: "AI pronunciation feedback on voice answers",
-      pronunciationProvider: "Assessment provider",
-      pronunciationModel: "Audio model",
-      pronunciationCustomModel: "Custom {label} model…",
-      pronunciationCustomModelId: "Custom audio model ID",
-      pronunciationModelId: "Model ID: {id}",
-      pronunciationModelHint:
-        "Choose a model that accepts audio input. Gemini 3.5 Flash is the recommended Gemini default; OpenAI audio models also work here.",
-      pronunciationKeyNote:
-        "Uses your {provider} key and base URL from Model providers — no separate key needed. Add it there first if you haven't.",
     },
     tts: {
       title: "TTS providers",
@@ -977,8 +938,6 @@ export const en = {
     quickfireStartFailed: "Failed to start the scenario drill",
     dictationBadge: "Dictation",
     dictationStartFailed: "Failed to start dictation",
-    shadowingBadge: "Read aloud",
-    shadowingStartFailed: "Failed to start the read-aloud drill",
     reviewDrillBadge: "Weak-spot drill",
     reviewDrillStartFailed: "Failed to start the weak-spot drill",
     redo: "Say it again: re-produce the corrected version from memory",
@@ -1307,10 +1266,6 @@ export const en = {
         title: "Drill observer",
         desc: "Runs a training mode's own observer instructions after each answer in that drill — extra notes in the coach panel.",
       },
-      pronunciation: {
-        title: "Pronunciation feedback",
-        desc: "Grades how you said a voice answer — sounds, stress, intonation — from the recording, and posts a note to the coach panel.",
-      },
       explain: {
         title: "Reply Explanation",
         desc: "Explains on demand in your native language the structures, idioms, and usage that might trip you up.",
@@ -1383,10 +1338,8 @@ export const en = {
     features: {
       conversation: "Natural conversation — topics, role-play, and scenarios",
       correction: "Real-time correction and more natural ways to say things",
-      lessons:
-        "Focused lessons and drills — scenarios, dictation, shadowing, quickfire",
+      lessons: "Focused lessons and drills — scenarios, dictation, quickfire",
       listening: "Listening and dictation practice",
-      pronunciation: "Pronunciation feedback on what you say",
       customize: "Customizable agents, observers, and slash commands",
     },
     meta: "Built with Tauri and a local SQLite database.",

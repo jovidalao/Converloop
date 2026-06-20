@@ -140,8 +140,8 @@ export function parseTurnAnalysis(json: string | null): TutorAnalysis | null {
   return parseTurnFeedback(json).analysis;
 }
 
-// Global most-recent PRODUCTION turns for the proficiency reading: dictation/shadowing turns are excluded — their
-// analyses grade transcription against a fixed sentence (listening/pronunciation evidence), and counting those
+// Global most-recent PRODUCTION turns for the proficiency reading: dictation turns are excluded — their
+// analyses grade transcription against a fixed sentence (listening evidence), and counting those
 // issues as production errors would drag the difficulty calibration down after every drill session.
 export async function getRecentProductionTurns(limit = 20): Promise<Turn[]> {
   const rows = await db
@@ -156,15 +156,12 @@ export async function getRecentProductionTurns(limit = 20): Promise<Turn[]> {
       try {
         const mods = JSON.parse(row.modifiers) as {
           dictation?: unknown;
-          shadowing?: unknown;
           drill?: { def?: { interaction?: string } };
         };
         const drillInteraction = mods?.drill?.def?.interaction;
         if (
           mods &&
-          (mods.dictation ||
-            mods.shadowing ||
-            (drillInteraction && drillInteraction !== "chat"))
+          (mods.dictation || (drillInteraction && drillInteraction !== "chat"))
         )
           continue;
       } catch {

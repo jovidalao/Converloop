@@ -508,8 +508,7 @@ export function CoachPanel({
 
   // Whole-conversation aggregate: deduplicate signals derived from corrections +
   // accurate/to-improve counts; pure in-memory, no DB. Isolated drill keys
-  // (listening:/shadowing:) are skipped — they are not conversation "memory"
-  // (shadowing records nothing at all), so showing them here would mislead.
+  // (listening:/dictation:) are skipped — they are not production conversation memory.
   const conversationSignals = useMemo(() => {
     const map = new Map<string, Signal>();
     for (const t of turns) {

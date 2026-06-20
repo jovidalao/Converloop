@@ -195,6 +195,23 @@ const ADD_LEARNING_AGENT_OUTPUT_MODE: &str =
 const ADD_LEARNING_AGENT_TRANSFORMER_STAGE: &str =
     "ALTER TABLE learning_agent ADD COLUMN transformer_stage TEXT;";
 
+// Remove the retired pronunciation-scoring capability and read-aloud drill data.
+// Shared observer tables remain because custom observers still use them.
+// Migration 45 has shipped: keep this SQL byte-for-byte stable and add follow-up cleanup as a new version.
+const DELETE_PRONUNCIATION_SCORING_DATA: &str = "\
+DELETE FROM turn_annotation WHERE agent_id = 'builtin:pronunciation';
+DELETE FROM agent_job WHERE input_json = '{\"agentId\":\"builtin:pronunciation\"}';
+DELETE FROM mastery_event WHERE key LIKE 'shadowing:%';
+DELETE FROM mastery_item WHERE key LIKE 'shadowing:%';
+DELETE FROM learning_agent WHERE id = 'builtin:drill:shadowing';
+UPDATE conversation
+SET agent_modifiers_json = NULL
+WHERE agent_modifiers_json LIKE '%\"shadowing\"%'
+   OR agent_modifiers_json LIKE '%\"say-visible\"%';";
+
+const DELETE_RETIRED_READ_ALOUD_DRILLS: &str =
+    "DELETE FROM learning_agent WHERE kind = 'drill' AND source_md LIKE '%say-visible%';";
+
 const CREATE_AGENT_JOB: &str = "\
 CREATE TABLE IF NOT EXISTS agent_job (
     id          TEXT PRIMARY KEY NOT NULL,
@@ -542,6 +559,18 @@ pub fn run() {
             version: 44,
             description: "add_learning_agent_transformer_stage",
             sql: ADD_LEARNING_AGENT_TRANSFORMER_STAGE,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 45,
+            description: "delete_pronunciation_scoring_data",
+            sql: DELETE_PRONUNCIATION_SCORING_DATA,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 46,
+            description: "delete_retired_read_aloud_drills",
+            sql: DELETE_RETIRED_READ_ALOUD_DRILLS,
             kind: MigrationKind::Up,
         },
     ];

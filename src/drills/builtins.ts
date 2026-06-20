@@ -6,13 +6,11 @@ import { parseDrillDocument } from "./format";
 import dictationMd from "./seeds/dictation.md?raw";
 import quickfireMd from "./seeds/quickfire.md?raw";
 import reviewDrillMd from "./seeds/review-drill.md?raw";
-import shadowingMd from "./seeds/shadowing.md?raw";
 import type { DrillDefinition } from "./types";
 
 export const BUILTIN_DRILL_IDS = {
   quickfire: "builtin:drill:quickfire",
   dictation: "builtin:drill:dictation",
-  shadowing: "builtin:drill:shadowing",
   reviewDrill: "builtin:drill:review_drill",
 } as const;
 
@@ -45,12 +43,6 @@ export const BUILTIN_DRILL_SEEDS: BuiltinDrillSeed[] = [
     id: BUILTIN_DRILL_IDS.dictation,
     sourceMd: dictationMd,
     def: mustParse(BUILTIN_DRILL_IDS.dictation, dictationMd),
-    supersedes: [],
-  },
-  {
-    id: BUILTIN_DRILL_IDS.shadowing,
-    sourceMd: shadowingMd,
-    def: mustParse(BUILTIN_DRILL_IDS.shadowing, shadowingMd),
     supersedes: [],
   },
   {

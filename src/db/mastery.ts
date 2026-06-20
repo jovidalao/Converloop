@@ -38,7 +38,6 @@ function excludeListeningKeys() {
   return and(
     notLike(masteryItem.key, `${LISTENING_KEY_PREFIX}%`),
     notLike(masteryItem.key, "dictation:%"),
-    notLike(masteryItem.key, "shadowing:%"),
   );
 }
 
@@ -46,16 +45,12 @@ export function isListeningKey(key: string): boolean {
   return normalizeKey(key).startsWith(LISTENING_KEY_PREFIX);
 }
 
-// Keys from the isolated drill dimensions (listening / shadowing / the legacy dictation aggregate). Turn analyses
+// Keys from the isolated listening dimension and legacy dictation aggregate. Turn analyses
 // carry them, but they are not production "memory" — display surfaces (e.g. the coach panel's conversation-memory
 // section) skip them, matching the SQL-side excludeListeningKeys.
 export function isIsolatedDrillKey(key: string): boolean {
   const k = normalizeKey(key);
-  return (
-    k.startsWith(LISTENING_KEY_PREFIX) ||
-    k.startsWith("shadowing:") ||
-    k.startsWith("dictation:")
-  );
+  return k.startsWith(LISTENING_KEY_PREFIX) || k.startsWith("dictation:");
 }
 
 async function insertMasteryEvent(

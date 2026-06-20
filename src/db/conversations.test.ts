@@ -43,16 +43,6 @@ describe("renderDrillInstructions (built-in drill documents)", () => {
     expect(text).not.toContain("LISTENING REVIEW");
   });
 
-  it("shadowing uses the shared [[SAY]] contract without the hidden-sentence rule", () => {
-    const text = renderDrillInstructions(seedDef(BUILTIN_DRILL_IDS.shadowing), {
-      setup: "small talk",
-    });
-    expect(text).toContain("SHADOWING (READ-ALOUD) DRILL");
-    expect(text).toContain("[[SAY]]");
-    expect(text).toContain("[[/SAY]]");
-    expect(text).not.toContain("NEVER write the upcoming sentence");
-  });
-
   it("weak-spot drill lists items in order and forbids revealing the target", () => {
     const text = renderDrillInstructions(
       seedDef(BUILTIN_DRILL_IDS.reviewDrill),
@@ -115,7 +105,7 @@ describe("formatModifierInstructions", () => {
 });
 
 describe("parseAgentModifiers legacy drill normalization", () => {
-  it("maps legacy quickfire/dictation/shadowing/reviewDrill keys to the generic drill modifier", () => {
+  it("maps legacy quickfire/dictation/reviewDrill keys to the generic drill modifier", () => {
     const quickfire = parseAgentModifiers(
       JSON.stringify({ quickfire: { scenario: "airport" } }),
     );
@@ -129,12 +119,6 @@ describe("parseAgentModifiers legacy drill normalization", () => {
     expect(dictation.drill?.modeId).toBe(BUILTIN_DRILL_IDS.dictation);
     expect(dictation.drill?.def.interaction).toBe("say-hidden");
     expect(dictation.drill?.def.mastery).toBe("listening");
-
-    const shadowing = parseAgentModifiers(
-      JSON.stringify({ shadowing: { theme: "small talk" } }),
-    );
-    expect(shadowing.drill?.def.interaction).toBe("say-visible");
-    expect(shadowing.drill?.def.mastery).toBe("none");
 
     const review = parseAgentModifiers(
       JSON.stringify({
@@ -185,12 +169,6 @@ describe("conversationType", () => {
   };
 
   it("recognizes legacy drill modifier rows", () => {
-    expect(
-      conversationType({
-        ...base,
-        agentModifiersJson: JSON.stringify({ shadowing: { theme: "x" } }),
-      }),
-    ).toBe("shadowing");
     expect(
       conversationType({
         ...base,

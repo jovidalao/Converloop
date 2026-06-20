@@ -76,7 +76,7 @@ export interface ConversationDerivationState {
 
 // Session-level adjustments: behavior changes the reply agent should follow. LLM observes; behavior is injected by code (formatted as instructions).
 // Drill conversations carry one generic `drill` modifier ({ modeId, params, def snapshot }); the
-// legacy per-drill keys (quickfire/dictation/shadowing/reviewDrill) are normalized into it at parse time.
+// legacy per-drill keys (quickfire/dictation/reviewDrill) are normalized into it at parse time.
 export interface AgentModifiers {
   difficultyDelta?: number; // +1 harder / -1 easier
   swapRoles?: boolean;
@@ -92,7 +92,6 @@ export interface AgentModifiers {
 interface LegacyDrillModifiers {
   quickfire?: { scenario: string };
   dictation?: { theme: string };
-  shadowing?: { theme: string };
   reviewDrill?: { items: ReviewDrillItem[] };
 }
 
@@ -111,9 +110,6 @@ function legacyDrillModifier(
   }
   if (raw.dictation) {
     return make(BUILTIN_DRILL_IDS.dictation, { setup: raw.dictation.theme });
-  }
-  if (raw.shadowing) {
-    return make(BUILTIN_DRILL_IDS.shadowing, { setup: raw.shadowing.theme });
   }
   if (raw.reviewDrill) {
     return make(BUILTIN_DRILL_IDS.reviewDrill, {
@@ -148,7 +144,6 @@ export type ConversationType =
   | "practice"
   | "quickfire"
   | "dictation"
-  | "shadowing"
   | "review_drill"
   | "learning_agent";
 
@@ -158,7 +153,6 @@ export function conversationType(c: ConversationMeta): ConversationType {
   if (!drill) return "practice";
   if (drill.def.setup === "review-items") return "review_drill";
   if (drill.def.interaction === "say-hidden") return "dictation";
-  if (drill.def.interaction === "say-visible") return "shadowing";
   return "quickfire";
 }
 

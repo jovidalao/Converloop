@@ -56,17 +56,12 @@ function substituteVars(
   );
 }
 
-// The say output contract (code-owned). `hidden` adds the no-spoiler rule for dictation-style drills
-// where the UI masks the sentence until it is answered.
-function sayContract(hidden: boolean): string {
+// The say output contract (code-owned) for dictation-style drills where the UI masks the sentence.
+function sayContract(): string {
   return `STRICT OUTPUT FORMAT — follow it on EVERY turn:
   • If the learner just submitted an attempt, FIRST give your brief feedback note as instructed above. Keep it short.
   • THEN, as the LAST thing in your message, output the next sentence wrapped EXACTLY as: ${DICTATION_SAY_OPEN}the sentence${DICTATION_SAY_CLOSE} with nothing after the closing tag.
-The text inside ${DICTATION_SAY_OPEN}…${DICTATION_SAY_CLOSE} MUST be a single, complete, natural sentence in the TARGET language, calibrated to the learner's level. Put ONLY that sentence between the tags.${
-    hidden
-      ? " NEVER write the upcoming sentence anywhere except inside the tags, and never describe it in advance."
-      : ""
-  }`;
+The text inside ${DICTATION_SAY_OPEN}…${DICTATION_SAY_CLOSE} MUST be a single, complete, natural sentence in the TARGET language, calibrated to the learner's level. Put ONLY that sentence between the tags. NEVER write the upcoming sentence anywhere except inside the tags, and never describe it in advance.`;
 }
 
 function listeningFocusBlock(words: string[]): string {
@@ -86,9 +81,7 @@ export function renderDrillInstructions(
   extras: DrillRenderExtras = {},
 ): string {
   const parts: string[] = [substituteVars(def.task.trim(), params, extras)];
-  if (def.interaction !== "chat") {
-    parts.push(sayContract(def.interaction === "say-hidden"));
-  }
+  if (def.interaction === "say-hidden") parts.push(sayContract());
   if (def.feed === "listening-words" && extras.listeningFocusWords) {
     const block = listeningFocusBlock(extras.listeningFocusWords);
     if (block) parts.push(block);
@@ -102,7 +95,7 @@ export function renderDrillInstructions(
     .join("\n");
 }
 
-/** Kickoff instruction for the AI's first turn. Say drills get the wrapping requirement appended by
+/** Kickoff instruction for the AI's first turn. Dictation drills get the wrapping requirement appended by
  *  code (the document body itself is not allowed to contain the [[SAY]] tags). */
 export function renderDrillOpening(
   def: DrillDefinition,

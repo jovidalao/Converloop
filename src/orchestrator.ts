@@ -793,12 +793,10 @@ export async function runTurn(
     offRecord?: boolean;
     displayText?: string;
     signal?: AbortSignal;
-    /** Dictation/shadowing: replays of the previous sentence before this answer (slow replays included). */
+    /** Dictation: replays of the previous sentence before this answer (slow replays included). */
     replayCount?: number;
     /** "Say it again": this message re-produces the learner's previous sentence using the correction, from memory. */
     redo?: boolean;
-    /** Voice send with pronunciation feedback on: the raw recording, read by the pronunciation observer. */
-    pronunciationAudio?: { blob: Blob; mime: string };
   } = {},
 ): Promise<TurnResult> {
   // Off-record turn (/btw "by the way"): standalone helper answer, no correction, not counted in future context, no compression.
@@ -881,7 +879,7 @@ export async function runTurn(
   // Drill conversations: resolve the drill document (live row preferred, snapshot fallback) and derive
   // the per-turn behavior from its enums — interaction (say mechanics), grading, mastery, hints, feed.
   const drill = await resolveDrill(agentModifiers);
-  const isSayDrill = drill ? drill.def.interaction !== "chat" : false;
+  const isSayDrill = drill?.def.interaction === "say-hidden";
   // Say drills with standard-answer grading: the target sentence is the one the prior AI turn presented
   // (the last verbatim reply). Hand it to the tutor so grading is a comparison, not free-form correction.
   const dictationStandardAnswer =
@@ -890,12 +888,6 @@ export async function runTurn(
           verbatimTurns[verbatimTurns.length - 1]?.reply ?? "",
         ).sentence || undefined
       : undefined;
-  const standardAnswerMode: "dictation" | "shadowing" | undefined =
-    dictationStandardAnswer === undefined
-      ? undefined
-      : drill?.def.interaction === "say-visible"
-        ? "shadowing"
-        : "dictation";
   // feed: listening-words — load the listening-weak words so the reply agent can weave them into upcoming sentences.
   const dictationFocusWords =
     drill?.def.feed === "listening-words"
@@ -964,12 +956,10 @@ export async function runTurn(
     agentModifiers,
     drill,
     dictationStandardAnswer,
-    standardAnswerMode,
     dictationFocusWords,
     sayDrillReplayCount: opts.replayCount,
     redoTurn: opts.redo,
     includeHintTrailer: wantsInlineHint,
-    pronunciationAudio: opts.pronunciationAudio,
     callbacks: cb,
     turnPersisted,
   };

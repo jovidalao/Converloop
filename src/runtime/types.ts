@@ -145,8 +145,6 @@ export interface PracticeContext extends BaseContext {
   /** Say drills only: the exact target sentence of the previous AI turn. When set, the tutor grades
    *  the attempt against this standard answer instead of as free-form conversation. */
   dictationStandardAnswer?: string;
-  /** Which say variant the standard answer belongs to: dictation (typed from ear) or shadowing (read aloud via STT). */
-  standardAnswerMode?: "dictation" | "shadowing";
   /** feed: listening-words — tracked listening-weak words to weave into upcoming sentences (loaded per turn by the orchestrator). */
   dictationFocusWords?: string[];
   /** Say drills: replays of the previous sentence (incl. slow replays) — live difficulty signal for the next sentence. */
@@ -155,9 +153,6 @@ export interface PracticeContext extends BaseContext {
   redoTurn?: boolean;
   /** Ask the reply agent for a private [[HINT]] trailer (input-box coaching hint, stripped before display/TTS/history). */
   includeHintTrailer?: boolean;
-  /** Voice turns with pronunciation feedback enabled: the learner's raw recording, read by the pronunciation
-   *  observer to grade how they said it. Absent on typed turns and when the feature is off. */
-  pronunciationAudio?: { blob: Blob; mime: string };
 }
 
 export interface LearningContext extends BaseContext {

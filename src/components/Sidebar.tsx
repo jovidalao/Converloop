@@ -89,8 +89,6 @@ function conversationTypeIcon(c: ConversationMeta): ReactNode {
       return <ZapIcon className="size-3.5 shrink-0" />;
     case "dictation":
       return <HeadphonesIcon className="size-3.5 shrink-0" />;
-    case "shadowing":
-      return <MicIcon className="size-3.5 shrink-0" />;
     case "review_drill":
       return <TargetIcon className="size-3.5 shrink-0" />;
     default:
@@ -136,8 +134,6 @@ interface SidebarProps {
   view: MainView;
   onSelect: (id: string) => void;
   onNewChat: () => void;
-  onOpenPronunciationPractice: () => void;
-  pronunciationPracticeActive: boolean;
   onDeriveConversation: (conversationId: string, actionId: string) => void;
   onRename: (id: string, title: string) => void;
   onDelete: (id: string) => void;
@@ -160,8 +156,6 @@ export function Sidebar({
   view,
   onSelect,
   onNewChat,
-  onOpenPronunciationPractice,
-  pronunciationPracticeActive,
   onDeriveConversation,
   onRename,
   onDelete,
@@ -339,18 +333,6 @@ export function Sidebar({
                   <BookOpenCheckIcon className="size-4" />
                 </span>
                 <span>{t("sidebar.customLearning")}</span>
-              </button>
-              <button
-                type="button"
-                className="codex-sidebar-action"
-                data-active={pronunciationPracticeActive}
-                onClick={onOpenPronunciationPractice}
-                title={t("sidebar.pronunciationPracticeTooltip")}
-              >
-                <span className="codex-sidebar-leading-icon">
-                  <MicIcon className="size-4" />
-                </span>
-                <span>{t("sidebar.pronunciationPractice")}</span>
               </button>
               <button
                 type="button"

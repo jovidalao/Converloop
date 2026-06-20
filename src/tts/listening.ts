@@ -69,14 +69,14 @@ function userIdiomaticText(
 }
 
 // Flatten one conversation's turns into ordered listening lines (chronological: the learner's
-// idiomatic line, then the AI reply). Say drills (dictation/shadowing) contribute only the AI's
+// idiomatic line, then the AI reply). Dictation drills contribute only the AI's
 // target sentence — the learner's transcription attempt is the same sentence and is skipped.
 export function buildConversationItems(
   conv: ConversationMeta,
   turns: ChatTurn[],
 ): ListeningItem[] {
   const drill = parseAgentModifiers(conv.agentModifiersJson).drill;
-  const sayDrill = !!drill && drill.def.interaction !== "chat";
+  const sayDrill = drill?.def.interaction === "say-hidden";
   const items: ListeningItem[] = [];
   for (const turn of turns) {
     if (sayDrill) {

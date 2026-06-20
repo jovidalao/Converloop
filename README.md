@@ -34,9 +34,8 @@ The v1 learning loop is complete and usable for daily practice. The current prod
 
 ### Training Center And Focused Lessons
 
-- Built-in training modes: scenario practice, dictation, shadowing, and weak-item quick drills.
+- Built-in training modes: scenario practice, dictation, and weak-item quick drills.
 - Dictation stores misheard words in a separate listening dimension and can adapt future sentences to revisit them.
-- Shadowing supports model reading, speech transcription comparison, and optional pronunciation feedback.
 - Weak-item quick drills turn due review items into short tasks that require active recall.
 - Custom training modes use `converloop/drill@1` Markdown documents: frontmatter defines mechanics, body sections define prompts.
 - Drills can include topic recommendations, drill observers, session reports, import, and export.
@@ -46,7 +45,7 @@ The v1 learning loop is complete and usable for daily practice. The current prod
 
 ### Capability Library And Custom Agents
 
-- Capability Library displays built-in capabilities by entry point: conversation, correction, lessons, drill observers, pronunciation feedback, reply explanation, bilingual view, selection analysis, conversation actions, and more.
+- Capability Library displays built-in capabilities by entry point: conversation, correction, lessons, drill observers, reply explanation, bilingual view, selection analysis, conversation actions, and more.
 - Built-in capabilities can be enabled, disabled, hidden, or extended with extra instructions; runs are logged as agent jobs.
 - Users can create custom observers, actions, and reply transformers.
 - Observers can add Coach notes after each turn; memory writes must go through pending proposals.
@@ -59,7 +58,6 @@ The v1 learning loop is complete and usable for daily practice. The current prod
 - LLM providers: OpenAI-compatible endpoints, Anthropic, Gemini, plus Claude / ChatGPT subscription OAuth login paths.
 - STT: Soniox real-time streaming, OpenAI-compatible batch transcription, local Parakeet, and local Qwen3-ASR.
 - TTS: free Edge Read Aloud and MiMo TTS, with auto-speak, manual speak, rate/pitch/voice settings, and audio caching.
-- Pronunciation feedback can use Gemini audio-capable models to assess pronunciation, stress, and intonation after spoken answers.
 - Bilingual reading, on-demand explanation, and selection translation/analysis are all registered as auditable capabilities.
 - Listening page can turn past conversation lines into playable listening material.
 

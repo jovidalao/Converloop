@@ -81,14 +81,6 @@ import {
 } from "../profile/preferences";
 import { readProfile, writeProfile } from "../profile/profile";
 import {
-  loadPronunciationConfig,
-  PRONUNCIATION_PROVIDER_PRESETS,
-  PRONUNCIATION_PROVIDERS,
-  type PronunciationConfig,
-  type PronunciationProvider,
-  savePronunciationConfig,
-} from "../pronunciation/config";
-import {
   type CustomPromptMacro,
   clearPromptMacroOverride,
   deleteCustomPromptMacro,
@@ -144,8 +136,6 @@ import {
 } from "./ui/select";
 import { Switch } from "./ui/switch";
 import { Textarea } from "./ui/textarea";
-
-const CUSTOM_PRONUNCIATION_MODEL_VALUE = "__custom_pronunciation_model__";
 
 // A form field: label + control. Inside a row, flex-1 makes fields share width.
 function Field({
@@ -231,10 +221,6 @@ function SettingRow({
 function SttSettings({ targetLanguage }: { targetLanguage: string }) {
   const { t } = useTranslation();
   const [cfg, setCfg] = useState<SttConfig>(() => loadSttConfig());
-  const [pronCfg, setPronCfg] = useState<PronunciationConfig>(() =>
-    loadPronunciationConfig(),
-  );
-  const [customPronModel, setCustomPronModel] = useState(false);
   const [expandedStt, setExpandedStt] = useState<SttProvider | null>(
     () => loadSttConfig().sttProvider,
   );
@@ -307,36 +293,6 @@ function SttSettings({ targetLanguage }: { targetLanguage: string }) {
     saveSttConfig(next);
   }
 
-  function updatePron<K extends keyof PronunciationConfig>(
-    key: K,
-    value: PronunciationConfig[K],
-  ) {
-    const next = { ...pronCfg, [key]: value };
-    setPronCfg(next);
-    savePronunciationConfig(next);
-  }
-
-  function setPronProvider(provider: PronunciationProvider | null) {
-    setCustomPronModel(false);
-    updatePron("provider", provider);
-  }
-
-  function updatePronModel(
-    provider: PronunciationProvider,
-    model: string,
-  ): void {
-    updatePron("models", { ...pronCfg.models, [provider]: model });
-  }
-
-  function selectPronModel(provider: PronunciationProvider, value: string) {
-    if (value === CUSTOM_PRONUNCIATION_MODEL_VALUE) {
-      setCustomPronModel(true);
-      return;
-    }
-    setCustomPronModel(false);
-    updatePronModel(provider, value);
-  }
-
   async function saveKey(provider: CloudSttProvider) {
     const value = (keyInputs[provider] ?? "").trim();
     if (!value) return;
@@ -354,18 +310,6 @@ function SttSettings({ targetLanguage }: { targetLanguage: string }) {
 
   const sonioxHasKey = !!keyStatus.soniox;
   const openAiHasKey = !!keyStatus.openai;
-  const pronProvider = pronCfg.provider;
-  const pronPreset = pronProvider
-    ? PRONUNCIATION_PROVIDER_PRESETS[pronProvider]
-    : null;
-  const pronModel = pronProvider ? pronCfg.models[pronProvider] : "";
-  const pronSelectedModel = pronPreset?.models.find(
-    (option) => option.model === pronModel,
-  );
-  const pronModelValue =
-    customPronModel || !pronSelectedModel
-      ? CUSTOM_PRONUNCIATION_MODEL_VALUE
-      : pronSelectedModel.model;
 
   return (
     <section className="space-y-6">
@@ -732,103 +676,6 @@ function SttSettings({ targetLanguage }: { targetLanguage: string }) {
             )}
           </ProviderCard>
         </div>
-      </div>
-
-      <div className="space-y-2">
-        <h3 className="text-ui-meta font-semibold uppercase tracking-wide text-ui-muted">
-          {t("settings.stt.pronunciationGroup")}
-        </h3>
-        <p className="m-0 text-ui-caption leading-snug text-ui-muted">
-          {t("settings.stt.pronunciationGroupHint")}
-        </p>
-        <ToggleField
-          label={t("settings.stt.pronunciationToggle")}
-          checked={pronProvider !== null}
-          onChange={(v) => setPronProvider(v ? "gemini" : null)}
-        />
-        {pronProvider && pronPreset && (
-          <div className="pt-1">
-            <SettingRow label={t("settings.stt.pronunciationProvider")}>
-              <Select
-                value={pronProvider}
-                onValueChange={(v) =>
-                  setPronProvider(v as PronunciationProvider)
-                }
-              >
-                <SelectTrigger className="w-72 max-w-[50vw]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {PRONUNCIATION_PROVIDERS.map((provider) => {
-                    const preset = PRONUNCIATION_PROVIDER_PRESETS[provider];
-                    return (
-                      <SelectItem key={provider} value={provider}>
-                        <span className="inline-flex items-center gap-2">
-                          <ProviderBrandIcon type={provider} />
-                          {preset.label}
-                        </span>
-                      </SelectItem>
-                    );
-                  })}
-                </SelectContent>
-              </Select>
-            </SettingRow>
-
-            <SettingRow label={t("settings.stt.pronunciationModel")}>
-              <div className="min-w-0 space-y-1.5">
-                <Select
-                  value={pronModelValue}
-                  onValueChange={(v) => selectPronModel(pronProvider, v)}
-                >
-                  <SelectTrigger className="w-72 max-w-[50vw]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {pronPreset.models.map((option) => (
-                      <SelectItem key={option.model} value={option.model}>
-                        {`${pronPreset.shortLabel} · ${option.label}`}
-                      </SelectItem>
-                    ))}
-                    <SelectItem value={CUSTOM_PRONUNCIATION_MODEL_VALUE}>
-                      {t("settings.stt.pronunciationCustomModel", {
-                        label: pronPreset.shortLabel,
-                      })}
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-                {pronSelectedModel && !customPronModel && (
-                  <p className="m-0 text-right text-ui-caption leading-snug text-ui-muted">
-                    {t("settings.stt.pronunciationModelId", {
-                      id: pronSelectedModel.model,
-                    })}
-                  </p>
-                )}
-              </div>
-            </SettingRow>
-
-            {(customPronModel || !pronSelectedModel) && (
-              <SettingRow label={t("settings.stt.pronunciationCustomModelId")}>
-                <Input
-                  value={pronModel}
-                  onChange={(e) => {
-                    setCustomPronModel(true);
-                    updatePronModel(pronProvider, e.target.value);
-                  }}
-                  className="w-72 max-w-[50vw]"
-                  placeholder={pronPreset.model}
-                />
-              </SettingRow>
-            )}
-            <p className="m-0 text-ui-caption leading-snug text-ui-muted">
-              {t("settings.stt.pronunciationModelHint")}
-            </p>
-            <p className="m-0 text-ui-caption leading-snug text-ui-muted">
-              {t("settings.stt.pronunciationKeyNote", {
-                provider: pronPreset.shortLabel,
-              })}
-            </p>
-          </div>
-        )}
       </div>
     </section>
   );

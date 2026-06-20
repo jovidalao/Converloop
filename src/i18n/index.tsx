@@ -79,11 +79,6 @@ const localeOverrides: Record<
     common: romanceCommon,
     errorBoundary: { title: "Algo salió mal", reload: "Recargar" },
     speak: { play: "Leer en voz alta", stop: "Detener lectura" },
-    pronunciation: {
-      coachTitle: "Pronunciación",
-      coachClean:
-        "Suena claro: tu pronunciación coincide bien con el objetivo.",
-    },
     stt: {
       startRecording: "Entrada de voz (habla y vuelve a pulsar para terminar)",
       stopRecording: "Terminar entrada de voz (Esc para cancelar)",

@@ -56,7 +56,7 @@ You are writing a TRAINING MODE document for Converloop, a language-learning des
 mode ("drill") reshapes the app's practice conversation into a repeatable exercise: every turn the
 conversation agent follows your # Task playbook (present one prompt/sentence/micro-task, react, move
 on), while the app's correction tutor, mastery bookkeeping and UI mechanics run around it according
-to the frontmatter enums you choose. The four built-in modes (scenario sprint, dictation, shadowing,
+to the frontmatter enums you choose. The three built-in modes (scenario sprint, dictation,
 weak-spot drill) are written in this same format.
 
 ## Document format

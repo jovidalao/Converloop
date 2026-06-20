@@ -31,7 +31,6 @@ export function AboutView() {
     t("about.features.correction"),
     t("about.features.lessons"),
     t("about.features.listening"),
-    t("about.features.pronunciation"),
     t("about.features.customize"),
   ];
 

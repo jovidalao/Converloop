@@ -1,10 +1,4 @@
-import {
-  ArrowRightIcon,
-  MicIcon,
-  SnailIcon,
-  Volume2Icon,
-  XIcon,
-} from "lucide-react";
+import { ArrowRightIcon, SnailIcon, Volume2Icon, XIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { parseDictationReply } from "../db/conversations";
@@ -100,31 +94,27 @@ function ReplayControls({
   );
 }
 
-// Renders one dictation/shadowing AI reply: any feedback on the previous attempt (shown when present), then the
-// target sentence. Dictation hides the sentence behind a "listen & type" card while it awaits an answer; shadowing
-// SHOWS the sentence (the learner reads it aloud). Before the learner taps into the item (`awaitingEnter`), the card
-// is a "next question" gate — the sentence and its audio are prepared, but playback waits for the tap so the learner
-// can read their correction first. Once answered (an earlier turn), the sentence is revealed in both variants.
+// Renders one dictation AI reply: any feedback on the previous attempt (shown when present), then the
+// target sentence hidden behind a "listen & type" card while it awaits an answer. Before the learner taps
+// into the item (`awaitingEnter`), the card is a "next question" gate — the sentence and its audio are
+// prepared, but playback waits for the tap so the learner can read their correction first.
 // TTS always speaks the sentence text, never the feedback.
 export function DictationReply({
   text,
   masked,
   awaitingEnter = false,
-  variant = "dictation",
   onEnter,
   onReplay,
 }: {
   text: string;
   masked: boolean;
   awaitingEnter?: boolean;
-  variant?: "dictation" | "shadowing";
   onEnter?: () => void;
   /** Fired on each manual replay (normal or slow) of the awaiting sentence. */
   onReplay?: () => void;
 }) {
   const { t } = useTranslation();
   const { feedback, sentence } = parseDictationReply(text);
-  const shadowing = variant === "shadowing";
   return (
     <div className="flex max-w-none flex-col items-start gap-2 self-stretch">
       {feedback ? (
@@ -147,23 +137,6 @@ export function DictationReply({
               {t("dictation.nextQuestion")}
             </span>
           </button>
-        ) : shadowing ? (
-          // Shadowing: the sentence is VISIBLE — the learner listens to the model reading and reads it aloud.
-          <div className="flex flex-col gap-2 self-stretch rounded-xl border bg-card px-3.5 py-3">
-            <div className="flex items-center gap-2 text-ui-caption text-ui-muted">
-              <MicIcon className="size-3.5 shrink-0 text-primary" />
-              <span className="min-w-0 flex-1">
-                {t("shadowing.readPrompt")}
-              </span>
-              <ReplayControls sentence={sentence} onReplay={onReplay} />
-            </div>
-            <div
-              className="text-ui-body text-foreground"
-              data-selectable-context
-            >
-              <Markdown>{sentence}</Markdown>
-            </div>
-          </div>
         ) : (
           <div className="flex items-center gap-2 self-stretch rounded-xl border bg-card px-3.5 py-3 text-ui-body text-ui-muted">
             <Volume2Icon className="size-4 shrink-0 text-primary" />

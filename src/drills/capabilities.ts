@@ -31,8 +31,7 @@ export const DRILL_CAPABILITIES: DrillCapability[] = [
     core: true,
     doc: `\`interaction\` — the per-turn UI mechanic preset (this is app code; you only pick one):
 - \`chat\` (default): a normal chat composer. The learner types or speaks freely. Use this for prompt-and-respond drills (translation, debate, role-play, retrieval tasks…).
-- \`say-hidden\`: each turn your reply must end with ONE target sentence; the app HIDES the sentence behind a listen card, speaks it aloud (TTS), and the learner types what they hear (dictation family). The app appends the strict output contract automatically — do NOT write [[SAY]] tags yourself.
-- \`say-visible\`: same single-sentence contract, but the app SHOWS the sentence and speaks a model reading; the learner reads it aloud and speech recognition transcribes them (shadowing family). Output contract is appended automatically here too.`,
+- \`say-hidden\`: each turn your reply must end with ONE target sentence; the app HIDES the sentence behind a listen card, speaks it aloud (TTS), and the learner types what they hear (dictation family). The app appends the strict output contract automatically — do NOT write [[SAY]] tags yourself.`,
   },
   {
     key: "setup",
@@ -51,7 +50,7 @@ export const DRILL_CAPABILITIES: DrillCapability[] = [
     core: true,
     doc: `\`grading\` — how the correction tutor grades each learner answer (runs in parallel, separate from your reply):
 - \`tutor\` (default): normal free-form correction of the learner's production.
-- \`standard-answer\`: the tutor compares the answer against the [[SAY]] sentence your previous turn presented (requires a say-* interaction).
+- \`standard-answer\`: the tutor compares the answer against the [[SAY]] sentence your previous turn presented (requires \`interaction: say-hidden\`).
 - \`none\`: no correction at all for this drill.`,
   },
   {

@@ -5,7 +5,7 @@
 // distribution.
 
 /** How the learner interacts each turn. This selects a UI mechanic preset — it is code, not prompt. */
-export type DrillInteraction = "chat" | "say-hidden" | "say-visible";
+export type DrillInteraction = "chat" | "say-hidden";
 
 /** What the start page asks for before the session begins. */
 export type DrillSetup = "none" | "topic" | "review-items";

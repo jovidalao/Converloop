@@ -116,10 +116,6 @@ const BUILTIN_CARD_I18N: Record<
     title: "agentLibrary.builtinCards.drillObserver.title",
     desc: "agentLibrary.builtinCards.drillObserver.desc",
   },
-  "builtin:pronunciation": {
-    title: "agentLibrary.builtinCards.pronunciation.title",
-    desc: "agentLibrary.builtinCards.pronunciation.desc",
-  },
   "builtin:transformer:explain": {
     title: "agentLibrary.builtinCards.explain.title",
     desc: "agentLibrary.builtinCards.explain.desc",

@@ -43,7 +43,7 @@ const Frontmatter = z
     author: z.string().optional(),
     version: z.union([z.string(), z.number()]).optional(),
     locales: z.record(LocaleOverride).optional(),
-    interaction: z.enum(["chat", "say-hidden", "say-visible"]).default("chat"),
+    interaction: z.enum(["chat", "say-hidden"]).default("chat"),
     setup: z.enum(["none", "topic", "review-items"]).default("topic"),
     grading: z.enum(["tutor", "standard-answer", "none"]).default("tutor"),
     mastery: z
@@ -206,7 +206,7 @@ export function parseDrillDocument(md: string): DrillParseResult {
       content.includes(DICTATION_SAY_CLOSE)
     ) {
       errors.push(
-        `Section "# ${name}" must not contain ${DICTATION_SAY_OPEN} tags — the app appends the say output contract automatically for say-* interactions.`,
+        `Section "# ${name}" must not contain ${DICTATION_SAY_OPEN} tags — the app appends the say output contract automatically for say-hidden interactions.`,
       );
     }
   }
@@ -214,7 +214,7 @@ export function parseDrillDocument(md: string): DrillParseResult {
   // Cross-field rules.
   if (fm.data.grading === "standard-answer" && fm.data.interaction === "chat") {
     errors.push(
-      'grading: "standard-answer" requires a say-* interaction (the standard answer is the [[SAY]] sentence of the previous turn).',
+      'grading: "standard-answer" requires interaction: "say-hidden" (the standard answer is the [[SAY]] sentence of the previous turn).',
     );
   }
   if (fm.data.mastery === "listening" && fm.data.interaction !== "say-hidden") {

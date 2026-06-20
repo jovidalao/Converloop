@@ -35,8 +35,6 @@ export const zh: Messages = {
     sttNoProvider: "尚未选择语音转写 provider。请到设置 → 语音输入选择一个。",
     sttNoKey: "尚未配置语音转写 key。请到设置 → 语音输入填写。",
     ttsNoKey: "请先到设置 → 语音里配置 MiMo API key。",
-    pronunciationNoKey:
-      "发音反馈需要 {provider} API key。请先到设置 → 模型供应商里填写。",
     requestAuth: "Provider 鉴权失败。请检查 API key 或重新登录。",
     requestQuota: "Provider 因配额或限流拒绝了请求。",
     requestTimeout: "Provider 请求超时。请稍后重试。",
@@ -67,10 +65,6 @@ export const zh: Messages = {
   speak: {
     play: "朗读",
     stop: "停止朗读",
-  },
-  pronunciation: {
-    coachTitle: "发音",
-    coachClean: "听起来很清晰——你的发音和目标句很贴合。",
   },
   slashMenu: {
     ariaLabel: "斜杠命令",
@@ -308,14 +302,10 @@ export const zh: Messages = {
     quickfireTooltip: "情景演练:设定一个大场景,逐一应对 AI 抛出的具体情况",
     dictation: "听写",
     dictationTooltip: "听写训练:听一句话,把听到的内容原样打出来",
-    shadowing: "跟读",
-    shadowingTooltip: "跟读训练:听示范朗读,自己开口读出来",
     reviewDrill: "弱项闪练",
     reviewDrillTooltip: "主动检索训练:定向出题,逼你亲口用出到期复习的弱项",
     customLearning: "训练中心",
     customLearningTooltip: "开始内置训练或浏览专项课",
-    pronunciationPractice: "发音评分",
-    pronunciationPracticeTooltip: "开始跟读训练,开口后查看发音反馈",
     listening: "磨耳朵听力",
     listeningTooltip: "把过往对话里的句子按顺序循环播放,磨耳朵练听力",
     dictationReview: "句子听写",
@@ -361,16 +351,6 @@ export const zh: Messages = {
       "给我一个场景,我会逐一抛出具体情境让你应对 —— 不用赶时间,看完批改再继续,下一题之前会先给一句示范说法。",
     recommendedTopics: "推荐话题",
     scenarioPlaceholder: "描述一个场景…… 或从上方选一个",
-    refresh: "重新生成",
-  },
-  shadowing: {
-    startTitle: "跟读",
-    startDescription:
-      "选一个主题,我会展示句子并读给你听 —— 你跟着读出来,我会指出哪些词没读到位。",
-    recommendedTopics: "推荐主题",
-    themePlaceholder: "描述一个主题…… 或从上方选一个",
-    attemptPlaceholder: "按麦克风,把这句话读出来……",
-    readPrompt: "先听示范,然后把这句话读出来",
     refresh: "重新生成",
   },
   reviewDrill: {
@@ -466,8 +446,6 @@ export const zh: Messages = {
     reviewDrillDesc: "把当前最值得复习的条目变成短任务,快速练一轮产出。",
     dictationTitle: "听写",
     dictationDesc: "听自适应句子,把听到的内容原样打出来。",
-    shadowingTitle: "跟读",
-    shadowingDesc: "先听示范句,再自己开口读,用转写结果对照。",
     quickfireTitle: "情景演练",
     quickfireDesc: "在具体情境里应对任务,顺手拉起到期复习项。",
     lessonsLabel: "专项课",
@@ -577,7 +555,6 @@ export const zh: Messages = {
     newChat: "新对话",
     quickfire: "情景演练",
     dictation: "听写",
-    shadowing: "跟读",
     reviewDrill: "弱项闪练",
     search: "搜索",
     deriveNewConversation: "基于这段开新对话",
@@ -800,19 +777,6 @@ export const zh: Messages = {
       qwen3ModelLabel: "模型(~1 GB,只需下载一次)",
       keySaved: "STT API key 已加密保存到本地。",
       keyCleared: "STT API key 已从本地清除。",
-      pronunciationGroup: "发音反馈",
-      pronunciationGroupHint:
-        "语音作答后，由原生支持音频的模型评估你的发音——音准、重音、语调——并在教练面板给出笔记。配合跟读训练效果最好。",
-      pronunciationToggle: "对语音作答开启 AI 发音反馈",
-      pronunciationProvider: "评估 Provider",
-      pronunciationModel: "音频模型",
-      pronunciationCustomModel: "自定义 {label} 模型…",
-      pronunciationCustomModelId: "自定义音频模型 ID",
-      pronunciationModelId: "模型 ID：{id}",
-      pronunciationModelHint:
-        "请选择支持音频输入的模型。Gemini 默认推荐 3.5 Flash；OpenAI audio 模型也适合这里。",
-      pronunciationKeyNote:
-        "复用「模型供应商」里的 {provider} key 和 base URL，无需单独配置。若还没填，请先到那里填写。",
     },
     tts: {
       title: "TTS 提供商",
@@ -925,8 +889,6 @@ export const zh: Messages = {
     quickfireStartFailed: "情景演练启动失败",
     dictationBadge: "听写",
     dictationStartFailed: "听写启动失败",
-    shadowingBadge: "跟读",
-    shadowingStartFailed: "跟读启动失败",
     reviewDrillBadge: "弱项闪练",
     reviewDrillStartFailed: "弱项闪练启动失败",
     redo: "重说一遍:凭记忆把改对的说法再产出一次",
@@ -1234,10 +1196,6 @@ export const zh: Messages = {
         title: "训练观察者",
         desc: "在训练中每次作答后，运行该训练模式自带的观察者指令——在教练面板补充笔记。",
       },
-      pronunciation: {
-        title: "发音反馈",
-        desc: "根据你语音作答的录音，评估你「怎么说」的——音准、重音、语调——并在教练面板给出笔记。",
-      },
       explain: {
         title: "回复讲解",
         desc: "按需用母语讲解可能让你卡住的句式、习语和用法。",
@@ -1309,9 +1267,8 @@ export const zh: Messages = {
     features: {
       conversation: "自然对话——话题、角色扮演与情景",
       correction: "实时纠错，以及更地道的说法",
-      lessons: "专项课与训练——情景演练、听写、跟读、快问快答",
+      lessons: "专项课与训练——情景演练、听写、快问快答",
       listening: "听力与听写练习",
-      pronunciation: "对你的发音给出反馈",
       customize: "可定制的 Agent、观察者与斜杠命令",
     },
     meta: "基于 Tauri 与本地 SQLite 数据库构建。",

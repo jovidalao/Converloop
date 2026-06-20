@@ -62,7 +62,6 @@ import { getAppState, setAppState } from "./db/app-state";
 import {
   type ConversationMeta,
   clearActiveConversationId,
-  conversationType,
   createConversation,
   createDrillConversation,
   deleteConversation,
@@ -79,7 +78,6 @@ import {
   listLearningAgents,
 } from "./db/learning-agents";
 import type { ChatTurn } from "./db/turns";
-import { BUILTIN_DRILL_IDS } from "./drills/builtins";
 import { drillSummary, ensureBuiltInDrills, listDrills } from "./drills/store";
 import type { DrillParams, DrillSummary } from "./drills/types";
 import { useTranslation } from "./i18n";
@@ -458,15 +456,6 @@ function App() {
     [navigateTo],
   );
 
-  const openPronunciationPractice = useCallback(() => {
-    const drill = drills.find((d) => d.id === BUILTIN_DRILL_IDS.shadowing);
-    if (!drill) {
-      setToast(t("chat.shadowingStartFailed"));
-      return;
-    }
-    openDrillDraft(drill);
-  }, [drills, openDrillDraft, t]);
-
   // Lesson drafts mirror Rapid Q&A: selecting a lesson opens a frontend-only start page. The conversation row is
   // created only after the learner presses Start.
   const openLearningAgentDraft = useCallback(
@@ -807,14 +796,6 @@ function App() {
 
   const activeConversation = conversations.find((c) => c.id === activeId);
   const draftActive = view === "chat" && activeId === draftId;
-  const activeConversationType = activeConversation
-    ? conversationType(activeConversation)
-    : null;
-  const pronunciationPracticeActive =
-    (draftActive &&
-      draftKind === "drill" &&
-      draftDrill?.id === BUILTIN_DRILL_IDS.shadowing) ||
-    (view === "chat" && activeConversationType === "shadowing");
   // Small-window mode always shows the chat, regardless of the underlying view,
   // so the draft check can't rely on view === "chat".
   const chatIsDraft = smallWindow ? activeId === draftId : draftActive;
@@ -1177,8 +1158,6 @@ function App() {
           view={view}
           onSelect={selectConversation}
           onNewChat={openDraftConversation}
-          onOpenPronunciationPractice={openPronunciationPractice}
-          pronunciationPracticeActive={pronunciationPracticeActive}
           onDeriveConversation={(id, actionId) =>
             void deriveConversation(id, actionId)
           }

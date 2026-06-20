@@ -45,7 +45,6 @@ const SETTINGS_KEYS = [
   "lang-agent.config",
   "lang-agent.tts",
   "lang-agent.stt",
-  "lang-agent.pronunciation",
   "lang-agent.keybindings",
   "lang-agent-locale",
   "lang-agent-theme",
@@ -67,6 +66,48 @@ interface BackupBundle {
   settings: Record<string, string>;
 }
 
+function withoutRetiredPronunciationData(
+  name: string,
+  rows: Record<string, unknown>[],
+): Record<string, unknown>[] {
+  if (name === "turn_annotation") {
+    return rows.filter((row) => row.agentId !== "builtin:pronunciation");
+  }
+  if (name === "agent_job") {
+    return rows.filter(
+      (row) =>
+        row.inputJson !== JSON.stringify({ agentId: "builtin:pronunciation" }),
+    );
+  }
+  if (name === "mastery_item" || name === "mastery_event") {
+    return rows.filter(
+      (row) => typeof row.key !== "string" || !row.key.startsWith("shadowing:"),
+    );
+  }
+  if (name === "learning_agent") {
+    return rows.filter(
+      (row) =>
+        row.id !== "builtin:drill:shadowing" &&
+        (typeof row.sourceMd !== "string" ||
+          !row.sourceMd.includes("say-visible")),
+    );
+  }
+  if (name === "conversation") {
+    return rows.map((row) => {
+      const modifiers = row.agentModifiersJson;
+      if (
+        typeof modifiers === "string" &&
+        (modifiers.includes('"shadowing"') ||
+          modifiers.includes('"say-visible"'))
+      ) {
+        return { ...row, agentModifiersJson: null };
+      }
+      return row;
+    });
+  }
+  return rows;
+}
+
 export interface BackupSummary {
   conversations: number;
   turns: number;
@@ -80,7 +121,10 @@ export async function buildBackupBundle(): Promise<{
 }> {
   const tables: Record<string, Record<string, unknown>[]> = {};
   for (const [name, table] of Object.entries(TABLES)) {
-    tables[name] = (await db.select().from(table)) as Record<string, unknown>[];
+    tables[name] = withoutRetiredPronunciationData(
+      name,
+      (await db.select().from(table)) as Record<string, unknown>[],
+    );
   }
   const settings: Record<string, string> = {};
   for (const key of SETTINGS_KEYS) {
@@ -165,8 +209,9 @@ export async function importBackupBundle(bundle: BackupBundle): Promise<void> {
     const rows = bundle.tables[name as TableName];
     if (!Array.isArray(rows)) continue; // older bundle without this table — leave current data
     await db.delete(table);
-    for (let i = 0; i < rows.length; i += 50) {
-      const chunk = rows
+    const sanitizedRows = withoutRetiredPronunciationData(name, rows);
+    for (let i = 0; i < sanitizedRows.length; i += 50) {
+      const chunk = sanitizedRows
         .slice(i, i + 50)
         .filter((r) => r && typeof r === "object");
       if (chunk.length > 0) {
