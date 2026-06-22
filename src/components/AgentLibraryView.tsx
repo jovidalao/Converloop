@@ -198,7 +198,7 @@ function Modal({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4">
+    <div className="fixed inset-0 z-[200] flex items-start justify-center overflow-y-auto p-4">
       {/* Focusable backdrop: keyboard-accessible click-to-dismiss without div onClick handlers. */}
       <button
         type="button"
@@ -210,7 +210,7 @@ function Modal({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="relative my-8 w-[min(40rem,calc(100vw-2rem))] rounded-2xl border bg-card p-5 shadow-lg animate-in zoom-in-95 fade-in-0"
+        className="relative my-8 w-[min(40rem,calc(100vw-2rem))] rounded-2xl border bg-card p-5 shadow-modal-small animate-in zoom-in-95 fade-in-0"
       >
         <div className="mb-4 flex items-center justify-between gap-3">
           <h3 className="m-0 text-ui-title font-semibold">{title}</h3>

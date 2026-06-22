@@ -278,12 +278,12 @@ function EditOverlay({
       role="dialog"
       aria-modal="true"
       aria-label={t("profile.editSectionLabel", { name: label })}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 p-4"
       onMouseDown={onCancel}
     >
       {/* biome-ignore lint/a11y/noStaticElementInteractions: prevents background dismiss on inner click */}
       <div
-        className="flex max-h-[80vh] w-full max-w-lg flex-col rounded-xl border bg-card p-4 shadow-lg"
+        className="flex max-h-[80vh] w-full max-w-lg flex-col rounded-xl border bg-card p-4 shadow-modal-small"
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="mb-3 flex items-center justify-between gap-2">

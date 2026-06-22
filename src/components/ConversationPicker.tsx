@@ -9,13 +9,12 @@ import {
   TargetIcon,
   ZapIcon,
 } from "lucide-react";
-import { type ReactNode, useLayoutEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { type ReactNode, useRef, useState } from "react";
 import { useTranslation } from "@/i18n";
-import { getAppPortalContainer } from "@/lib/portal-container";
 import { cn } from "@/lib/utils";
 import { type ConversationMeta, conversationType } from "../db/conversations";
 import type { ListeningItem } from "../tts/listening";
+import { AnchoredPopover } from "./ui/anchored-popover";
 import { Spinner } from "./ui/spinner";
 
 // Same conversation-kind icon as the sidebar history rows, so a picker row is recognizable.
@@ -58,34 +57,7 @@ export function ConversationPickerPopover({
 }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
-  const [rect, setRect] = useState<DOMRect | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const panelRef = useRef<HTMLDivElement>(null);
-
-  // Anchor the portaled panel to the live trigger position (and re-anchor on resize).
-  useLayoutEffect(() => {
-    if (!open) return;
-    const measure = () =>
-      setRect(triggerRef.current?.getBoundingClientRect() ?? null);
-    measure();
-    function onDown(e: MouseEvent) {
-      const node = e.target as Node;
-      if (triggerRef.current?.contains(node)) return;
-      if (panelRef.current?.contains(node)) return;
-      setOpen(false);
-    }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setOpen(false);
-    }
-    window.addEventListener("mousedown", onDown);
-    window.addEventListener("keydown", onKey);
-    window.addEventListener("resize", measure);
-    return () => {
-      window.removeEventListener("mousedown", onDown);
-      window.removeEventListener("keydown", onKey);
-      window.removeEventListener("resize", measure);
-    };
-  }, [open]);
 
   return (
     <>
@@ -115,87 +87,79 @@ export function ConversationPickerPopover({
           )}
         />
       </button>
-      {open &&
-        rect &&
-        createPortal(
-          <div
-            ref={panelRef}
-            data-listening-overlay
-            style={{
-              position: "fixed",
-              top: rect.bottom + 6,
-              right: Math.max(8, window.innerWidth - rect.right),
-              maxHeight: window.innerHeight - rect.bottom - 16,
-            }}
-            className="z-50 flex w-[min(24rem,calc(100vw-1rem))] flex-col overflow-hidden rounded-lg border bg-popover text-popover-foreground shadow-minimal"
-          >
-            <div className="flex shrink-0 items-center justify-between gap-2 border-b px-3 py-2">
-              <span className="text-ui-caption font-medium text-ui-muted">
-                {t("listening.selectConversations")}
-              </span>
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  className="rounded px-1.5 py-0.5 text-ui-caption text-primary hover:bg-accent"
-                  onClick={onSelectAll}
-                >
-                  {t("listening.selectAll")}
-                </button>
-                <button
-                  type="button"
-                  className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-ui-caption text-ui-muted hover:bg-accent disabled:opacity-40"
-                  onClick={onClear}
-                  disabled={selectedIds.length === 0}
-                >
-                  <ListXIcon className="size-3" />
-                  {t("listening.clear")}
-                </button>
-              </div>
+      <AnchoredPopover
+        open={open}
+        anchorRef={triggerRef}
+        onClose={() => setOpen(false)}
+        width={384}
+        listeningOverlay
+        className="flex flex-col overflow-hidden rounded-lg border bg-popover text-popover-foreground shadow-minimal"
+      >
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b px-3 py-2">
+          <span className="text-ui-caption font-medium text-ui-muted">
+            {t("listening.selectConversations")}
+          </span>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              className="rounded px-1.5 py-0.5 text-ui-caption text-primary hover:bg-accent"
+              onClick={onSelectAll}
+            >
+              {t("listening.selectAll")}
+            </button>
+            <button
+              type="button"
+              className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-ui-caption text-ui-muted hover:bg-accent disabled:opacity-40"
+              onClick={onClear}
+              disabled={selectedIds.length === 0}
+            >
+              <ListXIcon className="size-3" />
+              {t("listening.clear")}
+            </button>
+          </div>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {conversations.length === 0 ? (
+            <div className="px-3 py-8 text-center text-ui-caption text-ui-muted">
+              {t("sidebar.noConversations")}
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto">
-              {conversations.length === 0 ? (
-                <div className="px-3 py-8 text-center text-ui-caption text-ui-muted">
-                  {t("sidebar.noConversations")}
-                </div>
-              ) : (
-                conversations.map((c) => {
-                  const checked = selectedIds.includes(c.id);
-                  const itemList = itemsByConv[c.id];
-                  const loading = loadingIds.has(c.id);
-                  return (
-                    <button
-                      key={c.id}
-                      type="button"
-                      onClick={() => onToggle(c.id)}
-                      className="flex w-full items-center gap-2.5 border-b px-2.5 py-2 text-left text-ui-body last:border-0 hover:bg-accent/60"
-                    >
-                      <span
-                        className={cn(
-                          "flex size-4 shrink-0 items-center justify-center rounded border transition-colors",
-                          checked
-                            ? "border-primary bg-primary text-primary-foreground"
-                            : "border-border",
-                        )}
-                      >
-                        {checked && <CheckIcon className="size-3" />}
-                      </span>
-                      <span className="text-ui-muted">{convIcon(c)}</span>
-                      <span className="min-w-0 flex-1 truncate">{c.title}</span>
-                      <span className="shrink-0 text-ui-caption text-ui-muted">
-                        {loading ? (
-                          <Spinner className="size-3" />
-                        ) : checked && itemList ? (
-                          t("listening.sentenceCount", { n: itemList.length })
-                        ) : null}
-                      </span>
-                    </button>
-                  );
-                })
-              )}
-            </div>
-          </div>,
-          getAppPortalContainer() ?? document.body,
-        )}
+          ) : (
+            conversations.map((c) => {
+              const checked = selectedIds.includes(c.id);
+              const itemList = itemsByConv[c.id];
+              const loading = loadingIds.has(c.id);
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => onToggle(c.id)}
+                  className="flex w-full items-center gap-2.5 border-b px-2.5 py-2 text-left text-ui-body last:border-0 hover:bg-accent/60"
+                >
+                  <span
+                    className={cn(
+                      "flex size-4 shrink-0 items-center justify-center rounded border transition-colors",
+                      checked
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-border",
+                    )}
+                  >
+                    {checked && <CheckIcon className="size-3" />}
+                  </span>
+                  <span className="text-ui-muted">{convIcon(c)}</span>
+                  <span className="min-w-0 flex-1 truncate">{c.title}</span>
+                  <span className="shrink-0 text-ui-caption text-ui-muted">
+                    {loading ? (
+                      <Spinner className="size-3" />
+                    ) : checked && itemList ? (
+                      t("listening.sentenceCount", { n: itemList.length })
+                    ) : null}
+                  </span>
+                </button>
+              );
+            })
+          )}
+        </div>
+      </AnchoredPopover>
     </>
   );
 }

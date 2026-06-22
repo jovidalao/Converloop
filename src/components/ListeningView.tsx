@@ -11,7 +11,6 @@ import {
 } from "lucide-react";
 import {
   type ReactNode,
-  type RefObject,
   useCallback,
   useEffect,
   useMemo,
@@ -39,6 +38,7 @@ import {
 import { speakText } from "../tts/speak";
 import { ConversationPickerPopover } from "./ConversationPicker";
 import { type ProviderKind, ProviderStatus } from "./ProviderStatus";
+import { AnchoredPopover } from "./ui/anchored-popover";
 import {
   Select,
   SelectContent,
@@ -92,34 +92,6 @@ function loadPersisted(): PersistedState {
   } catch {
     return { ...DEFAULTS };
   }
-}
-
-// Shared dismiss behaviour for the manual popovers (outside click + Escape). Both popovers
-// anchor to their own trigger and float over the player; this keeps that logic in one place.
-function usePopoverDismiss(
-  open: boolean,
-  onClose: () => void,
-  ref: RefObject<HTMLDivElement | null>,
-) {
-  useEffect(() => {
-    if (!open) return;
-    function onDown(e: MouseEvent) {
-      const node = e.target as HTMLElement;
-      // A Select inside the popover renders its options in a separate Radix portal — clicking
-      // one is "outside" the panel but must not dismiss it.
-      if (node.closest?.("[data-radix-popper-content-wrapper]")) return;
-      if (ref.current && !ref.current.contains(node)) onClose();
-    }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    window.addEventListener("mousedown", onDown);
-    window.addEventListener("keydown", onKey);
-    return () => {
-      window.removeEventListener("mousedown", onDown);
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [open, onClose, ref]);
 }
 
 // One side's voice picker. Empty value ("") = follow the global TTS voice, shown via the
@@ -476,12 +448,12 @@ function SettingsPopover({
 }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  usePopoverDismiss(open, () => setOpen(false), ref);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   return (
-    <div ref={ref} className="relative">
+    <div>
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
@@ -492,82 +464,84 @@ function SettingsPopover({
       >
         <Settings2Icon className="size-4" />
       </button>
-      {open && (
-        <div
-          data-listening-overlay
-          className="absolute right-0 top-[calc(100%+6px)] z-30 w-72 rounded-lg border bg-popover px-3 text-popover-foreground shadow-minimal"
-        >
-          <SettingRow label={t("listening.repeatLabel")}>
-            <Select
-              value={String(repeat)}
-              onValueChange={(v) => setRepeat(Number(v))}
-            >
-              <SelectTrigger className="h-8 w-28">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {REPEAT_OPTIONS.map((n) => (
-                  <SelectItem key={n} value={String(n)}>
-                    {t("listening.repeatTimes", { n })}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </SettingRow>
-          <SettingRow label={t("listening.speedLabel")}>
-            <Select
-              value={String(rate)}
-              onValueChange={(v) => setRate(Number(v))}
-            >
-              <SelectTrigger className="h-8 w-28">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {SPEED_OPTIONS.map((n) => (
-                  <SelectItem key={n} value={String(n)}>
-                    {n}×
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </SettingRow>
-          <SettingRow label={t("listening.gapLabel")}>
-            <Select
-              value={String(gapMs)}
-              onValueChange={(v) => setGapMs(Number(v))}
-            >
-              <SelectTrigger className="h-8 w-28">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {GAP_OPTIONS_MS.map((ms) => (
-                  <SelectItem key={ms} value={String(ms)}>
-                    {ms === 0
-                      ? t("listening.gapOff")
-                      : t("listening.gapSeconds", { n: ms / 1000 })}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </SettingRow>
-          <SettingRow label={t("listening.userVoice")}>
-            <VoiceSelect
-              defaultLabel={t("listening.voiceDefault")}
-              value={userVoice}
-              onChange={setUserVoice}
-              options={voiceOptions}
-            />
-          </SettingRow>
-          <SettingRow label={t("listening.aiVoice")}>
-            <VoiceSelect
-              defaultLabel={t("listening.voiceDefault")}
-              value={aiVoice}
-              onChange={setAiVoice}
-              options={voiceOptions}
-            />
-          </SettingRow>
-        </div>
-      )}
+      <AnchoredPopover
+        open={open}
+        anchorRef={triggerRef}
+        onClose={() => setOpen(false)}
+        width={288}
+        listeningOverlay
+        className="overflow-y-auto rounded-lg border bg-popover px-3 text-popover-foreground shadow-minimal"
+      >
+        <SettingRow label={t("listening.repeatLabel")}>
+          <Select
+            value={String(repeat)}
+            onValueChange={(v) => setRepeat(Number(v))}
+          >
+            <SelectTrigger className="h-8 w-28">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {REPEAT_OPTIONS.map((n) => (
+                <SelectItem key={n} value={String(n)}>
+                  {t("listening.repeatTimes", { n })}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </SettingRow>
+        <SettingRow label={t("listening.speedLabel")}>
+          <Select
+            value={String(rate)}
+            onValueChange={(v) => setRate(Number(v))}
+          >
+            <SelectTrigger className="h-8 w-28">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {SPEED_OPTIONS.map((n) => (
+                <SelectItem key={n} value={String(n)}>
+                  {n}×
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </SettingRow>
+        <SettingRow label={t("listening.gapLabel")}>
+          <Select
+            value={String(gapMs)}
+            onValueChange={(v) => setGapMs(Number(v))}
+          >
+            <SelectTrigger className="h-8 w-28">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {GAP_OPTIONS_MS.map((ms) => (
+                <SelectItem key={ms} value={String(ms)}>
+                  {ms === 0
+                    ? t("listening.gapOff")
+                    : t("listening.gapSeconds", { n: ms / 1000 })}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </SettingRow>
+        <SettingRow label={t("listening.userVoice")}>
+          <VoiceSelect
+            defaultLabel={t("listening.voiceDefault")}
+            value={userVoice}
+            onChange={setUserVoice}
+            options={voiceOptions}
+          />
+        </SettingRow>
+        <SettingRow label={t("listening.aiVoice")}>
+          <VoiceSelect
+            defaultLabel={t("listening.voiceDefault")}
+            value={aiVoice}
+            onChange={setAiVoice}
+            options={voiceOptions}
+          />
+        </SettingRow>
+      </AnchoredPopover>
     </div>
   );
 }

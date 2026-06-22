@@ -1,5 +1,5 @@
-import { Volume2Icon, XIcon } from "lucide-react";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { Volume2Icon } from "lucide-react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useTranslation } from "@/i18n";
 import { cn } from "@/lib/utils";
 import {
@@ -9,6 +9,7 @@ import {
   subscribePlayback,
 } from "../tts/playback";
 import { MissingTtsApiKeyError, speakText } from "../tts/speak";
+import { AnchoredErrorPopover } from "./ui/anchored-popover";
 import { Spinner } from "./ui/spinner";
 
 // Animated bars while playing (like a sound wave) — a clear "it's playing" cue.
@@ -50,6 +51,7 @@ export function SpeakButton({
   const playbackLoading = active && playback.phase === "loading";
   const [localLoading, setLocalLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!error) return;
@@ -81,8 +83,9 @@ export function SpeakButton({
   }
 
   return (
-    <span className="relative inline-flex shrink-0">
+    <span className="inline-flex shrink-0">
       <button
+        ref={triggerRef}
         type="button"
         className={cn(
           "inline-flex items-center justify-center transition-colors disabled:cursor-default disabled:opacity-45",
@@ -102,22 +105,12 @@ export function SpeakButton({
           <Volume2Icon size={variant === "round" ? 15 : 18} />
         )}
       </button>
-      {error && (
-        <span
-          className="absolute right-0 top-[calc(100%+4px)] z-[2] flex w-max max-w-64 items-start gap-1.5 rounded border border-destructive/20 bg-card px-2 py-1.5 text-ui-caption leading-tight text-destructive shadow-minimal"
-          role="alert"
-        >
-          <span className="min-w-0 flex-1">{error}</span>
-          <button
-            type="button"
-            className="-mr-0.5 shrink-0 rounded p-0.5 text-ui-muted hover:bg-destructive/10 hover:text-destructive"
-            onClick={() => setError(null)}
-            aria-label={t("common.close")}
-          >
-            <XIcon size={12} />
-          </button>
-        </span>
-      )}
+      <AnchoredErrorPopover
+        anchorRef={triggerRef}
+        message={error}
+        onClose={() => setError(null)}
+        closeLabel={t("common.close")}
+      />
     </span>
   );
 }

@@ -69,6 +69,7 @@ import {
 } from "./dictation-translate";
 import { type ProviderKind, ProviderStatus } from "./ProviderStatus";
 import { SpeakButton } from "./SpeakButton";
+import { AnchoredPopover } from "./ui/anchored-popover";
 import { Spinner } from "./ui/spinner";
 import { Switch } from "./ui/switch";
 import { applyDictationHint, WordSlotsInput } from "./WordSlotsInput";
@@ -323,28 +324,12 @@ function SettingsPopover({
 }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    function onDown(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node))
-        setOpen(false);
-    }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setOpen(false);
-    }
-    window.addEventListener("mousedown", onDown);
-    window.addEventListener("keydown", onKey);
-    return () => {
-      window.removeEventListener("mousedown", onDown);
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   return (
-    <div ref={ref} className="relative">
+    <div>
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
@@ -355,24 +340,28 @@ function SettingsPopover({
       >
         <Settings2Icon className="size-4" />
       </button>
-      {open && (
-        <div className="absolute right-0 top-[calc(100%+6px)] z-30 w-64 rounded-lg border bg-popover px-3 text-popover-foreground shadow-minimal">
-          <div className="border-b py-2 text-ui-caption font-medium text-ui-muted">
-            {t("dictationReview.contentLabel")}
-          </div>
-          <SettingRow label={t("dictationReview.typeAi")}>
-            <Switch checked={includeAi} onCheckedChange={setIncludeAi} />
-          </SettingRow>
-          <SettingRow label={t("dictationReview.typeUser")}>
-            <Switch checked={includeUser} onCheckedChange={setIncludeUser} />
-          </SettingRow>
-          {mode === "audio" && (
-            <SettingRow label={t("dictationReview.autoplay")}>
-              <Switch checked={autoplay} onCheckedChange={setAutoplay} />
-            </SettingRow>
-          )}
+      <AnchoredPopover
+        open={open}
+        anchorRef={triggerRef}
+        onClose={() => setOpen(false)}
+        width={256}
+        className="overflow-y-auto rounded-lg border bg-popover px-3 text-popover-foreground shadow-minimal"
+      >
+        <div className="border-b py-2 text-ui-caption font-medium text-ui-muted">
+          {t("dictationReview.contentLabel")}
         </div>
-      )}
+        <SettingRow label={t("dictationReview.typeAi")}>
+          <Switch checked={includeAi} onCheckedChange={setIncludeAi} />
+        </SettingRow>
+        <SettingRow label={t("dictationReview.typeUser")}>
+          <Switch checked={includeUser} onCheckedChange={setIncludeUser} />
+        </SettingRow>
+        {mode === "audio" && (
+          <SettingRow label={t("dictationReview.autoplay")}>
+            <Switch checked={autoplay} onCheckedChange={setAutoplay} />
+          </SettingRow>
+        )}
+      </AnchoredPopover>
     </div>
   );
 }

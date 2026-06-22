@@ -1265,7 +1265,7 @@ function App() {
 
       {toast && (
         <div
-          className="-translate-x-1/2 fixed bottom-20 left-1/2 z-50 flex max-w-[min(90vw,30rem)] items-center gap-3 rounded-lg border border-destructive/30 bg-card px-4 py-3 text-ui-body text-foreground shadow-lg"
+          className="-translate-x-1/2 fixed bottom-20 left-1/2 z-[150] flex max-w-[min(90vw,30rem)] items-center gap-3 rounded-lg border border-destructive/30 bg-card px-4 py-3 text-ui-body text-foreground shadow-modal-small"
           role="status"
           aria-live="polite"
         >

@@ -9,6 +9,7 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { useTranslation } from "@/i18n";
+import { getAppPortalContainer } from "@/lib/portal-container";
 
 /**
  * A promise-based confirmation dialog. Replaces the native window.confirm() —
@@ -63,9 +64,9 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
           if (!open) settle(false);
         }}
       >
-        <AlertDialog.Portal>
-          <AlertDialog.Overlay className="fixed inset-0 z-50 bg-black/40 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
-          <AlertDialog.Content className="fixed left-1/2 top-1/2 z-50 w-[min(28rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 rounded-2xl border bg-card p-5 shadow-lg data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95">
+        <AlertDialog.Portal container={getAppPortalContainer()}>
+          <AlertDialog.Overlay className="fixed inset-0 z-[200] bg-black/40 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+          <AlertDialog.Content className="fixed left-1/2 top-1/2 z-[201] w-[min(28rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 rounded-2xl border bg-card p-5 shadow-modal-small data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95">
             <AlertDialog.Title className="text-ui-title font-semibold">
               {options?.title}
             </AlertDialog.Title>

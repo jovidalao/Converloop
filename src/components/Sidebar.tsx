@@ -584,7 +584,7 @@ export function Sidebar({
 
       {conversationMenu && (
         <div
-          className="fixed z-50 flex min-w-64 flex-col overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-minimal"
+          className="fixed z-[100] flex min-w-64 flex-col overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-minimal"
           style={{
             left: conversationMenu.x,
             top: conversationMenu.y,

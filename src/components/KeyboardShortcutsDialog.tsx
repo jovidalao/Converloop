@@ -39,7 +39,7 @@ export function KeyboardShortcutsDialog({
       aria-modal="true"
       aria-label={t("shortcutsDialog.ariaLabel")}
       data-modal-overlay
-      className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-[12vh]"
+      className="fixed inset-0 z-[200] flex items-start justify-center bg-black/40 p-4 pt-[12vh]"
       onMouseDown={onClose}
     >
       {/* biome-ignore lint/a11y/noStaticElementInteractions: only stops the backdrop-close handler */}

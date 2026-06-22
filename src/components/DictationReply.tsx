@@ -1,5 +1,5 @@
-import { ArrowRightIcon, SnailIcon, Volume2Icon, XIcon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { ArrowRightIcon, SnailIcon, Volume2Icon } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 
 import { parseDictationReply } from "../db/conversations";
 import { useTranslation } from "../i18n";
@@ -7,6 +7,7 @@ import { playSpeech, stopSpeech } from "../tts/playback";
 import { speakText } from "../tts/speak";
 import { Markdown } from "./Markdown";
 import { SpeakButton } from "./SpeakButton";
+import { AnchoredErrorPopover } from "./ui/anchored-popover";
 import { Spinner } from "./ui/spinner";
 
 // Replay controls for the sentence awaiting an answer: normal replay + slow replay (0.7×, pitch preserved).
@@ -23,6 +24,7 @@ function ReplayControls({
   const [loading, setLoading] = useState<"normal" | "slow" | null>(null);
   // Surface TTS failures (e.g. missing key): a silent no-op replay button is indistinguishable from a dead one.
   const [error, setError] = useState<string | null>(null);
+  const triggerRef = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
     if (!error) return;
@@ -47,7 +49,7 @@ function ReplayControls({
   }
 
   return (
-    <span className="relative flex shrink-0 items-center gap-1">
+    <span ref={triggerRef} className="flex shrink-0 items-center gap-1">
       <button
         type="button"
         className="inline-flex size-[1.65rem] items-center justify-center rounded-full bg-accent text-primary transition-colors hover:bg-accent/70"
@@ -74,22 +76,12 @@ function ReplayControls({
           <SnailIcon size={15} />
         )}
       </button>
-      {error && (
-        <span
-          className="absolute right-0 top-[calc(100%+4px)] z-[2] flex w-max max-w-64 items-start gap-1.5 rounded border border-destructive/20 bg-card px-2 py-1.5 text-ui-caption leading-tight text-destructive shadow-minimal"
-          role="alert"
-        >
-          <span className="min-w-0 flex-1">{error}</span>
-          <button
-            type="button"
-            className="-mr-0.5 shrink-0 rounded p-0.5 text-ui-muted hover:bg-destructive/10 hover:text-destructive"
-            onClick={() => setError(null)}
-            aria-label={t("common.close")}
-          >
-            <XIcon size={12} />
-          </button>
-        </span>
-      )}
+      <AnchoredErrorPopover
+        anchorRef={triggerRef}
+        message={error}
+        onClose={() => setError(null)}
+        closeLabel={t("common.close")}
+      />
     </span>
   );
 }

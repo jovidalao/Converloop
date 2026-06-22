@@ -40,6 +40,7 @@ import { ReplyExplanation } from "../ReplyExplanation";
 import { remarkBilingual } from "../remark-bilingual";
 import { remarkReadingGuide } from "../remark-reading-guide";
 import { SpeakButton } from "../SpeakButton";
+import { AnchoredPopover } from "../ui/anchored-popover";
 import { Button } from "../ui/button";
 import { Spinner } from "../ui/spinner";
 import {
@@ -124,6 +125,7 @@ function LessonMasteryButton({
   > | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const triggerRef = useRef<HTMLSpanElement>(null);
 
   async function previewRun() {
     if (busy || disabled) return;
@@ -181,7 +183,7 @@ function LessonMasteryButton({
   }
 
   return (
-    <span className="relative inline-flex items-center gap-1">
+    <span ref={triggerRef} className="inline-flex items-center gap-1">
       <Button
         type="button"
         variant="action"
@@ -193,7 +195,13 @@ function LessonMasteryButton({
         {busy ? <Spinner /> : <CheckCircle2Icon size={16} />}
       </Button>
       {preview && preview.signals.length > 0 && (
-        <span className="absolute right-0 top-7 z-20 flex w-80 max-w-[80vw] flex-col gap-2 rounded-lg border bg-popover p-3 text-left shadow-lg">
+        <AnchoredPopover
+          open
+          anchorRef={triggerRef}
+          onClose={() => setPreview(null)}
+          width={320}
+          className="flex flex-col gap-2 overflow-hidden rounded-xl border bg-popover p-3 text-left text-popover-foreground shadow-modal-small"
+        >
           <span className="text-ui-body font-medium text-foreground">
             {t("chat.masteryPreviewTitle")}
           </span>
@@ -236,7 +244,7 @@ function LessonMasteryButton({
               {t("chat.masteryPreviewApply")}
             </Button>
           </span>
-        </span>
+        </AnchoredPopover>
       )}
       {message && (
         <span className="max-w-44 truncate text-ui-caption text-success">

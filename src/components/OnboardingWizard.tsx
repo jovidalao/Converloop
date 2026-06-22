@@ -124,7 +124,7 @@ export function OnboardingWizard({ onDone }: { onDone: () => void }) {
   const oauth = isOAuthProvider(providerType);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background">
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-background">
       <div className="flex w-full max-w-lg flex-col gap-6 px-8">
         <div className="flex flex-col items-center gap-2 text-center">
           <span className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">

@@ -219,14 +219,14 @@ export function CommandPalette({
       aria-modal="true"
       aria-label={t("commandPalette.ariaLabel")}
       data-modal-overlay
-      className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-[12vh]"
+      className="fixed inset-0 z-[200] flex items-start justify-center bg-black/40 p-4 pt-[12vh]"
       onMouseDown={onClose}
     >
       {/* biome-ignore lint/a11y/noStaticElementInteractions: only stops propagation to the backdrop-close handler; not an interactive control */}
       <div
         ref={dialogRef}
         tabIndex={-1}
-        className="flex max-h-[70vh] w-full max-w-xl flex-col overflow-hidden rounded-xl border bg-card shadow-lg"
+        className="flex max-h-[70vh] w-full max-w-xl flex-col overflow-hidden rounded-xl border bg-card shadow-modal-small"
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-2 border-b px-3">
