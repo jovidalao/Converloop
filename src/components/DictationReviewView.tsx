@@ -62,7 +62,11 @@ import {
   segmentDictationSentences,
   toDictationPlainText,
 } from "./dictation-text";
-import { NO_PROVIDER, translateForPrompt } from "./dictation-translate";
+import {
+  NO_PROVIDER,
+  prefetchPromptTranslations,
+  translateForPrompt,
+} from "./dictation-translate";
 import { type ProviderKind, ProviderStatus } from "./ProviderStatus";
 import { SpeakButton } from "./SpeakButton";
 import { Spinner } from "./ui/spinner";
@@ -72,6 +76,7 @@ import { applyDictationHint, WordSlotsInput } from "./WordSlotsInput";
 const STORAGE_KEY = "lang-agent.dictation-review";
 // How many recent conversations to pre-select the first time, so the page is usable on open.
 const DEFAULT_RECENT = 20;
+const MEANING_PREFETCH_COUNT = 6;
 
 interface PersistedState {
   selectedIds: string[];
@@ -611,6 +616,29 @@ export function DictationReviewView({
     if (current && modeRef.current === "audio" && autoplayRef.current)
       void play(current.text);
   }, [current?.id]);
+
+  // By-meaning mode should not make every next card wait on translation. Keep a small lookahead buffer
+  // warm; the translation module dedupes with the current-card request and caches successful results.
+  useEffect(() => {
+    if (mode !== "meaning" || !queueReady || !current) return;
+    const start = items.findIndex((item) => item.id === current.id);
+    if (start < 0) return;
+    const sentences: string[] = [];
+    for (
+      let step = 0;
+      step < items.length && sentences.length < MEANING_PREFETCH_COUNT;
+      step++
+    ) {
+      const item = items[(start + step) % items.length];
+      if (
+        item.nativePrompt ||
+        isDictationMastered(progress, item.id, "meaning")
+      )
+        continue;
+      sentences.push(item.text);
+    }
+    if (sentences.length > 0) void prefetchPromptTranslations(sentences);
+  }, [current, items, mode, progress, queueReady]);
 
   // Resolve native-language text when it is the prompt, or after an audio answer so the reveal can
   // include the meaning. Expression-gap lines already carry their native source; other lines are
