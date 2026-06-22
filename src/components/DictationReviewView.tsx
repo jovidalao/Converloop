@@ -58,7 +58,10 @@ import {
   selectionKey,
   setDictationCursor,
 } from "./dictation-progress";
-import { toDictationPlainText } from "./dictation-text";
+import {
+  segmentDictationSentences,
+  toDictationPlainText,
+} from "./dictation-text";
 import { NO_PROVIDER, translateForPrompt } from "./dictation-translate";
 import { type ProviderKind, ProviderStatus } from "./ProviderStatus";
 import { SpeakButton } from "./SpeakButton";
@@ -516,10 +519,18 @@ export function DictationReviewView({
       selectedIds
         .flatMap((id) => itemsByConv[id] ?? [])
         .filter((it) => includes(it.side))
-        .map((item) => ({
-          ...item,
-          text: toDictationPlainText(item.text),
-        }))
+        .flatMap((item) => {
+          const segments = segmentDictationSentences(
+            toDictationPlainText(item.text),
+          );
+          const split = segments.length > 1;
+          return segments.map((text, i) => ({
+            ...item,
+            id: split ? `${item.id}#${i}` : item.id,
+            text,
+            nativePrompt: split ? undefined : item.nativePrompt,
+          }));
+        })
         .filter((item) => item.text.length > 0),
     [selectedIds, itemsByConv, includes],
   );
