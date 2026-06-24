@@ -12,13 +12,25 @@ import {
   RotateCcwIcon,
   SparklesIcon,
 } from "lucide-react";
-import { memo, type ReactNode, useEffect, useRef, useState } from "react";
+import {
+  memo,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import type { Options } from "react-markdown";
 import type { TutorAnalysis } from "../../agents/schema";
 import { useConfig } from "../../config";
 import type { NewConversationContext } from "../../db/conversations";
 import type { ChatTurn } from "../../db/turns";
 import { useTranslation } from "../../i18n";
+import {
+  actionAriaKeyshortcuts,
+  actionShortcutLabel,
+  useKeybindings,
+} from "../../lib/app-actions";
 import { type DisplayError, describeError } from "../../lib/error-display";
 import { languageToBcp47 } from "../../lib/language";
 import {
@@ -51,7 +63,15 @@ import {
 } from "./reply-transformers";
 
 // Copy the reply; briefly shows a checkmark after copying.
-export function CopyButton({ text }: { text: string }) {
+export function CopyButton({
+  text,
+  shortcutLabel,
+  ariaKeyShortcuts,
+}: {
+  text: string;
+  shortcutLabel?: string;
+  ariaKeyShortcuts?: string;
+}) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   const timerRef = useRef<number | null>(null);
@@ -65,7 +85,12 @@ export function CopyButton({ text }: { text: string }) {
       type="button"
       variant="action"
       size="action"
-      title={t("common.copy")}
+      title={
+        shortcutLabel
+          ? `${t("common.copy")} · ${shortcutLabel}`
+          : t("common.copy")
+      }
+      aria-keyshortcuts={ariaKeyShortcuts}
       onClick={() => {
         void navigator.clipboard.writeText(text).then(() => {
           setCopied(true);
@@ -278,6 +303,22 @@ type PartnerReplyProps = {
   /** When provided, shows the "Regenerate reply" button (only attached to the latest reply). */
   onRegenerate?: () => void;
   regenerating?: boolean;
+  registerLatestBilingualToggle?: (
+    turnId: string,
+    toggle: (() => void) | null,
+  ) => void;
+  registerLatestSpeakTrigger?: (
+    turnId: string,
+    trigger: (() => void) | null,
+  ) => void;
+  registerLatestExplanationToggle?: (
+    turnId: string,
+    toggle: (() => void) | null,
+  ) => void;
+  registerLatestReadingGuideToggle?: (
+    turnId: string,
+    toggle: (() => void) | null,
+  ) => void;
 };
 
 // Drill turnActions: an action stays visible only when the variant preset shows it AND (no allow-list
@@ -301,9 +342,14 @@ export const PartnerReply = memo(function PartnerReply({
   onLayoutChange,
   onRegenerate,
   regenerating = false,
+  registerLatestBilingualToggle,
+  registerLatestSpeakTrigger,
+  registerLatestExplanationToggle,
+  registerLatestReadingGuideToggle,
 }: PartnerReplyProps) {
   const { t } = useTranslation();
   const { actionLabels, targetLanguage, nativeLanguage } = useConfig();
+  useKeybindings();
   // BCP-47 tags so the reply renders with the right regional glyphs (Han unification: zh vs ja) and the
   // bilingual gloss keeps the native language's glyphs. Empty (unknown language) → inherit the document.
   const targetLang = languageToBcp47(targetLanguage) || undefined;
@@ -319,6 +365,8 @@ export const PartnerReply = memo(function PartnerReply({
   const [error, setError] = useState<DisplayError | null>(null);
   const didAutoOpen = useRef(false);
   const prevTextRef = useRef(text);
+  const toggleRef = useRef<() => void>(() => {});
+  const readingGuideToggleRef = useRef<() => void>(() => {});
   // Custom reply transformers: per-reply buttons. "replace" mode shares the bubble with bilingual, so activating
   // one closes the other (onReplaceActivate closes bilingual; bilingual's toggle clears replace).
   const replyTransformers = useReplyTransformers({
@@ -346,6 +394,18 @@ export const PartnerReply = memo(function PartnerReply({
         remarkReadingGuide(targetLanguage),
       ]
     : [[remarkBilingual, { lang: nativeLang }]];
+  const registerSpeakTrigger = useCallback(
+    (trigger: (() => void) | null) => {
+      registerLatestSpeakTrigger?.(turnId, trigger);
+    },
+    [registerLatestSpeakTrigger, turnId],
+  );
+  const registerExplanationTrigger = useCallback(
+    (trigger: (() => void) | null) => {
+      registerLatestExplanationToggle?.(turnId, trigger);
+    },
+    [registerLatestExplanationToggle, turnId],
+  );
 
   // When a reply is replaced by "Regenerate", the old bilingual view no longer corresponds to it
   // — collapse and reset. Skip on first mount to avoid fighting with autoOpen.
@@ -367,7 +427,7 @@ export const PartnerReply = memo(function PartnerReply({
     setError(null);
     setView(null);
     try {
-      setView(await bilingualReply(text));
+      setView(await bilingualReply(text, conversationId));
     } catch (e) {
       setError(describeError(e, t));
     } finally {
@@ -388,6 +448,26 @@ export const PartnerReply = memo(function PartnerReply({
     if (next) replyTransformers.clearReplace();
     setOpen(next);
   }
+  toggleRef.current = toggle;
+
+  useEffect(() => {
+    if (!registerLatestBilingualToggle || bilingualHidden) return;
+    const run = () => toggleRef.current();
+    registerLatestBilingualToggle(turnId, run);
+    return () => registerLatestBilingualToggle(turnId, null);
+  }, [registerLatestBilingualToggle, turnId, bilingualHidden]);
+
+  function toggleReadingGuide() {
+    setReadingGuideOpen((prev) => !prev);
+  }
+  readingGuideToggleRef.current = toggleReadingGuide;
+
+  useEffect(() => {
+    if (!registerLatestReadingGuideToggle || !readingGuideAvailable) return;
+    const run = () => readingGuideToggleRef.current();
+    registerLatestReadingGuideToggle(turnId, run);
+    return () => registerLatestReadingGuideToggle(turnId, null);
+  }, [registerLatestReadingGuideToggle, turnId, readingGuideAvailable]);
 
   // When "auto-open bilingual reading" is enabled in settings, a new reply expands and generates once on mount.
   // biome-ignore lint/correctness/useExhaustiveDependencies: run once when autoOpen flips, guarded by didAutoOpen ref; adding generate would re-fire every render
@@ -405,6 +485,54 @@ export const PartnerReply = memo(function PartnerReply({
 
   const showBilingual = open && !!view;
   const showBilingualError = open && !!error;
+  const isLatestReply = !!(
+    registerLatestBilingualToggle ||
+    registerLatestSpeakTrigger ||
+    registerLatestExplanationToggle ||
+    registerLatestReadingGuideToggle ||
+    onRegenerate
+  );
+  const latestCopyShortcut = isLatestReply
+    ? actionShortcutLabel("copy-latest-reply")
+    : "";
+  const latestCopyAriaKeyShortcuts = isLatestReply
+    ? actionAriaKeyshortcuts("copy-latest-reply")
+    : undefined;
+  const latestExplanationShortcut = registerLatestExplanationToggle
+    ? actionShortcutLabel("toggle-latest-explanation")
+    : "";
+  const latestExplanationAriaKeyShortcuts = registerLatestExplanationToggle
+    ? actionAriaKeyshortcuts("toggle-latest-explanation")
+    : undefined;
+  const latestSpeakShortcut = registerLatestSpeakTrigger
+    ? actionShortcutLabel("speak-latest-reply")
+    : "";
+  const latestSpeakAriaKeyShortcuts = registerLatestSpeakTrigger
+    ? actionAriaKeyshortcuts("speak-latest-reply")
+    : undefined;
+  const latestRegenerateShortcut = onRegenerate
+    ? actionShortcutLabel("regenerate-latest-reply")
+    : "";
+  const regenerateTitle = latestRegenerateShortcut
+    ? `${t("chat.regenerateReply")} · ${latestRegenerateShortcut}`
+    : t("chat.regenerateReply");
+  const latestReadingGuideShortcut =
+    registerLatestReadingGuideToggle && readingGuideAvailable
+      ? actionShortcutLabel("toggle-latest-reading-guide")
+      : "";
+  const readingGuideTitle = latestReadingGuideShortcut
+    ? `${t("chat.readingGuideTitle")} · ${latestReadingGuideShortcut}`
+    : t("chat.readingGuideTitle");
+  const latestReadingGuideAriaKeyShortcuts =
+    registerLatestReadingGuideToggle && readingGuideAvailable
+      ? actionAriaKeyshortcuts("toggle-latest-reading-guide")
+      : undefined;
+  const bilingualTitle = registerLatestBilingualToggle
+    ? `${t("chat.bilingualTitle")} · ${actionShortcutLabel("toggle-latest-bilingual")}`
+    : t("chat.bilingualTitle");
+  const bilingualAriaKeyShortcuts = registerLatestBilingualToggle
+    ? actionAriaKeyshortcuts("toggle-latest-bilingual")
+    : undefined;
 
   return (
     <div className="flex max-w-none flex-col items-start gap-1.5 self-stretch">
@@ -473,22 +601,43 @@ export const PartnerReply = memo(function PartnerReply({
         onLayoutChange={onLayoutChange}
         actions={
           <>
-            <CopyButton text={text} />
-            <SpeakButton text={text} />
+            <CopyButton
+              text={text}
+              shortcutLabel={latestCopyShortcut || undefined}
+              ariaKeyShortcuts={latestCopyAriaKeyShortcuts}
+            />
+            <SpeakButton
+              text={text}
+              registerTrigger={
+                registerLatestSpeakTrigger ? registerSpeakTrigger : undefined
+              }
+              shortcutLabel={latestSpeakShortcut || undefined}
+              ariaKeyShortcuts={latestSpeakAriaKeyShortcuts}
+            />
             {onRegenerate && (
               <Button
                 type="button"
                 variant="action"
                 size="action"
-                title={t("chat.regenerateReply")}
+                title={regenerateTitle}
                 onClick={onRegenerate}
                 disabled={regenerating}
+                aria-keyshortcuts={actionAriaKeyshortcuts(
+                  "regenerate-latest-reply",
+                )}
               >
                 {regenerating ? <Spinner /> : <RefreshCwIcon size={16} />}
               </Button>
             )}
             <ReplyTransformerButtons items={replyTransformers.items} />
           </>
+        }
+        shortcutLabel={latestExplanationShortcut || undefined}
+        ariaKeyShortcuts={latestExplanationAriaKeyShortcuts}
+        registerTrigger={
+          registerLatestExplanationToggle
+            ? registerExplanationTrigger
+            : undefined
         }
         extraPanels={<ReplyTransformerPanels items={replyTransformers.items} />}
         trailingActions={
@@ -499,9 +648,10 @@ export const PartnerReply = memo(function PartnerReply({
                 variant="action"
                 size="action"
                 data-active={showReadingGuide}
-                onClick={() => setReadingGuideOpen((prev) => !prev)}
+                onClick={toggleReadingGuide}
                 aria-pressed={showReadingGuide}
-                title={t("chat.readingGuideTitle")}
+                aria-keyshortcuts={latestReadingGuideAriaKeyShortcuts}
+                title={readingGuideTitle}
               >
                 <BookOpenTextIcon className="size-4" />
                 {actionLabels && (
@@ -518,7 +668,8 @@ export const PartnerReply = memo(function PartnerReply({
                 onClick={toggle}
                 disabled={loading}
                 aria-pressed={!!showBilingual || !!showBilingualError}
-                title={t("chat.bilingualTitle")}
+                aria-keyshortcuts={bilingualAriaKeyShortcuts}
+                title={bilingualTitle}
               >
                 <span className="inline-flex size-4 shrink-0 items-center justify-center">
                   {loading ? (
@@ -649,6 +800,7 @@ type UserTurnProps = {
   onEditFrom: () => void;
   /** "Say it again" — see UserMessageActions. Undefined hides the action (lessons, sentence drills). */
   onRedo?: () => void;
+  onRetryCorrection?: (turnId: string) => void;
   onTurnAction: (actionId: string) => void;
   onLayoutChange?: () => void;
   editDisabled?: boolean;
@@ -663,6 +815,7 @@ export const UserTurn = memo(function UserTurn({
   allowedActions,
   onEditFrom,
   onRedo,
+  onRetryCorrection,
   onTurnAction,
   onLayoutChange,
   editDisabled = false,
@@ -687,6 +840,9 @@ export const UserTurn = memo(function UserTurn({
     : null;
   const correctionOpen = activePanelId === correctionPanelId;
   const [naturalOpen, setNaturalOpen] = useState(true);
+  const retryCorrection = onRetryCorrection
+    ? () => onRetryCorrection(turn.id)
+    : undefined;
   // Custom transformers whose stage is the user's own message: per-turn buttons under this bubble.
   // (replace mode is gated out for this stage in the editor, so replaceMarkdown is left unwired here.)
   const userTransformers = useReplyTransformers({
@@ -840,6 +996,7 @@ export const UserTurn = memo(function UserTurn({
               }
             : undefined
         }
+        onRetry={retryCorrection}
       />
       <ReplyTransformerPanels items={userTransformers.items} />
     </div>
@@ -979,8 +1136,17 @@ function arePartnerReplyPropsEqual(
     prev.turnId === next.turnId &&
     prev.text === next.text &&
     prev.autoOpen === next.autoOpen &&
+    prev.allowedActions === next.allowedActions &&
     prev.regenerating === next.regenerating &&
-    Boolean(prev.onRegenerate) === Boolean(next.onRegenerate)
+    Boolean(prev.onRegenerate) === Boolean(next.onRegenerate) &&
+    Boolean(prev.registerLatestBilingualToggle) ===
+      Boolean(next.registerLatestBilingualToggle) &&
+    Boolean(prev.registerLatestSpeakTrigger) ===
+      Boolean(next.registerLatestSpeakTrigger) &&
+    Boolean(prev.registerLatestExplanationToggle) ===
+      Boolean(next.registerLatestExplanationToggle) &&
+    Boolean(prev.registerLatestReadingGuideToggle) ===
+      Boolean(next.registerLatestReadingGuideToggle)
   );
 }
 
@@ -995,7 +1161,8 @@ function areUserTurnPropsEqual(prev: UserTurnProps, next: UserTurnProps) {
     prev.variant === next.variant &&
     prev.allowedActions === next.allowedActions &&
     prev.editDisabled === next.editDisabled &&
-    Boolean(prev.onRedo) === Boolean(next.onRedo)
+    Boolean(prev.onRedo) === Boolean(next.onRedo) &&
+    prev.onRetryCorrection === next.onRetryCorrection
   );
 }
 

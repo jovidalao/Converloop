@@ -45,6 +45,11 @@ const ProviderSettingsSchema = z.object({
 
 export type ProviderSettings = z.infer<typeof ProviderSettingsSchema>;
 
+export interface ProviderSelection {
+  providerType: ProviderType;
+  model: string;
+}
+
 // Non-secret config is stored in localStorage; API keys go into a device-bound encrypted file (see keychain.ts → Rust secrets.rs).
 const AppConfigSchema = z.object({
   providerType: z.enum(PROVIDER_TYPES),
@@ -130,10 +135,28 @@ export function inferContextLimit(model: string): number {
   return hit?.tokens ?? DEFAULT_CONTEXT_TOKENS;
 }
 
-// Context limit (tokens) for the active provider. Uses the user-supplied contextTokens override if present, otherwise infers from the model name.
+function providerContextLimit(
+  type: ProviderType,
+  settings: ProviderSettings,
+  model = settings.model,
+): number {
+  if (isOAuthProvider(type)) return inferContextLimit(model);
+  return settings.contextTokens ?? inferContextLimit(model);
+}
+
+// Context limit (tokens) for the active provider. API-key providers can use the user-supplied contextTokens override; subscription-login providers are inferred from the model.
 export function getContextLimit(config: AppConfig): number {
   const active = config.providers[config.providerType];
-  return active.contextTokens ?? inferContextLimit(active.model);
+  return providerContextLimit(config.providerType, active);
+}
+
+export function getContextLimitForSelection(
+  config: AppConfig,
+  selection?: ProviderSelection | null,
+): number {
+  if (!selection) return getContextLimit(config);
+  const active = config.providers[selection.providerType];
+  return providerContextLimit(selection.providerType, active, selection.model);
 }
 
 // Each provider's key is stored separately so switching providers does not lose the other.
@@ -642,9 +665,15 @@ async function buildProviderFor(
 }
 
 // Build the currently active provider from config + keychain. Returns null when there is no key or the user is not logged in; callers use this to prompt the user to visit settings.
-export async function getProvider(): Promise<ModelProvider | null> {
+export async function getProvider(
+  selection?: ProviderSelection | null,
+): Promise<ModelProvider | null> {
   const config = loadConfig();
-  return buildProviderFor(config, config.providerType);
+  if (!selection) return buildProviderFor(config, config.providerType);
+  return buildProviderFor(
+    withActiveModel(config, selection.providerType, selection.model),
+    selection.providerType,
+  );
 }
 
 // Used by the settings page: build the specified provider (which may not be the active one) to test its connection.

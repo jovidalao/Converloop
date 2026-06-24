@@ -71,21 +71,28 @@ export function KeyboardShortcutsDialog({
           </Button>
         </div>
         <div className="grid gap-1 p-2">
-          {APP_ACTIONS.map((shortcut) => (
-            <div
-              key={shortcut.id}
-              className="flex items-center gap-3 rounded-lg px-2 py-2 text-ui-body"
-            >
-              <span className="min-w-0 flex-1 text-foreground">
-                {t(`actions.${shortcut.id}`)}
-              </span>
-              <span className="flex shrink-0 items-center gap-1">
-                {actionKeyCaps(shortcut.id).map((key) => (
-                  <KeyCap key={key}>{key}</KeyCap>
-                ))}
-              </span>
-            </div>
-          ))}
+          {APP_ACTIONS.map((shortcut) => {
+            const keys = actionKeyCaps(shortcut.id);
+            return (
+              <div
+                key={shortcut.id}
+                className="flex items-center gap-3 rounded-lg px-2 py-2 text-ui-body"
+              >
+                <span className="min-w-0 flex-1 text-foreground">
+                  {t(`actions.${shortcut.id}`)}
+                </span>
+                <span className="flex shrink-0 items-center gap-1">
+                  {keys.length > 0 ? (
+                    keys.map((key) => <KeyCap key={key}>{key}</KeyCap>)
+                  ) : (
+                    <span className="text-ui-caption text-ui-muted">
+                      {t("settings.shortcuts.unassigned")}
+                    </span>
+                  )}
+                </span>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>

@@ -1,4 +1,5 @@
 import { and, count, desc, eq, gte, inArray, isNull } from "drizzle-orm";
+import type { ProviderSelection } from "../config";
 import { BUILTIN_DRILL_IDS, getBuiltinDrillSeed } from "../drills/builtins";
 import type {
   DrillConversationModifier,
@@ -78,6 +79,7 @@ export interface ConversationDerivationState {
 // Drill conversations carry one generic `drill` modifier ({ modeId, params, def snapshot }); the
 // legacy per-drill keys (quickfire/dictation/reviewDrill) are normalized into it at parse time.
 export interface AgentModifiers {
+  modelOverride?: ProviderSelection;
   difficultyDelta?: number; // +1 harder / -1 easier
   swapRoles?: boolean;
   nextDay?: boolean;
@@ -135,6 +137,36 @@ export function parseAgentModifiers(json: string | null): AgentModifiers {
     // Corrupted JSON falls back to no adjustments
   }
   return {};
+}
+
+export function getConversationModelOverride(
+  c: ConversationMeta | null | undefined,
+): ProviderSelection | null {
+  const override = parseAgentModifiers(
+    c?.agentModifiersJson ?? null,
+  ).modelOverride;
+  return override?.providerType && override.model ? override : null;
+}
+
+export async function setConversationModelOverride(
+  id: string,
+  selection: ProviderSelection | null,
+): Promise<void> {
+  const conv = await getConversation(id);
+  const modifiers = parseAgentModifiers(conv?.agentModifiersJson ?? null);
+  const next: AgentModifiers = { ...modifiers };
+  if (selection) {
+    next.modelOverride = selection;
+  } else {
+    delete next.modelOverride;
+  }
+  await db
+    .update(conversation)
+    .set({
+      agentModifiersJson:
+        Object.keys(next).length > 0 ? JSON.stringify(next) : null,
+    })
+    .where(eq(conversation.id, id));
 }
 
 // The user-facing type of a conversation, used to badge each history row with an icon. Drill rows are

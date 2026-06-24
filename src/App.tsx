@@ -565,6 +565,18 @@ function App() {
         focusPanel("coach");
         return;
       }
+      if (matchesActionShortcut(e, "toggle-coach-panel")) {
+        e.preventDefault();
+        const chatKind =
+          conversations.find((c) => c.id === activeId)?.kind ??
+          (activeId === draftId && draftKind === "learning_agent"
+            ? "learning_agent"
+            : "practice");
+        if (view === "chat" && chatKind === "practice" && !smallWindow) {
+          toggleCoach();
+        }
+        return;
+      }
       if (matchesActionShortcut(e, "toggle-sidebar") && !inField) {
         e.preventDefault();
         toggleSidebar();
@@ -576,10 +588,16 @@ function App() {
     activeId,
     navigateTo,
     toggleSidebar,
+    toggleCoach,
     openDraftConversation,
     focusPanel,
     goBack,
     goForward,
+    conversations,
+    draftId,
+    draftKind,
+    smallWindow,
+    view,
   ]);
 
   const refresh = useCallback(
@@ -813,6 +831,7 @@ function App() {
   // in small-window mode.
   const coachEligible = view === "chat" && currentChatKind === "practice";
   const coachVisible = coachEligible && coachOpen && !smallWindow;
+  const coachToggleShortcut = actionShortcutLabel("toggle-coach-panel");
   const settingsMode = isSettingsView(view);
   const TOPBAR_TITLES: Partial<Record<MainView, string>> = {
     profile: t("viewTitles.profile"),
@@ -1110,10 +1129,19 @@ function App() {
                       <GraduationCapIcon />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent side="bottom" align="end">
+                  <TooltipContent
+                    side="bottom"
+                    align="end"
+                    className="flex items-center gap-2"
+                  >
                     <span>
                       {coachVisible ? t("app.hideCoach") : t("app.showCoach")}
                     </span>
+                    {coachToggleShortcut && (
+                      <kbd className="rounded border border-border/60 bg-muted px-1.5 py-0.5 font-sans text-ui-caption text-ui-muted">
+                        {coachToggleShortcut}
+                      </kbd>
+                    )}
                   </TooltipContent>
                 </Tooltip>
               )}

@@ -15,22 +15,23 @@ import {
   slashMenuToken,
 } from "../commands";
 import {
-  activeProvider,
   findModelOption,
-  getContextLimit,
+  getContextLimitForSelection,
+  isOAuthProvider,
   loadConfig,
   PROVIDER_PRESETS,
+  type ProviderSelection,
   providerModelLabel,
   providerModels,
-  saveConfig,
   useConfig,
-  withActiveModel,
 } from "../config";
 import {
   getConversation,
+  getConversationModelOverride,
   type NewConversationContext,
   parseAgentModifiers,
   parseDictationReply,
+  setConversationModelOverride as saveConversationModelOverride,
   streamingDictationFeedback,
   touchConversation,
   truncateConversationFrom,
@@ -56,7 +57,9 @@ import { useTranslation } from "../i18n";
 import {
   actionAriaKeyshortcuts,
   actionShortcutLabel,
+  actionShortcutTitle,
   matchesActionShortcut,
+  useKeybindings,
 } from "../lib/app-actions";
 import { onAppEvent } from "../lib/app-events";
 import { type DisplayError, describeError } from "../lib/error-display";
@@ -71,6 +74,7 @@ import {
   recommendConversationTopics,
   recommendQuickfireTopics,
   regenerateReply,
+  retryTurnAnalysis,
   runTurn,
   startDerivedConversation,
   startDrillSession,
@@ -160,6 +164,8 @@ interface ChatViewProps {
   externalDraft?: { text: string; nonce: number } | null;
 }
 
+const SETTINGS_DEFAULT_MODEL_VALUE = "__settings_default_model__";
+
 const INPUT_TEXTAREA_MIN_HEIGHT = 56;
 const INPUT_TEXTAREA_MAX_HEIGHT = 104;
 
@@ -195,6 +201,7 @@ export function ChatView({
   externalDraft = null,
 }: ChatViewProps) {
   const { t, locale } = useTranslation();
+  useKeybindings();
   const [turns, setTurns] = useState<ChatTurn[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreamingState] = useState("");
@@ -281,11 +288,45 @@ export function ChatView({
   const derivationStartedRef = useRef(false);
   const drillStartedRef = useRef(false);
   const topicStartedRef = useRef(false);
+  const latestBilingualToggleRef = useRef<{
+    turnId: string;
+    toggle: () => void;
+  } | null>(null);
+  const latestSpeakTriggerRef = useRef<{
+    turnId: string;
+    trigger: () => void;
+  } | null>(null);
+  const latestExplanationToggleRef = useRef<{
+    turnId: string;
+    toggle: () => void;
+  } | null>(null);
+  const latestReadingGuideToggleRef = useRef<{
+    turnId: string;
+    toggle: () => void;
+  } | null>(null);
+  const chatShortcutActionsRef = useRef<{
+    latestTurnId?: string;
+    latestReplyText: string;
+    canRefreshHints: boolean;
+    refreshHints: () => void;
+    canRegenerateLatest: boolean;
+    regenerateLatest: () => void;
+    jumpToLatest: () => void;
+  }>({
+    latestReplyText: "",
+    canRefreshHints: false,
+    refreshHints: () => {},
+    canRegenerateLatest: false,
+    regenerateLatest: () => {},
+    jumpToLatest: () => {},
+  });
   // Replays of the sentence currently awaiting an answer (including slow replays); sent with the
   // next answer as a live difficulty signal, then reset for the next sentence.
   const sayDrillReplayCountRef = useRef(0);
   const liveTurnIdsRef = useRef<Set<string>>(new Set()); // turns sent in this session; auto-bilingual only applies to these
   const config = useConfig();
+  const [conversationModelOverride, setConversationModelOverrideState] =
+    useState<ProviderSelection | null>(null);
   const { nativeLanguage, autoBilingual } = config;
   const confirm = useConfirm();
   const learningMode = mode === "learning_agent";
@@ -299,6 +340,58 @@ export function ChatView({
       setError(describeError(e, t));
     },
     [t],
+  );
+
+  const registerLatestBilingualToggle = useCallback(
+    (turnId: string, toggle: (() => void) | null) => {
+      if (toggle) {
+        latestBilingualToggleRef.current = { turnId, toggle };
+        return;
+      }
+      if (latestBilingualToggleRef.current?.turnId === turnId) {
+        latestBilingualToggleRef.current = null;
+      }
+    },
+    [],
+  );
+
+  const registerLatestSpeakTrigger = useCallback(
+    (turnId: string, trigger: (() => void) | null) => {
+      if (trigger) {
+        latestSpeakTriggerRef.current = { turnId, trigger };
+        return;
+      }
+      if (latestSpeakTriggerRef.current?.turnId === turnId) {
+        latestSpeakTriggerRef.current = null;
+      }
+    },
+    [],
+  );
+
+  const registerLatestExplanationToggle = useCallback(
+    (turnId: string, toggle: (() => void) | null) => {
+      if (toggle) {
+        latestExplanationToggleRef.current = { turnId, toggle };
+        return;
+      }
+      if (latestExplanationToggleRef.current?.turnId === turnId) {
+        latestExplanationToggleRef.current = null;
+      }
+    },
+    [],
+  );
+
+  const registerLatestReadingGuideToggle = useCallback(
+    (turnId: string, toggle: (() => void) | null) => {
+      if (toggle) {
+        latestReadingGuideToggleRef.current = { turnId, toggle };
+        return;
+      }
+      if (latestReadingGuideToggleRef.current?.turnId === turnId) {
+        latestReadingGuideToggleRef.current = null;
+      }
+    },
+    [],
   );
 
   const setStreaming = useCallback((next: string) => {
@@ -382,7 +475,10 @@ export function ChatView({
   );
 
   // Status bar below the input: current model + context usage (rough estimate, see lib/tokens).
-  const contextLimit = getContextLimit(config);
+  const contextLimit = getContextLimitForSelection(
+    config,
+    conversationModelOverride,
+  );
   // Prefer the real prompt size reported by the reply agent (system prompt + scaffolds + summary + history + input).
   // Before the first send in this conversation (e.g. just reopened), fall back to a transcript-only estimate, which
   // undercounts the fixed prompt overhead but is the only thing available client-side until a turn runs.
@@ -477,19 +573,19 @@ export function ChatView({
     setShowJumpButton(!atBottom && distanceFromBottom > 120);
   }
 
-  function jumpToLatest() {
+  const jumpToLatest = useCallback(() => {
     stickToBottomRef.current = true;
     setShowJumpButton(false);
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }
+  }, []);
 
   const requestLayoutScroll = useCallback(() => {
     setLayoutTick((n) => n + 1);
   }, []);
 
-  function patchTurn(id: string, patch: Partial<ChatTurn>) {
+  const patchTurn = useCallback((id: string, patch: Partial<ChatTurn>) => {
     setTurns((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
-  }
+  }, []);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: kickoff functions read current conversation state; this effect intentionally runs only on conversation/mode switch
   useEffect(() => {
@@ -501,10 +597,14 @@ export function ChatView({
     sayDrillReplayCountRef.current = 0;
     setLessonInfo(null);
     setInputHints(null);
+    setConversationModelOverrideState(null);
     setLastPromptTokens(null); // reset the context meter; repopulated on the next send in this conversation
     void loadChatHistory(conversationId).then(async (loaded) => {
       if (cancelled) return;
       setTurns(loaded);
+      const conv = isDraft ? null : await getConversation(conversationId);
+      if (cancelled) return;
+      setConversationModelOverrideState(getConversationModelOverride(conv));
       if (learningMode && loaded.length === 0 && !kickoffStartedRef.current) {
         if (lessonDraftActive) {
           // The gallery / command palette already showed the intro, so a lesson draft starts immediately —
@@ -513,8 +613,6 @@ export function ChatView({
           return;
         }
         // Don't fire the first turn yet: resolve the lesson and show the start screen (intro + Start button).
-        const conv = await getConversation(conversationId);
-        if (cancelled) return;
         const agent = conv?.learningAgentId
           ? await getLearningAgent(conv.learningAgentId)
           : null;
@@ -526,8 +624,6 @@ export function ChatView({
         return;
       }
       if (!learningMode) {
-        const conv = await getConversation(conversationId);
-        if (cancelled) return;
         const mods = parseAgentModifiers(conv?.agentModifiersJson ?? null);
         if (mods.derivedContext)
           setDerivedBanner({
@@ -773,6 +869,35 @@ export function ChatView({
         requestAnimationFrame(() => inputRef.current?.focus());
       });
   }
+
+  const retryCorrection = useCallback(
+    (turnId: string) => {
+      patchTurn(turnId, {
+        analysis: null,
+        analysisProse: null,
+        analysisPending: true,
+        analysisError: null,
+        analysisDiagnostic: null,
+      });
+      void retryTurnAnalysis(conversationId, turnId, {
+        onAnalysis: (a, opts) => {
+          patchTurn(turnId, {
+            analysis: a,
+            analysisProse: opts?.proseFeedback ?? null,
+            analysisPending: false,
+            analysisError: opts?.error ?? null,
+            analysisDiagnostic: opts?.diagnostic ?? null,
+          });
+        },
+      }).catch((e) => {
+        patchTurn(turnId, {
+          analysisPending: false,
+          analysisError: describeError(e, t).summary,
+        });
+      });
+    },
+    [conversationId, patchTurn, t],
+  );
 
   async function startLesson(replacingId?: string) {
     if (!learningMode || replyBusy || kickoffStartedRef.current) return;
@@ -1553,6 +1678,120 @@ export function ChatView({
   // The latest turn with a partner reply — "Regenerate" is only attached to it.
   let lastReplyTurnId: string | undefined;
   for (const turn of turns) if (turn.partnerText) lastReplyTurnId = turn.id;
+  const lastReplyTurn = lastReplyTurnId
+    ? turns.find((turn) => turn.id === lastReplyTurnId)
+    : undefined;
+  const canRegenerateLatestReply = !!(
+    lastReplyTurn &&
+    !learningMode &&
+    !replyBusy &&
+    !lastReplyTurn.excludeFromContext
+  );
+  chatShortcutActionsRef.current = {
+    latestTurnId: lastReplyTurnId,
+    latestReplyText: lastReplyTurn?.partnerText ?? "",
+    canRefreshHints: hintsActive && !hintRegeneratingRef.current,
+    refreshHints: regenerateInputHints,
+    canRegenerateLatest: canRegenerateLatestReply,
+    regenerateLatest: () => {
+      if (lastReplyTurn) void regenerate(lastReplyTurn.id);
+    },
+    jumpToLatest,
+  };
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.defaultPrevented) return;
+      const wantsRefreshHints = matchesActionShortcut(e, "refresh-hints");
+      const wantsCopy = matchesActionShortcut(e, "copy-latest-reply");
+      const wantsExplanation = matchesActionShortcut(
+        e,
+        "toggle-latest-explanation",
+      );
+      const wantsReadingGuide = matchesActionShortcut(
+        e,
+        "toggle-latest-reading-guide",
+      );
+      const wantsBilingual = matchesActionShortcut(
+        e,
+        "toggle-latest-bilingual",
+      );
+      const wantsSpeak = matchesActionShortcut(e, "speak-latest-reply");
+      const wantsRegenerate = matchesActionShortcut(
+        e,
+        "regenerate-latest-reply",
+      );
+      const wantsJumpToLatest = matchesActionShortcut(e, "jump-to-latest");
+      if (
+        !wantsRefreshHints &&
+        !wantsCopy &&
+        !wantsExplanation &&
+        !wantsReadingGuide &&
+        !wantsBilingual &&
+        !wantsSpeak &&
+        !wantsRegenerate &&
+        !wantsJumpToLatest
+      )
+        return;
+      if (e.isComposing) return;
+      const inModal =
+        e.target instanceof HTMLElement &&
+        !!e.target.closest("[data-modal-overlay]");
+      if (inModal) return;
+      const shortcutActions = chatShortcutActionsRef.current;
+      if (wantsRefreshHints) {
+        e.preventDefault();
+        if (shortcutActions.canRefreshHints) shortcutActions.refreshHints();
+        return;
+      }
+      if (wantsJumpToLatest) {
+        e.preventDefault();
+        shortcutActions.jumpToLatest();
+        return;
+      }
+      if (wantsCopy) {
+        e.preventDefault();
+        if (shortcutActions.latestReplyText.trim()) {
+          void navigator.clipboard.writeText(shortcutActions.latestReplyText);
+        }
+        return;
+      }
+      if (wantsExplanation) {
+        e.preventDefault();
+        const latest = latestExplanationToggleRef.current;
+        if (!latest || latest.turnId !== shortcutActions.latestTurnId) return;
+        latest.toggle();
+        return;
+      }
+      if (wantsReadingGuide) {
+        e.preventDefault();
+        const latest = latestReadingGuideToggleRef.current;
+        if (!latest || latest.turnId !== shortcutActions.latestTurnId) return;
+        latest.toggle();
+        return;
+      }
+      if (wantsBilingual) {
+        e.preventDefault();
+        const latest = latestBilingualToggleRef.current;
+        if (!latest || latest.turnId !== shortcutActions.latestTurnId) return;
+        latest.toggle();
+        return;
+      }
+      if (wantsRegenerate) {
+        e.preventDefault();
+        if (shortcutActions.canRegenerateLatest) {
+          shortcutActions.regenerateLatest();
+        }
+        return;
+      }
+      e.preventDefault();
+      const latest = latestSpeakTriggerRef.current;
+      if (!latest || latest.turnId !== shortcutActions.latestTurnId) return;
+      latest.trigger();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   // Dictation masking: the sentence still awaiting an answer is the one in the LAST turn's reply (no turn
   // follows it). All earlier sentences have been answered and are revealed. While a new reply is still streaming, the
@@ -1614,23 +1853,37 @@ export function ChatView({
         tone: "muted",
       });
   }
-  const active = activeProvider(config);
-  const currentPreset = PROVIDER_PRESETS[config.providerType];
+  const defaultModelSelection: ProviderSelection = {
+    providerType: config.providerType,
+    model: config.providers[config.providerType].model,
+  };
+  const activeModelSelection =
+    conversationModelOverride ?? defaultModelSelection;
+  const active = {
+    ...config.providers[activeModelSelection.providerType],
+    model: activeModelSelection.model,
+  };
+  const currentPreset = PROVIDER_PRESETS[activeModelSelection.providerType];
   const currentModelOption = findModelOption(
-    config.providerType,
+    activeModelSelection.providerType,
     active,
     active.model,
   );
   const usingPresetEndpoint = active.baseUrl.trim() === currentPreset.baseUrl;
   const currentProviderModelLabel = providerModelLabel(
-    config.providerType,
+    activeModelSelection.providerType,
     active.model,
   );
   const currentModelButtonLabel = modelShortName(active.model);
   const selectedModelValue =
-    usingPresetEndpoint && currentModelOption
-      ? modelSelectValue(config.providerType, currentModelOption.model)
-      : CURRENT_MODEL_VALUE;
+    conversationModelOverride == null
+      ? SETTINGS_DEFAULT_MODEL_VALUE
+      : usingPresetEndpoint && currentModelOption
+        ? modelSelectValue(
+            activeModelSelection.providerType,
+            currentModelOption.model,
+          )
+        : CURRENT_MODEL_VALUE;
   const contextTitle = t("chat.contextUsage", {
     used: usedTokens.toLocaleString(locale),
     limit: contextLimit.toLocaleString(locale),
@@ -1638,11 +1891,28 @@ export function ChatView({
   });
   const showContextWarning = !compact && usedPercent >= 70;
 
-  function selectModelProvider(value: string) {
-    if (value === CURRENT_MODEL_VALUE) return;
-    const selected = parseModelSelectValue(value);
-    if (!selected) return;
-    saveConfig(withActiveModel(config, selected.providerType, selected.model));
+  async function selectModelProvider(value: string) {
+    if (isDraft) return;
+    try {
+      if (value === SETTINGS_DEFAULT_MODEL_VALUE) {
+        await saveConversationModelOverride(conversationId, null);
+        setConversationModelOverrideState(null);
+        return;
+      }
+      if (value === CURRENT_MODEL_VALUE) return;
+      const selected = parseModelSelectValue(value);
+      if (!selected) return;
+      const defaultModel = defaultModelSelection;
+      const next =
+        selected.providerType === defaultModel.providerType &&
+        selected.model === defaultModel.model
+          ? null
+          : selected;
+      await saveConversationModelOverride(conversationId, next);
+      setConversationModelOverrideState(next);
+    } catch (e) {
+      showUnknownError(e);
+    }
   }
 
   return (
@@ -1744,6 +2014,7 @@ export function ChatView({
                         }
                       : undefined
                   }
+                  onRetryCorrection={retryCorrection}
                   onTurnAction={(actionId) =>
                     void runConversationAction(actionId, turn.id)
                   }
@@ -1788,6 +2059,26 @@ export function ChatView({
                         : undefined
                     }
                     regenerating={regeneratingId === turn.id}
+                    registerLatestBilingualToggle={
+                      turn.id === lastReplyTurnId
+                        ? registerLatestBilingualToggle
+                        : undefined
+                    }
+                    registerLatestSpeakTrigger={
+                      turn.id === lastReplyTurnId
+                        ? registerLatestSpeakTrigger
+                        : undefined
+                    }
+                    registerLatestExplanationToggle={
+                      turn.id === lastReplyTurnId
+                        ? registerLatestExplanationToggle
+                        : undefined
+                    }
+                    registerLatestReadingGuideToggle={
+                      turn.id === lastReplyTurnId
+                        ? registerLatestReadingGuideToggle
+                        : undefined
+                    }
                   />
                 ))}
             </TurnCard>
@@ -1817,6 +2108,11 @@ export function ChatView({
             onClick={jumpToLatest}
             className="-translate-x-1/2 absolute bottom-3 left-1/2 z-20 flex animate-in items-center gap-1.5 rounded-full border bg-card px-3 py-1.5 text-ui-caption text-ui-muted shadow-md transition-colors fade-in-0 slide-in-from-bottom-1 hover:text-foreground"
             aria-label={t("chat.jumpToLatest")}
+            aria-keyshortcuts={actionAriaKeyshortcuts("jump-to-latest")}
+            title={actionShortcutTitle(
+              t("chat.jumpToLatest"),
+              "jump-to-latest",
+            )}
           >
             <ChevronDownIcon size={14} />
             {t("chat.jumpToLatest")}
@@ -2038,7 +2334,10 @@ export function ChatView({
                       type="button"
                       onClick={regenerateInputHints}
                       disabled={hintRegenerating}
-                      title={`${t("coach.hints.regenerate")} ${actionShortcutLabel("refresh-hints")}`}
+                      title={actionShortcutTitle(
+                        t("coach.hints.regenerate"),
+                        "refresh-hints",
+                      )}
                       aria-label={t("coach.hints.regenerate")}
                       aria-keyshortcuts={actionAriaKeyshortcuts(
                         "refresh-hints",
@@ -2089,12 +2388,16 @@ export function ChatView({
                 <Select
                   value={selectedModelValue}
                   onValueChange={selectModelProvider}
-                  disabled={replyBusy}
+                  disabled={replyBusy || isDraft}
                 >
                   <SelectTrigger
                     className="h-8 w-auto min-w-[5.5rem] max-w-[min(42vw,12rem)] gap-1.5 rounded-full border-0 bg-transparent px-2 py-0 font-normal leading-none text-ui-muted shadow-none hover:bg-accent focus-visible:ring-0 sm:max-w-[14rem] [&>svg]:size-2.5"
                     aria-label={t("chat.selectModel")}
-                    title={currentProviderModelLabel}
+                    title={
+                      conversationModelOverride
+                        ? `${t("chat.sessionModel")} · ${currentProviderModelLabel}`
+                        : `${t("chat.settingsDefaultModel")} · ${currentProviderModelLabel}`
+                    }
                   >
                     <ModelLogo model={active.model} compact />
                     <span className="min-w-0 truncate text-ui-meta">
@@ -2107,6 +2410,22 @@ export function ChatView({
                     sideOffset={6}
                     className="w-80 max-w-[min(92vw,24rem)]"
                   >
+                    <SelectItem value={SETTINGS_DEFAULT_MODEL_VALUE}>
+                      <span className="flex min-w-0 items-center gap-2.5">
+                        <ModelLogo model={defaultModelSelection.model} />
+                        <span className="flex min-w-0 flex-col">
+                          <span className="truncate">
+                            {t("chat.settingsDefaultModel")}
+                          </span>
+                          <span className="truncate text-ui-caption text-ui-muted">
+                            {providerModelLabel(
+                              defaultModelSelection.providerType,
+                              defaultModelSelection.model,
+                            )}
+                          </span>
+                        </span>
+                      </span>
+                    </SelectItem>
                     {selectedModelValue === CURRENT_MODEL_VALUE && (
                       <SelectItem value={CURRENT_MODEL_VALUE}>
                         <span className="flex min-w-0 items-center gap-2.5">
@@ -2117,8 +2436,10 @@ export function ChatView({
                                 currentModelButtonLabel}
                             </span>
                             <span className="truncate text-ui-caption text-ui-muted">
-                              {currentPreset.shortLabel} ·{" "}
-                              {active.model.trim() || t("chat.emptyModelId")}
+                              {conversationModelOverride
+                                ? t("chat.sessionModel")
+                                : currentPreset.shortLabel}{" "}
+                              · {active.model.trim() || t("chat.emptyModelId")}
                             </span>
                           </span>
                         </span>
@@ -2126,10 +2447,13 @@ export function ChatView({
                     )}
                     {MODEL_PROVIDERS.map((providerType) => {
                       const preset = PROVIDER_PRESETS[providerType];
-                      return providerModels(
-                        providerType,
-                        config.providers[providerType],
-                      ).map((model) => (
+                      const models = isOAuthProvider(providerType)
+                        ? preset.models
+                        : providerModels(
+                            providerType,
+                            config.providers[providerType],
+                          );
+                      return models.map((model) => (
                         <SelectItem
                           key={`${providerType}:${model.model}`}
                           value={modelSelectValue(providerType, model.model)}

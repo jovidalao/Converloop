@@ -279,6 +279,28 @@ export function dispatchObservers(ctx: PracticeContext): void {
   }
 }
 
+// Retry path for a missing correction: rerun only the observer that owns the correction panel.
+// This avoids duplicating custom observer notes or memory proposals for an already-persisted turn.
+export function dispatchTurnAnalysisObservers(ctx: PracticeContext): void {
+  const active = getObservers().filter(
+    (o) => isAgentEnabled(o.id) && o.providesTurnAnalysis,
+  );
+  if (active.length === 0) {
+    ctx.callbacks.onAnalysis(null);
+    return;
+  }
+  for (const observer of active) {
+    void runLogged(
+      {
+        agentId: observer.id,
+        hook: HOOKS.conversationObserve,
+        turnId: ctx.turnId,
+      },
+      () => observer.run(ctx),
+    ).catch((e) => logError("agent-observe", `${observer.id} failed`, e));
+  }
+}
+
 // Run a conversation action agent (triggered by user click). Logged; result is returned to the UI (typically contains the new conversation id to navigate to).
 export async function runAction(
   actionId: string,

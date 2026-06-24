@@ -44,6 +44,7 @@ import {
   failDerivedConversation,
   formatModifierInstructions,
   getConversation,
+  getConversationModelOverride,
   getSummary,
   listConversations,
   parseAgentModifiers,
@@ -113,6 +114,7 @@ import {
   derivePendingAction,
   dispatchObservers,
   dispatchReply,
+  dispatchTurnAnalysisObservers,
   getBuiltinAgentOverride,
   HOOKS,
   type LearningContext,
@@ -186,7 +188,10 @@ async function runStandaloneSideQuestion(
   cb: TurnCallbacks,
   turnId?: string,
 ): Promise<TurnResult> {
-  const provider = await getProvider();
+  const conversation = await getConversation(conversationId);
+  const provider = await getProvider(
+    getConversationModelOverride(conversation),
+  );
   if (!provider) throw new MissingApiKeyError();
 
   const config = loadConfig();
@@ -482,13 +487,15 @@ export async function previewLearningTurnMastery(
   conversationId: string,
   turnId: string,
 ): Promise<LessonMasteryPreview> {
-  const provider = await getProvider();
-  if (!provider) throw new MissingApiKeyError();
-
   const conversation = await getConversation(conversationId);
   if (conversation?.kind !== "learning_agent") {
     throw new Error(staticT("errors.lessonOnly"));
   }
+  const provider = await getProvider(
+    getConversationModelOverride(conversation),
+  );
+  if (!provider) throw new MissingApiKeyError();
+
   const agentId = conversation.learningAgentId;
   if (!agentId) throw new Error(staticT("errors.lessonNoAgent"));
   const agent = await getLearningAgent(agentId);
@@ -596,9 +603,11 @@ const LESSON_SESSION_TRANSCRIPT_CHARS = 24000;
 export async function generateDrillSessionReport(
   conversationId: string,
 ): Promise<string> {
-  const provider = await getProvider();
-  if (!provider) throw new MissingApiKeyError();
   const conversation = await getConversation(conversationId);
+  const provider = await getProvider(
+    getConversationModelOverride(conversation),
+  );
+  if (!provider) throw new MissingApiKeyError();
   const drill = await resolveDrill(
     parseAgentModifiers(conversation?.agentModifiersJson ?? null),
   );
@@ -645,13 +654,15 @@ ${formatTurns(turns) || "(empty session)"}`,
 export async function previewLessonSessionMastery(
   conversationId: string,
 ): Promise<LessonMasteryPreview> {
-  const provider = await getProvider();
-  if (!provider) throw new MissingApiKeyError();
-
   const conversation = await getConversation(conversationId);
   if (conversation?.kind !== "learning_agent") {
     throw new Error(staticT("errors.lessonOnly"));
   }
+  const provider = await getProvider(
+    getConversationModelOverride(conversation),
+  );
+  if (!provider) throw new MissingApiKeyError();
+
   const agentId = conversation.learningAgentId;
   if (!agentId) throw new Error(staticT("errors.lessonNoAgent"));
   const agent = await getLearningAgent(agentId);
@@ -820,7 +831,9 @@ export async function runTurn(
     );
   }
 
-  const provider = await getProvider();
+  const provider = await getProvider(
+    getConversationModelOverride(conversation),
+  );
   if (!provider) throw new MissingApiKeyError();
 
   const config = loadConfig();
@@ -1033,6 +1046,125 @@ export async function runTurn(
   return { reply, analysis: null };
 }
 
+export async function retryTurnAnalysis(
+  conversationId: string,
+  turnId: string,
+  cb: Pick<TurnCallbacks, "onAnalysis">,
+): Promise<void> {
+  const target = await getTurn(turnId);
+  if (!target || target.conversationId !== conversationId) {
+    throw new Error("Turn not found");
+  }
+  if (
+    target.excludeFromContext === 1 ||
+    target.displayText ||
+    !target.userInput.trim()
+  ) {
+    cb.onAnalysis(null);
+    return;
+  }
+
+  const conversation = await getConversation(conversationId);
+  if (conversation?.kind === "learning_agent") {
+    cb.onAnalysis(null);
+    return;
+  }
+
+  const provider = await getProvider(
+    getConversationModelOverride(conversation),
+  );
+  if (!provider) throw new MissingApiKeyError();
+
+  const config = loadConfig();
+  const langs = {
+    nativeLanguage: config.nativeLanguage,
+    targetLanguage: config.targetLanguage,
+    level: config.level,
+  };
+  const {
+    summaryData,
+    weakListRaw,
+    profileMd,
+    comfortableItemsRaw,
+    reviewItemsRaw,
+    proficiency,
+    keyHints,
+    verbatimTurns,
+  } = await loadTurnContextData(conversationId, config);
+  const targetIndex = verbatimTurns.findIndex((turn) => turn.id === turnId);
+  const contextTurns =
+    targetIndex >= 0
+      ? verbatimTurns.slice(0, targetIndex)
+      : verbatimTurns.filter((turn) => turn.createdAt < target.createdAt);
+  const history = formatTurns(contextTurns);
+  const tutorHistory = formatTurns(contextTurns.slice(-TUTOR_HISTORY_TURNS));
+  const previousPartnerReply =
+    [...contextTurns].reverse().find((turn) => turn.reply.trim())?.reply ?? "";
+  const weakList = rankMasteryItemsForInput(
+    weakListRaw,
+    target.userInput,
+    tutorHistory,
+  );
+  const reviewItems = rankMasteryItemsForInput(
+    reviewItemsRaw,
+    target.userInput,
+    history,
+  );
+  const comfortableItems = rankMasteryItemsForInput(
+    comfortableItemsRaw,
+    target.userInput,
+    history,
+  );
+  const profileSlice = profileSliceForConversation(profileMd);
+  const tutorPreferences = formatExperiencePreferences(profileMd, "tutor");
+  const tutorFlags = correctionPreferenceFlags(profileMd);
+  const agentModifiers = parseAgentModifiers(
+    conversation?.agentModifiersJson ?? null,
+  );
+  const drill = await resolveDrill(agentModifiers);
+  const isSayDrill = drill?.def.interaction === "say-hidden";
+  const dictationStandardAnswer =
+    isSayDrill && drill?.def.grading === "standard-answer"
+      ? parseDictationReply(contextTurns[contextTurns.length - 1]?.reply ?? "")
+          .sentence || undefined
+      : undefined;
+  const dictationFocusWords =
+    drill?.def.feed === "listening-words"
+      ? await getListeningFocusWords()
+      : undefined;
+
+  dispatchTurnAnalysisObservers({
+    kind: "practice",
+    provider,
+    conversationId,
+    turnId,
+    userInput: target.userInput,
+    langs,
+    profileSlice,
+    conversationPreferences: "",
+    tutorPreferences,
+    tutorFlags,
+    summary: summaryData.summary ?? "",
+    historyTurns: toHistoryTurns(contextTurns),
+    tutorHistory,
+    previousPartnerReply,
+    weakList,
+    keyHints,
+    comfortableItems,
+    reviewItems,
+    proficiency,
+    agentModifiers,
+    drill,
+    dictationStandardAnswer,
+    dictationFocusWords,
+    callbacks: {
+      onReplyDelta: () => {},
+      onAnalysis: cb.onAnalysis,
+    },
+    turnPersisted: Promise.resolve(turnId),
+  });
+}
+
 export async function startLearningSession(
   conversationId: string,
   cb: TurnCallbacks,
@@ -1051,7 +1183,8 @@ async function openConversationWithInstruction(
   cb: TurnCallbacks,
   turnId?: string,
 ): Promise<TurnResult> {
-  const provider = await getProvider();
+  const conv = await getConversation(conversationId);
+  const provider = await getProvider(getConversationModelOverride(conv));
   if (!provider) throw new MissingApiKeyError();
 
   const config = loadConfig();
@@ -1061,22 +1194,16 @@ async function openConversationWithInstruction(
     level: config.level,
   };
 
-  const [
-    {
-      summaryData,
-      weakListRaw,
-      profileMd,
-      comfortableItemsRaw,
-      reviewItemsRaw,
-      proficiency,
-      keyHints,
-      verbatimTurns,
-    },
-    conv,
-  ] = await Promise.all([
-    loadTurnContextData(conversationId, config),
-    getConversation(conversationId),
-  ]);
+  const {
+    summaryData,
+    weakListRaw,
+    profileMd,
+    comfortableItemsRaw,
+    reviewItemsRaw,
+    proficiency,
+    keyHints,
+    verbatimTurns,
+  } = await loadTurnContextData(conversationId, config);
   const history = formatTurns(verbatimTurns);
   const weakList = rankMasteryItemsForInput(
     weakListRaw,
@@ -1228,10 +1355,12 @@ async function runLearningTurn(
   offRecord = false,
   displayText?: string,
 ): Promise<TurnResult> {
-  const provider = await getProvider();
+  const conversation = await getConversation(conversationId);
+  const provider = await getProvider(
+    getConversationModelOverride(conversation),
+  );
   if (!provider) throw new MissingApiKeyError();
 
-  const conversation = await getConversation(conversationId);
   const agentId = conversation?.learningAgentId;
   if (!agentId) throw new Error(staticT("errors.lessonNoAgent"));
 
@@ -1319,7 +1448,8 @@ export async function regenerateReply(
     onContext?: (promptTokens: number) => void;
   },
 ): Promise<string> {
-  const provider = await getProvider();
+  const conv = await getConversation(conversationId);
+  const provider = await getProvider(getConversationModelOverride(conv));
   if (!provider) throw new MissingApiKeyError();
 
   const config = loadConfig();
@@ -1330,14 +1460,12 @@ export async function regenerateReply(
     comfortableItemsRaw,
     reviewItemsRaw,
     proficiency,
-    conv,
   ] = await Promise.all([
     getSummary(conversationId),
     readProfile(config),
     getComfortableList(),
     getReviewDueList(),
     getProficiencySnapshot(),
-    getConversation(conversationId),
   ]);
   const verbatimTurns = await getTurnsAfterId(
     conversationId,
@@ -1408,7 +1536,10 @@ export async function explainReply(
   reply: string,
   onDelta: (delta: string) => void,
 ): Promise<string> {
-  const provider = await getProvider();
+  const conversation = await getConversation(conversationId);
+  const provider = await getProvider(
+    getConversationModelOverride(conversation),
+  );
   if (!provider) throw new MissingApiKeyError();
 
   const config = loadConfig();
@@ -1462,8 +1593,16 @@ export async function explainReply(
 
 // Bilingual reading: convert a conversation reply into a target-language/native-language sentence-by-sentence interleave (bilingual Markdown).
 // Does not read the profile; not persisted — cheap, regenerated on demand.
-export async function bilingualReply(reply: string): Promise<string> {
-  const provider = await getProvider();
+export async function bilingualReply(
+  reply: string,
+  conversationId?: string,
+): Promise<string> {
+  const conversation = conversationId
+    ? await getConversation(conversationId)
+    : null;
+  const provider = await getProvider(
+    getConversationModelOverride(conversation),
+  );
   if (!provider) throw new MissingApiKeyError();
 
   const config = loadConfig();
@@ -1531,11 +1670,10 @@ export async function generateAndSetConversationTitle(
   conversationId: string,
   firstUserInput: string,
 ): Promise<void> {
-  const provider = await getProvider();
-  if (!provider) return;
-
   const conv = await getConversation(conversationId);
   if (!conv || conv.title !== DEFAULT_CONVERSATION_TITLE) return;
+  const provider = await getProvider(getConversationModelOverride(conv));
+  if (!provider) return;
 
   const config = loadConfig();
   try {
@@ -1593,7 +1731,10 @@ export async function generateInputHintsForConversation(
   conversationId: string,
   opts: { reuseCached?: boolean } = {},
 ): Promise<string[]> {
-  const provider = await getProvider();
+  const conversation = await getConversation(conversationId);
+  const provider = await getProvider(
+    getConversationModelOverride(conversation),
+  );
   if (!provider) return [];
 
   const config = loadConfig();

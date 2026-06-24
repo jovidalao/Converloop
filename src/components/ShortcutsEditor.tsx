@@ -114,6 +114,7 @@ export function ShortcutsEditor() {
       <div className="overflow-hidden rounded-xl border border-border/70 bg-card/75 shadow-minimal-flat">
         {EDITABLE_ACTIONS.map((action, i) => {
           const recording = recordingId === action.id;
+          const keys = actionKeyCaps(action.id);
           return (
             <div
               key={action.id}
@@ -131,9 +132,13 @@ export function ShortcutsEditor() {
                 </span>
               ) : (
                 <span className="flex shrink-0 items-center gap-1">
-                  {actionKeyCaps(action.id).map((cap) => (
-                    <KeyCap key={cap}>{cap}</KeyCap>
-                  ))}
+                  {keys.length > 0 ? (
+                    keys.map((cap) => <KeyCap key={cap}>{cap}</KeyCap>)
+                  ) : (
+                    <span className="text-ui-caption text-ui-muted">
+                      {t("settings.shortcuts.unassigned")}
+                    </span>
+                  )}
                 </span>
               )}
               <div className="flex shrink-0 items-center gap-1">

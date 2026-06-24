@@ -196,8 +196,15 @@ describe("bindingHasModifier", () => {
 });
 
 describe("default keybindings", () => {
+  it("includes configurable actions that intentionally start unassigned", () => {
+    expect(EDITABLE_ACTIONS.some((action) => !action.defaultBinding)).toBe(
+      true,
+    );
+  });
+
   it("every editable default has a non-shift modifier so it can't fire while typing", () => {
     for (const action of EDITABLE_ACTIONS) {
+      if (!action.defaultBinding) continue;
       expect(
         bindingHasModifier(action.defaultBinding),
         `${action.id} default needs a ⌘/⌃/⌥ modifier`,
@@ -208,11 +215,13 @@ describe("default keybindings", () => {
   it("no two editable defaults share a chord", () => {
     const seen: KeyBinding[] = [];
     for (const action of EDITABLE_ACTIONS) {
-      const dup = seen.find((b) => bindingsEqual(b, action.defaultBinding));
+      const binding = action.defaultBinding;
+      if (!binding) continue;
+      const dup = seen.find((b) => bindingsEqual(b, binding));
       expect(dup, `${action.id} reuses an existing default chord`).toBe(
         undefined,
       );
-      seen.push(action.defaultBinding);
+      seen.push(binding);
     }
   });
 });

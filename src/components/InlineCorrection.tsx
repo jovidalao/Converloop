@@ -3,6 +3,7 @@ import {
   CheckIcon,
   InfoIcon,
   LanguagesIcon,
+  RefreshCwIcon,
   SparklesIcon,
 } from "lucide-react";
 import {
@@ -268,6 +269,7 @@ export function InlineCorrection({
   panelIds,
   correction,
   natural,
+  onRetry,
 }: {
   analysis: TutorAnalysis | null;
   proseFeedback?: string | null;
@@ -292,6 +294,8 @@ export function InlineCorrection({
   // "Natural expression" toggle: the content shows inside the user's bubble (see
   // ChatView); here we only provide the toggle button.
   natural?: { open: boolean; onToggle: () => void };
+  /** Retry generating correction when no structured/prose feedback exists. */
+  onRetry?: () => void;
 }) {
   const { t } = useTranslation();
   const { actionLabels } = useConfig();
@@ -321,13 +325,15 @@ export function InlineCorrection({
     !natural &&
     !showProse &&
     !error;
+  const showRetry = !!onRetry && !pending && !analysis && !showProse;
+  const showUnavailableRetry = showRetry && showFallback && !analysis;
 
   return (
     <div
       className="flex w-full flex-col items-end gap-1.5"
       data-selectable-context
     >
-      <div className="-mr-1 flex items-center gap-0.5">
+      <div className="-mr-1 flex flex-wrap items-center justify-end gap-0.5">
         {leading}
         {showPending && (
           <span
@@ -345,7 +351,36 @@ export function InlineCorrection({
             {analysis?.highlight?.trim() || t("corrections.correct")}
           </span>
         )}
-        {showFallback && (
+        {showUnavailableRetry ? (
+          <Button
+            type="button"
+            variant="action"
+            size="action"
+            className="gap-1 px-1.5 py-1 text-ui-caption text-ui-muted"
+            title={t("corrections.retry")}
+            aria-label={t("corrections.retry")}
+            onClick={onRetry}
+          >
+            <InfoIcon size={14} />
+            <span>{t("corrections.unavailable")}</span>
+            <RefreshCwIcon className="size-3.5" />
+          </Button>
+        ) : showRetry ? (
+          <Button
+            type="button"
+            variant="action"
+            size="action"
+            title={t("corrections.retry")}
+            aria-label={t("corrections.retry")}
+            onClick={onRetry}
+          >
+            <RefreshCwIcon />
+            {actionLabels && (
+              <span data-compact-label>{t("corrections.retry")}</span>
+            )}
+          </Button>
+        ) : null}
+        {showFallback && !showUnavailableRetry && (
           <span className="inline-flex items-center gap-1 px-1.5 py-1 text-ui-caption text-ui-muted">
             {analysis ? <CheckIcon size={14} /> : <InfoIcon size={14} />}
             {analysis

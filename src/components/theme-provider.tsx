@@ -32,10 +32,10 @@ function systemPrefersDark() {
 
 function loadAccent(): Accent {
   const stored = localStorage.getItem(ACCENT_STORAGE_KEY);
-  if (stored === "gray") return "gray";
+  if (stored === "gray" || stored === "graphite") return "gray";
   if (stored === "blue") return "blue";
   if (stored === "purple") return "purple";
-  if (stored === "claude") return "claude";
+  if (stored === "claude" || stored === "orange") return "claude";
   if (stored === "vercel") return "vercel";
   if (localStorage.getItem("lang-agent-palette") === "claude") return "claude";
   return "blue";

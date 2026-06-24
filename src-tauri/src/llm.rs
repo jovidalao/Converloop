@@ -23,6 +23,9 @@ fn build_request(
 ) -> reqwest::RequestBuilder {
     let mut req = HTTP.post(url).json(body);
     for (k, v) in headers {
+        if k.eq_ignore_ascii_case("content-type") {
+            continue;
+        }
         req = req.header(k, v);
     }
     req
@@ -107,7 +110,39 @@ pub async fn llm_stream(
 
 #[cfg(test)]
 mod tests {
-    use super::utf8_safe_prefix_len;
+    use super::{build_request, utf8_safe_prefix_len};
+    use reqwest::header::CONTENT_TYPE;
+    use std::collections::HashMap;
+
+    #[test]
+    fn json_request_keeps_single_content_type_header() {
+        let mut headers = HashMap::new();
+        headers.insert("Content-Type".to_string(), "application/json".to_string());
+        headers.insert("Authorization".to_string(), "Bearer token".to_string());
+
+        let request = build_request(
+            "https://example.test/responses",
+            &headers,
+            &serde_json::json!({ "stream": true }),
+        )
+        .build()
+        .expect("request builds");
+
+        let content_types: Vec<_> = request
+            .headers()
+            .get_all(CONTENT_TYPE)
+            .iter()
+            .collect();
+        assert_eq!(content_types.len(), 1);
+        assert_eq!(content_types[0], "application/json");
+        assert_eq!(
+            request
+                .headers()
+                .get("Authorization")
+                .expect("authorization header"),
+            "Bearer token",
+        );
+    }
 
     #[test]
     fn whole_valid_string_is_emitted() {

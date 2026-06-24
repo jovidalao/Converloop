@@ -33,6 +33,9 @@ export function ReplyExplanation({
   hideExplain = false,
   onFirstOpen,
   onLayoutChange,
+  shortcutLabel,
+  ariaKeyShortcuts,
+  registerTrigger,
 }: {
   panelId: string;
   activePanelId: string | null;
@@ -51,6 +54,9 @@ export function ReplyExplanation({
   /** Notify the parent scroll container to stick to the bottom when the
    * explanation expands or its streaming content changes. */
   onLayoutChange?: () => void;
+  shortcutLabel?: string;
+  ariaKeyShortcuts?: string;
+  registerTrigger?: (trigger: (() => void) | null) => void;
 }) {
   const { t } = useTranslation();
   const { actionLabels } = useConfig();
@@ -58,6 +64,7 @@ export function ReplyExplanation({
   const [explanation, setExplanation] = useState("");
   const [error, setError] = useState<string | null>(null);
   const prevTextRef = useRef(text);
+  const actionRef = useRef<() => void>(() => {});
   const open = activePanelId === panelId;
 
   // Once the reply is replaced by a "regenerate", the old explanation no longer
@@ -107,12 +114,23 @@ export function ReplyExplanation({
     }
     setActivePanelId((current) => (current === panelId ? null : panelId));
   }
+  actionRef.current = handleClick;
 
   const expanded = open && (explanation || error);
   // When "Reply explanation" is removed (hidden), only the explain button is
   // hidden; copy / read-aloud / bilingual and other actions stay as usual.
   const explainHidden =
     isAgentHidden("builtin:transformer:explain") || hideExplain;
+  const explainTitle = shortcutLabel
+    ? `${t("replyExplanation.explainTooltip")} · ${shortcutLabel}`
+    : t("replyExplanation.explainTooltip");
+
+  useEffect(() => {
+    if (!registerTrigger || explainHidden) return;
+    const run = () => actionRef.current();
+    registerTrigger(run);
+    return () => registerTrigger(null);
+  }, [registerTrigger, explainHidden]);
 
   return (
     <div className="flex w-full flex-col gap-1.5">
@@ -127,7 +145,8 @@ export function ReplyExplanation({
             onClick={handleClick}
             disabled={loading}
             aria-expanded={!!expanded}
-            title={t("replyExplanation.explainTooltip")}
+            aria-keyshortcuts={ariaKeyShortcuts}
+            title={explainTitle}
           >
             <span className="inline-flex size-4 shrink-0 items-center justify-center">
               {loading ? (

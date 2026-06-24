@@ -71,7 +71,7 @@ function splitMessages(messages: ChatMessage[]): {
   };
 }
 
-function buildBody(cfg: OpenAICodexConfig, opts: GenerateOptions): Body {
+export function buildBody(cfg: OpenAICodexConfig, opts: GenerateOptions): Body {
   const { instructions, input } = splitMessages(opts.messages);
   const body: Body = {
     model: cfg.model,
@@ -93,8 +93,6 @@ function buildBody(cfg: OpenAICodexConfig, opts: GenerateOptions): Body {
   } else if (opts.jsonObject) {
     body.text = { format: { type: "json_object" } };
   }
-  if (opts.temperature !== undefined) body.temperature = opts.temperature;
-  if (opts.maxTokens !== undefined) body.max_output_tokens = opts.maxTokens;
   return body;
 }
 

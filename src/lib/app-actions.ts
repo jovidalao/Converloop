@@ -12,9 +12,17 @@ export type AppActionId =
   | "focus-sidebar"
   | "focus-chat"
   | "focus-coach"
+  | "toggle-coach-panel"
   | "shortcuts"
   | "voice-input"
   | "refresh-hints"
+  | "copy-latest-reply"
+  | "toggle-latest-explanation"
+  | "toggle-latest-reading-guide"
+  | "toggle-latest-bilingual"
+  | "speak-latest-reply"
+  | "regenerate-latest-reply"
+  | "jump-to-latest"
   | "slash-command"
   | "send"
   | "new-line"
@@ -42,8 +50,10 @@ export interface KeyBinding {
 
 export interface AppAction {
   id: AppActionId;
-  /** Default chord for rebindable actions. Absent for fixed contextual hints. */
+  /** Default chord for rebindable actions. Absent for fixed contextual hints or unassigned actions. */
   defaultBinding?: KeyBinding;
+  /** Show in Settings even when no default chord is assigned. */
+  configurable?: boolean;
   /** Display caps for fixed actions that have no rebindable chord. */
   fixedKeys?: string[];
 }
@@ -59,12 +69,26 @@ export const APP_ACTIONS: AppAction[] = [
   { id: "focus-sidebar", defaultBinding: { key: "1", meta: true } },
   { id: "focus-chat", defaultBinding: { key: "2", meta: true } },
   { id: "focus-coach", defaultBinding: { key: "3", meta: true } },
+  { id: "toggle-coach-panel", configurable: true },
   { id: "shortcuts", defaultBinding: { key: "/", meta: true } },
   { id: "voice-input", defaultBinding: { key: "v", meta: true, shift: true } },
   {
     id: "refresh-hints",
     defaultBinding: { key: "h", meta: true, shift: true },
   },
+  { id: "copy-latest-reply", configurable: true },
+  { id: "toggle-latest-explanation", configurable: true },
+  { id: "toggle-latest-reading-guide", configurable: true },
+  {
+    id: "toggle-latest-bilingual",
+    defaultBinding: { key: "b", meta: true, shift: true },
+  },
+  {
+    id: "speak-latest-reply",
+    defaultBinding: { key: "l", meta: true, shift: true },
+  },
+  { id: "regenerate-latest-reply", configurable: true },
+  { id: "jump-to-latest", configurable: true },
   { id: "slash-command", fixedKeys: ["/"] },
   { id: "send", fixedKeys: ["↩"] },
   { id: "new-line", fixedKeys: ["⇧", "↩"] },
@@ -75,9 +99,10 @@ export const APP_ACTIONS: AppAction[] = [
   { id: "dictation-reveal", defaultBinding: { key: ";", meta: true } },
 ];
 
-// Actions whose chord can be customized (everything with a default chord).
+// Actions whose chord can be customized. Some intentionally have no default so
+// users can opt in without us claiming scarce global chords.
 export const EDITABLE_ACTIONS = APP_ACTIONS.filter(
-  (a): a is AppAction & { defaultBinding: KeyBinding } => !!a.defaultBinding,
+  (a) => !!a.defaultBinding || !!a.configurable,
 );
 
 export function getAppAction(id: AppActionId): AppAction {
@@ -220,6 +245,11 @@ export function actionKeyCaps(id: AppActionId): string[] {
 // Compact label: glyphs glued on macOS (⌘⇧N), text "+"-joined on Windows (Ctrl+Shift+N).
 export function actionShortcutLabel(id: AppActionId): string {
   return actionKeyCaps(id).join(isMacOS() ? "" : "+");
+}
+
+export function actionShortcutTitle(label: string, id: AppActionId): string {
+  const shortcut = actionShortcutLabel(id);
+  return shortcut ? `${label} · ${shortcut}` : label;
 }
 
 // "Meta+Shift+N" form for the aria-keyshortcuts attribute. The primary modifier

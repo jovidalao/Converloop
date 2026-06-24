@@ -38,9 +38,15 @@ const SPEAK_PLAYING: Record<"bar" | "round", string> = {
 export function SpeakButton({
   text,
   variant = "bar",
+  registerTrigger,
+  shortcutLabel,
+  ariaKeyShortcuts,
 }: {
   text: string;
   variant?: "bar" | "round";
+  registerTrigger?: (trigger: (() => void) | null) => void;
+  shortcutLabel?: string;
+  ariaKeyShortcuts?: string;
 }) {
   const { t } = useTranslation();
   // Playback state comes from the global player, so this button also lights up
@@ -52,6 +58,7 @@ export function SpeakButton({
   const [localLoading, setLocalLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const actionRef = useRef<() => void>(() => {});
 
   useEffect(() => {
     if (!error) return;
@@ -81,6 +88,17 @@ export function SpeakButton({
       }
     }
   }
+  actionRef.current = () => void handleClick();
+
+  useEffect(() => {
+    if (!registerTrigger) return;
+    const run = () => actionRef.current();
+    registerTrigger(run);
+    return () => registerTrigger(null);
+  }, [registerTrigger]);
+
+  const label = active ? t("speak.stop") : t("speak.play");
+  const title = shortcutLabel ? `${label} · ${shortcutLabel}` : label;
 
   return (
     <span className="inline-flex shrink-0">
@@ -94,8 +112,9 @@ export function SpeakButton({
         )}
         onClick={() => void handleClick()}
         disabled={localLoading || !text.trim()}
-        aria-label={active ? t("speak.stop") : t("speak.play")}
-        title={active ? t("speak.stop") : t("speak.play")}
+        aria-label={label}
+        aria-keyshortcuts={ariaKeyShortcuts}
+        title={title}
       >
         {localLoading || playbackLoading ? (
           <Spinner className="size-3" />

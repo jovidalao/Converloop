@@ -4,6 +4,7 @@ import { renderDrillInstructions } from "../drills/render";
 import {
   conversationType,
   formatModifierInstructions,
+  getConversationModelOverride,
   parseAgentModifiers,
   parseDictationReply,
 } from "./conversations";
@@ -149,6 +150,20 @@ describe("parseAgentModifiers legacy drill normalization", () => {
     );
     expect(mods.difficultyDelta).toBe(1);
     expect(mods.drill?.modeId).toBe(BUILTIN_DRILL_IDS.quickfire);
+  });
+
+  it("keeps conversation model overrides intact", () => {
+    const modelOverride = {
+      providerType: "codex-oauth",
+      model: "gpt-5.5",
+    };
+    const mods = parseAgentModifiers(JSON.stringify({ modelOverride }));
+    expect(mods.modelOverride).toEqual(modelOverride);
+    expect(
+      getConversationModelOverride({
+        agentModifiersJson: JSON.stringify({ modelOverride }),
+      } as Parameters<typeof getConversationModelOverride>[0]),
+    ).toEqual(modelOverride);
   });
 });
 

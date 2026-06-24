@@ -797,8 +797,12 @@ const THEMES: { value: Theme; labelKey: MessageKey; icon: LucideIcon }[] = [
   { value: "dark", labelKey: "settings.themes.dark", icon: MoonIcon },
   { value: "system", labelKey: "settings.themes.system", icon: MonitorIcon },
 ];
-// Accent swatches use the light-mode --brand value, purely as a selection marker.
-const ACCENTS: { value: Accent; labelKey: MessageKey; swatch: string }[] = [
+// Accent swatches follow macOS Settings: large color dots with the active name below.
+const ACCENTS: {
+  value: Accent;
+  labelKey: MessageKey;
+  swatch: string;
+}[] = [
   {
     value: "gray",
     labelKey: "settings.accents.gray",
@@ -1129,24 +1133,48 @@ function AccentSelect() {
   const { accent, setAccent } = useTheme();
   const { t } = useTranslation();
   return (
-    <Select value={accent} onValueChange={(v) => setAccent(v as Accent)}>
-      <SelectTrigger variant="ghost">
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        {ACCENTS.map((a) => (
-          <SelectItem key={a.value} value={a.value}>
-            <span className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center justify-end gap-1.5 py-0.5">
+      {ACCENTS.map((a) => {
+        const active = accent === a.value;
+        const label = t(a.labelKey);
+        return (
+          <button
+            key={a.value}
+            type="button"
+            aria-pressed={active}
+            aria-label={label}
+            title={label}
+            onClick={() => setAccent(a.value)}
+            className={cn(
+              "group flex h-8 items-center justify-center rounded-full outline-none transition-[background-color,border-color,box-shadow,padding,width]",
+              active
+                ? "gap-1.5 border-2 border-[#0a84ff] bg-accent/45 px-1.5 pr-2.5 shadow-[inset_0_0_0_1px_var(--background)]"
+                : "w-8 border-2 border-transparent hover:bg-accent/50 focus-visible:border-ring",
+            )}
+          >
+            <span
+              className={cn(
+                "flex size-6 shrink-0 items-center justify-center rounded-full transition-transform",
+                active ? "scale-105" : "group-hover:scale-105",
+              )}
+            >
               <span
-                className="size-3 shrink-0 rounded-full"
+                className={cn(
+                  "size-5 rounded-full",
+                  a.value === "vercel" && "border border-white/80",
+                )}
                 style={{ background: a.swatch }}
               />
-              {t(a.labelKey)}
             </span>
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+            {active && (
+              <span className="max-w-20 truncate text-ui-caption font-medium leading-none text-foreground">
+                {label}
+              </span>
+            )}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -1840,7 +1868,7 @@ export function SettingsView({
     setLlmStatus({ type, text: t("settings.llm.loggedOut") });
   }
 
-  // Keep the provider test deliberately short: it verifies credentials, base URL,
+  // Keep the provider test deliberately short: it verifies credentials,
   // model id, and the provider's JSON request shape without depending on a
   // long-lived streaming connection.
   async function testConnection(type: ProviderType) {
@@ -1869,7 +1897,11 @@ export function SettingsView({
       // A custom model id that just verified successfully gets saved to the list so it can be reselected later.
       const entry = cfg.providers[type];
       const model = entry.model.trim();
-      if (model && !findModelOption(type, entry, model)) {
+      if (
+        model &&
+        !isOAuthProvider(type) &&
+        !findModelOption(type, entry, model)
+      ) {
         updateProvider(type, {
           customModels: [...(entry.customModels ?? []), model],
         });
@@ -1972,10 +2004,12 @@ export function SettingsView({
     const tokens = oauthTokens[type] ?? null;
     const hasKey = !!keyStatus[type];
     const configured = oauth ? !!tokens : hasKey;
-    const selectedModel = findModelOption(type, entry, entry.model);
-    const isCustom = (customModel[type] ?? false) || !selectedModel;
-    const modelValue =
-      isCustom || !selectedModel ? CUSTOM_MODEL_VALUE : selectedModel.model;
+    const modelOptions = oauth ? preset.models : providerModels(type, entry);
+    const selectedModel = modelOptions.find((m) => m.model === entry.model);
+    const isCustom = !oauth && ((customModel[type] ?? false) || !selectedModel);
+    const modelValue = isCustom
+      ? CUSTOM_MODEL_VALUE
+      : (selectedModel?.model ?? preset.model);
     const statusText = oauth
       ? tokens
         ? t("settings.llm.statusSignedIn")
@@ -1996,13 +2030,17 @@ export function SettingsView({
         onToggle={() => setExpandedLlm((prev) => (prev === type ? null : type))}
         onActivate={() => update("providerType", type)}
       >
-        <Field label={t(`settings.baseUrl.${type}`)}>
-          <Input
-            value={entry.baseUrl}
-            onChange={(e) => updateProvider(type, { baseUrl: e.target.value })}
-            placeholder={preset.baseUrl}
-          />
-        </Field>
+        {!oauth && (
+          <Field label={t(`settings.baseUrl.${type}`)}>
+            <Input
+              value={entry.baseUrl}
+              onChange={(e) =>
+                updateProvider(type, { baseUrl: e.target.value })
+              }
+              placeholder={preset.baseUrl}
+            />
+          </Field>
+        )}
 
         <Field label={t("settings.llm.model")}>
           <Select
@@ -2013,16 +2051,18 @@ export function SettingsView({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {providerModels(type, entry).map((model) => (
+              {modelOptions.map((model) => (
                 <SelectItem key={model.model} value={model.model}>
                   {providerModelLabel(type, model.model)}
                 </SelectItem>
               ))}
-              <SelectItem value={CUSTOM_MODEL_VALUE}>
-                {t("settings.llm.customModelOption", {
-                  label: preset.shortLabel,
-                })}
-              </SelectItem>
+              {!oauth && (
+                <SelectItem value={CUSTOM_MODEL_VALUE}>
+                  {t("settings.llm.customModelOption", {
+                    label: preset.shortLabel,
+                  })}
+                </SelectItem>
+              )}
             </SelectContent>
           </Select>
         </Field>
@@ -2046,21 +2086,30 @@ export function SettingsView({
           )
         )}
 
-        <Field label={t("settings.llm.contextWindow")}>
-          <Input
-            type="number"
-            value={entry.contextTokens ?? ""}
-            onChange={(e) => {
-              const n = Number(e.target.value);
-              updateProvider(type, {
-                contextTokens: e.target.value.trim() && n > 0 ? n : undefined,
-              });
-            }}
-            placeholder={t("settings.llm.contextAuto", {
+        {oauth ? (
+          <p className="text-ui-caption text-ui-muted">
+            {t("settings.llm.contextWindow")}:{" "}
+            {t("settings.llm.contextAuto", {
               n: inferContextLimit(entry.model).toLocaleString(),
             })}
-          />
-        </Field>
+          </p>
+        ) : (
+          <Field label={t("settings.llm.contextWindow")}>
+            <Input
+              type="number"
+              value={entry.contextTokens ?? ""}
+              onChange={(e) => {
+                const n = Number(e.target.value);
+                updateProvider(type, {
+                  contextTokens: e.target.value.trim() && n > 0 ? n : undefined,
+                });
+              }}
+              placeholder={t("settings.llm.contextAuto", {
+                n: inferContextLimit(entry.model).toLocaleString(),
+              })}
+            />
+          </Field>
+        )}
 
         {isOpenAIWireProvider(type) && (
           <div className="space-y-1.5">
