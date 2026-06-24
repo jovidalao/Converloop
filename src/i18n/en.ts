@@ -175,15 +175,7 @@ export const en = {
   coach: {
     title: "Learning coach",
     waitingInput: "Waiting for input",
-    wholeConversationSub: "Whole conversation · {n} turns",
-    emptyHint:
-      "Once you start chatting, this shows a turn-by-turn review of the conversation and the learning memory recorded for you.",
-    signal: {
-      error: "Marked wrong",
-      correct: "Used correctly",
-      introduced: "Newly introduced",
-      gap: "Expression gap",
-    },
+    subtitle: "Your focus, updated each turn",
     type: {
       vocab: "Vocabulary",
       grammar: "Grammar",
@@ -191,10 +183,31 @@ export const en = {
       error_pattern: "Error pattern",
       expression_gap: "Expression gap",
     },
-    conversationObservationsEmpty:
-      "No custom observations in this conversation yet.",
+    // coach.signal.* is also used by the Mastery view's evidence list.
+    signal: {
+      error: "Marked wrong",
+      correct: "Used correctly",
+      introduced: "Newly introduced",
+      gap: "Expression gap",
+    },
+    focus: {
+      empty:
+        "Start chatting — this shows the one thing most worth your attention after each sentence.",
+      clean:
+        "Nothing to fix in your last sentence. Keep the conversation going.",
+      gapKicker: "You wanted to say",
+      template: "Template: {template}",
+      expand: "Show details",
+      fixKicker: "Your last sentence",
+      viewSentence: "View this sentence",
+      recurringKicker: "Recurring ×{n}",
+      recurringHint: "Watch for this next time.",
+      praiseKicker: "Nicely done",
+    },
+    recall: {
+      kicker: "Try to use this next",
+    },
     applied: "Applied {n} items.",
-    noProposalsHint: "No write suggestions to confirm.",
     confirmWrite: "Confirm write",
     dismiss: "Dismiss",
     proposal: {
@@ -203,42 +216,11 @@ export const en = {
       delete: "Remove: {label}",
       merge: "Merge {label} → {target}",
     },
-    badge: {
-      grading: "Grading",
-      graded: "Graded",
-      failed: "Grading failed",
-      notGraded: "Not graded",
-      gap: "Expression gap",
-      issues: "{n} issues",
-      accurate: "Accurate",
-    },
-    stats: {
-      practiceTurns: "Practice turns",
-      accurate: "Accurate",
-      toImprove: "To improve",
-      memory: "Learning memory",
-    },
-    dueReview: {
-      title: "Due for review",
-      subtitle:
-        "Retention on these has dropped — the AI is nudged to weave them back into the conversation naturally.",
-      empty: "Nothing is due for review right now.",
-      retention: "retention {p}%",
-    },
-    reviewTitle: "Turn-by-turn review",
-    conversationMemoryTitle: "Conversation learning memory",
-    conversationMemoryEmpty: "No learning recorded for this conversation yet.",
     pendingMemoryTitle: "Pending memory",
-    observationsTitle: "Custom observations",
-    emptyTurnText: "(empty)",
     viewAllData: "View all learning data",
+    // coach.hints.regenerate is used by the chat input's hint overlay.
     hints: {
-      title: "A way to keep going",
-      empty:
-        "Once a reply comes in, this shows one ready-to-borrow way to keep the conversation going.",
       regenerate: "Try another",
-      regenerating: "Finding another…",
-      use: "Use this opener",
     },
   },
   logs: {

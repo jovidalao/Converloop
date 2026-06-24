@@ -86,6 +86,7 @@ import {
   matchesActionShortcut,
   useKeybindings,
 } from "./lib/app-actions";
+import { onAppEvent } from "./lib/app-events";
 import { isWindows } from "./lib/platform";
 import { withViewTransition } from "./lib/view-transition";
 import { flushMaintainerSoon } from "./profile/maintainer-runner";
@@ -239,10 +240,6 @@ function App() {
   );
   const prevWindowSizeRef = useRef<PhysicalSize | null>(null);
   const [coachTurns, setCoachTurns] = useState<ChatTurn[]>([]);
-  const [coachDraft, setCoachDraft] = useState<{
-    text: string;
-    nonce: number;
-  } | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
@@ -341,6 +338,11 @@ function App() {
     setCoachTurns([]);
   }, [activeId]);
 
+  // When a learner opens an in-bubble detail (grammar / gap / explanation), step
+  // the coach panel aside so the detail has room. The user reopens it via the
+  // toggle/shortcut. setCoachOpen(false) is a no-op when it's already closed.
+  useEffect(() => onAppEvent("panel-opened", () => setCoachOpen(false)), []);
+
   useEffect(() => {
     if (!activeId) return;
     flushMaintainerSoon();
@@ -386,7 +388,6 @@ function App() {
         setActiveConversationId(loc.activeId);
       }
       withViewTransition(() => {
-        setCoachDraft(null);
         setActiveId(loc.activeId);
         setView(loc.view);
       });
@@ -1233,7 +1234,6 @@ function App() {
               navigateTo({ view: `settings-${kind}`, activeId })
             }
             compact={smallWindow}
-            externalDraft={coachDraft}
           />
         </div>
         {!smallWindow && secondaryView && (
@@ -1255,12 +1255,6 @@ function App() {
             conversationId={activeId}
             onOpenView={(v) => navigateTo({ view: v, activeId })}
             onJumpToTurn={jumpToTurn}
-            onUseHint={(text) =>
-              setCoachDraft((cur) => ({
-                text,
-                nonce: (cur?.nonce ?? 0) + 1,
-              }))
-            }
           />
         </aside>
       )}

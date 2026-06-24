@@ -9,6 +9,12 @@ interface AppEventPayloads {
   "coach-data-changed": { turnId?: string };
   /** Input hints for a conversation were (re)generated and cached. */
   "input-hints-changed": { conversationId: string };
+  /** An in-bubble detail panel (grammar / gap / explanation) opened. The coach
+   * panel listens and steps aside so the detail has room. */
+  "panel-opened": { turnId: string; panelId: string };
+  /** Request a turn to open a specific in-bubble panel (coach focus card → detail).
+   * The owning turn matches by `${turnId}:` prefix on the panelId. */
+  "panel-command": { panelId: string };
 }
 
 export type AppEventName = keyof AppEventPayloads;

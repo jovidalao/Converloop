@@ -160,8 +160,6 @@ interface ChatViewProps {
   onOpenProviderSettings?: (kind: ProviderKind) => void;
   /** Small-window mode: strip to bare chat — message bubbles + copy + composer; hide explain/speak/corrections/badges/slash menu. */
   compact?: boolean;
-  /** Text requested by another panel (currently Coach hints) to draft into the composer. */
-  externalDraft?: { text: string; nonce: number } | null;
 }
 
 const SETTINGS_DEFAULT_MODEL_VALUE = "__settings_default_model__";
@@ -198,7 +196,6 @@ export function ChatView({
   onOpenCommandSettings,
   onOpenProviderSettings,
   compact = false,
-  externalDraft = null,
 }: ChatViewProps) {
   const { t, locale } = useTranslation();
   useKeybindings();
@@ -419,12 +416,6 @@ export function ChatView({
     };
   }, []);
 
-  useEffect(() => {
-    if (!externalDraft) return;
-    setInput(externalDraft.text);
-    setInputHints(null);
-    requestAnimationFrame(() => inputRef.current?.focus());
-  }, [externalDraft]);
   // Drill start page: an uncommitted drill draft (no conversation row yet). Drives the drill start
   // screen and routes the first commit (chip / typed setup / Start) through startDrillDraft.
   const drillDraftActive = isDraft && drillDraft !== null;
