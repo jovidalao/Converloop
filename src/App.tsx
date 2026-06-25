@@ -86,7 +86,6 @@ import {
   matchesActionShortcut,
   useKeybindings,
 } from "./lib/app-actions";
-import { onAppEvent } from "./lib/app-events";
 import { isWindows } from "./lib/platform";
 import { withViewTransition } from "./lib/view-transition";
 import { flushMaintainerSoon } from "./profile/maintainer-runner";
@@ -337,11 +336,6 @@ function App() {
   useEffect(() => {
     setCoachTurns([]);
   }, [activeId]);
-
-  // When a learner opens an in-bubble detail (grammar / gap / explanation), step
-  // the coach panel aside so the detail has room. The user reopens it via the
-  // toggle/shortcut. setCoachOpen(false) is a no-op when it's already closed.
-  useEffect(() => onAppEvent("panel-opened", () => setCoachOpen(false)), []);
 
   useEffect(() => {
     if (!activeId) return;

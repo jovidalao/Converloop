@@ -31,7 +31,7 @@ import {
   actionShortcutLabel,
   useKeybindings,
 } from "../../lib/app-actions";
-import { emitAppEvent, onAppEvent } from "../../lib/app-events";
+import { onAppEvent } from "../../lib/app-events";
 import { type DisplayError, describeError } from "../../lib/error-display";
 import { languageToBcp47 } from "../../lib/language";
 import {
@@ -359,11 +359,6 @@ export const PartnerReply = memo(function PartnerReply({
   // custom transformer panels). Bilingual reading replaces the bubble text in place rather than
   // dropping below, so it is independent and not part of this coordination.
   const [activePanelId, setActivePanelId] = useState<ActivePanelId>(null);
-  // Opening a detail panel asks the coach panel to step aside (see App.tsx).
-  useEffect(() => {
-    if (activePanelId)
-      emitAppEvent("panel-opened", { turnId, panelId: activePanelId });
-  }, [activePanelId, turnId]);
   const [loading, setLoading] = useState(false);
   const [view, setView] = useState<string | null>(null); // bilingual Markdown
   const [open, setOpen] = useState(false); // whether bilingual view is shown
@@ -832,11 +827,6 @@ export const UserTurn = memo(function UserTurn({
   // "more natural" rewrite renders inside the bubble rather than dropping below,
   // so it is independent and not part of this coordination.
   const [activePanelId, setActivePanelId] = useState<ActivePanelId>(null);
-  // Opening a detail panel asks the coach panel to step aside (see App.tsx).
-  useEffect(() => {
-    if (activePanelId)
-      emitAppEvent("panel-opened", { turnId: turn.id, panelId: activePanelId });
-  }, [activePanelId, turn.id]);
   // The coach focus card can ask this turn to open a specific detail panel
   // (gap / grammar) via panel-command; it targets us by `${turn.id}:` prefix.
   useEffect(
