@@ -19,9 +19,9 @@ export function LessonStartScreen({
   const { t } = useTranslation();
 
   return (
-    <div className="m-auto flex w-full max-w-xl flex-col items-center gap-5 px-4 py-8 text-center">
-      <div className="flex flex-col items-center gap-2">
-        <div className="flex items-center justify-center gap-2 text-ui-title font-semibold text-foreground">
+    <div className="flex w-full max-w-2xl flex-col gap-5 pt-4 pb-2">
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center gap-2 text-ui-title font-semibold text-foreground">
           <BookOpenCheckIcon className="size-5 text-primary" />
           {name}
         </div>
@@ -32,17 +32,15 @@ export function LessonStartScreen({
         )}
       </div>
 
-      <div>
-        <Button
-          type="button"
-          variant="ghost"
-          className="border border-border bg-transparent px-4 hover:bg-accent"
-          disabled={busy}
-          onClick={onStart}
-        >
-          {t("chat.lessonStartButton")}
-        </Button>
-      </div>
+      <Button
+        type="button"
+        variant="ghost"
+        className="self-start border border-border bg-transparent px-4 hover:bg-accent"
+        disabled={busy}
+        onClick={onStart}
+      >
+        {t("chat.lessonStartButton")}
+      </Button>
     </div>
   );
 }

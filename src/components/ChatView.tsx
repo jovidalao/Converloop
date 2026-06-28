@@ -7,6 +7,7 @@ import {
   XIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { splitHintParts } from "../agents/input-hints";
 import type { TutorAnalysis } from "../agents/schema";
 import {
   matchSlashCommands,
@@ -15,12 +16,15 @@ import {
   slashMenuToken,
 } from "../commands";
 import {
+  apiKeyAccount,
   findModelOption,
   getContextLimitForSelection,
   isOAuthProvider,
   loadConfig,
+  oauthAccount,
   PROVIDER_PRESETS,
   type ProviderSelection,
+  type ProviderType,
   providerModelLabel,
   providerModels,
   useConfig,
@@ -54,6 +58,7 @@ import type {
   DrillSummary,
 } from "../drills/types";
 import { useTranslation } from "../i18n";
+import { getSecret } from "../keychain";
 import {
   actionAriaKeyshortcuts,
   actionShortcutLabel,
@@ -64,6 +69,7 @@ import {
 import { onAppEvent } from "../lib/app-events";
 import { type DisplayError, describeError } from "../lib/error-display";
 import { estimatePromptTokens } from "../lib/tokens";
+import { getTokens } from "../oauth/store";
 import {
   generateAndSetConversationTitle,
   generateInputHintsForConversation,
@@ -119,7 +125,15 @@ import { ReviewDrillStartScreen } from "./ReviewDrillStartScreen";
 import { SlashBodyHint, SlashMenu } from "./SlashMenu";
 import { ThinkingIndicator } from "./TurnActivity";
 import { Button } from "./ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger } from "./ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectSeparator,
+  SelectTrigger,
+} from "./ui/select";
 import { Spinner } from "./ui/spinner";
 
 interface ChatViewProps {
@@ -270,7 +284,6 @@ export function ChatView({
   const [hintRegenerating, setHintRegenerating] = useState(false);
   const hintRegeneratingRef = useRef(false);
   const messagesRef = useRef<HTMLDivElement>(null);
-  const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const streamingFrameRef = useRef<number | null>(null);
   const streamingBufferRef = useRef("");
@@ -324,6 +337,29 @@ export function ChatView({
   const config = useConfig();
   const [conversationModelOverride, setConversationModelOverrideState] =
     useState<ProviderSelection | null>(null);
+  // Providers that actually have a credential (API key / OAuth login); the model picker hides the rest.
+  // null = not yet loaded → fall back to showing everything so the list never flashes empty.
+  const [configuredProviders, setConfiguredProviders] =
+    useState<Set<ProviderType> | null>(null);
+  const refreshConfiguredProviders = useCallback(async () => {
+    const entries = await Promise.all(
+      MODEL_PROVIDERS.map(
+        async (type) =>
+          [
+            type,
+            isOAuthProvider(type)
+              ? !!(await getTokens(oauthAccount(type)))
+              : !!(await getSecret(apiKeyAccount(type))),
+          ] as const,
+      ),
+    );
+    setConfiguredProviders(
+      new Set(entries.filter(([, ok]) => ok).map(([type]) => type)),
+    );
+  }, []);
+  useEffect(() => {
+    void refreshConfiguredProviders();
+  }, [refreshConfiguredProviders]);
   const { nativeLanguage, autoBilingual } = config;
   const confirm = useConfirm();
   const learningMode = mode === "learning_agent";
@@ -491,20 +527,18 @@ export function ChatView({
 
   // Slash commands (/btw etc.): menu pops up when input starts with / and the command token is being edited.
   // Keyboard navigation is intercepted in the textarea; Esc closes until the command context is left and re-entered.
-  // Action commands only appear when branching is possible (practice mode and not a draft).
+  // Prompt macros and /reply are hidden in focused lessons (they would fight the lesson script).
   const [slashSelected, setSlashSelected] = useState(0);
   const [slashDismissed, setSlashDismissed] = useState(false);
+  // True while /reply is generating a suggested draft to drop into the composer.
+  const [composingReply, setComposingReply] = useState(false);
   const slashToken = useMemo(() => slashMenuToken(input), [input]);
-  const canDerive = !learningMode && !isDraft;
   const slashCommands = useMemo(
     () =>
       slashToken !== null && !slashDismissed
-        ? matchSlashCommands(slashToken, {
-            canDerive,
-            isLearning: learningMode,
-          })
+        ? matchSlashCommands(slashToken, { isLearning: learningMode })
         : [],
-    [slashToken, slashDismissed, canDerive, learningMode],
+    [slashToken, slashDismissed, learningMode],
   );
   const slashOpen = !compact && !drillDraftActive && slashCommands.length > 0;
 
@@ -564,11 +598,21 @@ export function ChatView({
     setShowJumpButton(!atBottom && distanceFromBottom > 120);
   }
 
+  // Scroll the message list to the very bottom. Scrolling the container directly
+  // is reliable under WKWebView, where smooth scrollIntoView on the trailing
+  // sentinel is intermittently dropped — especially while streaming grows the
+  // layout and the pin effect fires a competing scroll at the same target.
+  const scrollToBottom = useCallback((behavior: ScrollBehavior) => {
+    const el = messagesRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior });
+  }, []);
+
   const jumpToLatest = useCallback(() => {
     stickToBottomRef.current = true;
     setShowJumpButton(false);
-    endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, []);
+    scrollToBottom("smooth");
+  }, [scrollToBottom]);
 
   const requestLayoutScroll = useCallback(() => {
     setLayoutTick((n) => n + 1);
@@ -807,10 +851,7 @@ export function ChatView({
       return;
     }
     setShowJumpButton(false);
-    endRef.current?.scrollIntoView({
-      behavior: streaming ? "auto" : "smooth",
-      block: "end",
-    });
+    scrollToBottom(streaming ? "auto" : "smooth");
   }, [turns, streaming, layoutTick]);
 
   function commitPartnerReply(turnId: string, reply: string) {
@@ -1605,9 +1646,43 @@ export function ChatView({
     });
   }
 
+  // /reply: generate a ready-to-edit suggested reply and drop it into the composer. Reuses the
+  // input-hints engine (cue → opener) but inserts ONLY the opener, so the box stays in the target
+  // language for the learner to tweak and send. No-op when there is nothing to reply to yet, while a
+  // reply is streaming, or in a focused lesson.
+  async function composeSuggestedReply() {
+    if (replyBusy || composingReply || learningMode) return;
+    if (!turns.some((tn) => tn.partnerText && !tn.excludeFromContext)) return;
+    setInput("");
+    setInputHints(null); // clear any stale ghost hint so the "drafting…" placeholder shows
+    setComposingReply(true);
+    setError(null);
+    const turnGen = turnGenRef.current;
+    try {
+      const hints = await generateInputHintsForConversation(conversationId);
+      if (turnGenRef.current !== turnGen) return; // a new turn started while generating
+      const opener = hints[0] ? splitHintParts(hints[0]).opener : "";
+      if (opener) {
+        setInput(opener);
+        requestAnimationFrame(() => {
+          const el = inputRef.current;
+          if (!el) return;
+          el.focus();
+          el.setSelectionRange(opener.length, opener.length);
+        });
+      } else {
+        requestAnimationFrame(() => inputRef.current?.focus());
+      }
+    } catch (e) {
+      showUnknownError(e);
+    } finally {
+      setComposingReply(false);
+    }
+  }
+
   // Submit input: check for slash commands first. "message" type (/btw) sends off-record;
   // "prompt" type (/topic etc.) sends a prompt macro that stays in the conversation;
-  // "action" type executes an existing conversation action;
+  // "compose" type (/reply) drafts an editable suggestion into the box and sends nothing;
   // non-commands send normally. Arrives here via Enter / Send when the menu is already closed.
   function submitInput() {
     // Lesson start screen: the composer is a disabled gate — the lesson only begins via the Start button.
@@ -1633,20 +1708,16 @@ export function ChatView({
       runPromptMacro(parsed.command, parsed.rest);
       return;
     }
-    if (parsed.command.actionId) {
-      setInput("");
-      void runConversationAction(parsed.command.actionId);
+    if (parsed.command.kind === "compose") {
+      void composeSuggestedReply();
     }
   }
 
   // Select a command in the menu (Enter / click): "message"/"prompt" with args complete to "/name " for body input;
-  // a no-arg "prompt" (/surprise, /recap) runs immediately; "action" executes immediately.
+  // a no-arg "prompt" (/surprise, /recap) runs immediately; "compose" (/reply) drafts a suggestion on the spot.
   function activateSlashCommand(command: SlashCommand) {
-    if (command.kind === "action") {
-      if (command.actionId) {
-        setInput("");
-        void runConversationAction(command.actionId);
-      }
+    if (command.kind === "compose") {
+      void composeSuggestedReply();
       return;
     }
     if (command.kind === "prompt" && !command.argsHint) {
@@ -2090,7 +2161,6 @@ export function ChatView({
               <Markdown>{streamingVisible}</Markdown>
             </div>
           )}
-          <div ref={endRef} />
         </div>
         <AnnotationIsland containerRef={messagesRef} />
         {showJumpButton && (
@@ -2298,11 +2368,15 @@ export function ChatView({
                             ? dictationAwaitingEnter
                               ? t("dictation.awaitingEnterPlaceholder")
                               : t("dictation.transcriptionPlaceholder")
-                            : redoActive
-                              ? t("chat.redoPlaceholder")
-                              : !compact && inputHints && inputHints.length > 0
-                                ? "" // hint shown via the animated overlay below
-                                : t("chat.inputPlaceholderPractice")
+                            : composingReply
+                              ? t("chat.composingReply")
+                              : redoActive
+                                ? t("chat.redoPlaceholder")
+                                : !compact &&
+                                    inputHints &&
+                                    inputHints.length > 0
+                                  ? "" // hint shown via the animated overlay below
+                                  : t("chat.inputPlaceholderPractice")
                   }
                   disabled={
                     lessonGateActive ||
@@ -2379,6 +2453,9 @@ export function ChatView({
                 <Select
                   value={selectedModelValue}
                   onValueChange={selectModelProvider}
+                  onOpenChange={(open) => {
+                    if (open) void refreshConfiguredProviders();
+                  }}
                   disabled={replyBusy || isDraft}
                 >
                   <SelectTrigger
@@ -2436,7 +2513,15 @@ export function ChatView({
                         </span>
                       </SelectItem>
                     )}
-                    {MODEL_PROVIDERS.map((providerType) => {
+                    <SelectSeparator />
+                    {MODEL_PROVIDERS.filter(
+                      (providerType) =>
+                        // Unconfigured providers are hidden; the active one always stays
+                        // so the current selection keeps a matching option.
+                        configuredProviders == null ||
+                        configuredProviders.has(providerType) ||
+                        providerType === activeModelSelection.providerType,
+                    ).map((providerType) => {
                       const preset = PROVIDER_PRESETS[providerType];
                       const models = isOAuthProvider(providerType)
                         ? preset.models
@@ -2444,22 +2529,36 @@ export function ChatView({
                             providerType,
                             config.providers[providerType],
                           );
-                      return models.map((model) => (
-                        <SelectItem
-                          key={`${providerType}:${model.model}`}
-                          value={modelSelectValue(providerType, model.model)}
-                        >
-                          <span className="flex min-w-0 items-center gap-2.5">
-                            <ModelLogo model={model.model} />
-                            <span className="flex min-w-0 flex-col">
-                              <span className="truncate">{model.label}</span>
-                              <span className="truncate text-ui-caption text-ui-muted">
-                                {preset.shortLabel} · {model.model}
+                      // One block per provider: a heading, then its models indented
+                      // beneath it. The provider name lives in the heading, so the
+                      // per-row caption drops it and shows just the model id.
+                      return (
+                        <SelectGroup key={providerType}>
+                          <SelectLabel>{preset.shortLabel}</SelectLabel>
+                          {models.map((model) => (
+                            <SelectItem
+                              key={`${providerType}:${model.model}`}
+                              value={modelSelectValue(
+                                providerType,
+                                model.model,
+                              )}
+                              className="pl-3.5"
+                            >
+                              <span className="flex min-w-0 items-center gap-2.5">
+                                <ModelLogo model={model.model} />
+                                <span className="flex min-w-0 flex-col">
+                                  <span className="truncate">
+                                    {model.label}
+                                  </span>
+                                  <span className="truncate text-ui-caption text-ui-muted">
+                                    {model.model}
+                                  </span>
+                                </span>
                               </span>
-                            </span>
-                          </span>
-                        </SelectItem>
-                      ));
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      );
                     })}
                   </SelectContent>
                 </Select>

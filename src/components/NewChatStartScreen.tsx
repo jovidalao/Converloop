@@ -5,11 +5,11 @@ import { PracticeStats } from "./PracticeStats";
 import { type ProviderKind, ProviderStatus } from "./ProviderStatus";
 import { TopicStartScreen } from "./TopicStartScreen";
 
-// New-chat start page (shown on an empty practice draft): a Claude-style greeting hero (icon + a time-of-day
-// greeting/encouragement line), the practice-stats card, a set of recommended conversation-topic chips generated
-// in the background from the learner's profile and recent topics, and a status line with the active LLM/TTS/STT
-// providers. Picking a chip materializes the conversation and the AI opens the chat on that topic; typing a first
-// message in the composer below starts a normal turn instead.
+// New-chat start page (shown on an empty practice draft): a status line with the active LLM/TTS/STT providers at the
+// top (matching the other start pages), a Claude-style greeting hero (icon + a time-of-day greeting/encouragement
+// line), the practice-stats card, and a set of recommended conversation-topic chips generated in the background from
+// the learner's profile and recent topics. Picking a chip materializes the conversation and the AI opens the chat on
+// that topic; typing a first message in the composer below starts a normal turn instead.
 export function NewChatStartScreen({
   topics,
   refreshing,
@@ -41,10 +41,12 @@ export function NewChatStartScreen({
   return (
     <TopicStartScreen
       header={
+        // Provider status sits at the very top, matching the other start pages (training center, listening),
+        // then the Claude-style greeting hero below it.
         <div className="flex flex-col gap-4">
           <ProviderStatus onOpen={onOpenProviderSettings} />
-          <div className="flex items-center gap-2.5 text-ui-title font-semibold text-foreground">
-            <SparklesIcon className="size-6 shrink-0 text-primary" />
+          <div className="flex items-center gap-2 text-ui-title font-semibold text-foreground">
+            <SparklesIcon className="size-5 shrink-0 text-primary" />
             {greeting}
           </div>
         </div>
