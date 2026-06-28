@@ -15,6 +15,8 @@ import {
   CheckIcon,
   ChevronDownIcon,
   DownloadIcon,
+  ExternalLinkIcon,
+  LogOutIcon,
   MonitorIcon,
   MoonIcon,
   PlusIcon,
@@ -59,6 +61,7 @@ import {
   PROVIDER_TYPES,
   type ProviderSettings,
   type ProviderType,
+  providerAllowsContextOverride,
   providerModelLabel,
   providerModels,
   saveConfig,
@@ -211,6 +214,40 @@ function SettingRow({
     <div className="flex items-center justify-between gap-4 border-b border-border/70 py-3 last:border-0">
       <span className="shrink-0 text-ui-body">{label}</span>
       <div className="min-w-0">{children}</div>
+    </div>
+  );
+}
+
+function ProviderActionStrip({
+  title,
+  description,
+  children,
+}: {
+  title?: string;
+  description?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-2.5 border-t border-border/60 pt-4 sm:flex-row sm:items-center sm:justify-between">
+      {(title || description) && (
+        <div className="min-w-0 space-y-0.5">
+          {title && <div className="text-ui-body font-medium">{title}</div>}
+          {description && (
+            <p className="m-0 max-w-2xl break-words text-ui-caption leading-snug text-ui-muted">
+              {description}
+            </p>
+          )}
+        </div>
+      )}
+      <div className="flex shrink-0 items-center justify-end">{children}</div>
+    </div>
+  );
+}
+
+function ProviderButtonGroup({ children }: { children: ReactNode }) {
+  return (
+    <div className="inline-flex items-center gap-0.5 rounded-md bg-secondary/60 p-0.5 shadow-minimal-flat">
+      {children}
     </div>
   );
 }
@@ -2001,6 +2038,7 @@ export function SettingsView({
     const entry = cfg.providers[type];
     const preset = PROVIDER_PRESETS[type];
     const oauth = isOAuthProvider(type);
+    const contextOverride = providerAllowsContextOverride(type);
     const tokens = oauthTokens[type] ?? null;
     const hasKey = !!keyStatus[type];
     const configured = oauth ? !!tokens : hasKey;
@@ -2086,14 +2124,7 @@ export function SettingsView({
           )
         )}
 
-        {oauth ? (
-          <p className="text-ui-caption text-ui-muted">
-            {t("settings.llm.contextWindow")}:{" "}
-            {t("settings.llm.contextAuto", {
-              n: inferContextLimit(entry.model).toLocaleString(),
-            })}
-          </p>
-        ) : (
+        {contextOverride && (
           <Field label={t("settings.llm.contextWindow")}>
             <Input
               type="number"
@@ -2125,41 +2156,54 @@ export function SettingsView({
         )}
 
         {oauth ? (
-          <div className="flex flex-col gap-2.5">
-            <span className="text-ui-meta font-medium text-ui-muted">
-              {t("settings.llm.subscriptionLogin", {
+          <div className="space-y-3">
+            <ProviderActionStrip
+              title={t("settings.llm.subscriptionLogin", {
                 state: tokens
                   ? t("settings.llm.stateSignedIn")
                   : t("settings.llm.stateSignedOut"),
               })}
-            </span>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                onClick={() => void handleOauthLogin(type)}
-                disabled={loggingIn === type}
-              >
-                {loggingIn === type
-                  ? t("settings.llm.waitingBrowser")
-                  : tokens
-                    ? t("settings.llm.reLogin")
-                    : t("settings.llm.loginWithBrowser")}
-              </Button>
-              {tokens && (
+              description={
+                tokens
+                  ? t("settings.llm.tokenRefresh", {
+                      date: new Date(tokens.expires).toLocaleString(),
+                    })
+                  : undefined
+              }
+            >
+              <ProviderButtonGroup>
                 <Button
-                  variant="secondary"
-                  onClick={() => void handleOauthLogout(type)}
+                  size="sm"
+                  variant={tokens ? "ghost" : "default"}
+                  className="h-7 rounded-sm px-2.5 text-ui-caption shadow-none"
+                  onClick={() => void handleOauthLogin(type)}
+                  disabled={loggingIn === type}
                 >
-                  {t("settings.llm.logout")}
+                  {loggingIn !== type &&
+                    (tokens ? (
+                      <RotateCcwIcon className="size-3.5" />
+                    ) : (
+                      <ExternalLinkIcon className="size-3.5" />
+                    ))}
+                  {loggingIn === type
+                    ? t("settings.llm.waitingBrowser")
+                    : tokens
+                      ? t("settings.llm.reLogin")
+                      : t("settings.llm.loginWithBrowser")}
                 </Button>
-              )}
-            </div>
-            {tokens && (
-              <span className="text-ui-caption text-ui-muted">
-                {t("settings.llm.tokenRefresh", {
-                  date: new Date(tokens.expires).toLocaleString(),
-                })}
-              </span>
-            )}
+                {tokens && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 rounded-sm px-2.5 text-ui-caption text-ui-muted hover:text-foreground"
+                    onClick={() => void handleOauthLogout(type)}
+                  >
+                    <LogOutIcon className="size-3.5" />
+                    {t("settings.llm.logout")}
+                  </Button>
+                )}
+              </ProviderButtonGroup>
+            </ProviderActionStrip>
             <span className="text-ui-caption leading-snug text-ui-muted">
               {t("settings.llm.subscriptionWarning")}
             </span>
@@ -2200,26 +2244,33 @@ export function SettingsView({
           </Field>
         )}
 
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            variant="secondary"
-            onClick={() => void testConnection(type)}
-            disabled={testingLlm === type}
-          >
-            {testingLlm === type
-              ? t("settings.llm.testing")
-              : t("settings.llm.testConnection")}
-          </Button>
-          <Button variant="ghost" size="sm" onClick={() => resetToPreset(type)}>
-            {t("settings.llm.restorePreset")}
-          </Button>
-        </div>
-
-        {llmStatus?.type === type && (
-          <p className="mt-2 break-words text-ui-body text-primary">
-            {llmStatus.text}
-          </p>
-        )}
+        <ProviderActionStrip
+          description={llmStatus?.type === type ? llmStatus.text : undefined}
+        >
+          <ProviderButtonGroup>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 rounded-sm px-2.5 text-ui-caption"
+              onClick={() => void testConnection(type)}
+              disabled={testingLlm === type}
+            >
+              <CheckIcon className="size-3.5" />
+              {testingLlm === type
+                ? t("settings.llm.testing")
+                : t("settings.llm.testConnection")}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 rounded-sm px-2.5 text-ui-caption text-ui-muted hover:text-foreground"
+              onClick={() => resetToPreset(type)}
+            >
+              <RotateCcwIcon className="size-3.5" />
+              {t("settings.llm.restorePreset")}
+            </Button>
+          </ProviderButtonGroup>
+        </ProviderActionStrip>
       </ProviderCard>
     );
   }

@@ -10,6 +10,7 @@ import {
   PROVIDER_TYPES,
   type ProviderSettings,
   type ProviderType,
+  providerAllowsContextOverride,
   providerModelLabel,
   providerModels,
 } from "./config";
@@ -111,6 +112,13 @@ describe("provider registration completeness", () => {
     expect(PROVIDER_TYPES.filter(isOpenAIWireProvider).sort()).toEqual(
       [...OPENAI_WIRE].sort(),
     );
+  });
+
+  it("only API-key providers expose a manual context-window setting", () => {
+    expect(providerAllowsContextOverride("openai")).toBe(true);
+    expect(providerAllowsContextOverride("gemini")).toBe(true);
+    expect(providerAllowsContextOverride("claude-oauth")).toBe(false);
+    expect(providerAllowsContextOverride("codex-oauth")).toBe(false);
   });
 });
 

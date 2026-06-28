@@ -140,7 +140,7 @@ function providerContextLimit(
   settings: ProviderSettings,
   model = settings.model,
 ): number {
-  if (isOAuthProvider(type)) return inferContextLimit(model);
+  if (!providerAllowsContextOverride(type)) return inferContextLimit(model);
   return settings.contextTokens ?? inferContextLimit(model);
 }
 
@@ -174,6 +174,10 @@ const OAUTH_PROVIDERS = new Set<ProviderType>(["claude-oauth", "codex-oauth"]);
 // Whether the provider uses subscription OAuth login (rather than an API key). SettingsView uses this to toggle the login UI.
 export function isOAuthProvider(type: ProviderType): boolean {
   return OAUTH_PROVIDERS.has(type);
+}
+
+export function providerAllowsContextOverride(type: ProviderType): boolean {
+  return !isOAuthProvider(type);
 }
 
 // Providers that speak the OpenAI chat/completions wire format (routed through createOpenAIProvider). Excludes the
