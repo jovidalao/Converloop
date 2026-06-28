@@ -40,7 +40,7 @@ export const en = {
     sttNoKey:
       "No speech-to-text key configured. Add one in Settings → Voice input.",
     ttsNoKey:
-      "Please configure the MiMo API key in Settings → Text-to-Speech first.",
+      "Please configure the MiMo API key in Settings → Read aloud first.",
     requestAuth:
       "Provider authentication failed. Check the API key or sign in again.",
     requestQuota:
@@ -88,6 +88,7 @@ export const en = {
   // Localized menu text for the built-in slash commands (commands.ts). Prompt-macro entries only
   // show these until the user overrides the text in settings — then their text wins as-is.
   slashCommands: {
+    reply: "Draft a reply: drop a ready-to-edit suggestion in the box",
     btw: "Standalone side question: excluded from context and grading",
     btwHint: "<ask the AI anything>",
     topic: "Switch the conversation to a topic",
@@ -99,14 +100,9 @@ export const en = {
     surprise: "Start chatting about a random topic",
     how: "Ask how to say something in the target language",
     howHint: "<what you want to say>",
+    simpler: "Didn't catch that — ask your partner to say it more simply",
+    keywords: "Get a few words or phrases you could use to reply",
     recap: "Recap this conversation: takeaways and what to review",
-    harder: "Make it harder: start a harder version from this chat",
-    easier: "Make it easier: start a simpler version from this chat",
-    swap: "Swap roles: start a role-reversed version",
-    scene: "Change scene: keep the practice goal, switch the setting",
-    restart: "Practice it again: keep the setup, start fresh",
-    nextDay:
-      "Continue next day: start a new-day continuation of the current story",
   },
   turnActivity: {
     thinking: "Thinking…",
@@ -206,6 +202,11 @@ export const en = {
     },
     recall: {
       kicker: "Try to use this next",
+    },
+    lesson: {
+      explain: "Explain this point",
+      loading: "Explaining…",
+      regenerate: "Explain again",
     },
     applied: "Applied {n} items.",
     confirmWrite: "Confirm write",
@@ -312,10 +313,10 @@ export const en = {
       "Active retrieval: micro-tasks that make you produce your due-for-review items",
     customLearning: "Practice Center",
     customLearningTooltip: "Start built-in drills or browse focused lessons",
-    listening: "Listening practice",
+    listening: "Listening replay",
     listeningTooltip:
       "Play the lines from your past conversations in order, on repeat — for ear training",
-    dictationReview: "Sentence dictation",
+    dictationReview: "Dictation replay",
     dictationReviewTooltip:
       "Replay sentences from your past conversations and type what you hear — served from cache, offline",
     group: {
@@ -326,6 +327,7 @@ export const en = {
     },
     pin: "Pin",
     unpin: "Unpin",
+    moreActions: "More",
     noConversations: "No conversations yet",
     settings: "Settings",
     settingsTooltip: "Settings {shortcut}",
@@ -337,9 +339,9 @@ export const en = {
     sectionProfileDatabase: "Profile database",
     general: "General",
     customization: "AI Preferences",
-    llmProviders: "LLM providers",
+    llmProviders: "AI model",
     sttProviders: "Voice input",
-    ttsProviders: "TTS providers",
+    ttsProviders: "Read aloud",
     slashCommands: "Slash commands",
     designNotes: "Design notes",
     about: "About",
@@ -376,10 +378,10 @@ export const en = {
     title: "Session report",
   },
   drillDialog: {
-    createTitle: "New training mode",
-    editTitle: "Edit training mode",
+    createTitle: "New drill template",
+    editTitle: "Edit drill template",
     subtitle:
-      "A training mode is one Markdown document: frontmatter for the mechanics, sections for the prompts.",
+      "A drill template is one Markdown document: frontmatter for the mechanics, sections for the prompts.",
     describePlaceholder:
       'Describe the training you want, e.g. "give me native-language sentences to translate aloud"…',
     generate: "Generate with AI",
@@ -411,7 +413,7 @@ export const en = {
     recommendedTopics: "Recommended topics",
     refresh: "Regenerate",
     providerLlm: "Model",
-    providerTts: "Speech",
+    providerTts: "Read aloud",
     providerStt: "Voice input",
     providerNotSet: "Not set",
     providerLocal: "On-device",
@@ -422,7 +424,7 @@ export const en = {
     sttParakeet: "Parakeet V3",
     sttQwen3: "Qwen3-ASR",
     ttsLangWarning:
-      "This voice can't speak {language}. Switch to Microsoft Edge in TTS settings.",
+      "This voice can't speak {language}. Switch to Microsoft Edge in Read aloud settings.",
     sttLangWarning:
       "This engine can't transcribe {language}. Use a cloud engine (Soniox / OpenAI) or Qwen3.",
   },
@@ -441,12 +443,12 @@ export const en = {
     refresh: "Regenerate",
   },
   customLearning: {
-    newDrill: "New training mode",
-    duplicateDrill: "Duplicate as my training mode",
+    newDrill: "New drill template",
+    duplicateDrill: "Duplicate as my drill template",
     exportDrill: "Copy document (.md)",
-    deleteDrillTitle: "Delete training mode “{name}”?",
+    deleteDrillTitle: "Delete drill template “{name}”?",
     deleteDrillDescription:
-      "The training mode document will be deleted. Existing sessions keep working from their snapshot.",
+      "The drill template will be deleted. Existing sessions keep working from their snapshot.",
     title: "Practice Center",
     description:
       "Start a built-in drill or pick a focused lesson to preview it before starting. Everything here opens a practice session built around your learning data.",
@@ -467,7 +469,7 @@ export const en = {
     startLesson: "Start lesson",
   },
   listening: {
-    title: "Listening practice",
+    title: "Listening replay",
     settingsLabel: "Playback settings",
     selectConversations: "Conversations",
     selectAll: "All",
@@ -499,7 +501,7 @@ export const en = {
     shortcutHint: "Space play/pause · ← → previous/next",
   },
   dictationReview: {
-    title: "Sentence dictation",
+    title: "Dictation replay",
     modeAudio: "By ear",
     modeMeaning: "By meaning",
     typeAi: "AI replies",
@@ -535,7 +537,7 @@ export const en = {
     submit: "Submit",
     showAnswer: "Show answer",
     translateNeedsLlm:
-      "Showing the meaning needs an LLM provider — set one up in settings.",
+      "Showing the meaning needs an AI model — set one up in settings.",
     translateFailed: "Couldn't translate this line — try again.",
   },
   practiceStats: {
@@ -587,7 +589,7 @@ export const en = {
     deriveTooltip: "Start a new conversation based on the current chat",
     showCoach: "Show coach panel",
     hideCoach: "Hide coach panel",
-    deriveFailed: "Failed to derive conversation: {error}",
+    deriveFailed: "Couldn't start the new conversation: {error}",
     customLearningFallback: "Practice Center",
     smallWindow: "Small window",
     exitSmallWindow: "Exit small window",
@@ -622,9 +624,9 @@ export const en = {
     "new-line": "New line",
     "stop-generating": "Stop generating",
     dismiss: "Close menu or dialog",
-    "dictation-play": "Dictation: play pronunciation",
-    "dictation-hint": "Dictation: hint current word",
-    "dictation-reveal": "Dictation: show answer",
+    "dictation-play": "Dictation replay: play pronunciation",
+    "dictation-hint": "Dictation replay: hint current word",
+    "dictation-reveal": "Dictation replay: show answer",
   },
   shortcutsDialog: {
     ariaLabel: "Keyboard shortcuts",
@@ -637,16 +639,16 @@ export const en = {
     mastery: "Learning data",
     learning: "Create lesson",
     customLearning: "Practice Center",
-    listening: "Listening practice",
-    dictationReview: "Sentence dictation",
+    listening: "Listening replay",
+    dictationReview: "Dictation replay",
     design: "Design notes",
     agents: "Capabilities",
     logs: "Logs",
     general: "General settings",
     customize: "AI Preferences",
-    llm: "LLM providers",
+    llm: "AI model",
     stt: "Voice input",
-    tts: "TTS providers",
+    tts: "Read aloud",
     commands: "Slash commands",
   },
   settings: {
@@ -712,7 +714,7 @@ export const en = {
       use: "Use",
     },
     llm: {
-      title: "LLM providers",
+      title: "AI model",
       description:
         'All providers are listed below; each can be configured and saved independently. Open any one to edit its connection info — the "Use" button decides which one chat actually uses.',
       model: "Model",
@@ -822,7 +824,7 @@ export const en = {
       keyCleared: "STT API key cleared from local storage.",
     },
     tts: {
-      title: "TTS providers",
+      title: "Read aloud",
       description:
         "The little speaker next to AI replies, corrections, and more-natural sentences in chat triggers speech synthesis. Identical sentences cache their audio to avoid repeat requests.",
       cacheCount: " {n} item(s) currently cached.",
@@ -901,6 +903,7 @@ export const en = {
     inputPlaceholderLesson:
       "Ask the teacher, answer exercises — native or target language…",
     inputPlaceholderPractice: "Write a natural reply, or type / for commands",
+    composingReply: "Drafting a reply you can edit…",
     editFromHereGrading:
       "Grading in progress — you can re-edit after it finishes",
     editFromHere:
@@ -928,7 +931,7 @@ export const en = {
       constraints: "Constraints",
     },
     lessonStartFailed: "Failed to start lesson",
-    derivationFailed: "Derivation failed",
+    derivationFailed: "Couldn't start the new conversation",
     sendFailed: "Send failed",
     sendFailedNoGrading: "Send failed, turn not graded",
     editFromHereTitle: "Restart from this message?",
@@ -937,7 +940,7 @@ export const en = {
     editFromHereConfirm: "Discard and edit",
     lessonBadge: "Lesson",
     practiceBadge: "Practice",
-    drillStartFailed: "Failed to start the training session",
+    drillStartFailed: "Failed to start the drill",
     quickfireBadge: "Scenario drill",
     quickfireStartFailed: "Failed to start the scenario drill",
     dictationBadge: "Dictation",
@@ -1019,18 +1022,6 @@ export const en = {
       known: "Mastered",
     },
     empty: "No matching items",
-    naturalEditTitle: "Edit data with natural language",
-    naturalEditPlaceholder:
-      'e.g. Mark grammar:article_usage as mastered; delete the duplicate make/do collocation; add an expression gap "politely decline a request".',
-    naturalEditNote:
-      "The system converts the request to a limited set of data operations before code executes it; it does not directly modify counts.",
-    processing: "Processing…",
-    apply: "Apply",
-    preview: "Preview",
-    previewTitle: "Preview changes",
-    applyPreview: "Apply preview",
-    applied: "{summary} Applied {n} item(s).{skipped}",
-    skippedSuffix: " Skipped: {items}",
   },
   profile: {
     description:
@@ -1268,7 +1259,7 @@ export const en = {
       },
       drillObserver: {
         title: "Drill observer",
-        desc: "Runs a training mode's own observer instructions after each answer in that drill — extra notes in the coach panel.",
+        desc: "Runs a drill template's own observer instructions after each answer in that drill — extra notes in the coach panel.",
       },
       explain: {
         title: "Reply Explanation",
