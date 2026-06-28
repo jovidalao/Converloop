@@ -7,6 +7,7 @@ import {
   generateDrillDocument,
 } from "./agents/drill-builder";
 import { explain } from "./agents/explain";
+import { explainPoint } from "./agents/explain-point";
 import {
   cleanInputHintForDisplay,
   generateInputHints,
@@ -1588,6 +1589,46 @@ export async function explainReply(
         onDelta,
       ),
     (text) => ({ chars: text.length }),
+  );
+}
+
+// On-demand mini-lesson for ONE mastery point shown in the coach panel (recurring
+// error, latest fix, or a review target). Teaches the rule + fresh examples so the
+// learner can generalize; transient, not persisted, regenerated on demand.
+export interface MasteryPointExplainArgs {
+  conversationId: string | null;
+  label: string;
+  type: string;
+  evidence?: string;
+}
+
+export async function explainMasteryPoint(
+  args: MasteryPointExplainArgs,
+  onDelta: (delta: string) => void,
+): Promise<string> {
+  const conversation = args.conversationId
+    ? await getConversation(args.conversationId)
+    : null;
+  const provider = await getProvider(
+    getConversationModelOverride(conversation),
+  );
+  if (!provider) throw new MissingApiKeyError();
+
+  const config = loadConfig();
+  const profileMd = await readProfile(config);
+  return explainPoint(
+    provider,
+    {
+      nativeLanguage: config.nativeLanguage,
+      targetLanguage: config.targetLanguage,
+      level: config.level,
+      experiencePreferences: formatExperiencePreferences(profileMd, "reading"),
+      profileSlice: profileSliceForConversation(profileMd),
+      type: args.type,
+      label: args.label,
+      evidence: args.evidence,
+    },
+    onDelta,
   );
 }
 

@@ -32,6 +32,8 @@ export type CoachFocus =
       kind: "fix";
       turnId: string;
       masteryKey: string;
+      label: string;
+      type: string;
       original: string;
       corrected: string;
       explanation?: string;
@@ -76,6 +78,8 @@ function fixFocus(turnId: string, issue: Issue): CoachFocus {
     kind: "fix",
     turnId,
     masteryKey: issue.mastery_key,
+    label: issue.mastery_label,
+    type: issue.mastery_type,
     original: issue.span_original,
     corrected: issue.span_corrected,
     explanation: issue.explanation?.trim() || undefined,

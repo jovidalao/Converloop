@@ -114,6 +114,9 @@ describe("resolveCoachFocus — focus priority", () => {
     if (focus.kind === "fix") {
       expect(focus.severity).toBe("major");
       expect(focus.masteryKey).toBe("vocab:affect_effect");
+      // carries the point's label/type so the in-panel lesson can teach it
+      expect(focus.label).toBe("affect vs effect");
+      expect(focus.type).toBe("grammar");
     }
   });
 

@@ -1,10 +1,18 @@
 import {
   ArrowRightIcon,
   GraduationCapIcon,
+  RefreshCwIcon,
   RepeatIcon,
   SparklesIcon,
+  WandSparklesIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { type TFunction, useTranslation } from "@/i18n";
 import { emitAppEvent, onAppEvent } from "@/lib/app-events";
 import { cn } from "@/lib/utils";
@@ -17,20 +25,26 @@ import {
 } from "../db/memory-proposals";
 import type { MemoryProposal } from "../db/schema";
 import type { ChatTurn } from "../db/turns";
+import { explainMasteryPoint, MissingApiKeyError } from "../orchestrator";
 import {
   type CoachFocus,
   type CoachRecall,
   resolveCoachFocus,
 } from "./coach-focus";
+import { Markdown } from "./Markdown";
 import type { MainView } from "./Sidebar";
 import { Button } from "./ui/button";
+import { Spinner } from "./ui/spinner";
 
 // Coach panel: a single adaptive "focus" on what matters right now in this
 // conversation, refreshed every turn — not a static dashboard. Per-turn
 // corrections live inline in the chat bubbles (InlineCorrection); whole-history
-// data lives in the Mastery view. The panel only surfaces the one most useful
-// thing for the current moment, plus an optional active-recall nudge and any
-// pending memory write the learner can confirm. Display only.
+// data lives in the Mastery view. The panel surfaces the one most useful thing for
+// the current moment, an optional active-recall nudge, an on-demand mini-lesson,
+// and any pending memory write the learner can confirm.
+//
+// Layout is one flat surface: sections are separated by hairline dividers (no
+// stacked/nested card boxes); the mini-lesson expands as a left-accented indent.
 
 type KnownType =
   | "vocab"
@@ -50,23 +64,328 @@ function typeLabel(t: TFunction, type: string): string | null {
   return KNOWN_TYPES.has(type) ? t(`coach.type.${type as KnownType}`) : null;
 }
 
-function Section({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
+// Small colored label that anchors each section semantically (the only "chrome";
+// there are no card borders around sections).
+function Kicker({ tone, children }: { tone: string; children: ReactNode }) {
   return (
-    <section className="flex flex-col gap-2.5">
-      <h3 className="m-0 text-ui-body font-semibold text-foreground">
-        {title}
-      </h3>
+    <span
+      className={cn(
+        "inline-flex w-fit items-center gap-1 rounded-md px-2 py-0.5 text-ui-caption font-medium",
+        tone,
+      )}
+    >
       {children}
-    </section>
+    </span>
   );
 }
 
+// Point name + a muted type suffix (e.g. "plural nouns · grammar").
+function PointName({ label, type }: { label: string; type: string | null }) {
+  return (
+    <div className="flex min-w-0 items-baseline gap-2">
+      <span className="min-w-0 truncate text-ui-body font-medium text-foreground">
+        {label}
+      </span>
+      {type && (
+        <span className="shrink-0 text-ui-caption text-ui-muted">{type}</span>
+      )}
+    </div>
+  );
+}
+
+// "original → corrected" one-liner used by the fix / recurring sections.
+function DiffLine({
+  original,
+  corrected,
+}: {
+  original: string;
+  corrected: string;
+}) {
+  return (
+    <p className="m-0 flex flex-wrap items-center gap-1.5 text-ui-body">
+      <span className="text-ui-muted line-through">{original}</span>
+      <ArrowRightIcon size={13} className="shrink-0 text-ui-subtle" />
+      <span className="font-medium text-foreground">{corrected}</span>
+    </p>
+  );
+}
+
+// A lightweight text action (jump to the sentence / open inline detail).
+function ActionLink({
+  label,
+  onClick,
+}: {
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex w-fit items-center gap-1 text-ui-caption font-medium text-foreground-80 transition-colors hover:text-foreground"
+    >
+      {label}
+      <ArrowRightIcon size={12} />
+    </button>
+  );
+}
+
+// Interactive mini-lesson: one click streams a focused explanation of this point
+// (rule + fresh examples, 举一反三) so the learner can generalize it — not just fix
+// one sentence. Transient, not persisted. Expands inline as a left-accented indent
+// (no nested card); `leading` shares the trigger row (e.g. a "view sentence" link).
+function PointLesson({
+  conversationId,
+  label,
+  type,
+  evidence,
+  leading,
+  t,
+}: {
+  conversationId: string | null;
+  label: string;
+  type: string;
+  evidence?: string;
+  leading?: ReactNode;
+  t: TFunction;
+}) {
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [text, setText] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const generate = useCallback(() => {
+    setLoading(true);
+    setError(null);
+    setText("");
+    let acc = "";
+    void explainMasteryPoint({ conversationId, label, type, evidence }, (d) => {
+      acc += d;
+      setText(acc);
+    })
+      .catch((e) =>
+        setError(
+          e instanceof MissingApiKeyError
+            ? e.message
+            : e instanceof Error
+              ? e.message
+              : String(e),
+        ),
+      )
+      .finally(() => setLoading(false));
+  }, [conversationId, label, type, evidence]);
+
+  const toggle = () => {
+    if (loading) return;
+    if (!text && !error) {
+      setOpen(true);
+      generate();
+      return;
+    }
+    setOpen((o) => !o);
+  };
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+        {leading}
+        <button
+          type="button"
+          onClick={toggle}
+          aria-expanded={open}
+          className="inline-flex w-fit items-center gap-1 text-ui-caption font-medium text-primary transition-colors hover:opacity-80"
+        >
+          <WandSparklesIcon size={12} />
+          {t("coach.lesson.explain")}
+        </button>
+      </div>
+      {open && (
+        <div className="border-l-2 pl-3">
+          {loading && !text ? (
+            <span className="inline-flex items-center gap-1.5 text-ui-caption text-ui-muted">
+              <Spinner />
+              {t("coach.lesson.loading")}
+            </span>
+          ) : error ? (
+            <p className="m-0 text-ui-caption text-destructive">{error}</p>
+          ) : (
+            <>
+              <Markdown className="text-ui-body leading-relaxed">
+                {text}
+              </Markdown>
+              {!loading && (
+                <button
+                  type="button"
+                  onClick={generate}
+                  className="mt-2 inline-flex items-center gap-1 text-ui-caption text-ui-muted transition-colors hover:text-foreground"
+                >
+                  <RefreshCwIcon size={11} />
+                  {t("coach.lesson.regenerate")}
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// The single most-relevant thing about the conversation right now. Renders one of
+// the priority-resolved focus kinds (see resolveCoachFocus) as flat content.
+function FocusCard({
+  focus,
+  conversationId,
+  t,
+  onOpenDetail,
+}: {
+  focus: CoachFocus;
+  conversationId: string | null;
+  t: TFunction;
+  onOpenDetail: (turnId: string, panel: "gap" | "grammar") => void;
+}) {
+  if (focus.kind === "empty" || focus.kind === "clean") {
+    return (
+      <p className="m-0 text-ui-body leading-relaxed text-foreground-80">
+        {t(focus.kind === "empty" ? "coach.focus.empty" : "coach.focus.clean")}
+      </p>
+    );
+  }
+
+  if (focus.kind === "praise") {
+    return (
+      <div className="flex flex-col gap-2">
+        <Kicker tone="bg-success/10 text-success">
+          <SparklesIcon size={12} />
+          {t("coach.focus.praiseKicker")}
+        </Kicker>
+        <p className="m-0 text-ui-body leading-relaxed text-foreground">
+          {focus.highlight}
+        </p>
+      </div>
+    );
+  }
+
+  if (focus.kind === "gap") {
+    return (
+      <div className="flex flex-col gap-2">
+        <Kicker tone="bg-accent text-primary">
+          {t("coach.focus.gapKicker")}
+        </Kicker>
+        <p className="m-0 text-ui-caption text-ui-muted">{focus.original}</p>
+        <p className="m-0 text-ui-body font-medium leading-relaxed text-foreground">
+          {focus.target}
+        </p>
+        {focus.template && (
+          <p className="m-0 text-ui-caption text-ui-muted">
+            {t("coach.focus.template", { template: focus.template })}
+          </p>
+        )}
+        <ActionLink
+          label={t("coach.focus.expand")}
+          onClick={() => onOpenDetail(focus.turnId, "gap")}
+        />
+      </div>
+    );
+  }
+
+  if (focus.kind === "recurring") {
+    return (
+      <div className="flex flex-col gap-2">
+        <Kicker tone="bg-destructive/10 text-destructive">
+          <RepeatIcon size={12} />
+          {t("coach.focus.recurringKicker", { n: focus.count })}
+        </Kicker>
+        <PointName label={focus.label} type={typeLabel(t, focus.type)} />
+        <DiffLine original={focus.original} corrected={focus.corrected} />
+        <p className="m-0 text-ui-caption text-ui-muted">
+          {t("coach.focus.recurringHint")}
+        </p>
+        <PointLesson
+          key={focus.masteryKey}
+          conversationId={conversationId}
+          label={focus.label}
+          type={focus.type}
+          evidence={`${focus.original} → ${focus.corrected}`}
+          t={t}
+          leading={
+            <ActionLink
+              label={t("coach.focus.viewSentence")}
+              onClick={() => onOpenDetail(focus.turnId, "grammar")}
+            />
+          }
+        />
+      </div>
+    );
+  }
+
+  // fix
+  return (
+    <div className="flex flex-col gap-2">
+      <Kicker tone="bg-info/10 text-info-text">
+        {t("coach.focus.fixKicker")}
+      </Kicker>
+      <DiffLine original={focus.original} corrected={focus.corrected} />
+      {focus.explanation && (
+        <p className="m-0 line-clamp-2 text-ui-caption leading-snug text-ui-muted">
+          {focus.explanation}
+        </p>
+      )}
+      <PointLesson
+        key={focus.masteryKey}
+        conversationId={conversationId}
+        label={focus.label}
+        type={focus.type}
+        evidence={`${focus.original} → ${focus.corrected}`}
+        t={t}
+        leading={
+          <ActionLink
+            label={t("coach.focus.viewSentence")}
+            onClick={() => onOpenDetail(focus.turnId, "grammar")}
+          />
+        }
+      />
+    </div>
+  );
+}
+
+// Active-recall nudge: turn one due-review item into a "try to use this next" call
+// to action (distinct from the input-box opener hint).
+function RecallTarget({
+  recall,
+  conversationId,
+  t,
+}: {
+  recall: CoachRecall;
+  conversationId: string | null;
+  t: TFunction;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Kicker tone="bg-warning/10 text-warning">
+        {t("coach.recall.kicker")}
+      </Kicker>
+      <PointName label={recall.label} type={typeLabel(t, recall.type)} />
+      {recall.example?.trim() && (
+        <p
+          className="m-0 truncate text-ui-caption text-ui-muted"
+          title={recall.example}
+        >
+          {recall.example.trim()}
+        </p>
+      )}
+      <PointLesson
+        key={recall.key}
+        conversationId={conversationId}
+        label={recall.label}
+        type={recall.type}
+        t={t}
+      />
+    </div>
+  );
+}
+
+// Pending memory writes the learner can confirm — flat blocks, no card boxes.
 function MemoryProposals({
   items,
   onChanged,
@@ -109,16 +428,13 @@ function MemoryProposals({
   }
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-3">
       {items.map((item) => {
         const ops = memoryProposalOperations(item);
         return (
-          <div
-            key={item.id}
-            className="rounded-lg border bg-card p-3 text-ui-body"
-          >
-            <div className="font-semibold">{item.summary}</div>
-            <ul className="my-2 flex list-none flex-col gap-1 p-0 text-ui-caption text-ui-muted">
+          <div key={item.id} className="flex flex-col gap-2 text-ui-body">
+            <div className="font-medium">{item.summary}</div>
+            <ul className="m-0 flex list-none flex-col gap-1 p-0 text-ui-caption text-ui-muted">
               {ops.map((op, i) => (
                 <li key={`${op.action}:${op.key}:${i}`}>
                   {t(`coach.proposal.${op.action}`, {
@@ -158,198 +474,6 @@ function MemoryProposals({
   );
 }
 
-function Kicker({
-  tone,
-  children,
-}: {
-  tone: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <span
-      className={cn(
-        "inline-flex w-fit items-center gap-1 rounded-md px-2 py-0.5 text-ui-caption font-medium",
-        tone,
-      )}
-    >
-      {children}
-    </span>
-  );
-}
-
-// "original → corrected" one-liner used by the fix / recurring cards.
-function DiffLine({
-  original,
-  corrected,
-}: {
-  original: string;
-  corrected: string;
-}) {
-  return (
-    <p className="m-0 flex flex-wrap items-center gap-1.5 text-ui-body">
-      <span className="text-ui-muted line-through">{original}</span>
-      <ArrowRightIcon size={13} className="shrink-0 text-ui-subtle" />
-      <span className="font-medium text-foreground">{corrected}</span>
-    </p>
-  );
-}
-
-function DetailButton({
-  label,
-  onClick,
-}: {
-  label: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="mt-0.5 inline-flex w-fit items-center gap-1 rounded text-ui-caption font-medium text-foreground-80 transition-colors hover:text-foreground"
-    >
-      {label}
-      <ArrowRightIcon size={12} />
-    </button>
-  );
-}
-
-// The single most-relevant thing about the conversation right now. Renders one of
-// the priority-resolved focus kinds (see resolveCoachFocus).
-function FocusCard({
-  focus,
-  t,
-  onOpenDetail,
-}: {
-  focus: CoachFocus;
-  t: TFunction;
-  onOpenDetail: (turnId: string, panel: "gap" | "grammar") => void;
-}) {
-  if (focus.kind === "empty" || focus.kind === "clean") {
-    return (
-      <p className="m-0 rounded-lg border border-dashed bg-card/40 px-3 py-4 text-center text-ui-body leading-relaxed text-foreground-80">
-        {t(focus.kind === "empty" ? "coach.focus.empty" : "coach.focus.clean")}
-      </p>
-    );
-  }
-
-  if (focus.kind === "praise") {
-    return (
-      <div className="flex flex-col gap-2 rounded-lg border bg-card p-3">
-        <Kicker tone="bg-success/10 text-success">
-          <SparklesIcon size={12} />
-          {t("coach.focus.praiseKicker")}
-        </Kicker>
-        <p className="m-0 text-ui-body leading-relaxed text-foreground">
-          {focus.highlight}
-        </p>
-      </div>
-    );
-  }
-
-  if (focus.kind === "gap") {
-    return (
-      <div className="flex flex-col gap-2 rounded-lg border bg-card p-3">
-        <Kicker tone="bg-accent text-primary">
-          {t("coach.focus.gapKicker")}
-        </Kicker>
-        <p className="m-0 text-ui-caption text-ui-muted">{focus.original}</p>
-        <p className="m-0 text-ui-body font-medium leading-relaxed text-foreground">
-          {focus.target}
-        </p>
-        {focus.template && (
-          <p className="m-0 text-ui-caption text-ui-muted">
-            {t("coach.focus.template", { template: focus.template })}
-          </p>
-        )}
-        <DetailButton
-          label={t("coach.focus.expand")}
-          onClick={() => onOpenDetail(focus.turnId, "gap")}
-        />
-      </div>
-    );
-  }
-
-  if (focus.kind === "recurring") {
-    const type = typeLabel(t, focus.type);
-    return (
-      <div className="flex flex-col gap-2 rounded-lg border bg-card p-3">
-        <Kicker tone="bg-destructive/10 text-destructive">
-          <RepeatIcon size={12} />
-          {t("coach.focus.recurringKicker", { n: focus.count })}
-        </Kicker>
-        <div className="flex items-center gap-1.5">
-          {type && (
-            <span className="rounded bg-background px-1.5 py-0.5 text-ui-caption font-medium text-ui-muted">
-              {type}
-            </span>
-          )}
-          <span className="min-w-0 flex-1 truncate text-ui-body font-medium text-foreground">
-            {focus.label}
-          </span>
-        </div>
-        <DiffLine original={focus.original} corrected={focus.corrected} />
-        <p className="m-0 text-ui-caption text-ui-muted">
-          {t("coach.focus.recurringHint")}
-        </p>
-        <DetailButton
-          label={t("coach.focus.viewSentence")}
-          onClick={() => onOpenDetail(focus.turnId, "grammar")}
-        />
-      </div>
-    );
-  }
-
-  // fix
-  return (
-    <div className="flex flex-col gap-2 rounded-lg border bg-card p-3">
-      <Kicker tone="bg-info/10 text-info-text">
-        {t("coach.focus.fixKicker")}
-      </Kicker>
-      <DiffLine original={focus.original} corrected={focus.corrected} />
-      {focus.explanation && (
-        <p className="m-0 line-clamp-2 text-ui-caption leading-snug text-ui-muted">
-          {focus.explanation}
-        </p>
-      )}
-      <DetailButton
-        label={t("coach.focus.viewSentence")}
-        onClick={() => onOpenDetail(focus.turnId, "grammar")}
-      />
-    </div>
-  );
-}
-
-// Active-recall nudge: turn one due-review item into a "try to use this next" call
-// to action (distinct from the input-box opener hint).
-function RecallTarget({ recall, t }: { recall: CoachRecall; t: TFunction }) {
-  const type = typeLabel(t, recall.type);
-  return (
-    <div className="flex flex-col gap-1.5 rounded-lg border bg-card p-3">
-      <Kicker tone="bg-warning/10 text-warning">
-        {t("coach.recall.kicker")}
-      </Kicker>
-      <div className="flex items-center gap-1.5">
-        {type && (
-          <span className="rounded bg-background px-1.5 py-0.5 text-ui-caption font-medium text-ui-muted">
-            {type}
-          </span>
-        )}
-        <span className="min-w-0 flex-1 truncate text-ui-body font-medium text-foreground">
-          {recall.label}
-        </span>
-      </div>
-      {recall.example?.trim() && (
-        <p
-          className="m-0 truncate text-ui-caption text-ui-muted"
-          title={recall.example}
-        >
-          {recall.example.trim()}
-        </p>
-      )}
-    </div>
-  );
-}
-
 function MasteryLink({
   onOpenView,
 }: {
@@ -359,7 +483,7 @@ function MasteryLink({
   return (
     <button
       type="button"
-      className="mt-1 inline-flex items-center gap-1 self-start text-ui-caption text-foreground-80 transition-colors hover:text-foreground"
+      className="inline-flex items-center gap-1 self-start text-ui-caption text-foreground-80 transition-colors hover:text-foreground"
       onClick={() => onOpenView?.("mastery")}
     >
       {t("coach.viewAllData")}
@@ -421,7 +545,7 @@ export function CoachPanel({
   }, [conversationId, refreshProposals]);
 
   // Focus card "expand / view this sentence": scroll to the turn and open its
-  // in-bubble detail panel (which also auto-closes this coach panel via panel-opened).
+  // in-bubble detail panel.
   const openDetail = useCallback(
     (turnId: string, panel: "gap" | "grammar") => {
       onJumpToTurn?.(turnId);
@@ -448,20 +572,38 @@ export function CoachPanel({
           </div>
         </div>
       </div>
-      <div className="scrollbar-hover flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-4">
-        <FocusCard focus={focus} t={t} onOpenDetail={openDetail} />
+      <div className="scrollbar-hover flex min-h-0 flex-1 flex-col overflow-y-auto px-4">
+        <section className="py-4">
+          <FocusCard
+            focus={focus}
+            conversationId={conversationId}
+            t={t}
+            onOpenDetail={openDetail}
+          />
+        </section>
         {focus.kind !== "empty" && recall && (
-          <RecallTarget recall={recall} t={t} />
+          <section className="border-t py-4">
+            <RecallTarget
+              recall={recall}
+              conversationId={conversationId}
+              t={t}
+            />
+          </section>
         )}
         {convProposals.length > 0 && (
-          <Section title={t("coach.pendingMemoryTitle")}>
+          <section className="flex flex-col gap-2.5 border-t py-4">
+            <h3 className="m-0 text-ui-body font-semibold text-foreground">
+              {t("coach.pendingMemoryTitle")}
+            </h3>
             <MemoryProposals
               items={convProposals}
               onChanged={refreshProposals}
             />
-          </Section>
+          </section>
         )}
-        <MasteryLink onOpenView={onOpenView} />
+        <div className="border-t py-4">
+          <MasteryLink onOpenView={onOpenView} />
+        </div>
       </div>
     </div>
   );
