@@ -9,6 +9,7 @@ import {
   ListChecksIcon,
   MessageSquareIcon,
   MicIcon,
+  MoreHorizontalIcon,
   PencilIcon,
   PencilLineIcon,
   PinIcon,
@@ -38,7 +39,17 @@ import { type ConversationMeta, conversationType } from "../db/conversations";
 import { getActions, isAgentEnabled } from "../runtime";
 import { useConfirm } from "./confirm";
 import { conversationActionDisplay } from "./conversation-action-display";
-import { EntityRow, EntityRowAction } from "./EntityRow";
+import { EntityRow } from "./EntityRow";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from "./ui/dropdown-menu";
 
 export type MainView =
   | "chat"
@@ -210,19 +221,6 @@ export function Sidebar({
       conv: c,
       x: Math.max(8, Math.min(e.clientX, window.innerWidth - 276)),
       y: Math.max(8, Math.min(e.clientY, window.innerHeight - 320)),
-    });
-  }
-
-  // "Derive" button: the same menu reachable via keyboard/trackpad, anchored
-  // just below the button.
-  function openMenuFromButton(e: ReactMouseEvent, c: ConversationMeta) {
-    e.preventDefault();
-    e.stopPropagation();
-    const r = e.currentTarget.getBoundingClientRect();
-    setConversationMenu({
-      conv: c,
-      x: Math.max(8, Math.min(r.right - 256, window.innerWidth - 276)),
-      y: Math.max(8, Math.min(r.bottom + 4, window.innerHeight - 320)),
     });
   }
 
@@ -400,62 +398,100 @@ export function Sidebar({
                         onContextMenu={(e) => openConversationMenu(e, c)}
                         onDoubleClick={() => startEdit(c)}
                         actions={
-                          <>
-                            <EntityRowAction
-                              label={
-                                c.pinned ? t("sidebar.unpin") : t("sidebar.pin")
-                              }
-                              icon={
-                                c.pinned ? (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <button
+                                type="button"
+                                className="codex-row-action-trigger"
+                                aria-label={t("sidebar.moreActions")}
+                                title={t("sidebar.moreActions")}
+                                onClick={(e) => e.stopPropagation()}
+                                onDoubleClick={(e) => e.stopPropagation()}
+                                onKeyDown={(e) => e.stopPropagation()}
+                              >
+                                <MoreHorizontalIcon className="size-3.5" />
+                              </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" sideOffset={4}>
+                              <DropdownMenuItem
+                                onSelect={() => onTogglePin(c.id, !c.pinned)}
+                              >
+                                {c.pinned ? (
                                   <PinOffIcon className="size-3.5" />
                                 ) : (
                                   <PinIcon className="size-3.5" />
-                                )
-                              }
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onTogglePin(c.id, !c.pinned);
-                              }}
-                            />
-                            <EntityRowAction
-                              label={t("common.rename")}
-                              icon={<PencilIcon className="size-3.5" />}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                startEdit(c);
-                              }}
-                            />
-                            <EntityRowAction
-                              label={t("common.delete")}
-                              icon={<Trash2Icon className="size-3.5" />}
-                              onClick={async (e) => {
-                                e.stopPropagation();
-                                if (
-                                  await confirm({
-                                    title: t(
-                                      "sidebar.deleteConversationTitle",
-                                      {
-                                        title: c.title,
-                                      },
-                                    ),
-                                    description: t(
-                                      "sidebar.deleteConversationDescription",
-                                    ),
-                                  })
-                                ) {
-                                  onDelete(c.id);
-                                }
-                              }}
-                            />
-                            {c.kind === "practice" &&
-                              derivationActions.length > 0 && (
-                                <EntityRowAction
-                                  label={t("sidebar.deriveNewConversation")}
-                                  icon={<SparklesIcon className="size-3.5" />}
-                                  onClick={(e) => openMenuFromButton(e, c)}
-                                />
-                              )}
-                          </>
+                                )}
+                                {c.pinned
+                                  ? t("sidebar.unpin")
+                                  : t("sidebar.pin")}
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onSelect={() => startEdit(c)}>
+                                <PencilIcon className="size-3.5" />
+                                {t("common.rename")}
+                              </DropdownMenuItem>
+                              {c.kind === "practice" &&
+                                derivationActions.length > 0 && (
+                                  <DropdownMenuSub>
+                                    <DropdownMenuSubTrigger>
+                                      <SparklesIcon className="size-3.5" />
+                                      {t("sidebar.deriveNewConversation")}
+                                    </DropdownMenuSubTrigger>
+                                    <DropdownMenuSubContent className="max-h-80 overflow-y-auto">
+                                      {derivationActions.map((action) => {
+                                        const display =
+                                          conversationActionDisplay(action, t);
+                                        return (
+                                          <DropdownMenuItem
+                                            key={action.id}
+                                            className="items-start"
+                                            onSelect={() =>
+                                              onDeriveConversation(
+                                                c.id,
+                                                action.id,
+                                              )
+                                            }
+                                          >
+                                            <SparklesIcon className="mt-0.5 size-3.5 text-primary" />
+                                            <span className="min-w-0 flex-1">
+                                              <span className="block truncate font-medium">
+                                                {display.label}
+                                              </span>
+                                              {display.description && (
+                                                <span className="block truncate text-ui-caption text-ui-muted">
+                                                  {display.description}
+                                                </span>
+                                              )}
+                                            </span>
+                                          </DropdownMenuItem>
+                                        );
+                                      })}
+                                    </DropdownMenuSubContent>
+                                  </DropdownMenuSub>
+                                )}
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                className="text-destructive focus:bg-destructive/10 focus:text-destructive"
+                                onSelect={async () => {
+                                  if (
+                                    await confirm({
+                                      title: t(
+                                        "sidebar.deleteConversationTitle",
+                                        { title: c.title },
+                                      ),
+                                      description: t(
+                                        "sidebar.deleteConversationDescription",
+                                      ),
+                                    })
+                                  ) {
+                                    onDelete(c.id);
+                                  }
+                                }}
+                              >
+                                <Trash2Icon className="size-3.5" />
+                                {t("common.delete")}
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         }
                       />
                     );

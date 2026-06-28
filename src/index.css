@@ -1229,14 +1229,14 @@
   color: var(--codex-row-meta-fg);
   font-size: 11px;
 }
+/* Always laid out so the trigger keeps a stable bounding box. The button is
+   only faded in on hover — never `display:none` — otherwise its menu (anchored
+   to it) would jump to the top-left corner for the exit-animation frames when
+   the row stops being hovered on close. */
 .codex-row-actions {
-  display: none;
+  display: flex;
   flex: 0 0 auto;
   gap: 2px;
-}
-.codex-sidebar-row:hover .codex-row-actions,
-.codex-sidebar-row:focus-within .codex-row-actions {
-  display: flex;
 }
 .codex-row-actions button {
   display: grid;
@@ -1247,8 +1247,20 @@
   border-radius: 6px;
   background: transparent;
   color: var(--codex-sidebar-fg);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
 }
-.codex-row-actions button:hover {
+/* Reveal on row hover/focus, and keep it shown while its menu is open even if
+   the pointer has left the row (the menu is portaled). */
+.codex-sidebar-row:hover .codex-row-actions button,
+.codex-sidebar-row:focus-within .codex-row-actions button,
+.codex-row-actions button[data-state="open"] {
+  opacity: 1;
+  pointer-events: auto;
+}
+.codex-row-actions button:hover,
+.codex-row-actions button[data-state="open"] {
   background: var(--codex-row-action-hover-bg);
 }
 
