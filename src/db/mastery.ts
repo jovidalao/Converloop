@@ -1,4 +1,14 @@
-import { and, asc, desc, eq, like, ne, notLike, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  inArray,
+  like,
+  ne,
+  notLike,
+  sql,
+} from "drizzle-orm";
 import type { TutorAnalysis } from "../agents/schema";
 import type { WeakItem } from "../agents/tutor";
 import { languageToBcp47, segmentWords } from "../lib/language";
@@ -335,6 +345,72 @@ export async function listMasteryEvents(
     .where(eq(masteryEvent.key, normalizeKey(key)))
     .orderBy(desc(masteryEvent.createdAt))
     .limit(limit);
+}
+
+// "Your text → correct form" (+ a short native-language explanation) for an error
+// item, parsed from its most recent error event's stored issue payload. The fix
+// isn't on the snapshot row (mastery_item.example holds only the original span),
+// so the data page reads it from the audit trail to show the correction inline
+// without an LLM call.
+export interface MasteryCorrection {
+  original: string;
+  corrected: string;
+  explanation: string;
+}
+
+function parseCorrection(payloadJson: string | null): MasteryCorrection | null {
+  if (!payloadJson) return null;
+  try {
+    const issue = (JSON.parse(payloadJson) as { issue?: unknown }).issue as
+      | {
+          span_original?: string;
+          span_corrected?: string;
+          explanation?: string;
+        }
+      | undefined;
+    if (!issue) return null;
+    const original = issue.span_original?.trim() ?? "";
+    const corrected = issue.span_corrected?.trim() ?? "";
+    if (!corrected || corrected === original) return null;
+    return {
+      original,
+      corrected,
+      explanation: issue.explanation?.trim() ?? "",
+    };
+  } catch {
+    return null;
+  }
+}
+
+// Latest correction per key for the given items. One batched query over error
+// events (newest first); for each key we keep the newest event that carries a
+// usable fix.
+export async function getLatestCorrections(
+  keys: string[],
+): Promise<Map<string, MasteryCorrection>> {
+  if (keys.length === 0) return new Map();
+  const normalized = Array.from(new Set(keys.map(normalizeKey)));
+  const rows = await db
+    .select({
+      key: masteryEvent.key,
+      payloadJson: masteryEvent.payloadJson,
+    })
+    .from(masteryEvent)
+    .where(
+      and(
+        inArray(masteryEvent.key, normalized),
+        eq(masteryEvent.kind, "error"),
+      ),
+    )
+    .orderBy(desc(masteryEvent.createdAt));
+
+  const out = new Map<string, MasteryCorrection>();
+  for (const row of rows) {
+    if (out.has(row.key)) continue;
+    const correction = parseCorrection(row.payloadJson);
+    if (correction) out.set(row.key, correction);
+  }
+  return out;
 }
 
 export async function updateMasteryItem(

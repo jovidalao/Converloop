@@ -1,30 +1,30 @@
 import {
+  ArrowRightIcon,
   CheckCircle2Icon,
+  GraduationCapIcon,
   HistoryIcon,
   PencilIcon,
+  RefreshCwIcon,
   SaveIcon,
   SearchIcon,
-  SendIcon,
   Trash2Icon,
   XIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { type Locale, useTranslation } from "@/i18n";
-import type { DataEditPreview } from "../data-edit";
 import {
   deleteMasteryItem,
   getAllMastery,
+  getLatestCorrections,
   listMasteryEvents,
+  type MasteryCorrection,
   markMasteryKnown,
   updateMasteryItem,
 } from "../db/mastery";
 import type { MasteryEvent, MasteryItem } from "../db/schema";
-import {
-  applyLearningDataEditPreview,
-  MissingApiKeyError,
-  previewLearningDataEditWithInstruction,
-} from "../orchestrator";
+import { explainMasteryPoint, MissingApiKeyError } from "../orchestrator";
 import { useConfirm } from "./confirm";
+import { Markdown } from "./Markdown";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Spinner } from "./ui/spinner";
@@ -75,17 +75,6 @@ function Badge({
       {children}
     </span>
   );
-}
-
-function operationLabel(op: DataEditPreview["operations"][number]): string {
-  const parts = [`${op.action}: ${op.key}`];
-  if (op.target_key) parts.push(`→ ${op.target_key}`);
-  if (op.label) parts.push(`label="${op.label}"`);
-  if (op.type) parts.push(`type=${op.type}`);
-  if (op.status) parts.push(`status=${op.status}`);
-  if (op.example) parts.push(`example="${op.example}"`);
-  if (op.notes) parts.push(`notes="${op.notes}"`);
-  return parts.join(" · ");
 }
 
 // Tones for the evidence timeline, mirroring the coach panel's signal colors.
@@ -163,9 +152,11 @@ function MasteryHistory({ itemKey }: { itemKey: string }) {
 
 function MasteryRow({
   item,
+  correction,
   onRefresh,
 }: {
   item: MasteryItem;
+  correction?: MasteryCorrection;
   onRefresh: () => void;
 }) {
   const { t, locale } = useTranslation();
@@ -175,6 +166,53 @@ function MasteryRow({
   const [label, setLabel] = useState(item.label);
   const [example, setExample] = useState(item.example ?? "");
   const [notes, setNotes] = useState(item.notes ?? "");
+
+  // On-demand mini-lesson for this point — same explainer the coach panel uses,
+  // so the learner can understand *why* right here in the data view. Generated
+  // lazily on first open and cached until regenerated.
+  const [lessonOpen, setLessonOpen] = useState(false);
+  const [lessonLoading, setLessonLoading] = useState(false);
+  const [lessonText, setLessonText] = useState("");
+  const [lessonError, setLessonError] = useState<string | null>(null);
+
+  const generateLesson = useCallback(() => {
+    setLessonLoading(true);
+    setLessonError(null);
+    setLessonText("");
+    let acc = "";
+    void explainMasteryPoint(
+      {
+        conversationId: null,
+        label: item.label,
+        type: item.type,
+        evidence: item.example?.trim() || undefined,
+      },
+      (d) => {
+        acc += d;
+        setLessonText(acc);
+      },
+    )
+      .catch((e) =>
+        setLessonError(
+          e instanceof MissingApiKeyError
+            ? e.message
+            : e instanceof Error
+              ? e.message
+              : String(e),
+        ),
+      )
+      .finally(() => setLessonLoading(false));
+  }, [item.label, item.type, item.example]);
+
+  const toggleLesson = useCallback(() => {
+    if (lessonLoading) return;
+    if (!lessonText && !lessonError) {
+      setLessonOpen(true);
+      generateLesson();
+      return;
+    }
+    setLessonOpen((v) => !v);
+  }, [lessonLoading, lessonText, lessonError, generateLesson]);
 
   async function save() {
     await updateMasteryItem(item.key, { label, example, notes });
@@ -254,6 +292,30 @@ function MasteryRow({
             placeholder={t("mastery.notesPlaceholder")}
           />
         </div>
+      ) : correction ? (
+        // Error item: show "your text → correct form" inline so the fix is visible
+        // without opening the lesson. The diff mirrors the coach panel's DiffLine.
+        <div className="mt-2 grid gap-1.5 text-ui-body leading-relaxed">
+          <p className="m-0 flex flex-wrap items-center gap-1.5">
+            <span className="text-ui-muted line-through">
+              {correction.original}
+            </span>
+            <ArrowRightIcon size={13} className="shrink-0 text-ui-subtle" />
+            <span className="font-medium text-foreground">
+              {correction.corrected}
+            </span>
+          </p>
+          {correction.explanation && (
+            <p className="m-0 whitespace-pre-wrap text-ui-caption text-ui-muted">
+              {correction.explanation}
+            </p>
+          )}
+          {item.notes && (
+            <p className="m-0 whitespace-pre-wrap text-ui-muted">
+              {item.notes}
+            </p>
+          )}
+        </div>
       ) : (
         <div className="mt-2 grid gap-1.5 text-ui-body leading-relaxed">
           {item.example && (
@@ -303,6 +365,17 @@ function MasteryRow({
               type="button"
               variant="action"
               size="action"
+              data-active={lessonOpen}
+              aria-expanded={lessonOpen}
+              onClick={toggleLesson}
+              title={t("coach.lesson.explain")}
+            >
+              <GraduationCapIcon size={15} />
+            </Button>
+            <Button
+              type="button"
+              variant="action"
+              size="action"
               data-active={historyOpen}
               aria-expanded={historyOpen}
               onClick={() => setHistoryOpen((v) => !v)}
@@ -342,6 +415,36 @@ function MasteryRow({
           </>
         )}
       </div>
+      {lessonOpen && !editing && (
+        <div className="mt-2 border-t pt-2">
+          {lessonLoading && !lessonText ? (
+            <span className="inline-flex items-center gap-1.5 text-ui-caption text-ui-muted">
+              <Spinner />
+              {t("coach.lesson.loading")}
+            </span>
+          ) : lessonError ? (
+            <p className="m-0 text-ui-caption text-destructive">
+              {lessonError}
+            </p>
+          ) : (
+            <>
+              <Markdown className="text-ui-body leading-relaxed">
+                {lessonText}
+              </Markdown>
+              {!lessonLoading && (
+                <button
+                  type="button"
+                  onClick={generateLesson}
+                  className="mt-2 inline-flex items-center gap-1 text-ui-caption text-ui-muted transition-colors hover:text-foreground"
+                >
+                  <RefreshCwIcon size={11} />
+                  {t("coach.lesson.regenerate")}
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      )}
       {historyOpen && !editing && <MasteryHistory itemKey={item.key} />}
     </div>
   );
@@ -350,18 +453,17 @@ function MasteryRow({
 export function MasteryView() {
   const { t } = useTranslation();
   const [items, setItems] = useState<MasteryItem[]>([]);
+  const [corrections, setCorrections] = useState<
+    Map<string, MasteryCorrection>
+  >(new Map());
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
   const [type, setType] = useState("all");
-  const [editText, setEditText] = useState("");
-  const [editBusy, setEditBusy] = useState(false);
-  const [applyBusy, setApplyBusy] = useState(false);
-  const [editPreview, setEditPreview] = useState<DataEditPreview | null>(null);
-  const [editResult, setEditResult] = useState<string | null>(null);
-  const [editError, setEditError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    setItems(await getAllMastery());
+    const all = await getAllMastery();
+    setItems(all);
+    setCorrections(await getLatestCorrections(all.map((it) => it.key)));
   }, []);
 
   useEffect(() => {
@@ -383,63 +485,6 @@ export function MasteryView() {
     () => Array.from(new Set(items.map((item) => item.type))).sort(),
     [items],
   );
-
-  async function previewNaturalEdit() {
-    const text = editText.trim();
-    if (!text || editBusy) return;
-    setEditBusy(true);
-    setEditPreview(null);
-    setEditResult(null);
-    setEditError(null);
-    try {
-      const result = await previewLearningDataEditWithInstruction(text);
-      setEditPreview(result);
-      if (result.operations.length === 0) setEditResult(result.summary);
-    } catch (e) {
-      setEditError(
-        e instanceof MissingApiKeyError
-          ? e.message
-          : e instanceof Error
-            ? e.message
-            : String(e),
-      );
-    } finally {
-      setEditBusy(false);
-    }
-  }
-
-  async function applyNaturalEditPreview() {
-    if (!editPreview || applyBusy) return;
-    setApplyBusy(true);
-    setEditResult(null);
-    setEditError(null);
-    try {
-      const result = await applyLearningDataEditPreview(editPreview);
-      await refresh();
-      setEditText("");
-      setEditPreview(null);
-      const skipped = result.skipped.length
-        ? t("mastery.skippedSuffix", { items: result.skipped.join(", ") })
-        : "";
-      setEditResult(
-        t("mastery.applied", {
-          summary: result.summary,
-          n: String(result.applied),
-          skipped,
-        }),
-      );
-    } catch (e) {
-      setEditError(
-        e instanceof MissingApiKeyError
-          ? e.message
-          : e instanceof Error
-            ? e.message
-            : String(e),
-      );
-    } finally {
-      setApplyBusy(false);
-    }
-  }
 
   return (
     <div className="flex h-full max-w-5xl flex-col overflow-y-auto px-6 pt-14 pb-6">
@@ -488,91 +533,13 @@ export function MasteryView() {
           <MasteryRow
             key={item.key}
             item={item}
+            correction={corrections.get(item.key)}
             onRefresh={() => void refresh()}
           />
         ))}
         {filtered.length === 0 && (
           <div className="rounded-lg border bg-card p-4 text-ui-body text-ui-muted">
             {t("mastery.empty")}
-          </div>
-        )}
-      </div>
-
-      <div className="mt-5 rounded-lg border bg-card p-3">
-        <div className="mb-2 text-ui-body font-semibold">
-          {t("mastery.naturalEditTitle")}
-        </div>
-        <Textarea
-          value={editText}
-          onChange={(e) => {
-            setEditText(e.target.value);
-            setEditPreview(null);
-            setEditResult(null);
-          }}
-          placeholder={t("mastery.naturalEditPlaceholder")}
-          className="min-h-24 resize-none"
-        />
-        <div className="mt-2 flex items-center justify-between gap-2">
-          <p className="m-0 text-ui-caption leading-snug text-ui-muted">
-            {t("mastery.naturalEditNote")}
-          </p>
-          <Button
-            type="button"
-            onClick={() => void previewNaturalEdit()}
-            disabled={editBusy || !editText.trim()}
-          >
-            <SendIcon size={15} />
-            {editBusy ? t("mastery.processing") : t("mastery.preview")}
-          </Button>
-        </div>
-        {editPreview && editPreview.operations.length > 0 && (
-          <div className="mt-3 rounded-md border bg-background px-3 py-2">
-            <div className="text-ui-body font-medium">
-              {t("mastery.previewTitle")}
-            </div>
-            <p className="mt-1 mb-2 text-ui-caption leading-snug text-ui-muted">
-              {editPreview.summary}
-            </p>
-            <div className="grid max-h-48 gap-1 overflow-y-auto">
-              {editPreview.operations.map((op, i) => (
-                <div
-                  key={`${op.action}:${op.key}:${i}`}
-                  className="rounded bg-muted px-2 py-1.5 font-mono text-ui-caption leading-snug text-foreground"
-                >
-                  {operationLabel(op)}
-                </div>
-              ))}
-            </div>
-            <div className="mt-2 flex justify-end gap-2">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                disabled={applyBusy}
-                onClick={() => setEditPreview(null)}
-              >
-                {t("common.cancel")}
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                disabled={applyBusy}
-                onClick={() => void applyNaturalEditPreview()}
-              >
-                {applyBusy ? <Spinner /> : <CheckCircle2Icon size={14} />}
-                {t("mastery.applyPreview")}
-              </Button>
-            </div>
-          </div>
-        )}
-        {editResult && (
-          <div className="mt-2 rounded-md bg-primary/10 px-3 py-2 text-ui-body text-primary">
-            {editResult}
-          </div>
-        )}
-        {editError && (
-          <div className="mt-2 rounded-md bg-destructive/15 px-3 py-2 text-ui-body text-destructive">
-            {editError}
           </div>
         )}
       </div>
