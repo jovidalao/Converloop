@@ -25,10 +25,10 @@ describe("parseSlashInput", () => {
     expect(parseSlashInput("/btw   ")?.rest).toBe("");
   });
 
-  it("parses an action command", () => {
-    const p = parseSlashInput("/harder");
-    expect(p?.command.kind).toBe("action");
-    expect(p?.command.actionId).toBe("builtin:action:harder");
+  it("parses /reply as a compose command", () => {
+    const p = parseSlashInput("/reply");
+    expect(p?.command.kind).toBe("compose");
+    expect(p?.command.buildPrompt).toBeUndefined();
   });
 
   it("parses a prompt command and builds the expanded prompt from args", () => {
@@ -52,8 +52,8 @@ describe("parseSlashInput", () => {
     );
   });
 
-  it("/surprise and /recap are no-arg prompt commands", () => {
-    for (const name of ["surprise", "recap"]) {
+  it("/surprise, /recap, /simpler, /keywords are no-arg prompt commands", () => {
+    for (const name of ["surprise", "recap", "simpler", "keywords"]) {
       const p = parseSlashInput(`/${name}`);
       expect(p?.command.kind).toBe("prompt");
       expect(p?.command.argsHint).toBeUndefined();
@@ -72,10 +72,9 @@ describe("parseSlashInput", () => {
     expect(rp?.command.buildPrompt?.(rp.rest)).toContain("returning a parcel");
   });
 
-  it("/scene parses as a branching action", () => {
-    const p = parseSlashInput("/scene");
-    expect(p?.command.kind).toBe("action");
-    expect(p?.command.actionId).toBe("builtin:action:change_scene");
+  it("removed branching commands (/scene, /harder) are treated as plain text", () => {
+    expect(parseSlashInput("/scene")).toBeNull();
+    expect(parseSlashInput("/harder")).toBeNull();
   });
 
   it("/help was removed: treated as plain text", () => {
@@ -86,8 +85,17 @@ describe("parseSlashInput", () => {
     expect(parseSlashInput("/BTW hi")?.command.name).toBe("btw");
   });
 
-  it("command name with hyphen", () => {
-    expect(parseSlashInput("/next-day")?.command.name).toBe("next-day");
+  it("command name with hyphen (custom macro)", () => {
+    upsertCustomPromptMacro({
+      id: "test-1",
+      name: "warm-up",
+      template: "Warm me up with {input}.",
+    });
+    try {
+      expect(parseSlashInput("/warm-up jokes")?.command.name).toBe("warm-up");
+    } finally {
+      deleteCustomPromptMacro("test-1");
+    }
   });
 
   it("unknown command returns null (treated as plain text)", () => {
@@ -125,59 +133,50 @@ describe("slashMenuToken", () => {
 });
 
 describe("matchSlashCommands", () => {
-  it("empty token returns all available commands (canDerive)", () => {
-    const r = matchSlashCommands("", { canDerive: true, isLearning: false });
+  it("empty token returns all available commands", () => {
+    const r = matchSlashCommands("", { isLearning: false });
     expect(r.map((c) => c.name)).toEqual(
       expect.arrayContaining([
+        "reply",
         "btw",
-        "harder",
-        "swap",
-        "scene",
-        "next-day",
         "topic",
         "roleplay",
         "learn",
         "surprise",
         "how",
+        "simpler",
+        "keywords",
         "recap",
       ]),
     );
+    // Branching commands were removed from the slash menu.
+    expect(r.map((c) => c.name)).not.toContain("harder");
+    expect(r.map((c) => c.name)).not.toContain("scene");
   });
 
-  it("hides action commands when cannot derive, keeps btw/prompt macros", () => {
-    const r = matchSlashCommands("", {
-      canDerive: false,
-      isLearning: false,
-    }).map((c) => c.name);
+  it("hides prompt macros and /reply in a focused lesson, keeps /btw", () => {
+    const r = matchSlashCommands("", { isLearning: true }).map((c) => c.name);
     expect(r).toContain("btw");
-    expect(r).toContain("topic");
-    expect(r).not.toContain("harder");
-    expect(r).not.toContain("swap");
-    expect(r).not.toContain("scene");
-  });
-
-  it("hides prompt macros in a focused lesson, keeps btw", () => {
-    const r = matchSlashCommands("", {
-      canDerive: false,
-      isLearning: true,
-    }).map((c) => c.name);
-    expect(r).toContain("btw");
+    expect(r).not.toContain("reply");
     expect(r).not.toContain("topic");
     expect(r).not.toContain("learn");
-    expect(r).not.toContain("surprise");
-    expect(r).not.toContain("how");
+    expect(r).not.toContain("simpler");
+    expect(r).not.toContain("keywords");
     expect(r).not.toContain("recap");
   });
 
   it("filters by prefix", () => {
-    const r = matchSlashCommands("ha", { canDerive: true, isLearning: false });
-    expect(r.map((c) => c.name)).toEqual(["harder"]);
+    const r = matchSlashCommands("key", { isLearning: false });
+    expect(r.map((c) => c.name)).toEqual(["keywords"]);
   });
 
   it("startsWith matches ranked before includes matches", () => {
-    // "e" appears in "easier" (prefix match) and "harder"/"help"/"next-day" (substring match).
-    const r = matchSlashCommands("e", { canDerive: true, isLearning: false });
-    expect(r[0]?.name).toBe("easier");
+    // "s" prefixes "surprise"/"simpler"; it appears mid-word in "keywords" (substring match).
+    const r = matchSlashCommands("s", { isLearning: false });
+    expect(["surprise", "simpler"]).toContain(r[0]?.name);
+    const surpriseIdx = r.findIndex((c) => c.name === "surprise");
+    const keywordsIdx = r.findIndex((c) => c.name === "keywords");
+    expect(surpriseIdx).toBeLessThan(keywordsIdx);
   });
 });
 

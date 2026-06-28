@@ -1,4 +1,4 @@
-// Chat-bar slash commands (/btw, action shortcuts, and customizable prompt macros).
+// Chat-bar slash commands (input-stage helpers: /reply, /btw, and customizable prompt macros).
 // This file handles "command definition + parsing/matching"; the UI is in SlashMenu, dispatch in ChatView,
 // and the prompt-macro customization UI in SettingsView. Prompt macros are template-based (see
 // BUILTIN_PROMPT_MACROS) so users can edit the built-ins and add their own; their persistence lives in
@@ -6,14 +6,13 @@
 // are an input-layer concern. Dependencies are leaf localStorage modules (no db/provider side effects).
 
 import type { MessageKey } from "./i18n";
-import { isAgentEnabled } from "./runtime/enablement";
 import {
   type CustomPromptMacro,
   getCustomPromptMacros,
   getPromptMacroOverrides,
 } from "./runtime/prompt-macro-store";
 
-export type SlashCommandKind = "message" | "action" | "prompt";
+export type SlashCommandKind = "message" | "prompt" | "compose";
 
 export interface SlashCommand {
   /** Command name without the slash, lowercase, e.g. "btw". */
@@ -27,12 +26,11 @@ export interface SlashCommand {
   /** i18n key for the localized args hint. Unset when the user overrode `argsHint`. */
   argsHintKey?: MessageKey;
   kind: SlashCommandKind;
-  /** For "action" kind: the id of the existing conversation.action Agent to reuse. */
-  actionId?: string;
   /**
    * For "prompt" kind: build the expanded prompt sent to the conversation agent from the typed args.
-   * Unlike "action" commands (which branch into a new conversation), prompt macros stay in the current
-   * conversation as a turn — the bubble shows the verbatim command, the agent receives this expanded prompt.
+   * Prompt macros stay in the current conversation as a turn — the bubble shows the verbatim command,
+   * the agent receives this expanded prompt. ("compose" commands instead fill the composer with an
+   * editable draft and send nothing on their own — dispatch lives in ChatView.)
    */
   buildPrompt?: (rest: string) => string;
   /** For "prompt" kind: when true, an empty body does not send (e.g. /topic needs a topic). */
@@ -101,6 +99,20 @@ export const BUILTIN_PROMPT_MACROS: PromptMacroDef[] = [
     template: `The user wants to express this: "${PROMPT_INPUT_TOKEN}". Give the most natural way to say it in the target language, plus one alternative with a different tone or formality if useful. Add a one-line note on nuance or a common mistake, then invite the user to try it in a sentence of their own.`,
   },
   {
+    name: "simpler",
+    description: "Didn't catch that — ask your partner to say it more simply",
+    descriptionKey: "slashCommands.simpler",
+    template:
+      "I didn't fully understand your last message. Say the same thing again in the target language, but make it easier to follow: shorter sentences, more common words, clearer phrasing. Don't change the topic, don't add new information, and don't translate into my native language — just rephrase your previous point more simply, then invite me to respond.",
+  },
+  {
+    name: "keywords",
+    description: "Get a few words or phrases you could use to reply",
+    descriptionKey: "slashCommands.keywords",
+    template:
+      "Before I reply, give me 3–4 useful words or short phrases in the target language that I could use to respond to your last message — pick ones that fit this exact point in our conversation. Put a brief gloss in my native language in parentheses after each. List them compactly, then wait for my reply; don't answer on my behalf.",
+  },
+  {
     name: "recap",
     description: "Recap this conversation: takeaways and what to review",
     descriptionKey: "slashCommands.recap",
@@ -109,9 +121,16 @@ export const BUILTIN_PROMPT_MACROS: PromptMacroDef[] = [
   },
 ];
 
-// Static (non-customizable) commands. Split so prompt macros sit between them in the menu order:
-// quick message commands first, then prompt macros, then conversation-branching actions.
-const MESSAGE_COMMANDS: SlashCommand[] = [
+// Static (non-customizable) commands. They bookend the menu: input-stage helpers first, then the
+// customizable prompt macros. /reply is a "compose" command (fills the box with an editable draft,
+// dispatched in ChatView); /btw sends a standalone off-record question.
+const STATIC_COMMANDS: SlashCommand[] = [
+  {
+    name: "reply",
+    description: "Draft a reply: drop a ready-to-edit suggestion in the box",
+    descriptionKey: "slashCommands.reply",
+    kind: "compose",
+  },
   {
     name: "btw",
     description: "Standalone side question: excluded from context and grading",
@@ -119,53 +138,6 @@ const MESSAGE_COMMANDS: SlashCommand[] = [
     argsHint: "<ask the AI anything>",
     argsHintKey: "slashCommands.btwHint",
     kind: "message",
-  },
-];
-
-const ACTION_COMMANDS: SlashCommand[] = [
-  {
-    name: "harder",
-    description:
-      "Increase difficulty: branch into a harder version of the current conversation",
-    descriptionKey: "slashCommands.harder",
-    kind: "action",
-    actionId: "builtin:action:harder",
-  },
-  {
-    name: "easier",
-    description: "Decrease difficulty: branch into an easier version",
-    descriptionKey: "slashCommands.easier",
-    kind: "action",
-    actionId: "builtin:action:easier",
-  },
-  {
-    name: "swap",
-    description: "Swap roles: branch into a role-reversed version",
-    descriptionKey: "slashCommands.swap",
-    kind: "action",
-    actionId: "builtin:action:swap_roles",
-  },
-  {
-    name: "scene",
-    description: "Change scene: keep the practice goal, switch the setting",
-    descriptionKey: "slashCommands.scene",
-    kind: "action",
-    actionId: "builtin:action:change_scene",
-  },
-  {
-    name: "restart",
-    description: "Restart: keep the setup, open a blank branch for re-practice",
-    descriptionKey: "slashCommands.restart",
-    kind: "action",
-    actionId: "builtin:action:restart",
-  },
-  {
-    name: "next-day",
-    description:
-      "Continue next day: branch into a new-day continuation of the current story",
-    descriptionKey: "slashCommands.nextDay",
-    kind: "action",
-    actionId: "builtin:action:next_day",
   },
 ];
 
@@ -197,8 +169,7 @@ function macroToCommand(def: {
 
 function isReservedName(name: string): boolean {
   return (
-    MESSAGE_COMMANDS.some((c) => c.name === name) ||
-    ACTION_COMMANDS.some((c) => c.name === name) ||
+    STATIC_COMMANDS.some((c) => c.name === name) ||
     BUILTIN_PROMPT_MACROS.some((m) => m.name === name)
   );
 }
@@ -237,10 +208,10 @@ export function resolvePromptMacros(): SlashCommand[] {
   return out;
 }
 
-// The full live command list: static message commands + resolved prompt macros + branching actions.
+// The full live command list: static input-stage commands + resolved prompt macros.
 // Recomputed on demand so settings edits to prompt macros take effect without a reload.
 export function getSlashCommands(): SlashCommand[] {
-  return [...MESSAGE_COMMANDS, ...resolvePromptMacros(), ...ACTION_COMMANDS];
+  return [...STATIC_COMMANDS, ...resolvePromptMacros()];
 }
 
 // Reserved + existing names a new custom macro must not reuse. Excludes `exceptId`'s own name so the
@@ -250,8 +221,7 @@ export function takenMacroNames(
   exceptId?: string,
 ): Set<string> {
   const names = new Set<string>([
-    ...MESSAGE_COMMANDS.map((c) => c.name),
-    ...ACTION_COMMANDS.map((c) => c.name),
+    ...STATIC_COMMANDS.map((c) => c.name),
     ...BUILTIN_PROMPT_MACROS.map((m) => m.name),
   ]);
   for (const c of custom) {
@@ -288,26 +258,20 @@ export function slashMenuToken(input: string): string | null {
 }
 
 export interface SlashMenuContext {
-  /** Whether branching is available (practice conversation and not a draft); when false, action-kind commands are hidden. */
-  canDerive: boolean;
-  /** Focused-lesson session: prompt macros (/topic, /learn, /surprise) would fight the lesson script, so they are hidden. */
+  /** Focused-lesson session: prompt macros (/topic, /learn …) and /reply would fight the lesson script, so they are hidden. */
   isLearning: boolean;
 }
 
 // Filter + sort for the menu: match by command word prefix or substring, startsWith ranked first;
-// action-kind commands are excluded when branching is unavailable or the corresponding agent is disabled;
-// prompt-kind commands are excluded in focused lessons.
+// prompt- and compose-kind commands are excluded in focused lessons (they fight the lesson script).
 export function matchSlashCommands(
   token: string,
   ctx: SlashMenuContext,
 ): SlashCommand[] {
   const q = token.toLowerCase();
   const available = getSlashCommands().filter((c) => {
-    if (c.kind === "action") {
-      if (!ctx.canDerive) return false;
-      if (c.actionId && !isAgentEnabled(c.actionId)) return false;
-    }
-    if (c.kind === "prompt" && ctx.isLearning) return false;
+    if ((c.kind === "prompt" || c.kind === "compose") && ctx.isLearning)
+      return false;
     return true;
   });
   if (!q) return available;
