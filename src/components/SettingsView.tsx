@@ -2225,8 +2225,8 @@ export function SettingsView({
   }
 
   return (
-    <div className="h-full overflow-y-auto px-8 pt-10 pb-12">
-      <div className="mx-auto w-full max-w-4xl">
+    <div className="flex h-full max-w-5xl flex-col overflow-y-auto px-6 pt-14 pb-6">
+      <div className="w-full">
         {section === "general" && (
           <section className="space-y-7">
             <div className="space-y-2 border-b border-border/70 pb-5">

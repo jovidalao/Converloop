@@ -36,7 +36,7 @@ export function AboutView() {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="mx-auto w-full max-w-2xl px-8 pt-16 pb-20">
+      <div className="w-full max-w-2xl px-6 pt-14 pb-12">
         <div className="flex items-start gap-4">
           <span className="inline-flex size-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
             <InfoIcon className="size-6" />

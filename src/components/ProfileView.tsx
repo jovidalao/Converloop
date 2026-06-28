@@ -715,8 +715,8 @@ export function ProfileView() {
   }, [sections]);
 
   return (
-    <div className="h-full overflow-y-auto px-6 py-8">
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
+    <div className="h-full overflow-y-auto px-6 pt-14 pb-6">
+      <div className="flex w-full max-w-7xl flex-col gap-6">
         <header className="flex flex-col gap-3 border-b border-border/70 pb-5 lg:flex-row lg:items-end lg:justify-between">
           <div className="min-w-0 max-w-3xl">
             <h2 className="m-0 text-ui-title font-semibold tracking-tight">
