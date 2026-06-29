@@ -1242,37 +1242,82 @@ export const zh: Messages = {
     },
   },
   about: {
-    tagline: "一个本地优先的桌面教练，通过真实对话学习一门语言。",
-    principlesTitle: "Converloop 的理念",
-    principles: {
-      local: {
-        title: "本地优先，隐私至上",
-        body: "你的档案、对话和学习数据都在本机。没有云、不同步、无需账号——只需自带模型 key。",
+    eyebrow: "本地优先的 AI 语言导师 · macOS 与 Windows",
+    mantra: "对话。纠错。记住。循环。",
+    tagline:
+      "Converloop 面向希望练习能持续积累的学习者:真实对话在前,精准批改在旁边,本地学习记忆再回到之后的练习里。",
+    identityTitle: "这是什么",
+    identities: {
+      chat: {
+        title: "为语言学习而生的聊天应用",
+        body: "纠错、双语对照、详细解释、划词解析和输入提示都长在对话里,不用跳到另一堂课。",
+      },
+      learning: {
+        title: "围绕记忆构建的学习应用",
+        body: "每个错误、每次说对、每个表达缺口都会成为本地信号,之后影响对话、专项课、听力和训练。",
+      },
+    },
+    loopTitle: "一轮对话里发生什么",
+    loop: {
+      input: {
+        label: "你写,或说",
+        body: "打一句话,通过语音转写说出来,或者在卡住时请求提示。",
       },
       conversation: {
-        title: "在对话中学习",
-        body: "每一轮都先给出自然回复，再在后台默默记录结构化反馈——练习像聊天，而不像考试。",
+        label: "对话继续",
+        body: "对话 agent 先自然回应,让交流不断掉。",
+      },
+      tutor: {
+        label: "导师讲解",
+        body: "导师 agent 标出原句里的错误片段,给出修正,并结合上下文解释。",
+      },
+      memory: {
+        label: "记忆更新",
+        body: "代码把带证据的信号写入本地,再把到期内容带回之后的练习。",
+      },
+    },
+    principlesTitle: "为什么这样设计",
+    principles: {
+      local: {
+        title: "默认本地优先",
+        body: "你的档案、对话和学习数据都留在本机。没有云账号或同步层,你只接入自己信任的模型。",
+      },
+      conversation: {
+        title: "对话始终优先",
+        body: "应用先接住你的意思,再开始教学。反馈服务交流,而不是把每一句都变成考试。",
       },
       accounting: {
         title: "模型只观察，代码来记账",
-        body: "AI 只提出观察建议。计数、掌握度和复习排期都由代码确定性地计算，进度始终可信。",
+        body: "AI 只提出观察建议。计数、掌握度和复习排期由代码计算,所以进度可检查、可追溯。",
       },
       editable: {
-        title: "你的数据，公开透明",
-        body: "学习者档案是纯 Markdown，进度是本地数据库——都可读可改，绝不锁死。",
+        title: "学习记录保持开放",
+        body: "学习者档案是纯 Markdown,进度存在本地 SQLite,记录可读、可改、可迁移。",
       },
     },
     featuresTitle: "主要能力",
     features: {
-      conversation: "自然对话——话题、角色扮演与情景",
-      correction: "实时纠错，以及更地道的说法",
-      lessons: "专项课与训练——情景演练、听写、快问快答",
-      listening: "听力与听写练习",
-      customize: "可定制的 Agent、观察者与斜杠命令",
+      chat: {
+        title: "对话工具",
+        body: "话题、角色扮演、场景、分支、斜杠帮助、双语回复和按需讲解。",
+      },
+      memory: {
+        title: "批改与记忆",
+        body: "行内纠错、地道改写、表达缺口、证据时间线和到期复习选择。",
+      },
+      practice: {
+        title: "练习方式",
+        body: "专项课、情景演练、弱项闪练、基于过往句子的听力和自适应听写。",
+      },
+      customize: {
+        title: "自定义能力",
+        body: "观察者、动作、回复变换器、自定义训练、package 导入导出和可审计运行记录。",
+      },
     },
-    meta: "基于 Tauri 与本地 SQLite 数据库构建。",
+    meta: "基于 Tauri 与本地 SQLite 构建。基于 AGPL-3.0 免费开源;模型请求只发往你配置的 provider。",
     websiteLink: "官网",
-    designLink: "它是怎么搭起来的 — 设计说明",
+    githubLink: "GitHub",
+    designLink: "设计说明",
   },
   design: {
     title: "设计说明",

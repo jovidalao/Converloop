@@ -1308,38 +1308,82 @@ export const en = {
     },
   },
   about: {
+    eyebrow: "Local-first AI language tutor · macOS & Windows",
+    mantra: "Converse. Correct. Remember. Repeat.",
     tagline:
-      "A local-first desktop coach for learning a language through real conversation.",
-    principlesTitle: "What Converloop believes",
-    principles: {
-      local: {
-        title: "Local-first and private",
-        body: "Your profile, conversations, and learning data live on this device. No cloud, no sync, no account — you bring your own model key.",
+      "Converloop is built for learners who want practice to compound: real conversation first, precise correction beside it, and a local learning memory that returns in future practice.",
+    identityTitle: "What it is",
+    identities: {
+      chat: {
+        title: "A chat app built for language learning",
+        body: "Corrections, bilingual reading, explanation, selected-text analysis, and input help all live inside the conversation instead of pulling you into a separate lesson.",
+      },
+      learning: {
+        title: "A learning app built around memory",
+        body: "Every slip, win, and expression gap becomes a local signal that can shape later conversations, lessons, listening, and drills.",
+      },
+    },
+    loopTitle: "What happens in one turn",
+    loop: {
+      input: {
+        label: "You write or speak",
+        body: "Type a sentence, speak it through STT, or ask for help when you are stuck.",
       },
       conversation: {
-        title: "You learn by talking",
-        body: "Every turn gets a natural reply, with quiet structured feedback in the background — so practice feels like a conversation, not a quiz.",
+        label: "Conversation continues",
+        body: "The conversation agent answers naturally first so the exchange keeps moving.",
+      },
+      tutor: {
+        label: "Tutor explains",
+        body: "The tutor agent marks the exact span, gives a fix, and explains the point in context.",
+      },
+      memory: {
+        label: "Memory updates",
+        body: "Code records evidence-backed signals locally and brings due items back later.",
+      },
+    },
+    principlesTitle: "Why it is built this way",
+    principles: {
+      local: {
+        title: "Local-first by default",
+        body: "Your profile, conversations, and learning data stay on this device. There is no cloud account or sync layer; you bring the model access you trust.",
+      },
+      conversation: {
+        title: "Conversation stays primary",
+        body: "The app answers your meaning before it teaches. Feedback supports the exchange instead of turning every turn into a test.",
       },
       accounting: {
         title: "The model observes, code keeps score",
-        body: "The AI only suggests observations. Counts, mastery, and your review schedule are computed deterministically in code, so your progress stays trustworthy.",
+        body: "AI proposes observations, but counts, mastery, and review timing are computed by code so progress remains inspectable.",
       },
       editable: {
-        title: "Your data, in the open",
-        body: "Your learner profile is plain Markdown and your progress is a local database — both readable and editable, never locked away.",
+        title: "Your learning record is open",
+        body: "The learner profile is plain Markdown and progress lives in local SQLite, so the record is readable, editable, and portable.",
       },
     },
     featuresTitle: "What's inside",
     features: {
-      conversation: "Natural conversation — topics, role-play, and scenarios",
-      correction: "Real-time correction and more natural ways to say things",
-      lessons: "Focused lessons and drills — scenarios, dictation, quickfire",
-      listening: "Listening and dictation practice",
-      customize: "Customizable agents, observers, and slash commands",
+      chat: {
+        title: "Conversation tools",
+        body: "Topics, role-play, scenes, branching, slash help, bilingual replies, and on-demand explanations.",
+      },
+      memory: {
+        title: "Correction and memory",
+        body: "Inline correction, natural rewrites, expression gaps, evidence timelines, and due review selection.",
+      },
+      practice: {
+        title: "Practice modes",
+        body: "Focused lessons, scenario drills, weak-item quickfire, listening from past lines, and adaptive dictation.",
+      },
+      customize: {
+        title: "Custom capabilities",
+        body: "Observers, actions, reply transformers, custom drills, package import/export, and auditable agent jobs.",
+      },
     },
-    meta: "Built with Tauri and a local SQLite database.",
+    meta: "Built with Tauri and local SQLite. Free and open source under AGPL-3.0; model requests go only to the provider you configure.",
     websiteLink: "Website",
-    designLink: "How it's built — Design notes",
+    githubLink: "GitHub",
+    designLink: "Design notes",
   },
   design: {
     title: "Design notes",

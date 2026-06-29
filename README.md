@@ -2,9 +2,52 @@
 
 English | [Simplified Chinese](README.zh-CN.md)
 
-Converloop is a local-first AI language-learning desktop app. It combines real conversation, instant correction, long-term learning memory, voice practice, and focused training in one Tauri app, using your own model API keys by default.
+> **Converse. Correct. Remember. Repeat.** A local-first AI language tutor for macOS and Windows: it talks with you, corrects the sentence you just wrote, and remembers every gap so the next practice already knows where to go.
 
-When a learner writes or speaks in the target language, Converloop returns a natural streaming reply and structured feedback in parallel. It records errors, correct usage, expression gaps, and review evidence, then uses that learning state in later conversations, focused lessons, and training drills.
+[![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-2337ff.svg)](LICENSE)
+[![Platform: macOS | Windows](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-555.svg)](#quick-start)
+[![Built with Tauri](https://img.shields.io/badge/built%20with-Tauri%20v2-24c8db.svg)](https://tauri.app)
+
+**[Website](https://jovidalao.com/converloop)** · **[Source code](https://github.com/jovidalao/Converloop)** · **[Report an issue](https://github.com/jovidalao/Converloop/issues)** · **[License](LICENSE)**
+
+Converloop is a local-first AI language-learning desktop app for learners who want practice to compound. It combines real conversation, instant correction, long-term learning memory, voice practice, and focused training in one Tauri app, using your own model API keys by default.
+
+When you write or speak in the target language, Converloop streams a natural reply first and produces structured feedback in parallel. It records errors, correct usage, expression gaps, and review evidence locally, then brings that learning state back into later conversations, focused lessons, listening practice, and drills.
+
+## Screenshots
+
+Place real product screenshots in `docs/screenshots/` when they are ready. The README already has slots for the main story:
+
+<!--
+<p align="center">
+  <img alt="Converloop conversation with inline correction" src="docs/screenshots/conversation.png" width="880">
+</p>
+
+<p align="center">
+  <img alt="Converloop Coach Panel and learning memory" src="docs/screenshots/coach-panel.png" width="880">
+</p>
+
+<p align="center">
+  <img alt="Converloop Practice Center" src="docs/screenshots/practice-center.png" width="880">
+</p>
+-->
+
+## Why Converloop
+
+- **Conversation first.** The app answers what you meant before it teaches, so practice still feels like talking.
+- **Corrections stay attached to your sentence.** You see the wrong span, the corrected sentence, a more natural rewrite, and grammar notes where they matter.
+- **Memory is evidence-based.** Errors, wins, and expression gaps become local records with traceable evidence, not vague "AI memory."
+- **Review returns in context.** Weak points come back through conversation, lessons, dictation, and drills instead of living only in a flashcard queue.
+- **Local data stays yours.** Conversations, profile notes, learning data, settings, and backups are stored on your device; secrets are excluded from backups.
+
+## The Learning Loop
+
+Converloop closes the loop most tools leave open — every turn feeds a learning state that shapes the next one:
+
+1. **Converse** — speak or type in your target language and a natural reply streams back. A real conversation, not a quiz.
+2. **Correct** — the fix lands on the sentence you wrote: the wrong span, the correction, a more natural rewrite, and grammar notes on tap.
+3. **Remember** — every slip, win, and expression gap becomes a signal in your local learning memory.
+4. **Review** — due items quietly return, woven into your next conversation and the training drills.
 
 ## Current Status
 

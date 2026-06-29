@@ -2,9 +2,52 @@
 
 [English](README.md) | 简体中文
 
-Converloop 是一个本地优先的 AI 语言学习桌面端。它把真实对话、即时批改、长期学习记忆、语音练习和专项训练放在同一个 Tauri 应用里，默认使用用户自己的模型 API key。
+> **对话。纠错。记住。循环。** 一个面向 macOS 和 Windows 的本地优先 AI 语言导师：它和你对话、就在你刚写的句子上纠错、记住每一个表达缺口，于是下一次练习已经知道该往哪里走。
 
-用户用目标语言输入一句话后，会同时得到自然的流式回复和结构化批改。系统会记录错误、正确使用、表达缺口和复习证据，再把这些学习状态用于后续对话、专项课和训练任务。
+[![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-2337ff.svg)](LICENSE)
+[![Platform: macOS | Windows](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-555.svg)](#快速开始)
+[![Built with Tauri](https://img.shields.io/badge/built%20with-Tauri%20v2-24c8db.svg)](https://tauri.app)
+
+**[官网](https://jovidalao.com/converloop)** · **[源码仓库](https://github.com/jovidalao/Converloop)** · **[反馈问题](https://github.com/jovidalao/Converloop/issues)** · **[许可证](LICENSE)**
+
+Converloop 是一个本地优先的 AI 语言学习桌面端,面向希望练习能持续积累的学习者。它把真实对话、即时批改、长期学习记忆、语音练习和专项训练放在同一个 Tauri 应用里,默认使用用户自己的模型 API key。
+
+你用目标语言说或写一句话后,Converloop 会先返回自然的流式回复,同时并行生成结构化反馈。系统在本地记录错误、正确使用、表达缺口和复习证据,再把这些学习状态带回后续对话、专项课、听力练习和训练任务。
+
+## 截图
+
+真实产品截图准备好后放到 `docs/screenshots/`。README 已经预留了主叙事对应的图片位：
+
+<!--
+<p align="center">
+  <img alt="Converloop 对话与行内纠错" src="docs/screenshots/conversation.png" width="880">
+</p>
+
+<p align="center">
+  <img alt="Converloop Coach Panel 与学习记忆" src="docs/screenshots/coach-panel.png" width="880">
+</p>
+
+<p align="center">
+  <img alt="Converloop 训练中心" src="docs/screenshots/practice-center.png" width="880">
+</p>
+-->
+
+## 为什么是 Converloop
+
+- **对话优先。** 应用先回应你想表达的意思,再开始教学,所以练习仍然像聊天。
+- **纠错贴着原句。** 你能看到错误片段、完整改正版、更自然说法和放在上下文里的语法说明。
+- **记忆基于证据。** 错误、说对的地方和表达缺口都会变成本地记录,不是模糊的“AI 记忆”。
+- **复习回到语境里。** 薄弱点会进入之后的对话、专项课、听写和训练,而不是只待在抽认卡队列里。
+- **本地数据归你。** 对话、档案、学习数据、设置和备份都在本机;密钥不会进入备份。
+
+## 学习闭环
+
+Converloop 把大多数工具止步于「回复」的那个环闭上——每一轮都喂给一份学习状态，再去塑造下一轮：
+
+1. **对话** —— 用目标语言说或写，自然的回复即时返回。是真实对话，不是测验。
+2. **纠错** —— 修正就落在你写的那句上：错误片段、正解、更地道的改写，以及随手可点的语法讲解。
+3. **记住** —— 每个错误、每次说对、每个表达缺口，都成为本地学习记忆里的一条信号。
+4. **复习** —— 到期的条目会悄悄回来，编进你的下一段对话和训练练习。
 
 ## 当前状态
 
@@ -141,4 +184,9 @@ pnpm test
 
 ## 许可证
 
-仓库当前还没有 `LICENSE` 文件。公开发布或接受外部贡献前需要补充许可证。
+Converloop 采用**双重许可**：
+
+- **开源 —— [GNU AGPL-3.0-or-later](LICENSE)。** 你可以自由使用、修改和自托管。注意 AGPL 的网络条款：如果你把修改版作为网络服务运行，必须以 AGPL 公开你的修改源码。
+- **商业许可。** 对于无法或不愿遵守 AGPL 的情况（例如发布闭源构建，或运行托管服务但不公开改动），另提供单独的专有商业许可，见 [COMMERCIAL.md](COMMERCIAL.md)。
+
+外部贡献依据[贡献者许可协议（CLA）](CLA.md)接受，正是它让双重许可模式得以成立。
