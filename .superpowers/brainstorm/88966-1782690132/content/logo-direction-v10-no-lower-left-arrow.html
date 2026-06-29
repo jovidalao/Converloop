@@ -1,0 +1,103 @@
+<h2>Refined Direction: Remove Lower-Left Arrow</h2>
+<p class="subtitle">The lower-left arrowhead has been removed. The lower stroke now ends as a speech-bubble tail, so the two ideas no longer overlap.</p>
+
+<div class="cards">
+  <div class="card" data-choice="no-lower-left-arrow" onclick="toggleSelect(this)">
+    <div class="card-image" style="height:330px;display:flex;align-items:center;justify-content:center;background:#eef6ff;">
+      <svg width="250" height="250" viewBox="0 0 250 250" aria-label="Logo with lower-left arrow removed">
+        <defs>
+          <linearGradient id="tileNoLowerArrow" x1="49" y1="43" x2="201" y2="207" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stop-color="#123a7a"/>
+            <stop offset=".55" stop-color="#0b1f4d"/>
+            <stop offset="1" stop-color="#071426"/>
+          </linearGradient>
+          <linearGradient id="strokeNoLowerArrow" x1="72" y1="72" x2="180" y2="184" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stop-color="#78d6ff"/>
+            <stop offset=".52" stop-color="#2f80ed"/>
+            <stop offset="1" stop-color="#1d4ed8"/>
+          </linearGradient>
+        </defs>
+        <rect x="38" y="38" width="174" height="174" rx="47" fill="url(#tileNoLowerArrow)"/>
+        <path d="M78 121V103C78 83 94 72 118 72H161" fill="none" stroke="url(#strokeNoLowerArrow)" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M152 59l20 13-20 13" fill="none" stroke="#78d6ff" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M176 116V136C176 158 158 171 133 171H101" fill="none" stroke="url(#strokeNoLowerArrow)" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M101 171L78 190L88 171" fill="none" stroke="#2f80ed" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    <div class="card-body">
+      <h3>No Lower-Left Arrow</h3>
+      <p>The top arrow keeps the loop direction. The lower-left area is now only the speech-bubble tail, with no second arrowhead competing for attention.</p>
+      <p><strong>Result:</strong> cleaner lower-left corner, clearer dialogue shape, less visual knotting at small sizes.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="no-lower-left-arrow-small" onclick="toggleSelect(this)">
+    <div class="card-image" style="height:330px;display:flex;align-items:center;justify-content:center;background:#f8fbff;">
+      <div style="display:flex;gap:30px;align-items:center;justify-content:center;">
+        <div style="display:flex;flex-direction:column;gap:10px;align-items:center;">
+          <svg width="128" height="128" viewBox="0 0 250 250" aria-label="128 pixel preview">
+            <rect x="38" y="38" width="174" height="174" rx="47" fill="#0b1f4d"/>
+            <path d="M78 121V103C78 83 94 72 118 72H161" fill="none" stroke="#78d6ff" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M152 59l20 13-20 13" fill="none" stroke="#78d6ff" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M176 116V136C176 158 158 171 133 171H101" fill="none" stroke="#2f80ed" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M101 171L78 190L88 171" fill="none" stroke="#2f80ed" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <div style="font-size:13px;color:#5b6472;">128 px</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px;align-items:center;">
+          <svg width="72" height="72" viewBox="0 0 250 250" aria-label="72 pixel preview">
+            <rect x="38" y="38" width="174" height="174" rx="47" fill="#0b1f4d"/>
+            <path d="M78 121V103C78 83 94 72 118 72H161" fill="none" stroke="#78d6ff" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M152 59l20 13-20 13" fill="none" stroke="#78d6ff" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M176 116V136C176 158 158 171 133 171H101" fill="none" stroke="#2f80ed" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M101 171L78 190L88 171" fill="none" stroke="#2f80ed" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <div style="font-size:13px;color:#5b6472;">72 px</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px;align-items:center;">
+          <svg width="40" height="40" viewBox="0 0 250 250" aria-label="40 pixel preview">
+            <rect x="38" y="38" width="174" height="174" rx="47" fill="#0b1f4d"/>
+            <path d="M78 121V103C78 83 94 72 118 72H161" fill="none" stroke="#78d6ff" stroke-width="15" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M176 116V136C176 158 158 171 133 171H101" fill="none" stroke="#2f80ed" stroke-width="15" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M101 171L78 190L88 171" fill="none" stroke="#2f80ed" stroke-width="15" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <div style="font-size:13px;color:#5b6472;">40 px</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Small Size Check</h3>
+      <p>At smaller sizes the lower-left knot is gone. The icon reads as a conversation-shaped loop rather than two overlapping arrow shapes.</p>
+      <p><strong>Tiny icon rule:</strong> drop the top arrowhead below very small sizes if it starts to blur.</p>
+    </div>
+  </div>
+</div>
+
+<div class="mockup">
+  <div class="mockup-header">Wordmark preview</div>
+  <div class="mockup-body" style="display:grid;grid-template-columns:1fr 1fr;gap:28px;align-items:center;">
+    <div style="display:flex;align-items:center;gap:16px;">
+      <svg width="68" height="68" viewBox="0 0 250 250" aria-hidden="true">
+        <rect x="38" y="38" width="174" height="174" rx="47" fill="#0b1f4d"/>
+        <path d="M78 121V103C78 83 94 72 118 72H161" fill="none" stroke="#78d6ff" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M152 59l20 13-20 13" fill="none" stroke="#78d6ff" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M176 116V136C176 158 158 171 133 171H101" fill="none" stroke="#2f80ed" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M101 171L78 190L88 171" fill="none" stroke="#2f80ed" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <div>
+        <div style="font-size:32px;font-weight:760;letter-spacing:0;color:#0b1f4d;line-height:1;">Converloop</div>
+        <div style="font-size:13px;color:#5b6472;margin-top:6px;">local-first language practice</div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:16px;background:#0b1f4d;border-radius:14px;padding:18px 20px;">
+      <svg width="56" height="56" viewBox="0 0 250 250" aria-hidden="true">
+        <rect x="38" y="38" width="174" height="174" rx="47" fill="#f8fbff"/>
+        <path d="M78 121V103C78 83 94 72 118 72H161" fill="none" stroke="#0b1f4d" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M152 59l20 13-20 13" fill="none" stroke="#0b1f4d" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M176 116V136C176 158 158 171 133 171H101" fill="none" stroke="#0b1f4d" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M101 171L78 190L88 171" fill="none" stroke="#0b1f4d" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <div style="font-size:30px;font-weight:760;letter-spacing:0;color:#f8fbff;line-height:1;">Converloop</div>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,106 @@
+<h2>Dialogue Loop Variants</h2>
+<p class="subtitle">Three ways to connect the loop with conversation while keeping the clean tech-blue direction.</p>
+
+<div class="cards">
+  <div class="card" data-choice="bubble-core" onclick="toggleSelect(this)">
+    <div class="card-image" style="height:300px;display:flex;align-items:center;justify-content:center;background:#eef6ff;">
+      <svg width="230" height="230" viewBox="0 0 230 230" aria-label="Loop with central speech bubble">
+        <defs>
+          <linearGradient id="tileDialogueA" x1="46" y1="40" x2="184" y2="190" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stop-color="#123a7a"/>
+            <stop offset=".55" stop-color="#0b1f4d"/>
+            <stop offset="1" stop-color="#071426"/>
+          </linearGradient>
+          <linearGradient id="loopDialogueA" x1="78" y1="64" x2="152" y2="164" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stop-color="#78d6ff"/>
+            <stop offset=".48" stop-color="#2f80ed"/>
+            <stop offset="1" stop-color="#1d4ed8"/>
+          </linearGradient>
+          <filter id="glowDialogueA" x="-35%" y="-35%" width="170%" height="170%">
+            <feGaussianBlur stdDeviation="2" result="blur"/>
+            <feColorMatrix in="blur" type="matrix" values="0 0 0 0 0.20 0 0 0 0 0.62 0 0 0 0 1 0 0 0 .28 0"/>
+            <feBlend in="SourceGraphic"/>
+          </filter>
+        </defs>
+        <rect x="34" y="34" width="162" height="162" rx="43" fill="url(#tileDialogueA)"/>
+        <path d="M83 107c0-22 17-38 41-38h17" fill="none" stroke="url(#loopDialogueA)" stroke-width="11" stroke-linecap="round" filter="url(#glowDialogueA)"/>
+        <path d="M147 123c-3 21-20 38-43 38H87" fill="none" stroke="url(#loopDialogueA)" stroke-width="11" stroke-linecap="round" filter="url(#glowDialogueA)"/>
+        <path d="M135 56l18 13-18 13" fill="none" stroke="#78d6ff" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M95 148l-18 13 18 13" fill="none" stroke="#2f80ed" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M100 100h30c7 0 12 5 12 12v8c0 7-5 12-12 12h-12l-11 10v-10h-7c-7 0-12-5-12-12v-8c0-7 5-12 12-12Z" fill="#f8fbff"/>
+        <circle cx="108" cy="116" r="3" fill="#2f80ed"/>
+        <circle cx="119" cy="116" r="3" fill="#2f80ed"/>
+        <circle cx="130" cy="116" r="3" fill="#2f80ed"/>
+      </svg>
+    </div>
+    <div class="card-body">
+      <h3>1. Bubble Core</h3>
+      <p>The center point becomes a compact chat bubble. The loop still carries the brand idea, while the middle clearly says conversation.</p>
+      <p><strong>Recommended:</strong> explicit enough, still clean at app-icon scale.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="reply-loop" onclick="toggleSelect(this)">
+    <div class="card-image" style="height:300px;display:flex;align-items:center;justify-content:center;background:#eef6ff;">
+      <svg width="230" height="230" viewBox="0 0 230 230" aria-label="Loop as two reply bubbles">
+        <defs>
+          <linearGradient id="tileDialogueB" x1="46" y1="40" x2="184" y2="190" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stop-color="#123a7a"/>
+            <stop offset=".55" stop-color="#0b1f4d"/>
+            <stop offset="1" stop-color="#071426"/>
+          </linearGradient>
+        </defs>
+        <rect x="34" y="34" width="162" height="162" rx="43" fill="url(#tileDialogueB)"/>
+        <path d="M80 94c7-18 24-31 45-31h18" fill="none" stroke="#78d6ff" stroke-width="12" stroke-linecap="round"/>
+        <path d="M132 51l18 12-18 13" fill="none" stroke="#78d6ff" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M148 126c-8 17-24 31-45 31H85" fill="none" stroke="#2f80ed" stroke-width="12" stroke-linecap="round"/>
+        <path d="M98 144l-18 13 18 13" fill="none" stroke="#2f80ed" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M88 102h34c6 0 10 4 10 10v3c0 6-4 10-10 10h-19l-8 8v-8h-7c-6 0-10-4-10-10v-3c0-6 4-10 10-10Z" fill="#f8fbff"/>
+        <path d="M110 84h32c6 0 10 4 10 10v3c0 6-4 10-10 10h-6v8l-9-8h-17c-6 0-10-4-10-10v-3c0-6 4-10 10-10Z" fill="#dff4ff"/>
+      </svg>
+    </div>
+    <div class="card-body">
+      <h3>2. Reply Pair</h3>
+      <p>Two small bubbles sit inside the loop, so it reads as back-and-forth conversation. Stronger concept, but busier.</p>
+      <p><strong>Tradeoff:</strong> clearer at large sizes, more fragile at tiny sizes.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="ellipsis-core" onclick="toggleSelect(this)">
+    <div class="card-image" style="height:300px;display:flex;align-items:center;justify-content:center;background:#eef6ff;">
+      <svg width="230" height="230" viewBox="0 0 230 230" aria-label="Loop with conversation ellipsis">
+        <defs>
+          <linearGradient id="tileDialogueC" x1="46" y1="40" x2="184" y2="190" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stop-color="#123a7a"/>
+            <stop offset=".55" stop-color="#0b1f4d"/>
+            <stop offset="1" stop-color="#071426"/>
+          </linearGradient>
+          <linearGradient id="loopDialogueC" x1="78" y1="64" x2="152" y2="164" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stop-color="#78d6ff"/>
+            <stop offset=".48" stop-color="#2f80ed"/>
+            <stop offset="1" stop-color="#1d4ed8"/>
+          </linearGradient>
+        </defs>
+        <rect x="34" y="34" width="162" height="162" rx="43" fill="url(#tileDialogueC)"/>
+        <path d="M83 107c0-22 17-38 41-38h17" fill="none" stroke="url(#loopDialogueC)" stroke-width="11" stroke-linecap="round"/>
+        <path d="M147 123c-3 21-20 38-43 38H87" fill="none" stroke="url(#loopDialogueC)" stroke-width="11" stroke-linecap="round"/>
+        <path d="M135 56l18 13-18 13" fill="none" stroke="#78d6ff" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M95 148l-18 13 18 13" fill="none" stroke="#2f80ed" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="115" cy="115" r="19" fill="#f8fbff"/>
+        <circle cx="105" cy="115" r="3.5" fill="#2f80ed"/>
+        <circle cx="115" cy="115" r="3.5" fill="#2f80ed"/>
+        <circle cx="125" cy="115" r="3.5" fill="#2f80ed"/>
+      </svg>
+    </div>
+    <div class="card-body">
+      <h3>3. Ellipsis Core</h3>
+      <p>Minimal conversation cue: the center point becomes typing dots. It stays very clean, but feels less distinctive than a speech bubble.</p>
+      <p><strong>Tradeoff:</strong> best for simplicity, weakest for brand meaning.</p>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>My read</h3>
+  <p>Use <strong>Bubble Core</strong> if you want the loop to connect to conversation without losing the clean tech-blue identity. It is the strongest balance of app-icon clarity and product meaning.</p>
+</div>

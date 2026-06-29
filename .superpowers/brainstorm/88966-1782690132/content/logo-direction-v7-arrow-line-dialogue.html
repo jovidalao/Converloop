@@ -1,0 +1,131 @@
+<h2>Arrow Lines As Dialogue Shape</h2>
+<p class="subtitle">The arrows are no longer wrapped around a chat symbol. Their own stroke paths suggest the outline, tail, and exchange of a dialogue bubble.</p>
+
+<div class="cards">
+  <div class="card" data-choice="bubble-contour-arrows" onclick="toggleSelect(this)">
+    <div class="card-image" style="height:310px;display:flex;align-items:center;justify-content:center;background:#eef6ff;">
+      <svg width="235" height="235" viewBox="0 0 235 235" aria-label="Arrow lines forming a speech bubble contour">
+        <defs>
+          <linearGradient id="tileLineDialogueA" x1="46" y1="40" x2="188" y2="194" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stop-color="#123a7a"/>
+            <stop offset=".55" stop-color="#0b1f4d"/>
+            <stop offset="1" stop-color="#071426"/>
+          </linearGradient>
+          <linearGradient id="lineDialogueA" x1="72" y1="60" x2="166" y2="176" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stop-color="#78d6ff"/>
+            <stop offset=".5" stop-color="#2f80ed"/>
+            <stop offset="1" stop-color="#1d4ed8"/>
+          </linearGradient>
+        </defs>
+        <rect x="35" y="35" width="165" height="165" rx="44" fill="url(#tileLineDialogueA)"/>
+        <path d="M75 113c0-29 22-50 53-50h18" fill="none" stroke="url(#lineDialogueA)" stroke-width="12" stroke-linecap="round"/>
+        <path d="M138 50l20 13-20 13" fill="none" stroke="#78d6ff" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M160 119c-2 26-23 43-54 43H88l-15 13 7-19c-8-8-12-18-12-31" fill="none" stroke="url(#lineDialogueA)" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M93 149l-20 13 20 13" fill="none" stroke="#2f80ed" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    <div class="card-body">
+      <h3>1. Bubble Contour Arrows</h3>
+      <p>The two arrows trace the top and bottom of a dialogue bubble. The small lower bend is part of the return stroke, not an extra symbol.</p>
+      <p><strong>Recommended:</strong> clearest answer to “arrow line shape forms dialogue.”</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="tail-turn-arrows" onclick="toggleSelect(this)">
+    <div class="card-image" style="height:310px;display:flex;align-items:center;justify-content:center;background:#eef6ff;">
+      <svg width="235" height="235" viewBox="0 0 235 235" aria-label="Loop arrows with speech tail turns">
+        <defs>
+          <linearGradient id="tileLineDialogueB" x1="46" y1="40" x2="188" y2="194" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stop-color="#123a7a"/>
+            <stop offset=".55" stop-color="#0b1f4d"/>
+            <stop offset="1" stop-color="#071426"/>
+          </linearGradient>
+          <linearGradient id="lineDialogueB" x1="70" y1="62" x2="168" y2="172" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stop-color="#78d6ff"/>
+            <stop offset=".5" stop-color="#2f80ed"/>
+            <stop offset="1" stop-color="#1d4ed8"/>
+          </linearGradient>
+        </defs>
+        <rect x="35" y="35" width="165" height="165" rx="44" fill="url(#tileLineDialogueB)"/>
+        <path d="M77 111c0-26 20-45 49-45h20" fill="none" stroke="url(#lineDialogueB)" stroke-width="12" stroke-linecap="round"/>
+        <path d="M138 53l19 13-19 13" fill="none" stroke="#78d6ff" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M158 120c-3 24-22 40-50 40H86l-12 15 23-15" fill="none" stroke="url(#lineDialogueB)" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M95 147l-19 13 19 13" fill="none" stroke="#2f80ed" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    <div class="card-body">
+      <h3>2. Tail Turn Arrows</h3>
+      <p>Closer to the original A1 loop, with only a small tail-like turn in the return line. It is simpler, but the dialogue cue is more subtle.</p>
+      <p><strong>Tradeoff:</strong> cleaner, less immediately “conversation.”</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="message-edge-arrows" onclick="toggleSelect(this)">
+    <div class="card-image" style="height:310px;display:flex;align-items:center;justify-content:center;background:#eef6ff;">
+      <svg width="235" height="235" viewBox="0 0 235 235" aria-label="Message edge arrows">
+        <defs>
+          <linearGradient id="tileLineDialogueC" x1="46" y1="40" x2="188" y2="194" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stop-color="#123a7a"/>
+            <stop offset=".55" stop-color="#0b1f4d"/>
+            <stop offset="1" stop-color="#071426"/>
+          </linearGradient>
+          <linearGradient id="lineDialogueC" x1="72" y1="61" x2="166" y2="174" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stop-color="#78d6ff"/>
+            <stop offset=".5" stop-color="#2f80ed"/>
+            <stop offset="1" stop-color="#1d4ed8"/>
+          </linearGradient>
+        </defs>
+        <rect x="35" y="35" width="165" height="165" rx="44" fill="url(#tileLineDialogueC)"/>
+        <path d="M75 101c8-23 29-37 58-35h16" fill="none" stroke="url(#lineDialogueC)" stroke-width="12" stroke-linecap="round"/>
+        <path d="M141 53l18 13-20 12" fill="none" stroke="#78d6ff" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M160 134c-9 21-31 34-59 32H82" fill="none" stroke="url(#lineDialogueC)" stroke-width="12" stroke-linecap="round"/>
+        <path d="M91 153l-19 13 19 13" fill="none" stroke="#2f80ed" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M91 102h50" stroke="#78d6ff" stroke-width="12" stroke-linecap="round" opacity=".42"/>
+        <path d="M94 134h50" stroke="#2f80ed" stroke-width="12" stroke-linecap="round" opacity=".42"/>
+      </svg>
+    </div>
+    <div class="card-body">
+      <h3>3. Message Edge Arrows</h3>
+      <p>The arrow strokes flatten into message-line edges. This is very minimal, but it reads more as text/message flow than a dialogue bubble.</p>
+      <p><strong>Tradeoff:</strong> highly simple, weaker speech-bubble silhouette.</p>
+    </div>
+  </div>
+</div>
+
+<div class="mockup">
+  <div class="mockup-header">Small size check for Bubble Contour Arrows</div>
+  <div class="mockup-body" style="display:flex;gap:28px;align-items:center;justify-content:center;">
+    <div style="display:flex;flex-direction:column;gap:10px;align-items:center;">
+      <svg width="128" height="128" viewBox="0 0 235 235" aria-label="128 pixel preview">
+        <rect x="35" y="35" width="165" height="165" rx="44" fill="#0b1f4d"/>
+        <path d="M75 113c0-29 22-50 53-50h18" fill="none" stroke="#78d6ff" stroke-width="12" stroke-linecap="round"/>
+        <path d="M138 50l20 13-20 13" fill="none" stroke="#78d6ff" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M160 119c-2 26-23 43-54 43H88l-15 13 7-19c-8-8-12-18-12-31" fill="none" stroke="#2f80ed" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M93 149l-20 13 20 13" fill="none" stroke="#2f80ed" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <div style="font-size:13px;color:#5b6472;">128 px</div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px;align-items:center;">
+      <svg width="72" height="72" viewBox="0 0 235 235" aria-label="72 pixel preview">
+        <rect x="35" y="35" width="165" height="165" rx="44" fill="#0b1f4d"/>
+        <path d="M75 113c0-29 22-50 53-50h18" fill="none" stroke="#78d6ff" stroke-width="13" stroke-linecap="round"/>
+        <path d="M138 50l20 13-20 13" fill="none" stroke="#78d6ff" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M160 119c-2 26-23 43-54 43H88l-15 13 7-19c-8-8-12-18-12-31" fill="none" stroke="#2f80ed" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <div style="font-size:13px;color:#5b6472;">72 px</div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px;align-items:center;">
+      <svg width="40" height="40" viewBox="0 0 235 235" aria-label="40 pixel preview">
+        <rect x="35" y="35" width="165" height="165" rx="44" fill="#0b1f4d"/>
+        <path d="M75 113c0-29 22-50 53-50h18" fill="none" stroke="#78d6ff" stroke-width="15" stroke-linecap="round"/>
+        <path d="M160 119c-2 26-23 43-54 43H88l-15 13 7-19c-8-8-12-18-12-31" fill="none" stroke="#2f80ed" stroke-width="15" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <div style="font-size:13px;color:#5b6472;">40 px</div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>My read</h3>
+  <p><strong>Bubble Contour Arrows</strong> is the closest to your direction: the arrows themselves trace a simplified dialogue bubble contour, without adding a separate chat icon.</p>
+</div>

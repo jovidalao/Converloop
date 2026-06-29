@@ -33,7 +33,7 @@ import {
   type TransformerStage,
   updateLearningAgent,
 } from "../db/learning-agents";
-import { WEBSITE_DESIGN_URL } from "../lib/links";
+import { DESIGN_DOC_URL } from "../lib/links";
 import {
   type AgentCatalogEntry,
   type AgentEntry,
@@ -870,7 +870,7 @@ export function AgentLibraryView({
   }
 
   function openDataScopeGuide() {
-    void openUrl(`${WEBSITE_DESIGN_URL}#data-scopes`);
+    void openUrl(DESIGN_DOC_URL);
   }
 
   async function openEditor(entry: AgentCatalogEntry) {
