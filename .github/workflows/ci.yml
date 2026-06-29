@@ -4,6 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
+    tags: ["v*"]
   pull_request:
 
 # Cancel superseded runs on the same ref.
@@ -201,3 +202,48 @@ jobs:
           path: src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
           if-no-files-found: error
           retention-days: 30
+
+  release:
+    name: Publish GitHub Release
+    needs: package-macos
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist-artifacts
+      - name: Prepare release assets
+        run: |
+          set -euo pipefail
+
+          mkdir -p release-assets
+          apple_silicon_dmg="$(find dist-artifacts/converloop-macos-apple-silicon -type f -name '*.dmg' | head -n 1)"
+          intel_dmg="$(find dist-artifacts/converloop-macos-intel -type f -name '*.dmg' | head -n 1)"
+
+          if [ -z "$apple_silicon_dmg" ] || [ -z "$intel_dmg" ]; then
+            find dist-artifacts -type f -print
+            echo "Expected both macOS DMG artifacts before publishing the release." >&2
+            exit 1
+          fi
+
+          cp "$apple_silicon_dmg" "release-assets/Converloop-${GITHUB_REF_NAME}-apple-silicon.dmg"
+          cp "$intel_dmg" "release-assets/Converloop-${GITHUB_REF_NAME}-intel.dmg"
+          ls -lh release-assets
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" release-assets/*.dmg \
+              --repo "$GITHUB_REPOSITORY" \
+              --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" release-assets/*.dmg \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "Converloop ${GITHUB_REF_NAME}" \
+              --notes "Signed and notarized macOS builds for ${GITHUB_REF_NAME}."
+          fi
