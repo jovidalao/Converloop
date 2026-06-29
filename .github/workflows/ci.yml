@@ -139,17 +139,29 @@ jobs:
           keychain_path="$RUNNER_TEMP/build.keychain-db"
           keychain_password="$(openssl rand -base64 32)"
 
-          echo "$APPLE_CERTIFICATE" | base64 -D > "$certificate_path"
+          if ! echo "$APPLE_CERTIFICATE" | base64 -D > "$certificate_path"; then
+            echo "APPLE_CERTIFICATE is not valid base64. Encode the exported .p12 with: base64 -i DeveloperIDApplication.p12" >&2
+            exit 1
+          fi
+
+          if [ ! -s "$certificate_path" ]; then
+            echo "APPLE_CERTIFICATE decoded to an empty file. Check the repository secret value." >&2
+            exit 1
+          fi
+
           security create-keychain -p "$keychain_password" "$keychain_path"
           security set-keychain-settings -lut 21600 "$keychain_path"
           security unlock-keychain -p "$keychain_password" "$keychain_path"
 
-          security import "$certificate_path" \
+          if ! security import "$certificate_path" \
             -P "$APPLE_CERTIFICATE_PASSWORD" \
             -A \
             -t cert \
             -f pkcs12 \
-            -k "$keychain_path"
+            -k "$keychain_path"; then
+            echo "Failed to import APPLE_CERTIFICATE. Check that it is a Developer ID Application .p12 export and that APPLE_CERTIFICATE_PASSWORD matches the .p12 export password." >&2
+            exit 1
+          fi
 
           original_keychains="$(security list-keychains -d user | tr -d '"' | xargs)"
           security list-keychains -d user -s "$keychain_path" $original_keychains
