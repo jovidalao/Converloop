@@ -1,6 +1,7 @@
 name: CI
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
   pull_request:
@@ -55,3 +56,136 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
       - run: cargo build --manifest-path src-tauri/Cargo.toml --locked
+
+  package-macos:
+    name: Package macOS (${{ matrix.arch }})
+    needs: check
+    if: github.event_name != 'pull_request'
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: apple-silicon
+            runner: macos-15
+            target: aarch64-apple-darwin
+          - arch: intel
+            runner: macos-15-intel
+            target: x86_64-apple-darwin
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: macos-package-${{ matrix.target }}
+      - run: pnpm install --frozen-lockfile
+      - name: Select macOS signing mode
+        id: signing
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          required=(
+            APPLE_CERTIFICATE
+            APPLE_CERTIFICATE_PASSWORD
+            APPLE_ID
+            APPLE_PASSWORD
+            APPLE_TEAM_ID
+          )
+
+          missing=()
+          present=0
+          for name in "${required[@]}"; do
+            if [ -n "${!name}" ]; then
+              present=$((present + 1))
+            else
+              missing+=("$name")
+            fi
+          done
+
+          if [ "$present" -eq 0 ]; then
+            echo "mode=adhoc" >> "$GITHUB_OUTPUT"
+            echo "macOS signing mode: ad-hoc" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          if [ "${#missing[@]}" -gt 0 ]; then
+            printf 'Missing Apple signing secrets: %s\n' "${missing[*]}" >&2
+            exit 1
+          fi
+
+          echo "mode=developer-id" >> "$GITHUB_OUTPUT"
+          echo "macOS signing mode: Developer ID signing and notarization" >> "$GITHUB_STEP_SUMMARY"
+      - name: Import Developer ID certificate
+        if: steps.signing.outputs.mode == 'developer-id'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          certificate_path="$RUNNER_TEMP/developer-id.p12"
+          keychain_path="$RUNNER_TEMP/build.keychain-db"
+          keychain_password="$(openssl rand -base64 32)"
+
+          echo "$APPLE_CERTIFICATE" | base64 -D > "$certificate_path"
+          security create-keychain -p "$keychain_password" "$keychain_path"
+          security set-keychain-settings -lut 21600 "$keychain_path"
+          security unlock-keychain -p "$keychain_password" "$keychain_path"
+
+          security import "$certificate_path" \
+            -P "$APPLE_CERTIFICATE_PASSWORD" \
+            -A \
+            -t cert \
+            -f pkcs12 \
+            -k "$keychain_path"
+
+          original_keychains="$(security list-keychains -d user | tr -d '"' | xargs)"
+          security list-keychains -d user -s "$keychain_path" $original_keychains
+          security default-keychain -s "$keychain_path"
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: \
+            -s \
+            -k "$keychain_password" \
+            "$keychain_path"
+
+          signing_identity="$(security find-identity -v -p codesigning "$keychain_path" | awk -F'"' '/Developer ID Application/ { print $2; exit }')"
+          if [ -z "$signing_identity" ]; then
+            security find-identity -v -p codesigning "$keychain_path"
+            echo "Developer ID Application identity not found in certificate." >&2
+            exit 1
+          fi
+
+          echo "APPLE_SIGNING_IDENTITY=$signing_identity" >> "$GITHUB_ENV"
+          echo "Imported signing identity: $signing_identity"
+      - name: Build ad-hoc macOS DMG
+        if: steps.signing.outputs.mode == 'adhoc'
+        env:
+          # Ad-hoc signing does not identify the developer, but avoids some
+          # Apple Silicon "damaged app" failures for unsigned downloads.
+          APPLE_SIGNING_IDENTITY: "-"
+        run: pnpm tauri build --target ${{ matrix.target }} --bundles dmg
+      - name: Build signed and notarized macOS DMG
+        if: steps.signing.outputs.mode == 'developer-id'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: pnpm tauri build --target ${{ matrix.target }} --bundles dmg
+      - uses: actions/upload-artifact@v4
+        with:
+          name: converloop-macos-${{ matrix.arch }}
+          path: src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
+          if-no-files-found: error
+          retention-days: 30
