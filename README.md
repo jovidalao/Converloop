@@ -14,24 +14,6 @@ Converloop is a local-first AI language-learning desktop app for learners who wa
 
 When you write or speak in the target language, Converloop streams a natural reply first and produces structured feedback in parallel. It records errors, correct usage, expression gaps, and review evidence locally, then brings that learning state back into later conversations, focused lessons, listening practice, and drills.
 
-## Screenshots
-
-Place real product screenshots in `docs/screenshots/` when they are ready. The README already has slots for the main story:
-
-<!--
-<p align="center">
-  <img alt="Converloop conversation with inline correction" src="docs/screenshots/conversation.png" width="880">
-</p>
-
-<p align="center">
-  <img alt="Converloop Coach Panel and learning memory" src="docs/screenshots/coach-panel.png" width="880">
-</p>
-
-<p align="center">
-  <img alt="Converloop Practice Center" src="docs/screenshots/practice-center.png" width="880">
-</p>
--->
-
 ## Why Converloop
 
 - **Conversation first.** The app answers what you meant before it teaches, so practice still feels like talking.
