@@ -5,3 +5,4 @@ export const WEBSITE_URL = "https://jovidalao.com/converloop";
 export const GITHUB_URL = "https://github.com/jovidalao/Converloop";
 // Architecture / design notes live in the repository.
 export const DESIGN_DOC_URL = `${GITHUB_URL}/blob/main/docs/design.md`;
+export const WEBSITE_DESIGN_URL = DESIGN_DOC_URL;
