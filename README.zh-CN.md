@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="public/icon.svg" alt="Converloop" width="120" height="120">
+</p>
+
 # Converloop
 
 [English](README.md) | 简体中文

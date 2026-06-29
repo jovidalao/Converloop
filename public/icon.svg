@@ -12,7 +12,9 @@
     </linearGradient>
   </defs>
   <rect x="40" y="40" width="180" height="180" rx="48" fill="url(#tileSofterA)" />
-  <path d="M82 126V106C82 86 98 74 122 74H166" fill="none" stroke="url(#strokeSofterA)" stroke-width="13" stroke-linecap="round" stroke-linejoin="round" />
-  <path d="M156 61L178 74L156 88" fill="none" stroke="#78d6ff" stroke-width="13" stroke-linecap="round" stroke-linejoin="round" />
-  <path d="M182 119V139C182 161 164 176 137 176C126 176 114 176 104 178C95 180 86 187 82 194L82 150" fill="none" stroke="url(#strokeSofterA)" stroke-width="13" stroke-linecap="round" stroke-linejoin="round" />
+  <g transform="translate(130,130) scale(0.82) translate(-132,-127.5)">
+    <path d="M82 126V106C82 86 98 74 122 74H166" fill="none" stroke="url(#strokeSofterA)" stroke-width="13" stroke-linecap="round" stroke-linejoin="round" />
+    <path d="M156 61L178 74L156 88" fill="none" stroke="#78d6ff" stroke-width="13" stroke-linecap="round" stroke-linejoin="round" />
+    <path d="M182 119V139C182 161 164 176 137 176C126 176 114 176 104 178C95 180 86 187 82 194L82 150" fill="none" stroke="url(#strokeSofterA)" stroke-width="13" stroke-linecap="round" stroke-linejoin="round" />
+  </g>
 </svg>
