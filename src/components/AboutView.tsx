@@ -78,12 +78,12 @@ export function AboutView() {
   return (
     <div className="h-full overflow-y-auto">
       <div className="w-full max-w-3xl px-6 pt-12 pb-12">
-        <header className="flex items-start gap-4">
-          <span className="inline-flex size-12 shrink-0 items-center justify-center">
+        <header className="flex flex-col gap-5 sm:flex-row sm:items-start">
+          <span className="inline-flex size-20 shrink-0 items-center justify-center rounded-2xl bg-primary/10 p-2 shadow-sm ring-1 ring-border">
             <img
               src="/icon.svg"
               alt=""
-              className="size-12"
+              className="size-16"
               aria-hidden="true"
             />
           </span>
@@ -93,7 +93,7 @@ export function AboutView() {
             </p>
             <div className="mt-2 flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
               <h2 className="m-0 text-ui-title font-semibold">Converloop</h2>
-              <span className="font-mono text-ui-caption text-ui-muted">
+              <span className="inline-flex items-center rounded-md border bg-background px-2 py-0.5 font-mono text-ui-caption text-ui-muted">
                 v{version}
               </span>
             </div>
