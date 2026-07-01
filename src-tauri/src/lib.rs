@@ -6,6 +6,7 @@ mod profile;
 mod secrets;
 mod stt;
 mod stt_local;
+mod update_check;
 
 use tauri_plugin_sql::{Migration, MigrationKind};
 
@@ -610,6 +611,7 @@ pub fn run() {
             stt_local::local_asr_model_status,
             stt_local::local_asr_download_model,
             stt_local::stt_transcribe_local,
+            update_check::check_for_update,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

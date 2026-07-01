@@ -1,11 +1,47 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { BookOpenTextIcon, GlobeIcon, SparklesIcon } from "lucide-react";
+import {
+  BookOpenTextIcon,
+  DownloadIcon,
+  GlobeIcon,
+  RefreshCwIcon,
+  SparklesIcon,
+} from "lucide-react";
+import { useState } from "react";
 import { version } from "../../package.json";
 import { useTranslation } from "../i18n";
 import { DESIGN_DOC_URL, GITHUB_URL, WEBSITE_URL } from "../lib/links";
+import { checkForUpdate } from "../lib/update-check";
+
+type UpdateStatus =
+  | { kind: "idle" }
+  | { kind: "checking" }
+  | { kind: "upToDate" }
+  | { kind: "available"; version: string; releaseUrl: string }
+  | { kind: "error" };
 
 export function AboutView() {
   const { t } = useTranslation();
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({
+    kind: "idle",
+  });
+
+  async function handleCheckForUpdate() {
+    setUpdateStatus({ kind: "checking" });
+    try {
+      const result = await checkForUpdate();
+      setUpdateStatus(
+        result.hasUpdate
+          ? {
+              kind: "available",
+              version: result.latestVersion,
+              releaseUrl: result.releaseUrl,
+            }
+          : { kind: "upToDate" },
+      );
+    } catch {
+      setUpdateStatus({ kind: "error" });
+    }
+  }
 
   const identities = [
     {
@@ -96,6 +132,46 @@ export function AboutView() {
               <span className="inline-flex items-center rounded-md border bg-background px-2 py-0.5 font-mono text-ui-caption text-ui-muted">
                 v{version}
               </span>
+              {updateStatus.kind === "available" ? (
+                <button
+                  type="button"
+                  onClick={() => void openUrl(updateStatus.releaseUrl)}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-2 py-0.5 text-ui-caption font-medium text-primary transition-colors hover:bg-primary/15"
+                >
+                  <DownloadIcon className="size-3" />
+                  {t("about.update.available", {
+                    version: updateStatus.version,
+                  })}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => void handleCheckForUpdate()}
+                  disabled={updateStatus.kind === "checking"}
+                  className="inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-ui-caption font-medium text-foreground transition-colors hover:bg-accent disabled:opacity-60"
+                >
+                  <RefreshCwIcon
+                    className={
+                      updateStatus.kind === "checking"
+                        ? "size-3 animate-spin"
+                        : "size-3"
+                    }
+                  />
+                  {updateStatus.kind === "checking"
+                    ? t("about.update.checking")
+                    : t("about.update.check")}
+                </button>
+              )}
+              {updateStatus.kind === "upToDate" && (
+                <span className="text-ui-caption text-ui-muted">
+                  {t("about.update.upToDate")}
+                </span>
+              )}
+              {updateStatus.kind === "error" && (
+                <span className="text-ui-caption text-destructive">
+                  {t("about.update.error")}
+                </span>
+              )}
             </div>
             <p className="mt-2 mb-0 text-ui-title font-semibold leading-snug">
               {t("about.mantra")}

@@ -1318,6 +1318,14 @@ export const zh: Messages = {
     websiteLink: "官网",
     githubLink: "GitHub",
     designLink: "设计说明",
+    update: {
+      check: "检查更新",
+      checking: "检查中...",
+      upToDate: "已是最新版本",
+      available: "发现新版本 {version}",
+      download: "前往下载",
+      error: "检查更新失败",
+    },
   },
   design: {
     title: "设计说明",

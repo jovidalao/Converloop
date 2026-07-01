@@ -1384,6 +1384,14 @@ export const en = {
     websiteLink: "Website",
     githubLink: "GitHub",
     designLink: "Design notes",
+    update: {
+      check: "Check for updates",
+      checking: "Checking...",
+      upToDate: "You're on the latest version",
+      available: "Version {version} is available",
+      download: "Go to download",
+      error: "Couldn't check for updates",
+    },
   },
   design: {
     title: "Design notes",
