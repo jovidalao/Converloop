@@ -1,7 +1,7 @@
-import { converse } from "./agents/conversation";
-import { sanitizeHint } from "./agents/input-hints";
-import { getProvider, loadConfig } from "./config";
-import { setAppState } from "./db/app-state";
+import { converse } from "../agents/conversation";
+import { sanitizeHint } from "../agents/input-hints";
+import { getProvider, loadConfig } from "../config";
+import { setAppState } from "../db/app-state";
 import {
   completeDerivedConversation,
   failDerivedConversation,
@@ -11,14 +11,14 @@ import {
   getSummary,
   parseAgentModifiers,
   parseDictationReply,
-} from "./db/conversations";
-import { getLearningAgent } from "./db/learning-agents";
+} from "../db/conversations";
+import { getLearningAgent } from "../db/learning-agents";
 import {
   getComfortableList,
   getListeningFocusWords,
   getReviewDueList,
-} from "./db/mastery";
-import { getProficiencySnapshot } from "./db/proficiency";
+} from "../db/mastery";
+import { getProficiencySnapshot } from "../db/proficiency";
 import {
   formatTurns,
   getTurn,
@@ -26,16 +26,32 @@ import {
   persistTurn,
   toHistoryTurns,
   updateTurnReply,
-} from "./db/turns";
-import { renderDrillInstructions, renderDrillOpening } from "./drills/render";
-import { staticT } from "./i18n";
-import { buildLearningDataContext } from "./learning-data";
-import { runAbortableStream } from "./lib/abortable-stream";
-import { emitAppEvent } from "./lib/app-events";
-import { createHintDeltaGate, splitReplyTrailer } from "./lib/hint-trailer";
-import { logError } from "./lib/log";
-import { rankMasteryItemsForInput } from "./lib/mastery-relevance";
-import { estimateTokens } from "./lib/tokens";
+} from "../db/turns";
+import { renderDrillInstructions, renderDrillOpening } from "../drills/render";
+import { staticT } from "../i18n";
+import { buildLearningDataContext } from "../learning-data";
+import { runAbortableStream } from "../lib/abortable-stream";
+import { emitAppEvent } from "../lib/app-events";
+import { createHintDeltaGate, splitReplyTrailer } from "../lib/hint-trailer";
+import { logError } from "../lib/log";
+import { rankMasteryItemsForInput } from "../lib/mastery-relevance";
+import { estimateTokens } from "../lib/tokens";
+import { maybeRunMaintainer } from "../profile/maintainer-runner";
+import {
+  correctionPreferenceFlags,
+  formatExperiencePreferences,
+} from "../profile/preferences";
+import { profileSliceForConversation, readProfile } from "../profile/profile";
+import { maybeCompressConversation } from "../profile/summary-runner";
+import {
+  derivePendingAction,
+  dispatchObservers,
+  dispatchReply,
+  dispatchTurnAnalysisObservers,
+  getBuiltinAgentOverride,
+  type LearningContext,
+  type PracticeContext,
+} from "../runtime";
 import {
   type CachedInputHints,
   drillLangExtras,
@@ -46,29 +62,7 @@ import {
   resolveDrill,
   type TurnCallbacks,
   type TurnResult,
-} from "./orchestrator/shared";
-import { maybeRunMaintainer } from "./profile/maintainer-runner";
-import {
-  correctionPreferenceFlags,
-  formatExperiencePreferences,
-} from "./profile/preferences";
-import { profileSliceForConversation, readProfile } from "./profile/profile";
-import { maybeCompressConversation } from "./profile/summary-runner";
-import {
-  derivePendingAction,
-  dispatchObservers,
-  dispatchReply,
-  dispatchTurnAnalysisObservers,
-  getBuiltinAgentOverride,
-  type LearningContext,
-  type PracticeContext,
-} from "./runtime";
-
-export * from "./orchestrator/learning-authoring";
-export * from "./orchestrator/mastery-review";
-export * from "./orchestrator/reply-tools";
-export * from "./orchestrator/shared";
-export * from "./orchestrator/topics-and-hints";
+} from "./shared";
 
 // The tutor only needs enough context to disambiguate the latest utterance; supply this many recent turns. All verbatim turns after the watermark go to the conversation agent.
 const TUTOR_HISTORY_TURNS = 8;
@@ -891,6 +885,3 @@ export async function regenerateReply(
   cb.onReplyComplete?.(reply);
   return reply;
 }
-
-// On-demand explanation for a conversation reply: reads the Markdown profile (same source as the conversation agent), streams a native-language explanation.
-// Not on the hot path; not persisted — explanations are cheap and can be regenerated on demand.
