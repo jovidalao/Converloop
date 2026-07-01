@@ -39,3 +39,6 @@ vite.config.d.ts
 # Vendored reference checkout, not part of this project
 cherry-studio-main/
 craft-agents-oss-main/
+
+# Local dev-tool working files (brainstorm sessions, PIDs)
+.superpowers/
