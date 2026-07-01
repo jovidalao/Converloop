@@ -87,6 +87,33 @@ describe("converse", () => {
     );
   });
 
+  it("weaves due review items into the per-turn dynamic data block", async () => {
+    const calls: GenerateOptions[] = [];
+    await converse(
+      streamProvider(calls),
+      {
+        ...baseCtx,
+        reviewItems: [
+          {
+            key: "grammar:article_usage",
+            label: "article usage",
+            type: "grammar",
+            status: "struggling",
+            example: "I saw a elephant at the zoo.",
+            notes: null,
+            retention: 0.4,
+            dueScore: 0.9,
+          },
+        ],
+      },
+      () => {},
+    );
+
+    const system = calls[0].messages.filter((m) => m.role === "system");
+    expect(system[2].content).toContain("article usage");
+    expect(system[2].content).toContain("I saw a elephant at the zoo.");
+  });
+
   it("answers /btw standalone questions without conversation history", async () => {
     const calls: GenerateOptions[] = [];
     const reply = await converse(

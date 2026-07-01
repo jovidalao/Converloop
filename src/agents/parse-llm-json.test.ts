@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import {
   extractJsonText,
+  formatZodError,
   normalizeTutorPayload,
   parseLLMJson,
   parseStringArrayLoose,
@@ -270,5 +272,38 @@ describe("parseLLMJson", () => {
     const result = parseLLMJson('{"a":[1,2,],"b":true,}');
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.value).toEqual({ a: [1, 2], b: true });
+  });
+});
+
+describe("formatZodError", () => {
+  const schema = z.object({
+    signal: z.enum(["error", "correct"]),
+    key: z.string(),
+  });
+
+  it("formats field errors with the field name", () => {
+    const result = schema.safeParse({ signal: "nope", key: 5 });
+    if (result.success) throw new Error("expected validation to fail");
+    expect(formatZodError(result.error)).toContain("signal");
+    expect(formatZodError(result.error)).toContain("key");
+  });
+
+  it("caps output at 4 parts", () => {
+    const wideSchema = z.object({
+      a: z.string(),
+      b: z.string(),
+      c: z.string(),
+      d: z.string(),
+      e: z.string(),
+    });
+    const result = wideSchema.safeParse({});
+    if (result.success) throw new Error("expected validation to fail");
+    expect(formatZodError(result.error).split("; ")).toHaveLength(4);
+  });
+
+  it("falls back to a generic message when there is nothing to report", () => {
+    expect(
+      formatZodError({ flatten: () => ({ fieldErrors: {}, formErrors: [] }) }),
+    ).toBe("Fields do not match schema");
   });
 });
