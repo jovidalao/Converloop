@@ -42,3 +42,7 @@ craft-agents-oss-main/
 
 # Local dev-tool working files (brainstorm sessions, PIDs)
 .superpowers/
+
+# Internal AI-agent guidance, not published
+/AGENTS.md
+/CLAUDE.md
