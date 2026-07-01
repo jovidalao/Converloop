@@ -33,6 +33,19 @@ export class MissingApiKeyError extends Error {
   }
 }
 
+// Cache of generated input hints, keyed per conversation. Stored in app_state (SQLite) so
+// hints survive switching away and reopening the conversation, and app restarts.
+// throughTurnId is the last on-record turn at generation time (the watermark): hints reflect
+// the conversation state after that turn, so a different last turn means the cache is stale.
+// Written by turn-runner's runTurn (in-band [[HINT]] trailer) and read/written by
+// topics-and-hints' generateInputHintsForConversation — shared here so both agree on the key/shape.
+export const INPUT_HINTS_CACHE_PREFIX = "inputHints:";
+
+export interface CachedInputHints {
+  throughTurnId: string | null;
+  hints: string[];
+}
+
 // Resolve the drill behind a conversation's modifiers. Prompt prose (task/opening/setup guidance)
 // comes from the LIVE drill row when it still exists — editing a drill updates its open sessions —
 // while the mechanics enums (interaction/grading/mastery/…) stay frozen on the modifier snapshot so
