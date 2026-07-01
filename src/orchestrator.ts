@@ -21,14 +21,13 @@ import {
 } from "./agents/lesson-writeback";
 import { classifyProfilePreferenceInstruction } from "./agents/profile-preferences";
 import { generateQuickfireTopics } from "./agents/quickfire-topics";
-import type { TutorAnalysis } from "./agents/schema";
 import {
   fallbackSelectionLearningItem,
   generateSelectionLearningItem,
 } from "./agents/selection-learning-item";
 import { planLearningProject } from "./agents/task-agent";
 import { translate } from "./agents/translate";
-import { type AppConfig, getProvider, loadConfig } from "./config";
+import { getProvider, loadConfig } from "./config";
 import {
   applyDataEditInstruction,
   applyDataEditOperations,
@@ -39,7 +38,6 @@ import {
 import { runTrackedAgentJob } from "./db/agent-jobs";
 import { getAppState, setAppState } from "./db/app-state";
 import {
-  type AgentModifiers,
   completeDerivedConversation,
   DEFAULT_CONVERSATION_TITLE,
   failDerivedConversation,
@@ -85,13 +83,7 @@ import {
   toHistoryTurns,
   updateTurnReply,
 } from "./db/turns";
-import {
-  type DrillRenderExtras,
-  renderDrillInstructions,
-  renderDrillOpening,
-} from "./drills/render";
-import { getDrill } from "./drills/store";
-import type { ResolvedDrill } from "./drills/types";
+import { renderDrillInstructions, renderDrillOpening } from "./drills/render";
 import { staticT } from "./i18n";
 import { buildLearningDataContext } from "./learning-data";
 import { runAbortableStream } from "./lib/abortable-stream";
@@ -100,6 +92,16 @@ import { createHintDeltaGate, splitReplyTrailer } from "./lib/hint-trailer";
 import { logError } from "./lib/log";
 import { rankMasteryItemsForInput } from "./lib/mastery-relevance";
 import { estimateTokens } from "./lib/tokens";
+import {
+  drillLangExtras,
+  estimateNonHistoryTokens,
+  loadTurnContextData,
+  MissingApiKeyError,
+  resolveDrill,
+  type TurnCallbacks,
+  type TurnResult,
+  tailTurnsByChars,
+} from "./orchestrator/shared";
 import { maybeRunMaintainer } from "./profile/maintainer-runner";
 import {
   appendClassifiedPreferences,
@@ -111,7 +113,6 @@ import { profileSliceForConversation, readProfile } from "./profile/profile";
 import { maybeCompressConversation } from "./profile/summary-runner";
 import type { ChatMessage } from "./providers/types";
 import {
-  type ConversationCallbacks,
   derivePendingAction,
   dispatchObservers,
   dispatchReply,
@@ -123,63 +124,12 @@ import {
   runTransformer,
 } from "./runtime";
 
-// Callback shape is defined centrally in runtime (ConversationCallbacks); this alias export preserves existing references.
-export type TurnCallbacks = ConversationCallbacks;
-
-export interface TurnResult {
-  reply: string;
-  analysis: TutorAnalysis | null;
-}
+export * from "./orchestrator/shared";
 
 // The tutor only needs enough context to disambiguate the latest utterance; supply this many recent turns. All verbatim turns after the watermark go to the conversation agent.
 const TUTOR_HISTORY_TURNS = 8;
 // Explanation needs the immediate thread (what references resolve to), not the whole chat.
 const EXPLAIN_CONTEXT_CHARS = 6000;
-
-export class MissingApiKeyError extends Error {
-  constructor() {
-    super(staticT("errors.missingApiKey"));
-    this.name = "MissingApiKeyError";
-  }
-}
-
-// Resolve the drill behind a conversation's modifiers. Prompt prose (task/opening/setup guidance)
-// comes from the LIVE drill row when it still exists — editing a drill updates its open sessions —
-// while the mechanics enums (interaction/grading/mastery/…) stay frozen on the modifier snapshot so
-// an in-flight session never changes shape mid-conversation. A deleted drill falls back entirely to
-// the snapshot, so old conversations keep working.
-async function resolveDrill(
-  mods: AgentModifiers,
-): Promise<ResolvedDrill | undefined> {
-  const marker = mods.drill;
-  if (!marker) return undefined;
-  try {
-    const live = await getDrill(marker.modeId);
-    if (live) {
-      return {
-        modeId: marker.modeId,
-        params: marker.params,
-        def: {
-          ...marker.def,
-          task: live.def.task,
-          opening: live.def.opening,
-          setupGuidance: live.def.setupGuidance,
-        },
-      };
-    }
-  } catch {
-    // Store unavailable — snapshot below keeps the session alive.
-  }
-  return { modeId: marker.modeId, params: marker.params, def: marker.def };
-}
-
-function drillLangExtras(config: AppConfig): DrillRenderExtras {
-  return {
-    nativeLanguage: config.nativeLanguage,
-    targetLanguage: config.targetLanguage,
-    level: config.level,
-  };
-}
 
 // Off-record slash turn (/btw): answer one standalone question with no chat/lesson history,
 // no review weaving, no correction, and no future context footprint.
@@ -263,86 +213,6 @@ async function runStandaloneSideQuestion(
   resolvePersisted(id);
   cb.onReplyComplete?.(reply);
   return { reply, analysis: null };
-}
-
-function tailTurnsByChars<T extends { userInput: string; reply: string }>(
-  turns: T[],
-  charBudget: number,
-): T[] {
-  let used = 0;
-  let start = turns.length;
-  for (let i = turns.length - 1; i >= 0; i--) {
-    const next = turns[i];
-    const cost = next.userInput.length + next.reply.length + 32;
-    if (used + cost > charBudget && start < turns.length) break;
-    used += cost;
-    start = i;
-  }
-  return turns.slice(start);
-}
-
-// Shared per-turn data fetching for runTurn and startDerivedConversation: summary + global mastery table + profile,
-// fetched once in parallel (all independent, avoids stacking latency). Per-caller rankMasteryItemsForInput
-// (whose query/context differs between hot path and derived opening) is handled by each caller.
-async function loadTurnContextData(conversationId: string, config: AppConfig) {
-  const [
-    summaryData,
-    weakListRaw,
-    profileMd,
-    comfortableItemsRaw,
-    reviewItemsRaw,
-    proficiency,
-    keyHints,
-  ] = await Promise.all([
-    getSummary(conversationId),
-    getWeakList(),
-    readProfile(config),
-    getComfortableList(),
-    getReviewDueList(),
-    getProficiencySnapshot(),
-    getMasteryKeyHints(),
-  ]);
-  const verbatimTurns = await getTurnsAfterId(
-    conversationId,
-    summaryData.throughId,
-  );
-  return {
-    summaryData,
-    weakListRaw,
-    profileMd,
-    comfortableItemsRaw,
-    reviewItemsRaw,
-    proficiency,
-    keyHints,
-    verbatimTurns,
-  };
-}
-
-// Token estimate for the "non-history dynamic block" used by the auto-compression watermark: profile slice + mastered scaffold + review candidates.
-function estimateNonHistoryTokens(
-  profileSlice: string,
-  comfortableItems: {
-    label: string;
-    example?: string | null;
-    notes?: string | null;
-  }[],
-  reviewItems: {
-    label: string;
-    example?: string | null;
-    notes?: string | null;
-  }[],
-): number {
-  const listText = (
-    items: { label: string; example?: string | null; notes?: string | null }[],
-  ) =>
-    items
-      .map((r) => `${r.label} ${r.example ?? ""} ${r.notes ?? ""}`)
-      .join("\n");
-  return (
-    estimateTokens(profileSlice) +
-    estimateTokens(listText(comfortableItems)) +
-    estimateTokens(listText(reviewItems))
-  );
 }
 
 export async function createCustomLearningAgentFromDescription(
