@@ -1,9 +1,5 @@
-import { generateAutoTitle } from "./agents/auto-title";
-import { bilingual } from "./agents/bilingual";
 import { converse } from "./agents/conversation";
 import { generateConversationTopics } from "./agents/conversation-topics";
-import { explain } from "./agents/explain";
-import { explainPoint } from "./agents/explain-point";
 import {
   cleanInputHintForDisplay,
   generateInputHints,
@@ -15,7 +11,6 @@ import {
   toLessonWritebackCandidate,
 } from "./agents/lesson-writeback";
 import { generateQuickfireTopics } from "./agents/quickfire-topics";
-import { translate } from "./agents/translate";
 import { getProvider, loadConfig } from "./config";
 import { getAppState, setAppState } from "./db/app-state";
 import {
@@ -29,7 +24,6 @@ import {
   listConversations,
   parseAgentModifiers,
   parseDictationReply,
-  renameConversation,
 } from "./db/conversations";
 import { getLearningAgent, type LearningAgentMeta } from "./db/learning-agents";
 import {
@@ -87,19 +81,16 @@ import {
   dispatchReply,
   dispatchTurnAnalysisObservers,
   getBuiltinAgentOverride,
-  HOOKS,
   type LearningContext,
   type PracticeContext,
-  runTransformer,
 } from "./runtime";
 
 export * from "./orchestrator/learning-authoring";
+export * from "./orchestrator/reply-tools";
 export * from "./orchestrator/shared";
 
 // The tutor only needs enough context to disambiguate the latest utterance; supply this many recent turns. All verbatim turns after the watermark go to the conversation agent.
 const TUTOR_HISTORY_TURNS = 8;
-// Explanation needs the immediate thread (what references resolve to), not the whole chat.
-const EXPLAIN_CONTEXT_CHARS = 6000;
 
 // Off-record slash turn (/btw): answer one standalone question with no chat/lesson history,
 // no review weaving, no correction, and no future context footprint.
@@ -1208,204 +1199,6 @@ export async function regenerateReply(
 
 // On-demand explanation for a conversation reply: reads the Markdown profile (same source as the conversation agent), streams a native-language explanation.
 // Not on the hot path; not persisted — explanations are cheap and can be regenerated on demand.
-export async function explainReply(
-  conversationId: string,
-  turnId: string,
-  reply: string,
-  onDelta: (delta: string) => void,
-): Promise<string> {
-  const conversation = await getConversation(conversationId);
-  const provider = await getProvider(
-    getConversationModelOverride(conversation),
-  );
-  if (!provider) throw new MissingApiKeyError();
-
-  const config = loadConfig();
-  const [profileMd, turns] = await Promise.all([
-    readProfile(config),
-    getTurnsAfterId(conversationId, null),
-  ]);
-  const experiencePreferences = formatExperiencePreferences(
-    profileMd,
-    "reading",
-  );
-  const profileSlice = profileSliceForConversation(profileMd);
-  // Context leading up to the explained reply: earlier turns plus the learner
-  // message it answers, so cross-turn references ("that place you mentioned",
-  // elliptical answers) resolve. A missing turn degrades to no history.
-  const idx = turns.findIndex((t) => t.id === turnId);
-  let history = "";
-  if (idx >= 0) {
-    const before = formatTurns(
-      tailTurnsByChars(turns.slice(0, idx), EXPLAIN_CONTEXT_CHARS),
-    );
-    const userLine = turns[idx].userInput.trim();
-    history = [before, userLine ? `User: ${userLine}` : ""]
-      .filter(Boolean)
-      .join("\n\n");
-  }
-
-  return runTransformer(
-    "builtin:transformer:explain",
-    HOOKS.turnExplain,
-    () =>
-      explain(
-        provider,
-        {
-          nativeLanguage: config.nativeLanguage,
-          targetLanguage: config.targetLanguage,
-          level: config.level,
-          experiencePreferences,
-          profileSlice,
-          history,
-          reply,
-          customInstructions: getBuiltinAgentOverride(
-            "builtin:transformer:explain",
-          )?.instructions,
-        },
-        onDelta,
-      ),
-    (text) => ({ chars: text.length }),
-  );
-}
-
-// On-demand mini-lesson for ONE mastery point shown in the coach panel (recurring
-// error, latest fix, or a review target). Teaches the rule + fresh examples so the
-// learner can generalize; transient, not persisted, regenerated on demand.
-export interface MasteryPointExplainArgs {
-  conversationId: string | null;
-  label: string;
-  type: string;
-  evidence?: string;
-}
-
-export async function explainMasteryPoint(
-  args: MasteryPointExplainArgs,
-  onDelta: (delta: string) => void,
-): Promise<string> {
-  const conversation = args.conversationId
-    ? await getConversation(args.conversationId)
-    : null;
-  const provider = await getProvider(
-    getConversationModelOverride(conversation),
-  );
-  if (!provider) throw new MissingApiKeyError();
-
-  const config = loadConfig();
-  const profileMd = await readProfile(config);
-  return explainPoint(
-    provider,
-    {
-      nativeLanguage: config.nativeLanguage,
-      targetLanguage: config.targetLanguage,
-      level: config.level,
-      experiencePreferences: formatExperiencePreferences(profileMd, "reading"),
-      profileSlice: profileSliceForConversation(profileMd),
-      type: args.type,
-      label: args.label,
-      evidence: args.evidence,
-    },
-    onDelta,
-  );
-}
-
-// Bilingual reading: convert a conversation reply into a target-language/native-language sentence-by-sentence interleave (bilingual Markdown).
-// Does not read the profile; not persisted — cheap, regenerated on demand.
-export async function bilingualReply(
-  reply: string,
-  conversationId?: string,
-): Promise<string> {
-  const conversation = conversationId
-    ? await getConversation(conversationId)
-    : null;
-  const provider = await getProvider(
-    getConversationModelOverride(conversation),
-  );
-  if (!provider) throw new MissingApiKeyError();
-
-  const config = loadConfig();
-  const experiencePreferences = formatExperiencePreferences(
-    await readProfile(config),
-    "reading",
-  );
-  return runTransformer(
-    "builtin:transformer:bilingual",
-    HOOKS.turnBilingual,
-    () =>
-      bilingual(provider, {
-        nativeLanguage: config.nativeLanguage,
-        targetLanguage: config.targetLanguage,
-        experiencePreferences,
-        reply,
-        customInstructions: getBuiltinAgentOverride(
-          "builtin:transformer:bilingual",
-        )?.instructions,
-      }),
-    (text) => ({ chars: text.length }),
-  );
-}
-
-// Selection translation/analysis: stream a native-language explanation for a text selection in the conversation, using its surrounding context.
-// Does not read the profile; not persisted — cheap, regenerated on demand.
-export async function translateSelection(
-  selection: string,
-  context: string,
-  onDelta: (delta: string) => void,
-): Promise<string> {
-  const provider = await getProvider();
-  if (!provider) throw new MissingApiKeyError();
-
-  const config = loadConfig();
-  const experiencePreferences = formatExperiencePreferences(
-    await readProfile(config),
-    "reading",
-  );
-  return runTransformer(
-    "builtin:transformer:translate",
-    HOOKS.turnTranslate,
-    () =>
-      translate(
-        provider,
-        {
-          nativeLanguage: config.nativeLanguage,
-          targetLanguage: config.targetLanguage,
-          experiencePreferences,
-          selection,
-          context,
-          customInstructions: getBuiltinAgentOverride(
-            "builtin:transformer:translate",
-          )?.instructions,
-        },
-        onDelta,
-      ),
-    (text) => ({ chars: text.length }),
-  );
-}
-
-// LLM-generated conversation title: called after the first message is persisted.
-// Silently skips when no provider is configured or the title was already changed by the user.
-export async function generateAndSetConversationTitle(
-  conversationId: string,
-  firstUserInput: string,
-): Promise<void> {
-  const conv = await getConversation(conversationId);
-  if (!conv || conv.title !== DEFAULT_CONVERSATION_TITLE) return;
-  const provider = await getProvider(getConversationModelOverride(conv));
-  if (!provider) return;
-
-  const config = loadConfig();
-  try {
-    const title = await generateAutoTitle(provider, {
-      targetLanguage: config.targetLanguage,
-      nativeLanguage: config.nativeLanguage,
-      firstMessage: firstUserInput,
-    });
-    if (title) await renameConversation(conversationId, title);
-  } catch {
-    // Silently fall back — the existing truncated title remains.
-  }
-}
-
 // Cache of generated input hints, keyed per conversation. Stored in app_state (SQLite) so
 // hints survive switching away and reopening the conversation, and app restarts.
 // throughTurnId is the last on-record turn at generation time (the watermark): hints reflect
