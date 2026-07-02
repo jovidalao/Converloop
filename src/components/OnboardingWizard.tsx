@@ -1,15 +1,28 @@
-import { CheckCircle2Icon, GraduationCapIcon } from "lucide-react";
+import {
+  CheckCircle2Icon,
+  GraduationCapIcon,
+  RotateCcwIcon,
+} from "lucide-react";
 import { useState } from "react";
 import { type Locale, UI_LOCALES, useTranslation } from "@/i18n";
 import {
+  type AppConfig,
   apiKeyAccount,
+  effectiveJsonObjectFallback,
+  findModelOption,
   getProviderFor,
+  inferContextLimit,
   isOAuthProvider,
+  isOpenAIWireProvider,
   loadConfig,
   oauthAccount,
   PROVIDER_PRESETS,
   PROVIDER_TYPES,
+  type ProviderSettings,
   type ProviderType,
+  providerAllowsContextOverride,
+  providerModelLabel,
+  providerModels,
   saveConfig,
 } from "../config";
 import { setSecret } from "../keychain";
@@ -32,6 +45,31 @@ import {
   SelectValue,
 } from "./ui/select";
 import { Spinner } from "./ui/spinner";
+import { Switch } from "./ui/switch";
+
+const CUSTOM_MODEL_VALUE = "__custom_model__";
+const LLM_TEST_TIMEOUT_MS = 20_000;
+
+function errText(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
+}
+
+function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  label: string,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`${label} timed out after ${ms / 1000}s`)),
+      ms,
+    );
+  });
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
+}
 
 // First-run wizard: two steps to a working app — (1) who is learning what,
 // (2) connect one model provider and verify it. Full-screen overlay shown only
@@ -50,6 +88,7 @@ export function OnboardingWizard({ onDone }: { onDone: () => void }) {
   const [verified, setVerified] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [customModel, setCustomModel] = useState(false);
 
   function update<K extends "nativeLanguage" | "targetLanguage" | "level">(
     key: K,
@@ -62,12 +101,58 @@ export function OnboardingWizard({ onDone }: { onDone: () => void }) {
 
   function pickProvider(type: ProviderType) {
     setProviderType(type);
+    const nextConfig = loadConfig();
+    setCustomModel(
+      !isOAuthProvider(type) &&
+        !findModelOption(
+          type,
+          nextConfig.providers[type],
+          nextConfig.providers[type].model,
+        ),
+    );
     setVerified(false);
     setStatus(null);
     setError(null);
-    const next = { ...loadConfig(), providerType: type };
+    const next = { ...nextConfig, providerType: type };
     setCfg(next);
     saveConfig(next);
+  }
+
+  function updateProvider(patch: Partial<ProviderSettings>) {
+    setVerified(false);
+    setStatus(null);
+    setError(null);
+    const next: AppConfig = {
+      ...cfg,
+      providers: {
+        ...cfg.providers,
+        [providerType]: { ...cfg.providers[providerType], ...patch },
+      },
+    };
+    setCfg(next);
+    saveConfig(next);
+  }
+
+  function selectModel(value: string) {
+    if (value === CUSTOM_MODEL_VALUE) {
+      setCustomModel(true);
+      setVerified(false);
+      return;
+    }
+    setCustomModel(false);
+    updateProvider({ model: value });
+  }
+
+  function resetProvider() {
+    const preset = PROVIDER_PRESETS[providerType];
+    setCustomModel(false);
+    updateProvider({
+      baseUrl: preset.baseUrl,
+      model: preset.model,
+      contextTokens: undefined,
+      jsonObjectFallback: undefined,
+      customModels: undefined,
+    });
   }
 
   // Save the typed key (if any), then run a real round-trip through the provider.
@@ -86,15 +171,33 @@ export function OnboardingWizard({ onDone }: { onDone: () => void }) {
         setError(t("onboarding.noCredential"));
         return;
       }
-      const reply = await provider.generate({
-        messages: [
-          { role: "user", content: "Reply with the single word: pong" },
-        ],
-      });
+      const reply = await withTimeout(
+        provider.generate({
+          messages: [
+            { role: "user", content: "Reply with the single word: pong" },
+          ],
+          temperature: 0,
+          maxTokens: 64,
+        }),
+        LLM_TEST_TIMEOUT_MS,
+        "Generate test",
+      );
+      const entry = loadConfig().providers[providerType];
+      const model = entry.model.trim();
+      if (
+        model &&
+        !isOAuthProvider(providerType) &&
+        !findModelOption(providerType, entry, model)
+      ) {
+        updateProvider({
+          customModels: [...(entry.customModels ?? []), model],
+        });
+        setCustomModel(false);
+      }
       setVerified(true);
       setStatus(t("onboarding.testOk", { sample: reply.trim().slice(0, 40) }));
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errText(e));
     } finally {
       setBusy(null);
     }
@@ -114,7 +217,7 @@ export function OnboardingWizard({ onDone }: { onDone: () => void }) {
       setVerified(true);
       setStatus(t("onboarding.loginOk"));
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errText(e));
     } finally {
       setBusy(null);
     }
@@ -122,10 +225,22 @@ export function OnboardingWizard({ onDone }: { onDone: () => void }) {
 
   const preset = PROVIDER_PRESETS[providerType];
   const oauth = isOAuthProvider(providerType);
+  const entry = cfg.providers[providerType];
+  const modelOptions = oauth
+    ? preset.models
+    : providerModels(providerType, entry);
+  const selectedModel = modelOptions.find((m) => m.model === entry.model);
+  const modelValue =
+    !oauth && (customModel || !selectedModel)
+      ? CUSTOM_MODEL_VALUE
+      : (selectedModel?.model ?? preset.model);
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-background">
-      <div className="flex w-full max-w-lg flex-col gap-6 px-8">
+    <div
+      className="fixed inset-0 z-[200] flex items-center justify-center overflow-y-auto bg-background py-10"
+      data-app-portal-root
+    >
+      <div className="flex w-full max-w-2xl flex-col gap-6 px-8">
         <div className="flex flex-col items-center gap-2 text-center">
           <span className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
             <GraduationCapIcon className="size-5" />
@@ -147,7 +262,7 @@ export function OnboardingWizard({ onDone }: { onDone: () => void }) {
                 value={locale}
                 onValueChange={(v) => setLocale(v as Locale)}
               >
-                <SelectTrigger variant="ghost">
+                <SelectTrigger variant="ghost" className="min-w-48 justify-end">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -164,7 +279,7 @@ export function OnboardingWizard({ onDone }: { onDone: () => void }) {
                 value={cfg.nativeLanguage}
                 onValueChange={(v) => update("nativeLanguage", v)}
               >
-                <SelectTrigger variant="ghost">
+                <SelectTrigger variant="ghost" className="min-w-48 justify-end">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -181,7 +296,7 @@ export function OnboardingWizard({ onDone }: { onDone: () => void }) {
                 value={cfg.targetLanguage}
                 onValueChange={(v) => update("targetLanguage", v)}
               >
-                <SelectTrigger variant="ghost">
+                <SelectTrigger variant="ghost" className="min-w-48 justify-end">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -198,7 +313,7 @@ export function OnboardingWizard({ onDone }: { onDone: () => void }) {
                 value={cfg.level}
                 onValueChange={(v) => update("level", v)}
               >
-                <SelectTrigger variant="ghost">
+                <SelectTrigger variant="ghost" className="min-w-48 justify-end">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -213,12 +328,12 @@ export function OnboardingWizard({ onDone }: { onDone: () => void }) {
           </div>
         ) : (
           <div className="flex flex-col gap-4">
-            <Row label={t("onboarding.provider")}>
+            <FormField label={t("onboarding.provider")}>
               <Select
                 value={providerType}
                 onValueChange={(v) => pickProvider(v as ProviderType)}
               >
-                <SelectTrigger variant="ghost">
+                <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -229,7 +344,98 @@ export function OnboardingWizard({ onDone }: { onDone: () => void }) {
                   ))}
                 </SelectContent>
               </Select>
-            </Row>
+            </FormField>
+
+            {!oauth && (
+              <FormField label={t(`settings.baseUrl.${providerType}`)}>
+                <Input
+                  value={entry.baseUrl}
+                  onChange={(e) => updateProvider({ baseUrl: e.target.value })}
+                  placeholder={preset.baseUrl}
+                />
+              </FormField>
+            )}
+
+            <FormField label={t("settings.llm.model")}>
+              <Select value={modelValue} onValueChange={selectModel}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {modelOptions.map((model) => (
+                    <SelectItem key={model.model} value={model.model}>
+                      {providerModelLabel(providerType, model.model)}
+                    </SelectItem>
+                  ))}
+                  {!oauth && (
+                    <SelectItem value={CUSTOM_MODEL_VALUE}>
+                      {t("settings.llm.customModelOption", {
+                        label: preset.shortLabel,
+                      })}
+                    </SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+            </FormField>
+
+            {!oauth && (customModel || !selectedModel) ? (
+              <FormField label={t("settings.llm.customModelId")}>
+                <Input
+                  value={entry.model}
+                  onChange={(e) => {
+                    setCustomModel(true);
+                    updateProvider({ model: e.target.value });
+                  }}
+                  placeholder={preset.model}
+                />
+              </FormField>
+            ) : (
+              selectedModel && (
+                <p className="-mt-2 m-0 break-all text-ui-caption text-ui-muted">
+                  {t("settings.llm.modelId", { id: selectedModel.model })}
+                </p>
+              )
+            )}
+
+            {providerAllowsContextOverride(providerType) && (
+              <FormField label={t("settings.llm.contextWindow")}>
+                <Input
+                  type="number"
+                  value={entry.contextTokens ?? ""}
+                  onChange={(e) => {
+                    const n = Number(e.target.value);
+                    updateProvider({
+                      contextTokens:
+                        e.target.value.trim() && n > 0 ? n : undefined,
+                    });
+                  }}
+                  placeholder={t("settings.llm.contextAuto", {
+                    n: inferContextLimit(entry.model).toLocaleString(),
+                  })}
+                />
+              </FormField>
+            )}
+
+            {isOpenAIWireProvider(providerType) && (
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between gap-4 border-b border-border/70 py-3">
+                  <span className="text-ui-body">
+                    {t("settings.llm.jsonObjectFallback")}
+                  </span>
+                  <Switch
+                    checked={effectiveJsonObjectFallback(providerType, entry)}
+                    onCheckedChange={(v) =>
+                      updateProvider({ jsonObjectFallback: v })
+                    }
+                    className="shrink-0"
+                  />
+                </div>
+                <p className="m-0 text-ui-caption leading-snug text-ui-muted">
+                  {t("settings.llm.jsonObjectFallbackHint")}
+                </p>
+              </div>
+            )}
+
             {oauth ? (
               <div className="flex flex-col gap-2">
                 <p className="m-0 text-ui-caption leading-snug text-ui-muted">
@@ -270,6 +476,15 @@ export function OnboardingWizard({ onDone }: { onDone: () => void }) {
                 </Button>
               </div>
             )}
+            <Button
+              type="button"
+              variant="ghost"
+              className="w-fit self-end"
+              onClick={resetProvider}
+            >
+              <RotateCcwIcon className="size-4" />
+              {t("settings.llm.restorePreset")}
+            </Button>
             {status && (
               <p className="m-0 flex items-center gap-1.5 text-ui-body text-success">
                 <CheckCircle2Icon className="size-4 shrink-0" />
@@ -323,7 +538,22 @@ function Row({
   return (
     <div className="flex items-center justify-between gap-4 border-b border-border/70 py-3 last:border-0">
       <span className="shrink-0 text-ui-body">{label}</span>
-      <div className="min-w-0">{children}</div>
+      <div className="flex min-w-0 justify-end">{children}</div>
+    </div>
+  );
+}
+
+function FormField({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex min-w-0 flex-col gap-2">
+      <span className="text-ui-meta font-medium text-ui-muted">{label}</span>
+      {children}
     </div>
   );
 }

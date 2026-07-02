@@ -9,10 +9,17 @@ function Select(props: React.ComponentProps<typeof SelectPrimitive.Root>) {
   return <SelectPrimitive.Root data-slot="select" {...props} />;
 }
 
-function SelectValue(
-  props: React.ComponentProps<typeof SelectPrimitive.Value>,
-) {
-  return <SelectPrimitive.Value data-slot="select-value" {...props} />;
+function SelectValue({
+  className,
+  ...props
+}: React.ComponentProps<typeof SelectPrimitive.Value>) {
+  return (
+    <SelectPrimitive.Value
+      data-slot="select-value"
+      className={cn("min-w-0 truncate", className)}
+      {...props}
+    />
+  );
 }
 
 function SelectGroup(

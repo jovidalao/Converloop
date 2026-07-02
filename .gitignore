@@ -46,3 +46,6 @@ craft-agents-oss-main/
 # Internal AI-agent guidance, not published
 /AGENTS.md
 /CLAUDE.md
+
+# Local mobile-port spec (not published)
+/docs/mobile-app-spec.md
